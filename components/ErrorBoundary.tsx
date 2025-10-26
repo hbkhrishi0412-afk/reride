@@ -65,7 +65,7 @@ class ErrorBoundary extends Component<Props, State> {
                 Try Again
               </button>
             </div>
-            {(process.env.NODE_ENV === 'development' || import.meta.env.DEV) && this.state.error && (
+            {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mt-4 p-3 bg-gray-100 rounded text-xs">
                 <summary className="cursor-pointer font-semibold">Error Details (Development)</summary>
                 <pre className="mt-2 whitespace-pre-wrap text-red-600">

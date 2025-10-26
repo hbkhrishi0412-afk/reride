@@ -52,6 +52,19 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
 };
 
+// Mock import.meta for Vite compatibility
+Object.defineProperty(globalThis, 'import', {
+  value: {
+    meta: {
+      env: {
+        DEV: true,
+        PROD: false,
+      },
+    },
+  },
+  writable: true,
+});
+
 // Suppress console warnings in tests
 const originalError = console.error;
 beforeAll(() => {
