@@ -3,6 +3,7 @@ import connectToDatabase from '../lib/db.js';
 import User from '../models/User.js';
 import Vehicle from '../models/Vehicle.js';
 import VehicleDataModel from '../models/VehicleData.js';
+import NewCar from '../models/NewCar.js';
 import { 
   hashPassword, 
   validatePassword, 
@@ -143,6 +144,8 @@ export default async function handler(
       return await handleSeed(req, res);
     } else if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
       return await handleVehicleData(req, res);
+    } else if (pathname.includes('/new-cars') || pathname.endsWith('/new-cars')) {
+      return await handleNewCars(req, res);
     } else {
       // Default to users for backward compatibility
       return await handleUsers(req, res);
@@ -842,6 +845,52 @@ function getPriceRange(vehicles: any[]): { min: number; max: number } {
     min: Math.min(...prices),
     max: Math.max(...prices)
   };
+}
+
+// New Cars handler - CRUD for new car catalog
+async function handleNewCars(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    const items = await NewCar.find({}).sort({ updatedAt: -1 });
+    return res.status(200).json(items);
+  }
+
+  if (req.method === 'POST') {
+    const payload = req.body;
+    if (!payload || !payload.brand_name || !payload.model_name || !payload.model_year) {
+      return res.status(400).json({ success: false, reason: 'Missing required fields' });
+    }
+    const doc = new NewCar({ ...payload });
+    await doc.save();
+    return res.status(201).json({ success: true, data: doc });
+  }
+
+  if (req.method === 'PUT') {
+    const { id, _id, ...updateData } = req.body || {};
+    const docId = _id || id;
+    if (!docId) {
+      return res.status(400).json({ success: false, reason: 'Document id (_id) is required' });
+    }
+    const updated = await NewCar.findByIdAndUpdate(docId, updateData, { new: true });
+    if (!updated) {
+      return res.status(404).json({ success: false, reason: 'New car document not found' });
+    }
+    return res.status(200).json({ success: true, data: updated });
+  }
+
+  if (req.method === 'DELETE') {
+    const { id, _id } = req.body || {};
+    const docId = _id || id;
+    if (!docId) {
+      return res.status(400).json({ success: false, reason: 'Document id (_id) is required' });
+    }
+    const deleted = await NewCar.findByIdAndDelete(docId);
+    if (!deleted) {
+      return res.status(404).json({ success: false, reason: 'New car document not found' });
+    }
+    return res.status(200).json({ success: true });
+  }
+
+  return res.status(405).json({ success: false, reason: 'Method not allowed.' });
 }
 
 async function seedUsers(): Promise<any[]> {

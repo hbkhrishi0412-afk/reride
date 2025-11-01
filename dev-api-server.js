@@ -63,6 +63,83 @@ const mockVehicleData = {
   ]
 };
 
+// Mock vehicles list for browse page (generate 60 diverse vehicles)
+const MAKES = [
+  { make: 'Maruti Suzuki', models: ['Swift', 'Baleno', 'Dzire', 'Brezza'] },
+  { make: 'Hyundai', models: ['Creta', 'i20', 'Venue', 'Verna'] },
+  { make: 'Tata', models: ['Nexon', 'Altroz', 'Harrier', 'Punch'] },
+  { make: 'Honda', models: ['City', 'Amaze', 'Elevate'] },
+  { make: 'Kia', models: ['Seltos', 'Sonet'] },
+  { make: 'Mahindra', models: ['XUV700', 'Scorpio N', 'Thar'] },
+  { make: 'Toyota', models: ['Innova Crysta', 'Hyryder', 'Glanza'] },
+  { make: 'Skoda', models: ['Kushaq', 'Slavia'] },
+  { make: 'Volkswagen', models: ['Virtus', 'Taigun'] }
+];
+const CITIES = [
+  { city: 'Mumbai', state: 'MH', rto: 'MH-01' },
+  { city: 'Pune', state: 'MH', rto: 'MH-12' },
+  { city: 'Delhi', state: 'DL', rto: 'DL-01' },
+  { city: 'Bengaluru', state: 'KA', rto: 'KA-01' },
+  { city: 'Chennai', state: 'TN', rto: 'TN-01' },
+  { city: 'Hyderabad', state: 'TG', rto: 'TS-09' },
+  { city: 'Ahmedabad', state: 'GJ', rto: 'GJ-01' },
+  { city: 'Kolkata', state: 'WB', rto: 'WB-02' }
+];
+const FUEL = ['Petrol', 'Diesel', 'CNG'];
+const TRANS = ['Manual', 'Automatic'];
+
+function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function pick(arr) { return arr[rand(0, arr.length - 1)]; }
+
+function generateMockVehicles(count = 60) {
+  const list = [];
+  for (let i = 0; i < count; i++) {
+    const brand = pick(MAKES);
+    const model = pick(brand.models);
+    const place = pick(CITIES);
+    const year = rand(2016, 2024);
+    const price = rand(300000, 3500000);
+    const mileage = rand(5000, 120000);
+    const fuelType = pick(FUEL);
+    const transmission = pick(TRANS);
+    list.push({
+      id: 1000 + i,
+      make: brand.make,
+      model: model,
+      variant: 'Base',
+      year,
+      price,
+      mileage,
+      category: 'four-wheeler',
+      sellerEmail: 'seller@test.com',
+      status: 'published',
+      isFeatured: i % 7 === 0,
+      images: [`https://picsum.photos/800/600?random=${i + 20}`],
+      description: `${brand.make} ${model} in good condition`,
+      engine: '1.5L',
+      fuelType,
+      transmission,
+      fuelEfficiency: `${rand(12, 24)} kmpl`,
+      color: ['White','Gray','Black','Blue','Red'][i % 5],
+      registrationYear: year,
+      insuranceValidity: '2026-01-01',
+      insuranceType: 'Comprehensive',
+      rto: place.rto,
+      city: place.city,
+      state: place.state,
+      location: `${place.city}, ${place.state}`,
+      noOfOwners: rand(1, 2),
+      displacement: `${rand(999, 1999)} cc`,
+      groundClearance: `${rand(160, 210)} mm`,
+      bootSpace: `${rand(260, 550)} litres`,
+      features: []
+    });
+  }
+  return list;
+}
+
+let mockVehicles = generateMockVehicles(60);
+
 // Mock plan data
 const mockPlans = [
   {
@@ -182,8 +259,8 @@ app.get('/api/vehicles', (req, res) => {
     console.log('🚗 GET /api/vehicles?type=data - Returning vehicle data');
     res.json(mockVehicleData);
   } else {
-    console.log('🚗 GET /api/vehicles - Returning empty vehicle list');
-    res.json([]);
+    console.log('🚗 GET /api/vehicles - Returning mock vehicles list');
+    res.json(mockVehicles);
   }
 });
 
@@ -207,8 +284,27 @@ app.post('/api/vehicles', (req, res) => {
       ...req.body,
       createdAt: new Date().toISOString()
     };
+    mockVehicles.unshift(newVehicle);
     res.status(201).json(newVehicle);
   }
+});
+
+app.put('/api/vehicles', (req, res) => {
+  const { id, ...patch } = req.body || {};
+  if (!id) return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+  const idx = mockVehicles.findIndex(v => v.id === id);
+  if (idx === -1) return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+  mockVehicles[idx] = { ...mockVehicles[idx], ...patch };
+  res.json(mockVehicles[idx]);
+});
+
+app.delete('/api/vehicles', (req, res) => {
+  const { id } = req.body || {};
+  if (!id) return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+  const before = mockVehicles.length;
+  mockVehicles = mockVehicles.filter(v => v.id !== id);
+  if (before === mockVehicles.length) return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+  res.json({ success: true, id });
 });
 
 app.get('/api/vehicle-data', (req, res) => {
@@ -226,6 +322,37 @@ app.post('/api/vehicle-data', (req, res) => {
     message: 'Vehicle data updated successfully',
     timestamp: new Date().toISOString()
   });
+});
+
+// New Cars CRUD (dev mock)
+let newCarsStore = [];
+
+app.get('/api/new-cars', (req, res) => {
+  res.json(newCarsStore);
+});
+
+app.post('/api/new-cars', (req, res) => {
+  const doc = { _id: Date.now().toString(), ...req.body, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  newCarsStore.unshift(doc);
+  res.status(201).json({ success: true, data: doc });
+});
+
+app.put('/api/new-cars', (req, res) => {
+  const { _id, id, ...patch } = req.body || {};
+  const docId = _id || id;
+  const idx = newCarsStore.findIndex(x => x._id === docId);
+  if (idx === -1) return res.status(404).json({ success: false, reason: 'Not found' });
+  newCarsStore[idx] = { ...newCarsStore[idx], ...patch, updatedAt: new Date().toISOString() };
+  res.json({ success: true, data: newCarsStore[idx] });
+});
+
+app.delete('/api/new-cars', (req, res) => {
+  const { _id, id } = req.body || {};
+  const docId = _id || id;
+  const before = newCarsStore.length;
+  newCarsStore = newCarsStore.filter(x => x._id !== docId);
+  if (newCarsStore.length === before) return res.status(404).json({ success: false, reason: 'Not found' });
+  res.json({ success: true });
 });
 
 // Vehicle Data Management API (Admin Database)

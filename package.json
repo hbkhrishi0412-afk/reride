@@ -5,7 +5,7 @@
   "type": "module",
   "description": "A modern vehicle marketplace platform.",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npm run dev:api\" \"vite\"",
     "dev:api": "node dev-api-server.js",
     "dev:full": "concurrently \"npm run dev:api\" \"npm run dev\"",
     "dev:clean": "npm run clean && vite",

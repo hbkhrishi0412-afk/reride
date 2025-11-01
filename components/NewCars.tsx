@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { NEW_CARS_DATA, NewCarModel, NewCarVariant } from '../data/newCarsData';
+import { newCarsService, NewCarPayload } from '../services/newCarsService';
 import { getSafeImageSrc } from '../utils/imageUtils';
 import CarSpecModal from './CarSpecModal';
 
@@ -124,11 +125,36 @@ const NewCars: React.FC = () => {
     const [tempFilters, setTempFilters] = useState({ selectedState, makeFilter, modelFilter, yearFilter, bodyTypeFilter, fuelFilter, seatingFilter });
 
     useEffect(() => {
-        setIsLoading(true);
-        setTimeout(() => {
-            setCarModels(NEW_CARS_DATA);
-            setIsLoading(false);
-        }, 500); 
+        let cancelled = false;
+        const load = async () => {
+            setIsLoading(true);
+            try {
+                const fromDb = await newCarsService.getAll();
+                if (!cancelled && Array.isArray(fromDb) && fromDb.length > 0) {
+                    // Map DB shape to component type if needed
+                    const mapped: NewCarModel[] = fromDb.map((doc: any, idx: number) => ({
+                        id: doc.id || idx + 1,
+                        brand_name: doc.brand_name,
+                        model_name: doc.model_name,
+                        model_year: doc.model_year,
+                        body_type: doc.body_type,
+                        key_specs: doc.key_specs,
+                        fuel_options: doc.fuel_options,
+                        variants: doc.variants,
+                        image_url: doc.image_url
+                    }));
+                    setCarModels(mapped);
+                } else {
+                    setCarModels(NEW_CARS_DATA);
+                }
+            } catch {
+                setCarModels(NEW_CARS_DATA);
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
     }, []);
 
     const allIndianStates = useMemo(() => ["Andaman & Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra & Nagar Haveli and Daman & Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu & Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"], []);

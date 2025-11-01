@@ -11,6 +11,9 @@ interface UnifiedLoginProps {
   onRegister: (user: User) => void;
   onNavigate: (view: View) => void;
   onForgotPassword: () => void;
+  allowedRoles?: UserRole[];
+  forcedRole?: UserRole;
+  hideRolePicker?: boolean;
 }
 
 type UserRole = 'customer' | 'seller' | 'admin';
@@ -20,9 +23,13 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   onLogin, 
   onRegister, 
   onNavigate, 
-  onForgotPassword 
+  onForgotPassword,
+  allowedRoles = ['customer', 'seller', 'admin'],
+  forcedRole,
+  hideRolePicker
 }) => {
-  const [selectedRole, setSelectedRole] = useState<UserRole>('customer');
+  const initialRole: UserRole = (forcedRole ?? (allowedRoles[0] as UserRole));
+  const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
   const [mode, setMode] = useState<AuthMode>('login');
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
@@ -142,6 +149,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   };
 
   const handleRoleChange = (role: UserRole) => {
+    if (forcedRole) return;
     setSelectedRole(role);
     setError('');
     setName('');
@@ -179,25 +187,27 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             <p className="text-center text-orange-100 mb-8">Choose your role to continue</p>
             
             <div className="space-y-4">
-              {Object.entries(roleConfig).map(([role, config]) => (
-                <button
-                  key={role}
-                  onClick={() => handleRoleChange(role as UserRole)}
-                  className={`w-full p-4 rounded-lg text-left transition-all duration-200 ${
-                    selectedRole === role 
-                      ? 'bg-white bg-opacity-20 border-2 border-white' 
-                      : 'bg-white bg-opacity-10 hover:bg-opacity-20'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <span className="text-2xl">{config.icon}</span>
-                    <div>
-                      <div className="font-semibold">{config.title}</div>
-                      <div className="text-sm text-orange-100">{config.description}</div>
+              {!hideRolePicker && Object.entries(roleConfig)
+                .filter(([role]) => allowedRoles.includes(role as UserRole))
+                .map(([role, config]) => (
+                  <button
+                    key={role}
+                    onClick={() => handleRoleChange(role as UserRole)}
+                    className={`w-full p-4 rounded-lg text-left transition-all duration-200 ${
+                      selectedRole === role 
+                        ? 'bg-white bg-opacity-20 border-2 border-white' 
+                        : 'bg-white bg-opacity-10 hover:bg-opacity-20'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <span className="text-2xl">{config.icon}</span>
+                      <div>
+                        <div className="font-semibold">{config.title}</div>
+                        <div className="text-sm text-orange-100">{config.description}</div>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))}
             </div>
 
             <div className="mt-8 text-center">

@@ -319,9 +319,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     }
     if (view === View.SELLER_DASHBOARD && currentUser?.role !== 'seller') setCurrentView(View.LOGIN_PORTAL);
     else if (view === View.ADMIN_PANEL && currentUser?.role !== 'admin') setCurrentView(View.ADMIN_LOGIN);
+    else if (view === View.NEW_CARS_ADMIN_PANEL && currentUser?.role !== 'admin') setCurrentView(View.NEW_CARS_ADMIN_LOGIN);
     else if ((view === View.PROFILE || view === View.INBOX) && !currentUser) setCurrentView(View.LOGIN_PORTAL);
     else setCurrentView(view);
+
+    // Update path for friendly URLs
+    try {
+      let newPath = window.location.pathname;
+      if (view === View.ADMIN_LOGIN) newPath = '/admin/login';
+      else if (view === View.NEW_CARS_ADMIN_LOGIN) newPath = '/admin/new-cars';
+      else if (view === View.NEW_CARS_ADMIN_PANEL) newPath = '/admin/new-cars/manage';
+      else if (view === View.LOGIN_PORTAL || view === View.CUSTOMER_LOGIN || view === View.SELLER_LOGIN) newPath = '/login';
+      else if (view === View.HOME) newPath = '/';
+      if (newPath !== window.location.pathname) {
+        window.history.pushState({}, '', newPath);
+      }
+    } catch {}
   }, [currentView, currentUser]);
+
+  // Map initial path on first load to views (/login, /admin/login)
+  useEffect(() => {
+    try {
+      const path = window.location.pathname.toLowerCase();
+      if (path === '/admin' || path === '/admin/login') {
+        setCurrentView(View.ADMIN_LOGIN);
+      } else if (path === '/admin/new-cars') {
+        setCurrentView(View.NEW_CARS_ADMIN_LOGIN);
+      } else if (path === '/admin/new-cars/manage') {
+        setCurrentView(View.NEW_CARS_ADMIN_PANEL);
+      } else if (path === '/login') {
+        setCurrentView(View.LOGIN_PORTAL);
+      }
+    } catch {}
+  }, []);
 
   // Load initial data with optimized loading
   useEffect(() => {
