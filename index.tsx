@@ -51,12 +51,12 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 */
 
-// Unregister any existing service workers to clear cache
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// Unregister any existing service workers to clear cache (also in development)
+if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
-    for(let registration of registrations) {
+    for (let registration of registrations) {
       registration.unregister();
-      console.log('Unregistered old service worker');
+      console.log('Unregistered service worker');
     }
   });
 }

@@ -85,7 +85,8 @@ export default defineConfig({
         ]
       },
       devOptions: {
-        enabled: true
+        // Disable service worker in development to avoid intercepting module requests
+        enabled: false
       }
     })
   ],

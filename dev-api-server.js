@@ -140,6 +140,9 @@ function generateMockVehicles(count = 60) {
 
 let mockVehicles = generateMockVehicles(60);
 
+// In-memory Sell Car submissions store
+let sellCarSubmissions = [];
+
 // Mock plan data
 const mockPlans = [
   {
@@ -305,6 +308,73 @@ app.delete('/api/vehicles', (req, res) => {
   mockVehicles = mockVehicles.filter(v => v.id !== id);
   if (before === mockVehicles.length) return res.status(404).json({ success: false, reason: 'Vehicle not found' });
   res.json({ success: true, id });
+});
+
+// Sell Car API endpoints (mock)
+app.get('/api/sell-car', (req, res) => {
+  // Basic pagination and filters
+  const page = parseInt(req.query.page || '1', 10);
+  const limit = parseInt(req.query.limit || '20', 10);
+  const status = req.query.status;
+  const search = (req.query.search || '').toString().toLowerCase();
+
+  let data = [...sellCarSubmissions];
+  if (status) data = data.filter(x => x.status === status);
+  if (search) {
+    const safeLower = (val) => (typeof val === 'string' ? val.toLowerCase() : '');
+    data = data.filter(x =>
+      safeLower(x.make).includes(search) ||
+      safeLower(x.model).includes(search) ||
+      safeLower(x.registration).includes(search)
+    );
+  }
+
+  const start = (page - 1) * limit;
+  const paged = data.slice(start, start + limit);
+  res.json({ success: true, data: paged, pagination: { page, limit, total: data.length } });
+});
+
+app.post('/api/sell-car', (req, res) => {
+  // Basic validation to ensure critical fields exist to prevent later crashes
+  const required = ['registration', 'make', 'model'];
+  const missing = required.filter(f => !req.body || typeof req.body[f] !== 'string' || !req.body[f].trim());
+  if (missing.length) {
+    return res.status(400).json({ success: false, error: `Missing required fields: ${missing.join(', ')}` });
+  }
+
+  const doc = {
+    _id: Date.now().toString(),
+    submittedAt: new Date().toISOString(),
+    status: 'pending',
+    adminNotes: '',
+    estimatedPrice: undefined,
+    ...req.body
+  };
+  sellCarSubmissions.unshift(doc);
+  res.status(201).json({ success: true, id: doc._id, message: 'Car details submitted successfully' });
+});
+
+app.put('/api/sell-car', (req, res) => {
+  const { _id, id, status, adminNotes, estimatedPrice } = req.body || {};
+  const docId = _id || id;
+  if (!docId) return res.status(400).json({ success: false, error: 'id is required' });
+  const idx = sellCarSubmissions.findIndex(x => x._id === docId);
+  if (idx === -1) return res.status(404).json({ success: false, error: 'submission not found' });
+  const patch = {};
+  if (status) patch.status = status;
+  if (typeof adminNotes !== 'undefined') patch.adminNotes = adminNotes;
+  if (typeof estimatedPrice !== 'undefined') patch.estimatedPrice = estimatedPrice;
+  sellCarSubmissions[idx] = { ...sellCarSubmissions[idx], ...patch };
+  res.json({ success: true, message: 'Updated successfully' });
+});
+
+app.delete('/api/sell-car', (req, res) => {
+  const { id } = req.query;
+  if (!id) return res.status(400).json({ success: false, error: 'id is required' });
+  const before = sellCarSubmissions.length;
+  sellCarSubmissions = sellCarSubmissions.filter(x => x._id !== id);
+  if (before === sellCarSubmissions.length) return res.status(404).json({ success: false, error: 'submission not found' });
+  res.json({ success: true, message: 'Deleted successfully' });
 });
 
 app.get('/api/vehicle-data', (req, res) => {
