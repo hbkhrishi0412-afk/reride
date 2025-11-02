@@ -11,7 +11,7 @@ import { getSupportTickets, saveSupportTickets } from '../services/supportTicket
 import { dataService } from '../services/dataService';
 import { loadingManager, LOADING_OPERATIONS, withLoadingTimeout } from '../utils/loadingManager';
 import { useTimeout } from '../hooks/useCleanup';
-import { VEHICLE_DATA } from './vehicleData.ts';
+import { VEHICLE_DATA } from './vehicleData';
 
 interface AppContextType {
   // State
