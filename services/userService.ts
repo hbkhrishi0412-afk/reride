@@ -306,7 +306,13 @@ const authApi = async (body: any): Promise<any> => {
 
 // --- Environment Detection ---
 // Use local storage in development, API in production
-const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname.includes('localhost');
+// Force development mode on localhost even if running on different ports
+const isDevelopment = import.meta.env.DEV || 
+                     window.location.hostname === 'localhost' || 
+                     window.location.hostname === '127.0.0.1' ||
+                     window.location.hostname.includes('localhost') ||
+                     window.location.hostname.includes('127.0.0.1') ||
+                     window.location.port !== '';
 
 // --- Exported Environment-Aware Service Functions ---
 
@@ -357,9 +363,10 @@ export const updateUser = async (userData: Partial<User> & { email: string }): P
 };
 export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
 export const login = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
-  console.log('🚀 Login attempt:', { email: credentials.email, role: credentials.role, isDevelopment });
+  console.log('🚀 Login attempt:', { email: credentials.email, role: credentials.role, isDevelopment, hostname: window.location.hostname, port: window.location.port });
   
-  // Always try API first for production, with fallback to local
+  // Always use local storage in development or on localhost
+  // Only try API in true production environments
   if (!isDevelopment) {
     try {
       console.log('🌐 Trying API login...');
@@ -379,8 +386,8 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       return await loginLocal(credentials);
     }
   } else {
-    // Development mode - use local storage
-    console.log('💻 Development mode - using local storage');
+    // Development mode - use local storage directly
+    console.log('💻 Development mode - using local storage directly');
     return await loginLocal(credentials);
   }
 };
