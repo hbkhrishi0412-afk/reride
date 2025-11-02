@@ -390,9 +390,30 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ success: false, reason: 'Email is required for update.' });
     }
 
+    // Separate null values (to be unset) from regular updates
+    const updateFields: any = {};
+    const unsetFields: any = {};
+    
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === null) {
+        unsetFields[key] = '';
+      } else if (updateData[key] !== undefined) {
+        updateFields[key] = updateData[key];
+      }
+    });
+
+    // Build update operation
+    const updateOperation: any = {};
+    if (Object.keys(updateFields).length > 0) {
+      updateOperation.$set = updateFields;
+    }
+    if (Object.keys(unsetFields).length > 0) {
+      updateOperation.$unset = unsetFields;
+    }
+
     const updatedUser = await User.findOneAndUpdate(
       { email },
-      updateData,
+      updateOperation,
       { new: true }
     );
 
@@ -894,44 +915,62 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse) {
 }
 
 async function seedUsers(): Promise<any[]> {
+  // Hash passwords before inserting
+  const adminPassword = await hashPassword('password');
+  const sellerPassword = await hashPassword('password');
+  const customerPassword = await hashPassword('password');
+  
+  // Set plan dates for seller
+  const now = new Date();
+  const expiryDate = new Date(now);
+  expiryDate.setMonth(expiryDate.getMonth() + 1); // 1 month from now
+  
   const sampleUsers = [
     {
       id: 1,
       email: 'admin@test.com',
-      password: 'password',
+      password: adminPassword,
       name: 'Admin User',
       mobile: '9876543210',
       role: 'admin',
       status: 'active',
       isVerified: true,
-      plan: 'premium',
+      subscriptionPlan: 'premium',
       featuredCredits: 100,
       createdAt: new Date().toISOString()
     },
     {
       id: 2,
       email: 'seller@test.com',
-      password: 'password',
-      name: 'Test Seller',
-      mobile: '9876543211',
+      password: sellerPassword,
+      name: 'Prestige Motors',
+      mobile: '+91-98765-43210',
       role: 'seller',
       status: 'active',
       isVerified: true,
-      plan: 'pro',
-      featuredCredits: 50,
+      subscriptionPlan: 'premium',
+      featuredCredits: 5,
+      usedCertifications: 1,
+      dealershipName: 'Prestige Motors',
+      bio: 'Specializing in luxury and performance electric vehicles since 2020.',
+      logoUrl: 'https://i.pravatar.cc/100?u=seller',
+      avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com',
+      planActivatedDate: now.toISOString(),
+      planExpiryDate: expiryDate.toISOString(),
       createdAt: new Date().toISOString()
     },
     {
       id: 3,
       email: 'customer@test.com',
-      password: 'password',
+      password: customerPassword,
       name: 'Test Customer',
       mobile: '9876543212',
       role: 'customer',
       status: 'active',
       isVerified: false,
-      plan: 'basic',
+      subscriptionPlan: 'free',
       featuredCredits: 0,
+      avatarUrl: 'https://i.pravatar.cc/150?u=customer@test.com',
       createdAt: new Date().toISOString()
     }
   ];

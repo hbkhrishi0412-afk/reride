@@ -69,6 +69,12 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  planActivatedDate: {
+    type: String, // ISO String - when the current plan was activated
+  },
+  planExpiryDate: {
+    type: String, // ISO String - when the current plan expires
+  },
   
   // Trust & Verification
   phoneVerified: { type: Boolean, default: false },
