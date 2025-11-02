@@ -95,20 +95,29 @@ export const getUsersLocal = async (): Promise<User[]> => {
     try {
         console.log('getUsersLocal: Starting...');
         let usersJson = localStorage.getItem('reRideUsers');
-        if (!usersJson) {
-            console.log('getUsersLocal: No cached data, loading MOCK_USERS...');
-            // Dynamically import MOCK_USERS to avoid blocking initial load
-            const { MOCK_USERS } = await import('../constants');
-            // MOCK_USERS is a function, so we need to call it
-            const mockUsers = typeof MOCK_USERS === 'function' ? await MOCK_USERS() : MOCK_USERS;
-            localStorage.setItem('reRideUsers', JSON.stringify(mockUsers));
-            usersJson = JSON.stringify(mockUsers);
-            console.log(`✅ Populated local storage with ${mockUsers.length} users`);
+        if (!usersJson || usersJson === '[]' || usersJson === 'null') {
+            console.log('getUsersLocal: No cached data or empty array, loading fallback data...');
+            // Use FALLBACK_USERS directly instead of trying to import MOCK_USERS
+            // MOCK_USERS might be empty in constants/index.ts
+            const usersToStore = FALLBACK_USERS;
+            localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
+            usersJson = JSON.stringify(usersToStore);
+            console.log(`✅ Populated local storage with ${usersToStore.length} users from FALLBACK_USERS`);
         } else {
             console.log('getUsersLocal: Using cached data');
+            // Validate that we have users with proper structure
+            const parsedUsers = JSON.parse(usersJson);
+            if (!Array.isArray(parsedUsers) || parsedUsers.length === 0) {
+                console.warn('getUsersLocal: Cached data is invalid, using FALLBACK_USERS');
+                const usersToStore = FALLBACK_USERS;
+                localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
+                usersJson = JSON.stringify(usersToStore);
+            }
         }
         const users = JSON.parse(usersJson);
         console.log('getUsersLocal: Successfully loaded', users.length, 'users');
+        // Log available emails for debugging
+        console.log('getUsersLocal: Available user emails:', users.map((u: User) => u.email));
         return users;
     } catch (error) {
         console.error('getUsersLocal: Error loading users:', error);
@@ -141,16 +150,29 @@ const deleteUserLocal = async (email: string): Promise<{ success: boolean, email
 };
 
 const loginLocal = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
-    // SECURITY: Reduced logging to prevent information disclosure
     const { email, password, role } = credentials;
+    
+    // Normalize email (trim and lowercase for comparison)
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const normalizedPassword = (password || '').trim();
+    
+    console.log('🔐 loginLocal: Attempting login', { 
+        email: normalizedEmail, 
+        passwordLength: normalizedPassword.length,
+        role 
+    });
+    
     const users = await getUsersLocal();
     
-    // SECURITY: Find user by email first, then validate password securely
-    const user = users.find(u => u.email === email);
+    // Find user by email (case-insensitive comparison)
+    const user = users.find(u => (u.email || '').trim().toLowerCase() === normalizedEmail);
     
     if (!user) {
+        console.log('❌ loginLocal: User not found', { email: normalizedEmail, availableEmails: users.map(u => u.email) });
         return { success: false, reason: 'Invalid credentials.' };
     }
+    
+    console.log('✅ loginLocal: User found', { email: user.email, hasPassword: !!user.password });
     
     // SECURITY: For local storage, we need to handle both hashed and plain text passwords
     // This is a fallback system, so we check both formats
@@ -160,29 +182,40 @@ const loginLocal = async (credentials: any): Promise<{ success: boolean, user?: 
         // Password is hashed with bcrypt
         try {
             const bcrypt = require('bcryptjs');
-            isPasswordValid = await bcrypt.compare(password, user.password);
+            isPasswordValid = await bcrypt.compare(normalizedPassword, user.password);
         } catch (error) {
             // SECURITY: Don't log password validation errors
+            console.warn('⚠️ loginLocal: Bcrypt comparison failed', error);
             isPasswordValid = false;
         }
     } else {
         // SECURITY WARNING: Plain text password - this should only be used in development
         // In production, all passwords should be hashed
-        console.warn('⚠️ SECURITY WARNING: Using plain text password comparison in local storage');
-        isPasswordValid = user.password === password;
+        const storedPassword = (user.password || '').trim();
+        isPasswordValid = storedPassword === normalizedPassword;
+        console.log('🔍 loginLocal: Plain text comparison', { 
+            storedPasswordLength: storedPassword.length,
+            inputPasswordLength: normalizedPassword.length,
+            match: isPasswordValid 
+        });
     }
     
     if (!isPasswordValid) {
+        console.log('❌ loginLocal: Password mismatch');
         return { success: false, reason: 'Invalid credentials.' };
     }
     
     if (role && user.role !== role) {
+        console.log('❌ loginLocal: Role mismatch', { expected: role, actual: user.role });
         return { success: false, reason: `User is not a registered ${role}.` };
     }
     
     if (user.status === 'inactive') {
+        console.log('❌ loginLocal: Account inactive');
         return { success: false, reason: 'Your account has been deactivated.' };
     }
+    
+    console.log('✅ loginLocal: Login successful', { email: user.email, role: user.role });
     
     // SECURITY: Remove password from response
     const { password: _, ...userWithoutPassword } = user;
