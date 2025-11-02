@@ -268,7 +268,7 @@ app.get('/api/vehicles', (req, res) => {
 });
 
 app.post('/api/vehicles', (req, res) => {
-  const { type } = req.query;
+  const { type, action } = req.query;
   
   if (type === 'data') {
     console.log('🚗 POST /api/vehicles?type=data - Updating vehicle data');
@@ -280,16 +280,131 @@ app.post('/api/vehicles', (req, res) => {
       message: 'Vehicle data updated successfully',
       timestamp: new Date().toISOString()
     });
-  } else {
-    console.log('🚗 POST /api/vehicles - Creating new vehicle');
-    const newVehicle = {
-      id: Date.now(),
-      ...req.body,
-      createdAt: new Date().toISOString()
-    };
-    mockVehicles.unshift(newVehicle);
-    res.status(201).json(newVehicle);
+    return;
   }
+
+  // Handle special actions
+  if (action === 'refresh') {
+    const { vehicleId, refreshAction, sellerEmail } = req.body;
+    const vehicle = mockVehicles.find(v => v.id === vehicleId);
+    
+    if (!vehicle) {
+      return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+    }
+    
+    if (vehicle.sellerEmail !== sellerEmail) {
+      return res.status(403).json({ success: false, reason: 'Unauthorized' });
+    }
+    
+    if (refreshAction === 'refresh') {
+      vehicle.views = 0;
+      vehicle.inquiriesCount = 0;
+    } else if (refreshAction === 'renew') {
+      vehicle.listingExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    }
+    
+    return res.status(200).json({ success: true, vehicle });
+  }
+
+  if (action === 'boost') {
+    const { vehicleId, packageId } = req.body;
+    const vehicle = mockVehicles.find(v => v.id === vehicleId);
+    
+    if (!vehicle) {
+      return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+    }
+    
+    // Extract type and duration from packageId
+    let boostType = 'top_search';
+    let boostDuration = 7;
+    
+    if (packageId) {
+      const parts = packageId.split('_');
+      if (parts.length >= 2) {
+        const lastPart = parts[parts.length - 1];
+        const isLastPartNumber = !isNaN(Number(lastPart));
+        
+        if (isLastPartNumber) {
+          boostType = parts.slice(0, -1).join('_');
+          boostDuration = Number(lastPart);
+        } else {
+          boostType = parts.join('_');
+          boostDuration = 7;
+        }
+      }
+    }
+    
+    const boostInfo = {
+      id: `boost_${Date.now()}`,
+      vehicleId: vehicleId,
+      packageId: packageId || 'standard',
+      type: boostType,
+      startDate: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + boostDuration * 24 * 60 * 60 * 1000).toISOString(),
+      isActive: true
+    };
+    
+    if (!vehicle.activeBoosts) {
+      vehicle.activeBoosts = [];
+    }
+    vehicle.activeBoosts.push(boostInfo);
+    vehicle.isFeatured = true;
+    
+    return res.status(200).json({ success: true, vehicle });
+  }
+
+  if (action === 'certify') {
+    const { vehicleId } = req.body;
+    const vehicle = mockVehicles.find(v => v.id === vehicleId);
+    
+    if (!vehicle) {
+      return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+    }
+    
+    vehicle.certificationStatus = 'requested';
+    vehicle.certificationRequestedAt = new Date().toISOString();
+    
+    return res.status(200).json({ success: true, vehicle });
+  }
+
+  if (action === 'feature') {
+    const { vehicleId } = req.body;
+    const vehicle = mockVehicles.find(v => v.id === vehicleId);
+    
+    if (!vehicle) {
+      return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+    }
+    
+    vehicle.isFeatured = true;
+    vehicle.featuredAt = new Date().toISOString();
+    
+    return res.status(200).json({ success: true, vehicle });
+  }
+
+  if (action === 'sold') {
+    const { vehicleId } = req.body;
+    const vehicle = mockVehicles.find(v => v.id === vehicleId);
+    
+    if (!vehicle) {
+      return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+    }
+    
+    vehicle.status = 'sold';
+    vehicle.listingStatus = 'sold';
+    vehicle.soldAt = new Date().toISOString();
+    
+    return res.status(200).json({ success: true, vehicle });
+  }
+
+  // Default: Create new vehicle
+  console.log('🚗 POST /api/vehicles - Creating new vehicle');
+  const newVehicle = {
+    id: Date.now(),
+    ...req.body,
+    createdAt: new Date().toISOString()
+  };
+  mockVehicles.unshift(newVehicle);
+  res.status(201).json(newVehicle);
 });
 
 app.put('/api/vehicles', (req, res) => {

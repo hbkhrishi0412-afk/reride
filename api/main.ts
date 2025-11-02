@@ -613,6 +613,73 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
     }
 
     if (action === 'boost') {
+      const { vehicleId, packageId } = req.body;
+      const vehicle = await Vehicle.findOne({ id: vehicleId });
+      
+      if (!vehicle) {
+        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+      }
+      
+      // Add boost information if packageId is provided
+      // packageId format is like "top_search_3", "homepage_spot", etc.
+      // Extract type and duration from packageId
+      let boostType = 'top_search';
+      let boostDuration = 7; // Default 7 days
+      
+      if (packageId) {
+        const parts = packageId.split('_');
+        if (parts.length >= 2) {
+          // Extract type (first parts except last if it's a number)
+          const lastPart = parts[parts.length - 1];
+          const isLastPartNumber = !isNaN(Number(lastPart));
+          
+          if (isLastPartNumber) {
+            boostType = parts.slice(0, -1).join('_');
+            boostDuration = Number(lastPart);
+          } else {
+            boostType = parts.join('_');
+            // Use default duration based on package
+            boostDuration = 7; // Default
+          }
+        }
+      }
+      
+      const boostInfo = {
+        id: `boost_${Date.now()}`,
+        vehicleId: vehicleId,
+        packageId: packageId || 'standard',
+        type: boostType,
+        startDate: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + boostDuration * 24 * 60 * 60 * 1000).toISOString(),
+        isActive: true
+      };
+      
+      if (!vehicle.activeBoosts) {
+        vehicle.activeBoosts = [];
+      }
+      vehicle.activeBoosts.push(boostInfo);
+      vehicle.isFeatured = true;
+      
+      await vehicle.save();
+      return res.status(200).json({ success: true, vehicle });
+    }
+
+    if (action === 'certify') {
+      const { vehicleId } = req.body;
+      const vehicle = await Vehicle.findOne({ id: vehicleId });
+      
+      if (!vehicle) {
+        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+      }
+      
+      vehicle.certificationStatus = 'requested';
+      vehicle.certificationRequestedAt = new Date().toISOString();
+      
+      await vehicle.save();
+      return res.status(200).json({ success: true, vehicle });
+    }
+
+    if (action === 'feature') {
       const { vehicleId } = req.body;
       const vehicle = await Vehicle.findOne({ id: vehicleId });
       
@@ -621,6 +688,24 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
       }
       
       vehicle.isFeatured = true;
+      vehicle.featuredAt = new Date().toISOString();
+      
+      await vehicle.save();
+      return res.status(200).json({ success: true, vehicle });
+    }
+
+    if (action === 'sold') {
+      const { vehicleId } = req.body;
+      const vehicle = await Vehicle.findOne({ id: vehicleId });
+      
+      if (!vehicle) {
+        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+      }
+      
+      vehicle.status = 'sold';
+      vehicle.listingStatus = 'sold';
+      vehicle.soldAt = new Date().toISOString();
+      
       await vehicle.save();
       return res.status(200).json({ success: true, vehicle });
     }

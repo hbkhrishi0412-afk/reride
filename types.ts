@@ -98,8 +98,11 @@ export interface Vehicle {
   };
   certifiedInspection?: CertifiedInspection | null;
   certificationStatus?: 'none' | 'requested' | 'approved' | 'rejected' | 'certified';
+  certificationRequestedAt?: string;
   // New features
   videoUrl?: string;
+  featuredAt?: string;
+  soldAt?: string;
   serviceRecords?: ServiceRecord[];
   accidentHistory?: AccidentRecord[];
   documents?: VehicleDocument[];

@@ -69,6 +69,8 @@ const vehicleSchema = new mongoose.Schema({
     soldAt: Date,
     // Featured fields
     featuredAt: Date,
+    // Boost fields
+    activeBoosts: [{ type: mongoose.Schema.Types.Mixed }],
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now }
 }, {
@@ -113,7 +115,9 @@ app.get('/api/vehicles', async (req, res) => {
 
 app.post('/api/vehicles', async (req, res) => {
     try {
-        const { action, vehicleId, refreshAction, sellerEmail, id } = req.body;
+        // Support both query parameter and body for action
+        const action = req.query.action || req.body.action;
+        const { vehicleId, refreshAction, sellerEmail, id, packageId } = req.body;
         
         // Handle different actions
         if (action === 'refresh') {
@@ -188,6 +192,54 @@ app.post('/api/vehicles', async (req, res) => {
             
             vehicle.isFeatured = true;
             vehicle.featuredAt = new Date();
+            
+            await vehicle.save();
+            return res.status(200).json({ success: true, vehicle });
+        }
+        
+        if (action === 'boost') {
+            console.log('🚀 POST /api/vehicles - Boost listing');
+            const vehicle = await Vehicle.findOne({ id: vehicleId });
+            
+            if (!vehicle) {
+                return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+            }
+            
+            // Extract type and duration from packageId
+            let boostType = 'top_search';
+            let boostDuration = 7;
+            
+            if (packageId) {
+                const parts = packageId.split('_');
+                if (parts.length >= 2) {
+                    const lastPart = parts[parts.length - 1];
+                    const isLastPartNumber = !isNaN(Number(lastPart));
+                    
+                    if (isLastPartNumber) {
+                        boostType = parts.slice(0, -1).join('_');
+                        boostDuration = Number(lastPart);
+                    } else {
+                        boostType = parts.join('_');
+                        boostDuration = 7;
+                    }
+                }
+            }
+            
+            const boostInfo = {
+                id: `boost_${Date.now()}`,
+                vehicleId: vehicleId,
+                packageId: packageId || 'standard',
+                type: boostType,
+                startDate: new Date(),
+                expiresAt: new Date(Date.now() + boostDuration * 24 * 60 * 60 * 1000),
+                isActive: true
+            };
+            
+            if (!vehicle.activeBoosts) {
+                vehicle.activeBoosts = [];
+            }
+            vehicle.activeBoosts.push(boostInfo);
+            vehicle.isFeatured = true;
             
             await vehicle.save();
             return res.status(200).json({ success: true, vehicle });

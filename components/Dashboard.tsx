@@ -1192,13 +1192,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleCertifyVehicle = async (vehicleId: number) => {
     try {
-      const response = await fetch('/api/vehicles', {
+      const response = await fetch('/api/vehicles?action=certify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'certify',
-          vehicleId
-        })
+        body: JSON.stringify({ vehicleId })
       });
       
       if (response.ok) {
@@ -1218,13 +1215,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleMarkAsSold = async (vehicleId: number) => {
     try {
-      const response = await fetch('/api/vehicles', {
+      const response = await fetch('/api/vehicles?action=sold', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'sold',
-          vehicleId
-        })
+        body: JSON.stringify({ vehicleId })
       });
       
       if (response.ok) {
@@ -1243,25 +1237,26 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   };
 
   const handleFeatureVehicle = async (vehicleId: number) => {
+    console.log('🚀 handleFeatureVehicle called for vehicle:', vehicleId);
     try {
-      const response = await fetch('/api/vehicles', {
+      const response = await fetch('/api/vehicles?action=feature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'feature',
-          vehicleId
-        })
+        body: JSON.stringify({ vehicleId })
       });
       
+      console.log('📡 Feature response status:', response.status);
       if (response.ok) {
         const result = await response.json();
+        console.log('📡 Feature response data:', result);
         if (result.success) {
           // Update local state
           onUpdateVehicle(result.vehicle);
           console.log('✅ Vehicle featured successfully');
         }
       } else {
-        console.error('❌ Failed to feature vehicle');
+        const errorText = await response.text();
+        console.error('❌ Failed to feature vehicle:', errorText);
       }
     } catch (error) {
       console.error('❌ Error featuring vehicle:', error);
