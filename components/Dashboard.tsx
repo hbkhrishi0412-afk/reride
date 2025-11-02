@@ -167,6 +167,56 @@ const PlanStatusCard: React.FC<{
                     <span className="font-semibold">{plan.freeCertifications - (seller.usedCertifications || 0)} remaining</span>
                 </div>
 
+                {(seller.planActivatedDate || seller.planExpiryDate) && (
+                    <div className="mt-4 pt-4 border-t border-spinny-white/20 space-y-2">
+                        {seller.planActivatedDate && (
+                            <div className="flex justify-between text-xs">
+                                <span>Plan Activated:</span>
+                                <span className="font-semibold">
+                                    {new Date(seller.planActivatedDate).toLocaleDateString('en-IN', { 
+                                        year: 'numeric', 
+                                        month: 'short', 
+                                        day: 'numeric' 
+                                    })}
+                                </span>
+                            </div>
+                        )}
+                        {seller.planExpiryDate && (
+                            <div className="flex justify-between text-xs">
+                                <span>Expiry Date:</span>
+                                <span className={`font-semibold ${
+                                    (() => {
+                                        const expiryDate = new Date(seller.planExpiryDate);
+                                        const isExpired = expiryDate < new Date();
+                                        const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                        if (isExpired) return 'text-red-300';
+                                        if (daysRemaining <= 7) return 'text-orange-300';
+                                        return '';
+                                    })()
+                                }`}>
+                                    {new Date(seller.planExpiryDate).toLocaleDateString('en-IN', { 
+                                        year: 'numeric', 
+                                        month: 'short', 
+                                        day: 'numeric' 
+                                    })}
+                                    {(() => {
+                                        const expiryDate = new Date(seller.planExpiryDate);
+                                        const isExpired = expiryDate < new Date();
+                                        const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                        if (isExpired) {
+                                            return <span className="ml-2 text-red-200">(Expired)</span>;
+                                        }
+                                        if (daysRemaining <= 30 && daysRemaining > 0) {
+                                            return <span className="ml-2 text-orange-200">({daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left)</span>;
+                                        }
+                                        return null;
+                                    })()}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="mt-4 pt-4 border-t border-spinny-white/20">
                     <h4 className="font-semibold mb-2">Plan Features:</h4>
                     <ul className="space-y-2 text-xs">
@@ -1056,6 +1106,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // NEW: Boost listing feature
   const [showBoostModal, setShowBoostModal] = useState(false);
   const [vehicleToBoost, setVehicleToBoost] = useState<Vehicle | null>(null);
+  // Pagination state for Active Listings
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   
   // Location data is now handled by individual components that need it
 
@@ -1250,6 +1303,19 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   const soldListings = useMemo(() => sellerVehicles.filter(v => v.status === 'sold'), [sellerVehicles]);
   const reportedCount = useMemo(() => reportedVehicles.length, [reportedVehicles]);
   
+  // Pagination calculations for Active Listings
+  const totalPages = useMemo(() => Math.ceil(activeListings.length / itemsPerPage), [activeListings.length, itemsPerPage]);
+  const paginatedListings = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return activeListings.slice(startIndex, endIndex);
+  }, [activeListings, currentPage, itemsPerPage]);
+  
+  // Reset to page 1 when listings change or view changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeListings.length, activeView]);
+  
   const analyticsData = useMemo(() => {
     const totalSalesValue = soldListings.reduce((sum: number, v) => sum + (v.price || 0), 0);
     const totalViews = activeListings.reduce((sum, v) => sum + (v.views || 0), 0);
@@ -1299,12 +1365,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       case 'overview':
         return (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               <StatCard title="Active Listings" value={activeListings.length} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17v-2a4 4 0 00-4-4h-1.5m1.5 4H13m-2 0a2 2 0 104 0 2 2 0 00-4 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11V7a4 4 0 00-4-4H7a4 4 0 00-4 4v4" /></svg>} />
               <StatCard title="Unread Messages" value={unreadCount} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
               <StatCard title="Your Seller Rating" value={`${(seller?.averageRating || 0).toFixed(1)} (${seller?.ratingCount || 0})`} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.522 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.522 4.674c.3.921-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.784.57-1.838-.197-1.539-1.118l1.522-4.674a1 1 0 00-.363-1.118L2.98 8.11c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.522-4.674z" /></svg>} />
-              <PlanStatusCard seller={seller} activeListingsCount={activeListings.length} onNavigate={onNavigate} />
             </div>
+            <PlanStatusCard seller={seller} activeListingsCount={activeListings.length} onNavigate={onNavigate} />
             <PaymentStatusCard currentUser={seller} />
             <AiAssistant
               vehicles={activeListings}
@@ -1437,18 +1503,19 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               </div>
             </div>
             {activeListings.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-white dark:bg-white">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
-                    {activeListings.map((v) => (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead className="bg-white dark:bg-white">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehicle</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
+                      {paginatedListings.map((v) => (
                       <tr key={v.id}>
                         <td className="px-6 py-4 font-medium">{v.year} {v.make} {v.model} {v.variant || ''}</td>
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
@@ -1515,20 +1582,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                   ⭐ Feature
                                 </div>
                               )}
-                              <button 
-                                onClick={() => handleRefreshVehicle(v.id)} 
-                                className="px-1.5 py-0.5 text-spinny-blue hover:text-spinny-blue text-xs border border-spinny-blue rounded hover:bg-spinny-blue-light" 
-                                title="Refresh listing"
-                              >
-                                🔄 Refresh
-                              </button>
-                              <button 
-                                onClick={() => handleRenewVehicle(v.id)} 
-                                className="px-1.5 py-0.5 text-spinny-green hover:text-spinny-green text-xs border border-spinny-green rounded hover:bg-spinny-green-light" 
-                                title="Renew listing"
-                              >
-                                ♻️ Renew
-                              </button>
                             </div>
                             
                             {/* Second Row - 4 buttons */}
@@ -1589,20 +1642,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                 >
                                   ⭐
                                 </button>
-                                <button 
-                                  onClick={() => handleRefreshVehicle(v.id)} 
-                                  className="px-1.5 py-0.5 text-spinny-blue text-xs border border-spinny-blue rounded"
-                                  title="Refresh"
-                                >
-                                  🔄
-                                </button>
-                                <button 
-                                  onClick={() => handleRenewVehicle(v.id)} 
-                                  className="px-1.5 py-0.5 text-spinny-green text-xs border border-spinny-green rounded"
-                                  title="Renew"
-                                >
-                                  ♻️
-                                </button>
                               </div>
                               
                               {/* Second Row - 4 buttons */}
@@ -1653,6 +1692,113 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   </tbody>
                 </table>
               </div>
+              {/* Pagination Controls */}
+              {activeListings.length > itemsPerPage && (
+                <div className="mt-6 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <div className="flex-1 flex justify-between sm:hidden">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                  <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
+                        <span className="font-medium">{Math.min(currentPage * itemsPerPage, activeListings.length)}</span> of{' '}
+                        <span className="font-medium">{activeListings.length}</span> results
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="sr-only">Previous</span>
+                          <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        {(() => {
+                          const pages: (number | string)[] = [];
+                          
+                          // Always show first page
+                          pages.push(1);
+                          
+                          // Add ellipsis after first page if needed
+                          if (currentPage > 3) {
+                            pages.push('ellipsis-start');
+                          }
+                          
+                          // Show pages around current page
+                          for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+                            if (i !== 1 && i !== totalPages) {
+                              pages.push(i);
+                            }
+                          }
+                          
+                          // Add ellipsis before last page if needed
+                          if (currentPage < totalPages - 2) {
+                            pages.push('ellipsis-end');
+                          }
+                          
+                          // Always show last page (if more than 1 page)
+                          if (totalPages > 1) {
+                            pages.push(totalPages);
+                          }
+                          
+                          return pages.map((page, index) => {
+                            if (typeof page === 'string') {
+                              return (
+                                <span key={page} className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                  ...
+                                </span>
+                              );
+                            }
+                            
+                            return (
+                              <button
+                                key={page}
+                                onClick={() => setCurrentPage(page)}
+                                className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                  currentPage === page
+                                    ? 'z-10 bg-spinny-orange border-spinny-orange text-white'
+                                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            );
+                          });
+                        })()}
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                          className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="sr-only">Next</span>
+                          <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
+              </>
             ) : (
                 <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-200 dark:border-gray-200-300">
                     <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-spinny-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">

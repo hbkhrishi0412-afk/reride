@@ -112,6 +112,52 @@ export const getUsersLocal = async (): Promise<User[]> => {
                 const usersToStore = FALLBACK_USERS;
                 localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
                 usersJson = JSON.stringify(usersToStore);
+            } else {
+                // Ensure critical test users (seller, customer, admin) exist with correct plain text passwords
+                // This fixes cases where passwords might have been incorrectly hashed
+                const criticalUsers = FALLBACK_USERS.filter(fu => 
+                    ['seller@test.com', 'customer@test.com', 'admin@test.com'].includes(fu.email.toLowerCase())
+                );
+                
+                let needsUpdate = false;
+                const updatedUsers = parsedUsers.map((u: User) => {
+                    const criticalUser = criticalUsers.find(cu => cu.email.toLowerCase() === (u.email || '').toLowerCase());
+                    if (criticalUser) {
+                        // If stored password is hashed but should be plain text (development mode), fix it
+                        if (u.password && u.password.startsWith('$2')) {
+                            console.warn(`⚠️ getUsersLocal: Found hashed password for ${u.email} in development mode - resetting to plain text`);
+                            needsUpdate = true;
+                            return { ...u, password: criticalUser.password }; // Reset to plain text
+                        }
+                        // Ensure password matches fallback (plain text)
+                        if (u.password !== criticalUser.password) {
+                            console.warn(`⚠️ getUsersLocal: Password mismatch for ${u.email} - resetting to fallback`);
+                            needsUpdate = true;
+                            return { ...u, password: criticalUser.password };
+                        }
+                    }
+                    return u;
+                });
+                
+                // Add any missing critical users
+                criticalUsers.forEach(criticalUser => {
+                    const exists = updatedUsers.some((u: User) => 
+                        (u.email || '').toLowerCase() === criticalUser.email.toLowerCase()
+                    );
+                    if (!exists) {
+                        console.warn(`⚠️ getUsersLocal: Missing critical user ${criticalUser.email} - adding from fallback`);
+                        needsUpdate = true;
+                        updatedUsers.push(criticalUser);
+                    }
+                });
+                
+                if (needsUpdate) {
+                    console.log('✅ getUsersLocal: Fixed corrupted user data in localStorage');
+                    localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
+                    usersJson = JSON.stringify(updatedUsers);
+                } else {
+                    usersJson = JSON.stringify(updatedUsers);
+                }
             }
         }
         const users = JSON.parse(usersJson);
@@ -132,7 +178,22 @@ const updateUserLocal = async (userData: Partial<User> & { email: string }): Pro
     let updatedUser: User | undefined;
     users = users.map(u => {
         if (u.email === userData.email) {
-            updatedUser = { ...u, ...userData };
+            // Create updated user object, handling null values explicitly
+            updatedUser = { ...u };
+            
+            // Update all provided fields
+            Object.keys(userData).forEach(key => {
+                if (key !== 'email') {
+                    const value = (userData as any)[key];
+                    // Handle null values - explicitly set to undefined for removal
+                    if (value === null) {
+                        delete (updatedUser as any)[key];
+                    } else if (value !== undefined) {
+                        (updatedUser as any)[key] = value;
+                    }
+                }
+            });
+            
             return updatedUser;
         }
         return u;
@@ -174,30 +235,36 @@ const loginLocal = async (credentials: any): Promise<{ success: boolean, user?: 
     
     console.log('✅ loginLocal: User found', { email: user.email, hasPassword: !!user.password });
     
-    // SECURITY: For local storage, we need to handle both hashed and plain text passwords
-    // This is a fallback system, so we check both formats
+    // SECURITY: For local storage in development, we use plain text comparison
+    // localStorage is for development/testing only - in production, use API with proper password hashing
     let isPasswordValid = false;
     
-    if (user.password && user.password.startsWith('$2')) {
-        // Password is hashed with bcrypt
+    const storedPassword = (user.password || '').trim();
+    
+    // In development mode with localStorage, passwords should be stored as plain text
+    // If password looks like a bcrypt hash, it might have been incorrectly stored
+    // We'll try bcrypt comparison first, but fall back to plain text if it fails
+    if (storedPassword.startsWith('$2')) {
+        // Password appears to be hashed - try bcrypt comparison if available
         try {
-            const bcrypt = require('bcryptjs');
-            isPasswordValid = await bcrypt.compare(normalizedPassword, user.password);
+            // Use dynamic import for browser compatibility
+            const bcrypt = await import('bcryptjs');
+            isPasswordValid = await bcrypt.compare(normalizedPassword, storedPassword);
+            console.log('🔍 loginLocal: Bcrypt comparison result', { isValid: isPasswordValid });
         } catch (error) {
-            // SECURITY: Don't log password validation errors
-            console.warn('⚠️ loginLocal: Bcrypt comparison failed', error);
+            // Bcrypt not available or comparison failed - this is expected in browser
+            // For development localStorage, we should use plain text
+            console.warn('⚠️ loginLocal: Bcrypt unavailable in browser - this is normal for localStorage mode');
+            // Cannot compare hashed password without bcrypt, so fail
             isPasswordValid = false;
         }
     } else {
-        // SECURITY WARNING: Plain text password - this should only be used in development
-        // In production, all passwords should be hashed
-        const storedPassword = (user.password || '').trim();
+        // Plain text password - direct comparison (development mode only)
         isPasswordValid = storedPassword === normalizedPassword;
         console.log('🔍 loginLocal: Plain text comparison', { 
             storedPasswordLength: storedPassword.length,
             inputPasswordLength: normalizedPassword.length,
-            storedPasswordChars: JSON.stringify(storedPassword.split('').map(c => ({ char: c, code: c.charCodeAt(0) }))),
-            inputPasswordChars: JSON.stringify(normalizedPassword.split('').map(c => ({ char: c, code: c.charCodeAt(0) }))),
+            storedPassword: storedPassword.substring(0, 3) + '***', // Only show first 3 chars for security
             match: isPasswordValid 
         });
     }

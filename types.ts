@@ -192,6 +192,8 @@ export interface User {
   subscriptionPlan?: SubscriptionPlan;
   featuredCredits?: number;
   usedCertifications?: number;
+  planActivatedDate?: string; // ISO String - when the current plan was activated
+  planExpiryDate?: string; // ISO String - when the current plan expires
   
   // NEW: Trust & Verification for Listing Platform
   phoneVerified?: boolean;

@@ -1710,6 +1710,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         const [editingPlan, setEditingPlan] = useState<PlanDetails | null>(null);
         const [showPlanModal, setShowPlanModal] = useState(false);
         const [showAddPlanModal, setShowAddPlanModal] = useState(false);
+        const [showPlanAssignmentModal, setShowPlanAssignmentModal] = useState(false);
+        const [assigningUser, setAssigningUser] = useState<User | null>(null);
+        const [assigningPlan, setAssigningPlan] = useState<SubscriptionPlan | null>(null);
+        const [showExpiryEditModal, setShowExpiryEditModal] = useState(false);
+        const [editingExpiryUser, setEditingExpiryUser] = useState<User | null>(null);
         const [planFilter, setPlanFilter] = useState<'all' | SubscriptionPlan>('all');
         const [planStats, setPlanStats] = useState<Record<SubscriptionPlan, number>>({
             free: 0,
@@ -1742,7 +1747,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             if (!planDetails) {
                 return (
                     <tr key={user.email}>
-                        <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                        <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                             Loading plan details...
                         </td>
                     </tr>
@@ -1789,7 +1794,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         <div className="flex flex-col gap-2">
                                             {currentPlan !== 'free' && (
                                                 <button 
-                                                    onClick={() => handleAssignPlan(user.email, 'free')}
+                                                    onClick={() => handleAssignPlan(user, 'free')}
                                                     className="text-gray-600 hover:text-gray-800 transition-colors"
                                                 >
                                                     Assign Free
@@ -1797,7 +1802,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             )}
                                             {currentPlan !== 'pro' && (
                                                 <button 
-                                                    onClick={() => handleAssignPlan(user.email, 'pro')}
+                                                    onClick={() => handleAssignPlan(user, 'pro')}
                                                     className="text-blue-600 hover:text-blue-800 transition-colors"
                                                 >
                                                     Assign Pro
@@ -1805,12 +1810,64 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             )}
                                             {currentPlan !== 'premium' && (
                                                 <button 
-                                                    onClick={() => handleAssignPlan(user.email, 'premium')}
+                                                    onClick={() => handleAssignPlan(user, 'premium')}
                                                     className="text-purple-600 hover:text-purple-800 transition-colors"
                                                 >
                                                     Assign Premium
                                                 </button>
                                             )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                        {user.planActivatedDate 
+                                            ? new Date(user.planActivatedDate).toLocaleDateString('en-IN', { 
+                                                year: 'numeric', 
+                                                month: 'short', 
+                                                day: 'numeric' 
+                                            })
+                                            : <span className="text-gray-400">Not set</span>
+                                        }
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1">
+                                                {user.planExpiryDate 
+                                                    ? (() => {
+                                                        const expiryDate = new Date(user.planExpiryDate);
+                                                        const isExpired = expiryDate < new Date();
+                                                        const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                                        return (
+                                                            <div>
+                                                                <div className={isExpired ? 'text-red-600 font-semibold' : daysRemaining <= 7 ? 'text-orange-600 font-semibold' : ''}>
+                                                                    {expiryDate.toLocaleDateString('en-IN', { 
+                                                                        year: 'numeric', 
+                                                                        month: 'short', 
+                                                                        day: 'numeric' 
+                                                                    })}
+                                                                </div>
+                                                                {!isExpired && daysRemaining <= 30 && (
+                                                                    <div className="text-xs text-gray-500 mt-1">
+                                                                        {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()
+                                                    : currentPlan === 'free' 
+                                                        ? <span className="text-gray-400">No expiry</span>
+                                                        : <span className="text-gray-400">Not set</span>
+                                                }
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    setEditingExpiryUser(user);
+                                                    setShowExpiryEditModal(true);
+                                                }}
+                                                className="text-blue-600 hover:text-blue-800 text-xs underline"
+                                                title="Edit expiry date"
+                                            >
+                                                Edit
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -1911,17 +1968,23 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
         // Calculate plan statistics
         useEffect(() => {
-            const stats = users.reduce((acc, user) => {
-                const plan = user.subscriptionPlan || 'free';
-                acc[plan] = (acc[plan] || 0) + 1;
+            // Only count sellers for plan statistics
+            const sellerUsers = users.filter(user => user.role === 'seller');
+            const stats = sellerUsers.reduce((acc, user) => {
+            const plan = user.subscriptionPlan || 'free';
+            acc[plan] = (acc[plan] || 0) + 1;
             return acc;
             }, {} as Record<SubscriptionPlan, number>);
             setPlanStats(stats);
         }, [users]);
 
         const filteredUsers = useMemo(() => {
-            if (planFilter === 'all') return users;
-            return users.filter(user => (user.subscriptionPlan || 'free') === planFilter);
+            // First filter by role - only show sellers
+            let sellerUsers = users.filter(user => user.role === 'seller');
+            
+            // Then filter by plan type if not 'all'
+            if (planFilter === 'all') return sellerUsers;
+            return sellerUsers.filter(user => (user.subscriptionPlan || 'free') === planFilter);
         }, [users, planFilter]);
 
         const handleEditPlan = (plan: PlanDetails) => {
@@ -1988,37 +2051,37 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             }
         };
 
-        const handleAssignPlan = (userEmail: string, plan: SubscriptionPlan) => {
-            if (window.confirm(`Are you sure you want to assign ${plan} plan to ${userEmail}?`)) {
-                onUpdateUserPlan(userEmail, plan);
-            }
+        const handleAssignPlan = (user: User, plan: SubscriptionPlan) => {
+            setAssigningUser(user);
+            setAssigningPlan(plan);
+            setShowPlanAssignmentModal(true);
         };
 
         return (
             <div className="space-y-6">
-                {/* Plan Statistics */}
+                {/* Plan Statistics - Sellers Only */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <StatCard 
-                        title="Free Users" 
+                        title="Free Sellers" 
                         value={planStats.free} 
                         icon={<span className="text-2xl">🆓</span>} 
                         onClick={() => setPlanFilter('free')}
                     />
                     <StatCard 
-                        title="Pro Users" 
+                        title="Pro Sellers" 
                         value={planStats.pro} 
                         icon={<span className="text-2xl">⭐</span>} 
                         onClick={() => setPlanFilter('pro')}
                     />
                     <StatCard 
-                        title="Premium Users" 
+                        title="Premium Sellers" 
                         value={planStats.premium} 
                         icon={<span className="text-2xl">👑</span>} 
                         onClick={() => setPlanFilter('premium')}
                     />
                     <StatCard 
-                        title="Total Users" 
-                        value={users.length} 
+                        title="Total Sellers" 
+                        value={users.filter(u => u.role === 'seller').length} 
                         icon={<span className="text-2xl">👥</span>} 
                         onClick={() => setPlanFilter('all')}
                     />
@@ -2065,9 +2128,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     </div>
                 </div>
 
-                {/* User Plan Management */}
+                {/* User Plan Management - Sellers Only */}
                 <TableContainer 
-                    title={`User Plan Management ${planFilter !== 'all' ? `(${planFilter})` : ''}`}
+                    title={`Seller Plan Management ${planFilter !== 'all' ? `(${planFilter})` : ''}`}
                     actions={
                         <select 
                             value={planFilter} 
@@ -2088,6 +2151,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Current Plan</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Usage</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Actions</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Plan Activated</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Expiry Date</th>
                             </tr>
                         </thead>
                             <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
@@ -2118,6 +2183,380 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         onCreate={handleCreatePlan}
                     />
                 )}
+
+                {/* Expiry Date Edit Modal */}
+                {showExpiryEditModal && editingExpiryUser && (
+                    <ExpiryDateEditModal
+                        user={editingExpiryUser}
+                        currentPlan={editingExpiryUser.subscriptionPlan || 'free'}
+                        onClose={() => {
+                            setShowExpiryEditModal(false);
+                            setEditingExpiryUser(null);
+                        }}
+                        onSave={async (expiryDate: string | null) => {
+                            try {
+                                const { updateUser } = await import('../services/userService');
+                                
+                                // Prepare update data
+                                const updateData: any = {
+                                    email: editingExpiryUser.email
+                                };
+                                
+                                // Handle expiry date update
+                                if (expiryDate !== null && expiryDate !== '') {
+                                    // Set expiry date
+                                    updateData.planExpiryDate = expiryDate;
+                                } else {
+                                    // Remove expiry date by setting to null
+                                    updateData.planExpiryDate = null;
+                                }
+                                
+                                console.log('Updating user expiry date:', updateData);
+                                
+                                await updateUser(updateData);
+                                
+                                setShowExpiryEditModal(false);
+                                setEditingExpiryUser(null);
+                                
+                                alert('Expiry date updated successfully.');
+                                
+                                // Small delay before reload to allow alert to be visible
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 100);
+                            } catch (error: any) {
+                                console.error('Failed to update expiry date:', error);
+                                const errorMessage = error?.message || error?.toString() || 'Unknown error';
+                                alert(`Failed to update expiry date: ${errorMessage}`);
+                            }
+                        }}
+                    />
+                )}
+
+                {/* Plan Assignment Modal */}
+                {showPlanAssignmentModal && assigningUser && assigningPlan && (
+                    <PlanAssignmentModal
+                        user={assigningUser}
+                        plan={assigningPlan}
+                        onClose={() => {
+                            setShowPlanAssignmentModal(false);
+                            setAssigningUser(null);
+                            setAssigningPlan(null);
+                        }}
+                        onAssign={async (activatedDate: string, expiryDate: string | null) => {
+                            try {
+                                // Update plan
+                                onUpdateUserPlan(assigningUser.email, assigningPlan);
+                                
+                                // Update user with dates via API
+                                const { updateUser } = await import('../services/userService');
+                                await updateUser(assigningUser.email, {
+                                    subscriptionPlan: assigningPlan,
+                                    planActivatedDate: activatedDate,
+                                    planExpiryDate: expiryDate || undefined
+                                });
+                                
+                                setShowPlanAssignmentModal(false);
+                                setAssigningUser(null);
+                                setAssigningPlan(null);
+                                
+                                // Show success message
+                                alert(`Plan "${assigningPlan}" assigned successfully with dates.`);
+                                
+                                // Refresh users list - this would typically trigger a reload
+                                window.location.reload();
+                            } catch (error) {
+                                console.error('Failed to assign plan with dates:', error);
+                                alert('Failed to save plan dates. Plan was assigned but dates may not be saved.');
+                            }
+                        }}
+                    />
+                )}
+            </div>
+        );
+    };
+
+    // Plan Assignment Modal Component
+    const PlanAssignmentModal: React.FC<{
+        user: User;
+        plan: SubscriptionPlan;
+        onClose: () => void;
+        onAssign: (activatedDate: string, expiryDate: string | null) => void;
+    }> = ({ user, plan, onClose, onAssign }) => {
+        const today = new Date().toISOString().split('T')[0];
+        const defaultExpiry = new Date();
+        defaultExpiry.setDate(defaultExpiry.getDate() + 30); // Default 30 days
+        const defaultExpiryDate = defaultExpiry.toISOString().split('T')[0];
+        
+        const [activationDate, setActivationDate] = useState(today);
+        const [expiryDate, setExpiryDate] = useState<string>(plan === 'free' ? '' : defaultExpiryDate);
+        const [useCustomExpiry, setUseCustomExpiry] = useState(plan !== 'free');
+
+        const handleSubmit = (e: React.FormEvent) => {
+            e.preventDefault();
+            const activated = new Date(activationDate).toISOString();
+            const expiry = expiryDate ? new Date(expiryDate).toISOString() : null;
+            onAssign(activated, expiry);
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                    <form onSubmit={handleSubmit}>
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-2xl font-bold text-gray-900">Assign Plan</h2>
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="text-gray-400 hover:text-gray-600 text-2xl"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                            
+                            <div className="mb-4">
+                                <p className="text-sm text-gray-600 mb-2">
+                                    Assigning <span className="font-semibold capitalize">{plan}</span> plan to:
+                                </p>
+                                <p className="font-medium text-gray-900">{user.name} ({user.email})</p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label htmlFor="activation-date" className="block text-sm font-medium text-gray-700 mb-2">
+                                        Plan Activation Date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        id="activation-date"
+                                        value={activationDate}
+                                        onChange={(e) => {
+                                            setActivationDate(e.target.value);
+                                            // Update expiry date min if activation date is after current expiry date
+                                            if (expiryDate && e.target.value > expiryDate) {
+                                                const newExpiry = new Date(e.target.value);
+                                                newExpiry.setDate(newExpiry.getDate() + 30);
+                                                setExpiryDate(newExpiry.toISOString().split('T')[0]);
+                                            }
+                                        }}
+                                        max={today}
+                                        required
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-spinny-orange"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Select when the plan was/will be activated</p>
+                                </div>
+
+                                <div>
+                                    <label className="flex items-center mb-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={useCustomExpiry}
+                                            onChange={(e) => {
+                                                setUseCustomExpiry(e.target.checked);
+                                                if (!e.target.checked) {
+                                                    setExpiryDate('');
+                                                } else if (!expiryDate) {
+                                                    setExpiryDate(defaultExpiryDate);
+                                                }
+                                            }}
+                                            className="mr-2"
+                                        />
+                                        <span className="text-sm font-medium text-gray-700">
+                                            Set Expiry Date {plan === 'free' && '(Optional)'}
+                                        </span>
+                                    </label>
+                                    {useCustomExpiry && (
+                                        <input
+                                            type="date"
+                                            id="expiry-date"
+                                            value={expiryDate}
+                                            onChange={(e) => setExpiryDate(e.target.value)}
+                                            min={activationDate}
+                                            required={useCustomExpiry && plan !== 'free'}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-spinny-orange"
+                                        />
+                                    )}
+                                    {plan === 'free' && (
+                                        <p className="text-xs text-gray-500 mt-1">Free plans typically don't expire</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 px-4 py-2 bg-spinny-orange text-white rounded-md hover:bg-orange-600 transition-colors"
+                                >
+                                    Assign Plan
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
+
+    // Expiry Date Edit Modal Component
+    const ExpiryDateEditModal: React.FC<{
+        user: User;
+        currentPlan: SubscriptionPlan;
+        onClose: () => void;
+        onSave: (expiryDate: string | null) => void;
+    }> = ({ user, currentPlan, onClose, onSave }) => {
+        const today = new Date().toISOString().split('T')[0];
+        const currentExpiry = user.planExpiryDate ? new Date(user.planExpiryDate).toISOString().split('T')[0] : '';
+        
+        const [expiryDate, setExpiryDate] = useState<string>(currentExpiry);
+        const [useCustomExpiry, setUseCustomExpiry] = useState<boolean>(!!user.planExpiryDate && currentPlan !== 'free');
+        const [removeExpiry, setRemoveExpiry] = useState<boolean>(false);
+
+        const handleSubmit = (e: React.FormEvent) => {
+            e.preventDefault();
+            if (removeExpiry || (currentPlan === 'free' && !useCustomExpiry)) {
+                onSave(null);
+            } else if (useCustomExpiry && expiryDate) {
+                onSave(new Date(expiryDate).toISOString());
+            } else {
+                alert('Please select an expiry date or choose to remove expiry.');
+            }
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+                <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                    <form onSubmit={handleSubmit}>
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-2xl font-bold text-gray-900">Edit Expiry Date</h2>
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="text-gray-400 hover:text-gray-600 text-2xl"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                            
+                            <div className="mb-4">
+                                <p className="text-sm text-gray-600 mb-2">
+                                    Editing expiry date for:
+                                </p>
+                                <p className="font-medium text-gray-900">{user.name} ({user.email})</p>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Current Plan: <span className="font-semibold capitalize">{currentPlan}</span>
+                                </p>
+                                {user.planActivatedDate && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Plan Activated: {new Date(user.planActivatedDate).toLocaleDateString('en-IN', { 
+                                            year: 'numeric', 
+                                            month: 'short', 
+                                            day: 'numeric' 
+                                        })}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                {currentPlan === 'free' && (
+                                    <div className="bg-gray-50 p-3 rounded-md">
+                                        <label className="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={removeExpiry || !useCustomExpiry}
+                                                onChange={(e) => {
+                                                    setRemoveExpiry(e.target.checked);
+                                                    setUseCustomExpiry(!e.target.checked);
+                                                }}
+                                                className="mr-2"
+                                            />
+                                            <span className="text-sm text-gray-700">Remove expiry (No expiry for free plans)</span>
+                                        </label>
+                                    </div>
+                                )}
+
+                                {!removeExpiry && (
+                                    <div>
+                                        <label className="flex items-center mb-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={useCustomExpiry}
+                                                onChange={(e) => {
+                                                    setUseCustomExpiry(e.target.checked);
+                                                    if (!e.target.checked && currentPlan === 'free') {
+                                                        setRemoveExpiry(true);
+                                                    }
+                                                }}
+                                                className="mr-2"
+                                            />
+                                            <span className="text-sm font-medium text-gray-700">
+                                                Set Expiry Date {currentPlan === 'free' && '(Optional)'}
+                                            </span>
+                                        </label>
+                                        {useCustomExpiry && (
+                                            <>
+                                                <input
+                                                    type="date"
+                                                    id="expiry-date-edit"
+                                                    value={expiryDate}
+                                                    onChange={(e) => setExpiryDate(e.target.value)}
+                                                    min={user.planActivatedDate ? new Date(user.planActivatedDate).toISOString().split('T')[0] : today}
+                                                    required={useCustomExpiry && currentPlan !== 'free'}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-spinny-orange mt-2"
+                                                />
+                                                {user.planActivatedDate && (
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        Must be after activation date: {new Date(user.planActivatedDate).toLocaleDateString('en-IN', { 
+                                                            year: 'numeric', 
+                                                            month: 'short', 
+                                                            day: 'numeric' 
+                                                        })}
+                                                    </p>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+
+                                {user.planExpiryDate && !removeExpiry && (
+                                    <div className="bg-blue-50 p-3 rounded-md">
+                                        <p className="text-sm text-gray-700">
+                                            <strong>Current Expiry:</strong> {new Date(user.planExpiryDate).toLocaleDateString('en-IN', { 
+                                                year: 'numeric', 
+                                                month: 'short', 
+                                                day: 'numeric' 
+                                            })}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 px-4 py-2 bg-spinny-orange text-white rounded-md hover:bg-orange-600 transition-colors"
+                                >
+                                    Save Expiry Date
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
             </div>
         );
     };
