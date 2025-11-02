@@ -196,6 +196,8 @@ const loginLocal = async (credentials: any): Promise<{ success: boolean, user?: 
         console.log('🔍 loginLocal: Plain text comparison', { 
             storedPasswordLength: storedPassword.length,
             inputPasswordLength: normalizedPassword.length,
+            storedPasswordChars: JSON.stringify(storedPassword.split('').map(c => ({ char: c, code: c.charCodeAt(0) }))),
+            inputPasswordChars: JSON.stringify(normalizedPassword.split('').map(c => ({ char: c, code: c.charCodeAt(0) }))),
             match: isPasswordValid 
         });
     }
