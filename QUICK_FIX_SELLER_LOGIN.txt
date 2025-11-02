@@ -1,0 +1,37 @@
+════════════════════════════════════════════════════════════════
+   🔧 QUICK FIX FOR SELLER LOGIN ISSUE
+════════════════════════════════════════════════════════════════
+
+PROBLEM: Login with seller@test.com / password fails with "Password mismatch"
+
+SOLUTION: Clear and reset localStorage in your browser
+
+════════════════════════════════════════════════════════════════
+   STEP 1: Open Browser Console (Press F12)
+════════════════════════════════════════════════════════════════
+
+   Copy and paste this code:
+
+localStorage.removeItem('reRideUsers'); 
+const freshUsers = [{"name":"Prestige Motors","email":"seller@test.com","password":"password","mobile":"+91-98765-43210","role":"seller","location":"Mumbai","status":"active","createdAt":"2025-01-01T00:00:00.000Z","dealershipName":"Prestige Motors","bio":"Specializing in luxury and performance electric vehicles since 2020.","logoUrl":"https://i.pravatar.cc/100?u=seller","avatarUrl":"https://i.pravatar.cc/150?u=seller@test.com","isVerified":true,"subscriptionPlan":"premium","featuredCredits":5,"usedCertifications":1},{"name":"Mock Customer","email":"customer@test.com","password":"password","mobile":"555-987-6543","role":"customer","location":"Delhi","status":"active","createdAt":"2025-01-01T00:00:00.000Z","avatarUrl":"https://i.pravatar.cc/150?u=customer@test.com"},{"name":"Mock Admin","email":"admin@test.com","password":"password","mobile":"111-222-3333","role":"admin","location":"Bangalore","status":"active","createdAt":"2025-01-01T00:00:00.000Z","avatarUrl":"https://i.pravatar.cc/150?u=admin@test.com"}]; 
+localStorage.setItem('reRideUsers', JSON.stringify(freshUsers)); 
+location.reload();
+
+════════════════════════════════════════════════════════════════
+   STEP 2: After Page Reloads
+════════════════════════════════════════════════════════════════
+
+   Login with:
+   Email:    seller@test.com
+   Password: password
+
+════════════════════════════════════════════════════════════════
+   AVAILABLE TEST ACCOUNTS
+════════════════════════════════════════════════════════════════
+
+   Seller:   seller@test.com     / password
+   Customer: customer@test.com   / password  
+   Admin:    admin@test.com      / password
+
+════════════════════════════════════════════════════════════════
+
