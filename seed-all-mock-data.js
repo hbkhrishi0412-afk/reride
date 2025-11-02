@@ -70,7 +70,7 @@ const MOCK_USERS = [
     { 
         name: 'Prestige Motors', 
         email: 'seller@test.com', 
-        password: 'hashed_password_here', 
+        password: 'password', 
         mobile: '+91-98765-43210', 
         role: 'seller', 
         location: 'Mumbai', 

@@ -3,7 +3,7 @@
     "_id": "68fbb38ab5c2149125c6b5ba",
     "name": "Prestige Motors",
     "email": "seller@test.com",
-    "password": "hashed_password_here",
+    "password": "password",
     "mobile": "+91-98765-43210",
     "role": "seller",
     "location": "Mumbai",
