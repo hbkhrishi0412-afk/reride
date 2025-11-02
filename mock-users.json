@@ -1,5 +1,22 @@
 [
   {
+    "name": "Prestige Motors",
+    "email": "seller@test.com",
+    "password": "password",
+    "mobile": "+91-98765-43210",
+    "role": "seller",
+    "status": "active",
+    "createdAt": "2025-10-20T07:59:39.444Z",
+    "dealershipName": "Prestige Motors",
+    "bio": "Specializing in luxury and performance electric vehicles since 2020.",
+    "logoUrl": "https://i.pravatar.cc/100?u=seller",
+    "avatarUrl": "https://i.pravatar.cc/150?u=seller@test.com",
+    "isVerified": true,
+    "subscriptionPlan": "premium",
+    "featuredCredits": 5,
+    "usedCertifications": 1
+  },
+  {
     "name": "Demo Seller",
     "email": "seller1@test.com",
     "password": "password",
@@ -7,7 +24,7 @@
     "role": "seller",
     "status": "active",
     "createdAt": "2025-10-20T07:59:39.444Z",
-    "dealershipName": "Prestige Motors",
+    "dealershipName": "Demo Motors",
     "bio": "Specializing in luxury and performance vehicles since 2020.",
     "logoUrl": "https://i.pravatar.cc/100?u=seller1",
     "avatarUrl": "https://i.pravatar.cc/150?u=seller1@test.com",

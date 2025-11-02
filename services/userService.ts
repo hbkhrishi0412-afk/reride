@@ -4,17 +4,44 @@ import type { User } from '../types';
 // Fallback mock users to prevent loading issues
 const FALLBACK_USERS: User[] = [
   {
-    email: "admin@reride.com",
-    password: "admin123",
-    name: "Admin User",
-    role: "admin",
-    mobile: "9876543210",
-    location: "Mumbai",
-    status: "active",
-    isVerified: true,
+    name: 'Prestige Motors',
+    email: 'seller@test.com',
+    password: 'password',
+    mobile: '+91-98765-43210',
+    role: 'seller',
+    location: 'Mumbai',
+    status: 'active',
     createdAt: new Date().toISOString(),
-    subscriptionPlan: "free",
-    featuredCredits: 0
+    dealershipName: 'Prestige Motors',
+    bio: 'Specializing in luxury and performance electric vehicles since 2020.',
+    logoUrl: 'https://i.pravatar.cc/100?u=seller',
+    avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com',
+    isVerified: true,
+    subscriptionPlan: 'premium',
+    featuredCredits: 5,
+    usedCertifications: 1
+  },
+  {
+    name: 'Mock Customer',
+    email: 'customer@test.com',
+    password: 'password',
+    mobile: '555-987-6543',
+    role: 'customer',
+    location: 'Delhi',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    avatarUrl: 'https://i.pravatar.cc/150?u=customer@test.com'
+  },
+  {
+    name: 'Mock Admin',
+    email: 'admin@test.com',
+    password: 'password',
+    mobile: '111-222-3333',
+    role: 'admin',
+    location: 'Bangalore',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    avatarUrl: 'https://i.pravatar.cc/150?u=admin@test.com'
   }
 ];
 
@@ -72,9 +99,11 @@ export const getUsersLocal = async (): Promise<User[]> => {
             console.log('getUsersLocal: No cached data, loading MOCK_USERS...');
             // Dynamically import MOCK_USERS to avoid blocking initial load
             const { MOCK_USERS } = await import('../constants');
-            localStorage.setItem('reRideUsers', JSON.stringify(MOCK_USERS));
-            usersJson = JSON.stringify(MOCK_USERS);
-            console.log(`✅ Populated local storage with ${MOCK_USERS.length} users`);
+            // MOCK_USERS is a function, so we need to call it
+            const mockUsers = typeof MOCK_USERS === 'function' ? await MOCK_USERS() : MOCK_USERS;
+            localStorage.setItem('reRideUsers', JSON.stringify(mockUsers));
+            usersJson = JSON.stringify(mockUsers);
+            console.log(`✅ Populated local storage with ${mockUsers.length} users`);
         } else {
             console.log('getUsersLocal: Using cached data');
         }
