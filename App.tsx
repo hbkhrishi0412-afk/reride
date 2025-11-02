@@ -634,23 +634,47 @@ const AppContent: React.FC = React.memo(() => {
             }}
             onUpdatePassword={async (passwords) => {
               if (currentUser) {
-                // Validate current password
-                if (currentUser.password !== passwords.current) {
-                  addToast('Current password is incorrect', 'error');
-                  return false;
-                }
-                
-                // Hash the new password before updating
                 try {
-                  const { hashPassword } = await import('./utils/passwordUtils');
-                  const hashedNewPassword = await hashPassword(passwords.new);
+                  // Verify current password by attempting login
+                  // This works for both production (bcrypt) and development (plain text)
+                  const { login } = await import('./services/userService');
+                  const loginResult = await login({ 
+                    email: currentUser.email, 
+                    password: passwords.current,
+                    role: currentUser.role 
+                  });
                   
-                  // Update password with hashed version
-                  await updateUser(currentUser.email, { password: hashedNewPassword });
+                  if (!loginResult.success) {
+                    addToast('Current password is incorrect', 'error');
+                    return false;
+                  }
+                  
+                  // Current password is correct, now update to new password
+                  const { hashPassword } = await import('./utils/passwordUtils');
+                  
+                  // Check if we're in production (using API) or development (localStorage)
+                  const isDevelopment = import.meta.env.DEV || 
+                                       window.location.hostname === 'localhost' || 
+                                       window.location.hostname === '127.0.0.1' ||
+                                       window.location.hostname.includes('localhost') ||
+                                       window.location.hostname.includes('127.0.0.1');
+                  
+                  let passwordToStore: string;
+                  
+                  if (isDevelopment) {
+                    // Development: store plain text for localStorage
+                    passwordToStore = passwords.new;
+                  } else {
+                    // Production: hash the new password
+                    passwordToStore = await hashPassword(passwords.new);
+                  }
+                  
+                  // Update password
+                  await updateUser(currentUser.email, { password: passwordToStore });
                   addToast('Password updated successfully', 'success');
                   return true;
                 } catch (error) {
-                  console.error('Failed to hash password:', error);
+                  console.error('Failed to update password:', error);
                   addToast('Failed to update password', 'error');
                   return false;
                 }
