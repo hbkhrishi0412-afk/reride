@@ -77,17 +77,17 @@ if (typeof window !== 'undefined') {
   // Also generate some mock users
   const mockUsers = [
     {
-      name: 'Demo Seller',
-      email: 'seller1@test.com',
+      name: 'Prestige Motors',
+      email: 'seller@test.com',
       password: 'password',
-      mobile: '555-123-4567',
+      mobile: '+91-98765-43210',
       role: 'seller',
       status: 'active',
       createdAt: new Date().toISOString(),
       dealershipName: 'Prestige Motors',
-      bio: 'Specializing in luxury and performance vehicles since 2020.',
-      logoUrl: 'https://i.pravatar.cc/100?u=seller1',
-      avatarUrl: 'https://i.pravatar.cc/150?u=seller1@test.com',
+      bio: 'Specializing in luxury and performance electric vehicles since 2020.',
+      logoUrl: 'https://i.pravatar.cc/100?u=seller',
+      avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com',
       isVerified: true,
       subscriptionPlan: 'premium',
       featuredCredits: 5,
@@ -122,7 +122,7 @@ if (typeof window !== 'undefined') {
   console.log('\n📋 Available test accounts:');
   console.log('   Admin: admin@test.com / password');
   console.log('   Customer: customer@test.com / password');
-  console.log('   Seller: seller1@test.com / password');
+  console.log('   Seller: seller@test.com / password');
 }
 
 // Export for use in other scripts

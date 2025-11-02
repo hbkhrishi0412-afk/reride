@@ -12,7 +12,7 @@ const daysAgo = (days) => {
 
 // Mock Users
 const MOCK_USERS = [
-    { name: 'Prestige Motors', email: 'seller@test.com', password: 'password', mobile: '555-123-4567', role: 'seller', status: 'active', createdAt: daysAgo(30), dealershipName: 'Prestige Motors', bio: 'Specializing in luxury and performance electric vehicles since 2020.', logoUrl: 'https://i.pravatar.cc/100?u=seller', avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com', isVerified: true, subscriptionPlan: 'premium', featuredCredits: 5, usedCertifications: 1 },
+    { name: 'Prestige Motors', email: 'seller@test.com', password: 'password', mobile: '+91-98765-43210', role: 'seller', status: 'active', createdAt: daysAgo(30), dealershipName: 'Prestige Motors', bio: 'Specializing in luxury and performance electric vehicles since 2020.', logoUrl: 'https://i.pravatar.cc/100?u=seller', avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com', isVerified: true, subscriptionPlan: 'premium', featuredCredits: 5, usedCertifications: 1 },
     { name: 'Mock Customer', email: 'customer@test.com', password: 'password', mobile: '555-987-6543', role: 'customer', status: 'active', createdAt: daysAgo(15), avatarUrl: 'https://i.pravatar.cc/150?u=customer@test.com' },
     { name: 'Mock Admin', email: 'admin@test.com', password: 'password', mobile: '111-222-3333', role: 'admin', status: 'active', createdAt: daysAgo(100), avatarUrl: 'https://i.pravatar.cc/150?u=admin@test.com' },
     { name: 'Jane Doe', email: 'jane.doe@customer.com', password: 'password', mobile: '555-111-2222', role: 'customer', status: 'active', createdAt: daysAgo(5), avatarUrl: 'https://i.pravatar.cc/150?u=jane.doe@customer.com' },
