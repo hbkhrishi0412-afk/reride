@@ -374,9 +374,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         // Load non-critical data in background
         Promise.all([
           dataService.getVehicleData(),
-          Promise.resolve(getConversations())
+          Promise.resolve(getConversations()) // Will be filtered by currentUser when displayed
         ]).then(([vehicleDataData, conversationsData]) => {
           setVehicleData(vehicleDataData);
+          // Store all conversations, but filter will be applied in App.tsx when displaying
           setConversations(conversationsData);
         }).catch(error => {
           console.warn('Background data loading failed:', error);

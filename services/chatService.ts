@@ -4,16 +4,29 @@ const CONVERSATION_STORAGE_KEY = 'reRideConversations';
 
 /**
  * Retrieves all conversations from localStorage.
+ * Optionally filters by customerId to only return conversations for a specific user.
+ * @param customerEmail - Optional email to filter conversations (only show conversations for this customer)
  * @returns An array of conversations.
  */
-export const getConversations = (): Conversation[] => {
+export const getConversations = (customerEmail?: string): Conversation[] => {
   try {
     const conversationsJson = localStorage.getItem(CONVERSATION_STORAGE_KEY);
     if (conversationsJson) {
-      return JSON.parse(conversationsJson);
+      const allConversations = JSON.parse(conversationsJson);
+      // Filter by customerEmail if provided
+      if (customerEmail) {
+        return allConversations.filter((conv: Conversation) => conv.customerId === customerEmail);
+      }
+      return allConversations;
     }
     
-    // If no conversations exist, create sample conversations for testing
+    // Only create sample conversations if the user matches the test customer email
+    // This prevents new users from seeing sample data
+    if (!customerEmail || customerEmail !== 'customer@test.com') {
+      return [];
+    }
+    
+    // If no conversations exist and user is the test customer, create sample conversations for testing
     const sampleConversations: Conversation[] = [
       {
         id: "conv_1703123456789",

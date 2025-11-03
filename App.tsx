@@ -771,7 +771,7 @@ const AppContent: React.FC = React.memo(() => {
       case ViewEnum.INBOX:
         return currentUser ? (
           <CustomerInbox 
-            conversations={conversations}
+            conversations={conversations.filter(c => c.customerId === currentUser.email)}
             onSendMessage={(vehicleId, messageText, type, payload) => {
               const conversation = conversations.find(c => c.vehicleId === vehicleId);
               if (conversation) {
@@ -1273,7 +1273,7 @@ const AppContent: React.FC = React.memo(() => {
           onNavigate={navigate}
           currentUser={currentUser}
           wishlistCount={wishlist.length}
-          inboxCount={conversations.filter(c => !c.isReadByCustomer).length}
+          inboxCount={conversations.filter(c => c.customerId === currentUser?.email && !c.isReadByCustomer).length}
         />
         
         {/* Mobile Global Components */}
