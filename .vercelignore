@@ -1,0 +1,28 @@
+# Development files
+dev-api-server.js
+dev-api-server-mongodb.js
+*.local
+.env.local
+.env.development
+
+# Test files
+**/__tests__/**
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+playwright-report/
+coverage/
+
+# Documentation
+*.md
+!README.md
+
+# Seed scripts (not needed in production)
+seed-*.js
+populate-*.js
+
+# Build artifacts that shouldn't be deployed
+.vite/
+.cache/
+
