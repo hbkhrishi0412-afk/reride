@@ -436,79 +436,94 @@ const AppContent: React.FC = React.memo(() => {
               sellerVehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => v.sellerEmail === currentUser.email), users)}
               reportedVehicles={[]}
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
-                // Set listingExpiresAt based on subscription plan expiry date
-                let listingExpiresAt: string | undefined;
-                if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
-                  // Premium plan: use plan expiry date
-                  listingExpiresAt = currentUser.planExpiryDate;
-                } else if (currentUser.subscriptionPlan !== 'premium') {
-                  // Free and Pro plans get 30-day expiry from today
-                  const expiryDate = new Date();
-                  expiryDate.setDate(expiryDate.getDate() + 30);
-                  listingExpiresAt = expiryDate.toISOString();
+                try {
+                  // Set listingExpiresAt based on subscription plan expiry date
+                  let listingExpiresAt: string | undefined;
+                  if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
+                    // Premium plan: use plan expiry date
+                    listingExpiresAt = currentUser.planExpiryDate;
+                  } else if (currentUser.subscriptionPlan !== 'premium') {
+                    // Free and Pro plans get 30-day expiry from today
+                    const expiryDate = new Date();
+                    expiryDate.setDate(expiryDate.getDate() + 30);
+                    listingExpiresAt = expiryDate.toISOString();
+                  }
+                  // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+                  
+                  const newVehicle = {
+                    ...vehicleData,
+                    id: Date.now(),
+                    sellerEmail: currentUser.email,
+                    averageRating: 0,
+                    ratingCount: 0,
+                    isFeatured: isFeaturing,
+                    createdAt: new Date().toISOString(),
+                    listingExpiresAt,
+                  };
+                  
+                  // Call API to create vehicle
+                  const { addVehicle } = await import('./services/vehicleService');
+                  const result = await addVehicle(newVehicle);
+                  
+                  // Update local state
+                  setVehicles(prev => [...prev, result]);
+                  addToast('Vehicle added successfully', 'success');
+                } catch (error) {
+                  console.error('❌ Failed to add vehicle:', error);
+                  addToast('Failed to add vehicle', 'error');
                 }
-                // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
-                
-                const newVehicle = {
-                  ...vehicleData,
-                  id: Date.now(),
-                  sellerEmail: currentUser.email,
-                  averageRating: 0,
-                  ratingCount: 0,
-                  isFeatured: isFeaturing,
-                  createdAt: new Date().toISOString(),
-                  listingExpiresAt,
-                };
-                setVehicles(prev => [...prev, newVehicle]);
-                addToast('Vehicle added successfully', 'success');
               }}
               onAddMultipleVehicles={async (vehiclesData) => {
-                // Set listingExpiresAt based on subscription plan expiry date
-                let listingExpiresAt: string | undefined;
-                if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
-                  // Premium plan: use plan expiry date
-                  listingExpiresAt = currentUser.planExpiryDate;
-                } else if (currentUser.subscriptionPlan !== 'premium') {
-                  // Free and Pro plans get 30-day expiry from today
-                  const expiryDate = new Date();
-                  expiryDate.setDate(expiryDate.getDate() + 30);
-                  listingExpiresAt = expiryDate.toISOString();
+                try {
+                  // Set listingExpiresAt based on subscription plan expiry date
+                  let listingExpiresAt: string | undefined;
+                  if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
+                    // Premium plan: use plan expiry date
+                    listingExpiresAt = currentUser.planExpiryDate;
+                  } else if (currentUser.subscriptionPlan !== 'premium') {
+                    // Free and Pro plans get 30-day expiry from today
+                    const expiryDate = new Date();
+                    expiryDate.setDate(expiryDate.getDate() + 30);
+                    listingExpiresAt = expiryDate.toISOString();
+                  }
+                  // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+                  
+                  const newVehicles = vehiclesData.map(vehicle => ({
+                    ...vehicle,
+                    id: Date.now() + Math.random(),
+                    sellerEmail: currentUser.email,
+                    averageRating: 0,
+                    ratingCount: 0,
+                    createdAt: new Date().toISOString(),
+                    listingExpiresAt,
+                  }));
+                  
+                  // Call API to create vehicles
+                  const { addVehicle } = await import('./services/vehicleService');
+                  const results = await Promise.all(newVehicles.map(vehicle => addVehicle(vehicle)));
+                  
+                  // Update local state
+                  setVehicles(prev => [...prev, ...results]);
+                  addToast(`${results.length} vehicles added successfully`, 'success');
+                } catch (error) {
+                  console.error('❌ Failed to add vehicles:', error);
+                  addToast('Failed to add vehicles', 'error');
                 }
-                // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
-                
-                const newVehicles = vehiclesData.map(vehicle => ({
-                  ...vehicle,
-                  id: Date.now() + Math.random(),
-                  sellerEmail: currentUser.email,
-                  averageRating: 0,
-                  ratingCount: 0,
-                  createdAt: new Date().toISOString(),
-                  listingExpiresAt,
-                }));
-                setVehicles(prev => [...prev, ...newVehicles]);
-                addToast(`${newVehicles.length} vehicles added successfully`, 'success');
               }}
               onUpdateVehicle={async (vehicleData) => {
-                setVehicles(prev => prev.map(v => 
-                  v.id === vehicleData.id ? { ...v, ...vehicleData } : v
-                ));
-                addToast('Vehicle updated successfully', 'success');
+                await updateVehicle(vehicleData.id, vehicleData);
               }}
               onDeleteVehicle={async (vehicleId) => {
-                setVehicles(prev => prev.filter(v => v.id !== vehicleId));
-                addToast('Vehicle deleted successfully', 'success');
+                await deleteVehicle(vehicleId);
               }}
               onMarkAsSold={async (vehicleId) => {
-                setVehicles(prev => prev.map(v => 
-                  v.id === vehicleId ? { ...v, status: 'sold', soldAt: new Date().toISOString() } : v
-                ));
-                addToast('Vehicle marked as sold', 'success');
+                const vehicle = vehicles.find(v => v.id === vehicleId);
+                if (vehicle) {
+                  await updateVehicle(vehicleId, { status: 'sold', soldAt: new Date().toISOString(), listingStatus: 'sold' });
+                }
               }}
               onMarkAsUnsold={async (vehicleId) => {
-                setVehicles(prev => prev.map(v => 
-                  v.id === vehicleId ? { ...v, status: 'published', soldAt: undefined } : v
-                ));
-                addToast('Vehicle marked as unsold', 'success');
+                await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
               }}
               conversations={conversations}
               onSellerSendMessage={(conversationId, messageText, _type, _payload) => sendMessage(conversationId, messageText)}
@@ -523,16 +538,38 @@ const AppContent: React.FC = React.memo(() => {
               }}
               vehicleData={vehicleData}
               onFeatureListing={async (vehicleId) => {
-                setVehicles(prev => prev.map(v => 
-                  v.id === vehicleId ? { ...v, isFeatured: true, featuredAt: new Date().toISOString() } : v
-                ));
-                addToast('Vehicle featured successfully', 'success');
+                try {
+                  const response = await fetch('/api/vehicles?action=feature', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ vehicleId })
+                  });
+                  if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                      await updateVehicle(vehicleId, result.vehicle);
+                    }
+                  }
+                } catch (error) {
+                  console.error('❌ Failed to feature vehicle:', error);
+                }
               }}
               onRequestCertification={async (vehicleId) => {
-                setVehicles(prev => prev.map(v => 
-                  v.id === vehicleId ? { ...v, certificationStatus: 'requested', certificationRequestedAt: new Date().toISOString() } : v
-                ));
-                addToast('Certification request submitted', 'success');
+                try {
+                  const response = await fetch('/api/vehicles?action=certify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ vehicleId })
+                  });
+                  if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                      await updateVehicle(vehicleId, result.vehicle);
+                    }
+                  }
+                } catch (error) {
+                  console.error('❌ Failed to certify vehicle:', error);
+                }
               }}
               onNavigate={navigate}
               onTestDriveResponse={() => {}}
