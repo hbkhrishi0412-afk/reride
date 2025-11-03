@@ -20,15 +20,23 @@ const PWAInstallPrompt: React.FC = () => {
     // Listen for the beforeinstallprompt event
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      const promptEvent = e as BeforeInstallPromptEvent;
       
-      // Show prompt after a delay (don't annoy users immediately)
-      setTimeout(() => {
-        const dismissed = localStorage.getItem('pwa-install-dismissed');
-        if (!dismissed || Date.now() - parseInt(dismissed) > 7 * 24 * 60 * 60 * 1000) {
-          setShowPrompt(true);
-        }
-      }, 3000);
+      // Verify the prompt method exists before storing
+      if (promptEvent && typeof promptEvent.prompt === 'function') {
+        setDeferredPrompt(promptEvent);
+        
+        // Show prompt after a delay (don't annoy users immediately)
+        setTimeout(() => {
+          const dismissed = localStorage.getItem('pwa-install-dismissed');
+          if (!dismissed || Date.now() - parseInt(dismissed) > 7 * 24 * 60 * 60 * 1000) {
+            setShowPrompt(true);
+          }
+        }, 3000);
+      } else {
+        // If prompt method doesn't exist, don't store the event
+        console.warn('⚠️ beforeinstallprompt event missing prompt method');
+      }
     };
 
     // Listen for successful installation

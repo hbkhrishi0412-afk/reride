@@ -327,7 +327,7 @@ const AppContent: React.FC = React.memo(() => {
               if (!conversation) {
                 // Create new conversation
                 const newConversation = {
-                  id: `conv_${Date.now()}`,
+                  id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                   customerId: currentUser.email,
                   customerName: currentUser.name,
                   sellerId: vehicle.sellerEmail,
@@ -452,7 +452,7 @@ const AppContent: React.FC = React.memo(() => {
                   
                   const newVehicle = {
                     ...vehicleData,
-                    id: Date.now(),
+                    id: Date.now() + Math.floor(Math.random() * 1000),
                     sellerEmail: currentUser.email,
                     averageRating: 0,
                     ratingCount: 0,
@@ -490,7 +490,7 @@ const AppContent: React.FC = React.memo(() => {
                   
                   const newVehicles = vehiclesData.map(vehicle => ({
                     ...vehicle,
-                    id: Date.now() + Math.random(),
+                    id: Date.now() + Math.floor(Math.random() * 1000),
                     sellerEmail: currentUser.email,
                     averageRating: 0,
                     ratingCount: 0,
@@ -781,7 +781,7 @@ const AppContent: React.FC = React.memo(() => {
                       conv.id === conversation.id ? {
                         ...conv,
                         messages: [...conv.messages, {
-                          id: Date.now(),
+                          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                           sender: 'user' as const,
                           text: messageText,
                           timestamp: new Date().toISOString(),
@@ -1214,7 +1214,7 @@ const AppContent: React.FC = React.memo(() => {
                 const { addVehicle } = await import('./services/vehicleService');
                 const vehicleToAdd = {
                   ...vehicleData,
-                  id: Date.now(),
+                  id: Date.now() + Math.floor(Math.random() * 1000),
                   averageRating: 0,
                   ratingCount: 0,
                   isFeatured: isFeaturing,

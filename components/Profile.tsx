@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { User } from '../types';
 import PasswordInput from './PasswordInput';
 
@@ -16,6 +15,21 @@ interface ProfileProps {
   onUpdatePassword: (passwords: { current: string; new: string }) => Promise<boolean>;
 }
 
+interface FormErrors {
+  name?: string;
+  mobile?: string;
+  dealershipName?: string;
+  bio?: string;
+  avatar?: string;
+  logo?: string;
+}
+
+interface PasswordStrength {
+  score: number; // 0-4
+  feedback: string;
+  meetsRequirements: boolean;
+}
+
 const ProfileInput: React.FC<{ 
   label: string; 
   name: string; 
@@ -24,24 +38,100 @@ const ProfileInput: React.FC<{
   type?: string; 
   disabled?: boolean; 
   placeholder?: string;
-}> = ({ label, name, value, onChange, type = 'text', disabled = false, placeholder }) => (
-  <div className="space-y-1">
-    <label htmlFor={name} className="text-sm font-medium text-gray-700">{label}</label>
-    <input
-      type={type}
-      id={name}
-      name={name}
-      value={value}
-      onChange={onChange}
-      disabled={disabled}
-      placeholder={placeholder}
-      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
-    />
-  </div>
-);
+  error?: string;
+  maxLength?: number;
+  required?: boolean;
+}> = ({ label, name, value, onChange, type = 'text', disabled = false, placeholder, error, maxLength, required }) => {
+  const charCount = value.length;
+  const showCharCount = maxLength && maxLength > 0;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label htmlFor={name} className="text-sm font-semibold text-gray-700">
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+        {showCharCount && (
+          <span className={`text-xs ${charCount > maxLength! * 0.9 ? 'text-orange-500' : 'text-gray-400'}`}>
+            {charCount}/{maxLength}
+          </span>
+        )}
+      </div>
+      <input
+        type={type}
+        id={name}
+        name={name}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        required={required}
+        className={`w-full px-4 py-2.5 border rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed ${
+          error 
+            ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+            : 'border-gray-300 bg-white hover:border-gray-400'
+        }`}
+        aria-invalid={error ? 'true' : 'false'}
+        aria-describedby={error ? `${name}-error` : undefined}
+      />
+      {error && (
+        <p id={`${name}-error`} className="text-xs text-red-600 mt-1 flex items-center gap-1">
+          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+};
+
+const calculatePasswordStrength = (password: string): PasswordStrength => {
+  if (!password) {
+    return { score: 0, feedback: '', meetsRequirements: false };
+  }
+
+  let score = 0;
+  const feedback: string[] = [];
+
+  // Length check
+  if (password.length >= 8) score++;
+  else feedback.push('At least 8 characters');
+
+  // Uppercase check
+  if (/[A-Z]/.test(password)) score++;
+  else feedback.push('One uppercase letter');
+
+  // Lowercase check
+  if (/[a-z]/.test(password)) score++;
+  else feedback.push('One lowercase letter');
+
+  // Number check
+  if (/\d/.test(password)) score++;
+  else feedback.push('One number');
+
+  // Special character check
+  if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+  else feedback.push('One special character');
+
+  const strengthLabels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+  const meetsRequirements = score >= 4 && password.length >= 8;
+
+  return {
+    score,
+    feedback: feedback.length > 0 ? `Needs: ${feedback.slice(0, 2).join(', ')}` : strengthLabels[score - 1] || 'Very Weak',
+    meetsRequirements
+  };
+};
 
 const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdatePassword }) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  
   const [formData, setFormData] = useState({
     name: currentUser.name,
     mobile: currentUser.mobile,
@@ -50,53 +140,166 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     bio: (currentUser as any).bio || '',
     logoUrl: (currentUser as any).logoUrl || '',
   });
+
+  const [originalFormData, setOriginalFormData] = useState(formData);
+  
   const [passwordData, setPasswordData] = useState({
     current: '',
     new: '',
     confirm: '',
   });
+  
   const [passwordError, setPasswordError] = useState('');
+  const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, feedback: '', meetsRequirements: false });
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [uploadProgress, setUploadProgress] = useState<{ avatar: boolean; logo: boolean }>({ avatar: false, logo: false });
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setFormData({
+    const newFormData = {
       name: currentUser.name,
       mobile: currentUser.mobile,
       avatarUrl: currentUser.avatarUrl || '',
       dealershipName: (currentUser as any).dealershipName || '',
       bio: (currentUser as any).bio || '',
       logoUrl: (currentUser as any).logoUrl || '',
-    });
+    };
+    setFormData(newFormData);
+    setOriginalFormData(newFormData);
   }, [currentUser]);
+
+  useEffect(() => {
+    const hasChanged = JSON.stringify(formData) !== JSON.stringify(originalFormData);
+    setHasChanges(hasChanged);
+  }, [formData, originalFormData]);
+
+  useEffect(() => {
+    if (passwordData.new) {
+      setPasswordStrength(calculatePasswordStrength(passwordData.new));
+    } else {
+      setPasswordStrength({ score: 0, feedback: '', meetsRequirements: false });
+    }
+  }, [passwordData.new]);
+
+  const validateMobile = (mobile: string): string | undefined => {
+    if (!mobile.trim()) {
+      return 'Mobile number is required';
+    }
+    // Basic phone validation (supports international formats)
+    const phoneRegex = /^[\d\s\-\+\(\)]{10,15}$/;
+    if (!phoneRegex.test(mobile.replace(/\s/g, ''))) {
+      return 'Please enter a valid mobile number';
+    }
+    return undefined;
+  };
+
+  const validateName = (name: string): string | undefined => {
+    if (!name.trim()) {
+      return 'Name is required';
+    }
+    if (name.trim().length < 2) {
+      return 'Name must be at least 2 characters';
+    }
+    if (name.trim().length > 50) {
+      return 'Name must be less than 50 characters';
+    }
+    return undefined;
+  };
+
+  const validateForm = (): boolean => {
+    const errors: FormErrors = {};
+    
+    const nameError = validateName(formData.name);
+    if (nameError) errors.name = nameError;
+
+    const mobileError = validateMobile(formData.mobile);
+    if (mobileError) errors.mobile = mobileError;
+
+    if (currentUser.role === 'seller') {
+      if (!formData.dealershipName.trim()) {
+        errors.dealershipName = 'Dealership name is required';
+      } else if (formData.dealershipName.trim().length < 2) {
+        errors.dealershipName = 'Dealership name must be at least 2 characters';
+      }
+
+      if (formData.bio && formData.bio.length > 500) {
+        errors.bio = 'Bio must be less than 500 characters';
+      }
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error for this field when user starts typing
+    if (formErrors[name as keyof FormErrors]) {
+      setFormErrors(prev => ({ ...prev, [name]: undefined }));
+    }
+  };
+
+  const validateImageFile = (file: File): { valid: boolean; error?: string } => {
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+
+    if (!allowedTypes.includes(file.type)) {
+      return { valid: false, error: 'Please upload a valid image (JPEG, PNG, WebP, or GIF)' };
+    }
+
+    if (file.size > maxSize) {
+      return { valid: false, error: 'Image size must be less than 5MB' };
+    }
+
+    return { valid: true };
+  };
+
+  const handleImageUpload = (
+    e: React.ChangeEvent<HTMLInputElement>, 
+    type: 'avatar' | 'logo'
+  ) => {
+    if (!e.target.files || !e.target.files[0]) return;
+
+    const file = e.target.files[0];
+    const validation = validateImageFile(file);
+
+    if (!validation.valid) {
+      setFormErrors(prev => ({ 
+        ...prev, 
+        [type]: validation.error 
+      }));
+      return;
+    }
+
+    setUploadProgress(prev => ({ ...prev, [type]: true }));
+    setFormErrors(prev => ({ ...prev, [type]: undefined }));
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target && typeof event.target.result === 'string') {
+        setFormData(prev => ({ 
+          ...prev, 
+          [type === 'avatar' ? 'avatarUrl' : 'logoUrl']: event.target.result as string 
+        }));
+        setUploadProgress(prev => ({ ...prev, [type]: false }));
+      }
+    };
+    
+    reader.onerror = () => {
+      setFormErrors(prev => ({ 
+        ...prev, 
+        [type]: 'Failed to read image file' 
+      }));
+      setUploadProgress(prev => ({ ...prev, [type]: false }));
+    };
+
+    reader.readAsDataURL(file);
   };
   
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target && typeof event.target.result === 'string') {
-          setFormData(prev => ({ ...prev, logoUrl: event.target.result as string }));
-        }
-      };
-      reader.readAsDataURL(e.target.files[0]);
-    }
-  };
-
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target && typeof event.target.result === 'string') {
-          setFormData(prev => ({ ...prev, avatarUrl: event.target.result as string }));
-        }
-      };
-      reader.readAsDataURL(e.target.files[0]);
-    }
-  };
-
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setPasswordData(prev => ({ ...prev, [name]: value }));
@@ -105,97 +308,177 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
   const handleEditToggle = () => {
     if (isEditing) {
-      setFormData({ 
-        name: currentUser.name, 
-        mobile: currentUser.mobile, 
-        avatarUrl: currentUser.avatarUrl || '',
-        dealershipName: (currentUser as any).dealershipName || '',
-        bio: (currentUser as any).bio || '',
-        logoUrl: (currentUser as any).logoUrl || '',
-      });
+      // Reset to original data
+      setFormData(originalFormData);
+      setFormErrors({});
+      setHasChanges(false);
     }
     setIsEditing(!isEditing);
   };
 
-  const handleProfileSave = (e: React.FormEvent) => {
+  const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateProfile(formData);
-    setIsEditing(false);
+    
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await Promise.resolve(onUpdateProfile(formData));
+      setOriginalFormData(formData);
+      setHasChanges(false);
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+      setFormErrors(prev => ({ ...prev, general: 'Failed to save changes. Please try again.' }));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePasswordSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
 
-    if (passwordData.new !== passwordData.confirm) {
-      setPasswordError("New passwords do not match.");
+    if (!passwordData.current) {
+      setPasswordError('Current password is required');
       return;
     }
-    if (passwordData.new.length < 6) {
-        setPasswordError("New password must be at least 6 characters long.");
-        return;
+
+    if (!passwordStrength.meetsRequirements) {
+      setPasswordError('New password does not meet requirements');
+      return;
     }
 
-    const success = await onUpdatePassword({ current: passwordData.current, new: passwordData.new });
-    if (success) {
-      setPasswordData({ current: '', new: '', confirm: '' });
-    } else {
-        setPasswordError("Your current password was incorrect.");
+    if (passwordData.new !== passwordData.confirm) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+
+    if (passwordData.current === passwordData.new) {
+      setPasswordError('New password must be different from current password');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const success = await onUpdatePassword({ 
+        current: passwordData.current, 
+        new: passwordData.new 
+      });
+      
+      if (success) {
+        setPasswordData({ current: '', new: '', confirm: '' });
+        setPasswordStrength({ score: 0, feedback: '', meetsRequirements: false });
+      } else {
+        setPasswordError('Current password is incorrect');
+      }
+    } catch (error) {
+      console.error('Failed to update password:', error);
+      setPasswordError('Failed to update password. Please try again.');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
+  const getPasswordStrengthColor = (score: number) => {
+    if (score === 0) return 'bg-gray-200';
+    if (score === 1) return 'bg-red-500';
+    if (score === 2) return 'bg-orange-500';
+    if (score === 3) return 'bg-yellow-500';
+    if (score === 4) return 'bg-green-500';
+    return 'bg-green-600';
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 py-6">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto">
         <div className="space-y-6">
-          {/* Header */}
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
-            <p className="mt-2 text-gray-600">Manage your account settings</p>
+          {/* Enhanced Header */}
+          <div className="text-center space-y-2">
+            <h1 className="text-4xl font-bold text-gray-900">My Profile</h1>
+            <p className="text-lg text-gray-600">Manage your account settings and preferences</p>
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Account Details Card */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="p-6">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+              <div className="p-6 sm:p-8">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900">Account Details</h2>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Account Details</h2>
+                    <p className="text-sm text-gray-500 mt-1">Your personal information</p>
+                  </div>
                   {!isEditing && (
                     <button 
                       onClick={handleEditToggle}
-                      className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                      className="px-4 py-2 text-sm font-semibold text-blue-600 hover:text-blue-700 border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      aria-label="Edit profile"
                     >
-                      Edit
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Edit
+                      </span>
                     </button>
                   )}
                 </div>
 
                 <form onSubmit={handleProfileSave}>
-                  {/* Profile Picture */}
-                  <div className="flex items-center space-x-4 mb-6">
-                    <div className="relative">
-                      <img
-                        src={formData.avatarUrl || `https://i.pravatar.cc/80?u=${currentUser.email}`}
-                        alt="Profile"
-                        className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
-                      />
+                  {/* Enhanced Profile Picture */}
+                  <div className="flex items-center space-x-4 mb-8 pb-6 border-b border-gray-200">
+                    <div className="relative group">
+                      <div className="relative">
+                        <img
+                          src={formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&size=120&background=3b82f6&color=fff&bold=true`}
+                          alt="Profile"
+                          className="w-20 h-20 rounded-full object-cover border-4 border-gray-100 shadow-md transition-transform duration-200 group-hover:scale-105"
+                        />
+                        {uploadProgress.avatar && (
+                          <div className="absolute inset-0 bg-blue-500/20 rounded-full flex items-center justify-center">
+                            <svg className="animate-spin h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          </div>
+                        )}
+                      </div>
                       {isEditing && (
-                        <label htmlFor="avatar-upload" className="absolute -bottom-1 -right-1 bg-blue-600 text-white rounded-full p-1 cursor-pointer hover:bg-blue-700 transition-colors">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
-                          <input id="avatar-upload" type="file" className="sr-only" accept="image/*" onChange={handleAvatarUpload} />
-                        </label>
+                        <>
+                          <label 
+                            htmlFor="avatar-upload" 
+                            className="absolute -bottom-1 -right-1 bg-blue-600 text-white rounded-full p-2 cursor-pointer hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                            aria-label="Upload profile picture"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                          </label>
+                          <input 
+                            id="avatar-upload" 
+                            ref={avatarInputRef}
+                            type="file" 
+                            className="sr-only" 
+                            accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" 
+                            onChange={(e) => handleImageUpload(e, 'avatar')} 
+                          />
+                        </>
                       )}
                     </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{formData.name}</p>
-                      <p className="text-sm text-gray-500">{currentUser.email}</p>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 text-lg">{formData.name}</p>
+                      <p className="text-sm text-gray-500 mt-1">{currentUser.email}</p>
+                      {formErrors.avatar && (
+                        <p className="text-xs text-red-600 mt-1">{formErrors.avatar}</p>
+                      )}
                     </div>
                   </div>
 
                   {/* Form Fields */}
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <ProfileInput
                       label="Full Name"
                       name="name"
@@ -203,15 +486,21 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                       onChange={handleInputChange}
                       disabled={!isEditing}
                       placeholder="Enter your full name"
+                      error={formErrors.name}
+                      maxLength={50}
+                      required
                     />
                     
                     <ProfileInput
                       label="Mobile Number"
                       name="mobile"
+                      type="tel"
                       value={formData.mobile}
                       onChange={handleInputChange}
                       disabled={!isEditing}
-                      placeholder="Enter mobile number"
+                      placeholder="+91-98765-43210"
+                      error={formErrors.mobile}
+                      required
                     />
 
                     {currentUser.role === 'seller' && (
@@ -223,60 +512,133 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                           onChange={handleInputChange}
                           disabled={!isEditing}
                           placeholder="Enter dealership name"
+                          error={formErrors.dealershipName}
+                          maxLength={50}
+                          required
                         />
                         
-                        {/* Dealership Logo */}
+                        {/* Enhanced Dealership Logo */}
                         <div className="space-y-2">
-                          <label className="text-sm font-medium text-gray-700">Dealership Logo</label>
-                          <div className="flex items-center space-x-3">
-                            <img
-                              src={formData.logoUrl || `https://i.pravatar.cc/60?u=${currentUser.email}`}
-                              alt="Dealership Logo"
-                              className="w-12 h-12 rounded-lg object-cover border border-gray-200"
-                            />
+                          <label className="text-sm font-semibold text-gray-700">Dealership Logo</label>
+                          <div className="flex items-center space-x-4">
+                            <div className="relative">
+                              <img
+                                src={formData.logoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.dealershipName || 'Logo')}&size=80&background=6366f1&color=fff&bold=true`}
+                                alt="Dealership Logo"
+                                className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200 shadow-sm"
+                              />
+                              {uploadProgress.logo && (
+                                <div className="absolute inset-0 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                                  <svg className="animate-spin h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
                             {isEditing && (
                               <div>
-                                <label htmlFor="logo-upload" className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer">
+                                <label 
+                                  htmlFor="logo-upload" 
+                                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg cursor-pointer transition-all duration-200 border border-indigo-200 hover:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                                >
+                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                  </svg>
                                   Upload Logo
                                 </label>
-                                <input id="logo-upload" type="file" className="sr-only" accept="image/*" onChange={handleLogoUpload} />
+                                <input 
+                                  id="logo-upload" 
+                                  ref={logoInputRef}
+                                  type="file" 
+                                  className="sr-only" 
+                                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" 
+                                  onChange={(e) => handleImageUpload(e, 'logo')} 
+                                />
+                                <p className="text-xs text-gray-500 mt-2">JPEG, PNG, WebP, or GIF (Max 5MB)</p>
                               </div>
+                            )}
+                            {formErrors.logo && (
+                              <p className="text-xs text-red-600">{formErrors.logo}</p>
                             )}
                           </div>
                         </div>
 
-                        {/* Bio */}
-                        <div className="space-y-1">
-                          <label className="text-sm font-medium text-gray-700">About Your Dealership</label>
+                        {/* Enhanced Bio */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-semibold text-gray-700">About Your Dealership</label>
+                            <span className={`text-xs ${(formData.bio?.length || 0) > 450 ? 'text-orange-500' : 'text-gray-400'}`}>
+                              {formData.bio?.length || 0}/500
+                            </span>
+                          </div>
                           <textarea
                             name="bio"
                             value={formData.bio}
                             onChange={handleInputChange}
                             disabled={!isEditing}
-                            rows={3}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
-                            placeholder="Tell customers about your dealership..."
+                            rows={4}
+                            maxLength={500}
+                            className={`w-full px-4 py-2.5 border rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed resize-none ${
+                              formErrors.bio 
+                                ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
+                                : 'border-gray-300 bg-white hover:border-gray-400'
+                            }`}
+                            placeholder="Tell customers about your dealership, specialties, and what makes you unique..."
+                            aria-invalid={formErrors.bio ? 'true' : 'false'}
+                            aria-describedby={formErrors.bio ? 'bio-error' : undefined}
                           />
+                          {formErrors.bio && (
+                            <p id="bio-error" className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              {formErrors.bio}
+                            </p>
+                          )}
                         </div>
                       </>
                     )}
                   </div>
 
-                  {/* Action Buttons */}
+                  {formErrors.general && (
+                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-sm text-red-600">{formErrors.general}</p>
+                    </div>
+                  )}
+
+                  {/* Enhanced Action Buttons */}
                   {isEditing && (
-                    <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
+                    <div className="flex justify-end space-x-3 mt-8 pt-6 border-t border-gray-200">
                       <button 
                         type="button" 
                         onClick={handleEditToggle}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                        disabled={isSaving}
+                        className="px-6 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
                       <button 
                         type="submit"
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                        disabled={isSaving || !hasChanges}
+                        className="px-6 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        Save Changes
+                        {isSaving ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Save Changes
+                          </>
+                        )}
                       </button>
                     </div>
                   )}
@@ -284,30 +646,62 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
               </div>
             </div>
 
-            {/* Change Password Card */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-6">Change Password</h2>
+            {/* Enhanced Change Password Card */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+              <div className="p-6 sm:p-8">
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold text-gray-900">Change Password</h2>
+                  <p className="text-sm text-gray-500 mt-1">Update your account password</p>
+                </div>
                 
                 <form onSubmit={handlePasswordSave}>
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <PasswordInput
                       label="Current Password"
                       name="current"
                       value={passwordData.current}
                       onChange={handlePasswordChange}
                       placeholder="Enter current password"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                     
-                    <PasswordInput
-                      label="New Password"
-                      name="new"
-                      value={passwordData.new}
-                      onChange={handlePasswordChange}
-                      placeholder="Enter new password"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+                    <div className="space-y-2">
+                      <PasswordInput
+                        label="New Password"
+                        name="new"
+                        value={passwordData.new}
+                        onChange={handlePasswordChange}
+                        placeholder="Enter new password"
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      
+                      {/* Password Strength Indicator */}
+                      {passwordData.new && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            {[1, 2, 3, 4, 5].map((level) => (
+                              <div
+                                key={level}
+                                className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                                  passwordStrength.score >= level
+                                    ? getPasswordStrengthColor(passwordStrength.score)
+                                    : 'bg-gray-200'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <p className={`text-xs ${
+                            passwordStrength.score >= 4 
+                              ? 'text-green-600' 
+                              : passwordStrength.score >= 2 
+                                ? 'text-yellow-600' 
+                                : 'text-red-600'
+                          }`}>
+                            {passwordStrength.feedback}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                     
                     <PasswordInput
                       label="Confirm New Password"
@@ -315,23 +709,59 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                       value={passwordData.confirm}
                       onChange={handlePasswordChange}
                       placeholder="Confirm new password"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                     
+                    {passwordData.confirm && passwordData.new && passwordData.confirm !== passwordData.new && (
+                      <p className="text-xs text-red-600 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        Passwords do not match
+                      </p>
+                    )}
+                    
                     {passwordError && (
-                      <div className="text-sm text-red-600 bg-red-50 p-2 rounded-md">
-                        {passwordError}
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-sm text-red-600 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                          </svg>
+                          {passwordError}
+                        </p>
                       </div>
                     )}
                   </div>
                   
-                  <div className="mt-6 pt-4 border-t border-gray-200">
+                  <div className="mt-6 pt-6 border-t border-gray-200">
                     <button 
                       type="submit" 
-                      className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
-                      disabled={!passwordData.current || !passwordData.new || !passwordData.confirm}
+                      disabled={
+                        !passwordData.current || 
+                        !passwordData.new || 
+                        !passwordData.confirm || 
+                        !passwordStrength.meetsRequirements ||
+                        passwordData.new !== passwordData.confirm ||
+                        isChangingPassword
+                      }
+                      className="w-full px-6 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" 
                     >
-                      Update Password
+                      {isChangingPassword ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Updating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                          </svg>
+                          Update Password
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>

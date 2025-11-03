@@ -20,6 +20,12 @@ async function callGeminiAPI(payload: any): Promise<string> {
         });
 
         if (!response.ok) {
+            // Handle 404 specifically (API endpoint not available in dev)
+            if (response.status === 404) {
+                console.warn('⚠️ Gemini API endpoint not available (dev mode). AI features disabled.');
+                throw new Error('AI_API_UNAVAILABLE');
+            }
+            
             // Check if response is JSON before trying to parse
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -40,7 +46,12 @@ async function callGeminiAPI(payload: any): Promise<string> {
         const data = await response.json();
         return data.response || data.result || 'No response generated';
     } catch (error) {
-        console.error("Error calling Gemini proxy API:", error);
+        // Only log as error if it's not a 404 (expected in dev)
+        if (error instanceof Error && error.message === 'AI_API_UNAVAILABLE') {
+            // Silently fail for dev mode - don't spam console
+        } else {
+            console.warn("⚠️ Gemini API error (may be unavailable in dev):", error instanceof Error ? error.message : error);
+        }
         // Return a default value that won't break the UI.
         const isJson = payload.config?.responseMimeType === "application/json";
         if (isJson) {
@@ -364,7 +375,12 @@ If there is no data or no meaningful suggestions can be made, return an empty ar
             targetId: s.type === 'urgent_inquiry' ? String(s.targetId) : Number(s.targetId)
         }));
     } catch (error) {
-        console.error("Error generating seller suggestions from proxy:", error);
+        // Handle AI API unavailable gracefully (dev mode)
+        if (error instanceof Error && error.message === 'AI_API_UNAVAILABLE') {
+            // Silently return empty array - AI features disabled in dev
+            return [];
+        }
+        console.warn("⚠️ Error generating seller suggestions (AI may be unavailable):", error instanceof Error ? error.message : error);
         return [];
     }
 };

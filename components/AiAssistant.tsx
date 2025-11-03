@@ -63,8 +63,14 @@ const AiAssistant: React.FC<AiAssistantProps> = ({ vehicles, conversations, onNa
             setSuggestions([]);
         }
       } catch (err) {
-        console.error("Failed to get AI suggestions:", err);
-        setError("Could not load AI suggestions at this time.");
+        // Only show error if it's not the expected "API unavailable" case
+        if (err instanceof Error && !err.message.includes('AI_API_UNAVAILABLE')) {
+          console.warn("⚠️ Failed to get AI suggestions:", err);
+          setError("Could not load AI suggestions at this time.");
+        } else {
+          // AI API unavailable (dev mode) - silently fail
+          setError(null);
+        }
       } finally {
         setIsLoading(false);
       }
