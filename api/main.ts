@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import mongoose from 'mongoose';
 import connectToDatabase from '../lib/db.js';
 import User from '../models/User.js';
 import Vehicle from '../models/Vehicle.js';
@@ -385,43 +386,95 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
 
   // PUT - Update user
   if (req.method === 'PUT') {
-    const { email, ...updateData } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, reason: 'Email is required for update.' });
-    }
-
-    // Separate null values (to be unset) from regular updates
-    const updateFields: any = {};
-    const unsetFields: any = {};
-    
-    Object.keys(updateData).forEach(key => {
-      if (updateData[key] === null) {
-        unsetFields[key] = '';
-      } else if (updateData[key] !== undefined) {
-        updateFields[key] = updateData[key];
+    try {
+      const { email, ...updateData } = req.body;
+      if (!email) {
+        return res.status(400).json({ success: false, reason: 'Email is required for update.' });
       }
-    });
 
-    // Build update operation
-    const updateOperation: any = {};
-    if (Object.keys(updateFields).length > 0) {
-      updateOperation.$set = updateFields;
+      // Separate null values (to be unset) from regular updates
+      const updateFields: any = {};
+      const unsetFields: any = {};
+      
+      // Handle password update separately - it needs to be hashed
+      let passwordToUpdate: string | undefined;
+      if (updateData.password !== undefined && updateData.password !== null) {
+        try {
+          // Check if password is already hashed (bcrypt hashes start with $2)
+          // If not hashed, hash it before updating
+          const isAlreadyHashed = typeof updateData.password === 'string' && 
+                                   updateData.password.startsWith('$2');
+          
+          if (isAlreadyHashed) {
+            // Password is already hashed (edge case - for backward compatibility)
+            passwordToUpdate = updateData.password;
+          } else {
+            // Hash the plain text password before updating
+            passwordToUpdate = await hashPassword(updateData.password);
+          }
+          updateFields.password = passwordToUpdate;
+        } catch (hashError) {
+          console.error('Error hashing password:', hashError);
+          return res.status(500).json({ 
+            success: false, 
+            reason: 'Failed to process password update. Please try again.' 
+          });
+        }
+      }
+      
+      Object.keys(updateData).forEach(key => {
+        // Skip password as it's already handled above
+        if (key === 'password') {
+          return;
+        }
+        
+        if (updateData[key] === null) {
+          unsetFields[key] = '';
+        } else if (updateData[key] !== undefined) {
+          updateFields[key] = updateData[key];
+        }
+      });
+
+      // Build update operation
+      const updateOperation: any = {};
+      if (Object.keys(updateFields).length > 0) {
+        updateOperation.$set = updateFields;
+      }
+      if (Object.keys(unsetFields).length > 0) {
+        updateOperation.$unset = unsetFields;
+      }
+
+      // Only proceed with update if there are fields to update
+      if (Object.keys(updateOperation).length === 0) {
+        return res.status(400).json({ success: false, reason: 'No fields to update.' });
+      }
+
+      // Verify database connection before updating
+      if (mongoose.connection.readyState !== 1) {
+        await connectToDatabase();
+      }
+
+      const updatedUser = await User.findOneAndUpdate(
+        { email },
+        updateOperation,
+        { new: true }
+      );
+
+      if (!updatedUser) {
+        return res.status(404).json({ success: false, reason: 'User not found.' });
+      }
+
+      // Remove password from response for security
+      const { password: _, ...userWithoutPassword } = updatedUser.toObject();
+      return res.status(200).json({ success: true, user: userWithoutPassword });
+    } catch (dbError) {
+      console.error('Database error during user update:', dbError);
+      return res.status(500).json({ 
+        success: false, 
+        reason: 'Database error occurred. Please try again later.',
+        error: dbError instanceof Error ? dbError.message : 'Unknown error'
+      });
     }
-    if (Object.keys(unsetFields).length > 0) {
-      updateOperation.$unset = unsetFields;
-    }
-
-    const updatedUser = await User.findOneAndUpdate(
-      { email },
-      updateOperation,
-      { new: true }
-    );
-
-    if (!updatedUser) {
-      return res.status(404).json({ success: false, reason: 'User not found.' });
-    }
-
-    return res.status(200).json({ success: true, user: updatedUser });
   }
 
   // DELETE - Delete user

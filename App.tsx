@@ -721,8 +721,6 @@ const AppContent: React.FC = React.memo(() => {
                   }
                   
                   // Current password is correct, now update to new password
-                  const { hashPassword } = await import('./utils/passwordUtils');
-                  
                   // Check if we're in production (using API) or development (localStorage)
                   const isDevelopment = import.meta.env.DEV || 
                                        window.location.hostname === 'localhost' || 
@@ -736,11 +734,12 @@ const AppContent: React.FC = React.memo(() => {
                     // Development: store plain text for localStorage
                     passwordToStore = passwords.new;
                   } else {
-                    // Production: hash the new password
-                    passwordToStore = await hashPassword(passwords.new);
+                    // Production: send plain text password to API, let API hash it
+                    // This ensures consistent hashing and better security
+                    passwordToStore = passwords.new;
                   }
                   
-                  // Update password
+                  // Update password (API will hash it in production mode)
                   await updateUser(currentUser.email, { password: passwordToStore });
                   addToast('Password updated successfully', 'success');
                   return true;
