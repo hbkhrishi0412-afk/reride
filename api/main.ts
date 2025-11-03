@@ -115,17 +115,28 @@ export default async function handler(
 
   try {
     // Try to connect to database, but don't fail if it's not available
-    try {
-      await connectToDatabase();
-    } catch (dbError) {
-      console.warn('Database connection failed, using fallback data:', dbError);
-      // Return consistent error response for all methods
-      return res.status(503).json({ 
-        success: false, 
-        reason: 'Database temporarily unavailable. Please try again later.',
-        fallback: true,
-        data: req.method === 'GET' ? [] : null
-      });
+    // For PUT/POST/DELETE requests, let individual handlers manage connection errors
+    // For GET requests, return early if connection fails
+    if (req.method === 'GET') {
+      try {
+        await connectToDatabase();
+      } catch (dbError) {
+        console.warn('Database connection failed for GET request, using fallback data:', dbError);
+        return res.status(503).json({ 
+          success: false, 
+          reason: 'Database temporarily unavailable. Please try again later.',
+          fallback: true,
+          data: []
+        });
+      }
+    } else {
+      // For non-GET requests, attempt connection but let handler manage errors
+      try {
+        await connectToDatabase();
+      } catch (dbError) {
+        console.warn('Database connection warning for', req.method, 'request:', dbError);
+        // Don't return early - let the handler manage the connection error
+      }
     }
 
     // Route based on the path
@@ -388,40 +399,54 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'PUT') {
     try {
       const { email, ...updateData } = req.body;
+      
       if (!email) {
         return res.status(400).json({ success: false, reason: 'Email is required for update.' });
       }
+
+      console.log('🔄 PUT /users - Updating user:', { email, hasPassword: !!updateData.password, fields: Object.keys(updateData) });
 
       // Separate null values (to be unset) from regular updates
       const updateFields: any = {};
       const unsetFields: any = {};
       
       // Handle password update separately - it needs to be hashed
-      let passwordToUpdate: string | undefined;
       if (updateData.password !== undefined && updateData.password !== null) {
         try {
+          // Validate password is a string
+          if (typeof updateData.password !== 'string' || updateData.password.trim().length === 0) {
+            return res.status(400).json({ 
+              success: false, 
+              reason: 'Password must be a non-empty string.' 
+            });
+          }
+
           // Check if password is already hashed (bcrypt hashes start with $2)
           // If not hashed, hash it before updating
-          const isAlreadyHashed = typeof updateData.password === 'string' && 
-                                   updateData.password.startsWith('$2');
+          const isAlreadyHashed = updateData.password.startsWith('$2');
           
           if (isAlreadyHashed) {
             // Password is already hashed (edge case - for backward compatibility)
-            passwordToUpdate = updateData.password;
+            updateFields.password = updateData.password;
+            console.log('🔐 Password already hashed, using as-is');
           } else {
             // Hash the plain text password before updating
-            passwordToUpdate = await hashPassword(updateData.password);
+            console.log('🔐 Hashing password...');
+            updateFields.password = await hashPassword(updateData.password);
+            console.log('✅ Password hashed successfully');
           }
-          updateFields.password = passwordToUpdate;
         } catch (hashError) {
-          console.error('Error hashing password:', hashError);
+          console.error('❌ Error hashing password:', hashError);
+          const errorMessage = hashError instanceof Error ? hashError.message : 'Unknown error';
           return res.status(500).json({ 
             success: false, 
-            reason: 'Failed to process password update. Please try again.' 
+            reason: 'Failed to process password update. Please try again.',
+            error: errorMessage
           });
         }
       }
       
+      // Process other fields
       Object.keys(updateData).forEach(key => {
         // Skip password as it's already handled above
         if (key === 'password') {
@@ -449,30 +474,51 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ success: false, reason: 'No fields to update.' });
       }
 
-      // Verify database connection before updating
-      if (mongoose.connection.readyState !== 1) {
-        await connectToDatabase();
+      console.log('💾 Updating user in database...', { email, operationKeys: Object.keys(updateOperation) });
+
+      // Ensure database connection is active (should already be connected from top-level check)
+      try {
+        if (mongoose.connection.readyState !== 1) {
+          console.warn('⚠️ Database connection not ready, attempting reconnect...');
+          await connectToDatabase();
+        }
+      } catch (connError) {
+        console.error('❌ Database connection error:', connError);
+        return res.status(503).json({ 
+          success: false, 
+          reason: 'Database connection failed. Please try again later.',
+          error: connError instanceof Error ? connError.message : 'Connection error'
+        });
       }
 
       const updatedUser = await User.findOneAndUpdate(
-        { email },
+        { email: email.toLowerCase().trim() }, // Ensure email is normalized
         updateOperation,
-        { new: true }
+        { new: true, runValidators: true }
       );
 
       if (!updatedUser) {
+        console.warn('⚠️ User not found:', email);
         return res.status(404).json({ success: false, reason: 'User not found.' });
       }
+
+      console.log('✅ User updated successfully:', updatedUser.email);
 
       // Remove password from response for security
       const { password: _, ...userWithoutPassword } = updatedUser.toObject();
       return res.status(200).json({ success: true, user: userWithoutPassword });
     } catch (dbError) {
-      console.error('Database error during user update:', dbError);
+      console.error('❌ Database error during user update:', dbError);
+      const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';
+      const errorStack = dbError instanceof Error ? dbError.stack : undefined;
+      
+      // Log full error for debugging
+      console.error('Error details:', { message: errorMessage, stack: errorStack });
+      
       return res.status(500).json({ 
         success: false, 
         reason: 'Database error occurred. Please try again later.',
-        error: dbError instanceof Error ? dbError.message : 'Unknown error'
+        error: errorMessage
       });
     }
   }
