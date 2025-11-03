@@ -773,7 +773,10 @@ const AppContent: React.FC = React.memo(() => {
           <CustomerInbox 
             conversations={conversations.filter(c => c.customerId === currentUser.email)}
             onSendMessage={(vehicleId, messageText, type, payload) => {
-              const conversation = conversations.find(c => c.vehicleId === vehicleId);
+              // Only find conversations that belong to the current user
+              const conversation = conversations.find(c => 
+                c.vehicleId === vehicleId && c.customerId === currentUser.email
+              );
               if (conversation) {
                 // Handle offer messages with proper structure
                 if (type === 'offer' && payload) {
