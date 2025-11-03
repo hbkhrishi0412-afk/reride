@@ -741,7 +741,8 @@ const AppContent: React.FC = React.memo(() => {
                   
                   // Update password (API will hash it in production mode)
                   await updateUser(currentUser.email, { password: passwordToStore });
-                  addToast('Password updated successfully', 'success');
+                  // Don't show success here - let updateUser handle the toast message
+                  // This ensures we show the correct message based on MongoDB success/failure
                   return true;
                 } catch (error) {
                   console.error('Failed to update password:', error);

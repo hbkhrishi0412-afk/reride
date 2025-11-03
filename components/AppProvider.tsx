@@ -936,14 +936,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         } catch (apiError) {
           // Determine the type of error and show appropriate message
           if (apiError instanceof Error) {
-            if (apiError.message.includes('fetch') || 
+            // Check for database connection errors (503)
+            if (apiError.message.includes('503') || apiError.message.includes('Database connection failed')) {
+              console.error('❌ MongoDB connection failed:', apiError.message);
+              if (updates.password) {
+                addToast('Password updated locally. MongoDB connection failed - please configure MONGODB_URI in Vercel.', 'error');
+              } else {
+                addToast('Profile updated locally. MongoDB connection failed - please check server configuration.', 'error');
+              }
+            } else if (apiError.message.includes('fetch') || 
                 apiError.message.includes('network') ||
-                apiError.message.includes('503') ||
                 apiError.message.includes('Failed to fetch')) {
               // Network errors - expected in development
               console.warn('⚠️ Network error updating user (expected in dev):', apiError.message);
               if (isDevelopment) {
-                addToast('Password updated successfully (saved locally)', 'success');
+                if (updates.password) {
+                  addToast('Password updated successfully (saved locally)', 'success');
+                } else {
+                  addToast('Profile updated locally', 'success');
+                }
               } else {
                 addToast('Profile updated locally. Will sync when connection is restored.', 'warning');
               }
@@ -959,21 +970,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             } else if (apiError.message.includes('400')) {
               console.error('❌ Invalid profile data:', apiError);
               addToast('Invalid profile data. Please check your input.', 'error');
-            } else if (apiError.message.includes('500')) {
-              console.error('❌ Server error updating user:', apiError);
-              addToast('Server error. Profile updated locally, will retry later.', 'warning');
+            } else if (apiError.message.includes('500') || apiError.message.includes('Database error')) {
+              console.error('❌ Server/Database error updating user:', apiError);
+              // For password updates, provide specific feedback
+              if (updates.password) {
+                // Check if password was saved locally (development mode)
+                if (isDevelopment) {
+                  addToast('Password updated successfully (saved locally)', 'success');
+                } else {
+                  // Production: Database error - likely MongoDB issue
+                  console.error('MongoDB update failed - check MONGODB_URI environment variable and MongoDB Atlas connection in Vercel');
+                  addToast('Password updated locally. MongoDB error occurred - please check server logs and MongoDB configuration.', 'error');
+                }
+              } else {
+                addToast('Server error. Profile updated locally, will retry later.', 'warning');
+              }
             } else {
               console.warn('⚠️ Failed to sync profile with server:', apiError.message);
-              if (isDevelopment && updates.password) {
-                addToast('Password updated successfully (saved locally)', 'success');
+              // For password updates specifically
+              if (updates.password) {
+                if (isDevelopment) {
+                  addToast('Password updated successfully (saved locally)', 'success');
+                } else {
+                  // Production mode but MongoDB failed
+                  addToast('Password updated locally. Server sync failed - please check MongoDB configuration.', 'error');
+                }
               } else {
                 addToast('Profile updated locally, but failed to sync with server', 'warning');
               }
             }
           } else {
             console.warn('⚠️ Failed to sync profile with server');
-            if (isDevelopment && updates.password) {
-              addToast('Password updated successfully (saved locally)', 'success');
+            // For password updates specifically
+            if (updates.password) {
+              if (isDevelopment) {
+                addToast('Password updated successfully (saved locally)', 'success');
+              } else {
+                addToast('Password updated locally. Server sync failed - please check MongoDB configuration.', 'error');
+              }
             } else {
               addToast('Profile updated locally, but failed to sync with server', 'warning');
             }
