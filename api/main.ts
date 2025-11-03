@@ -275,21 +275,27 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
         });
       }
 
+      // Normalize email to lowercase for consistent duplicate checking
+      // This MUST match the normalization used when saving (line 294)
+      const normalizedEmail = sanitizedData.email.toLowerCase().trim();
+
       try {
-        const existingUser = await User.findOne({ email: sanitizedData.email });
+        const existingUser = await User.findOne({ email: normalizedEmail });
         if (existingUser) {
+          console.warn('⚠️ Registration attempt with existing email:', normalizedEmail);
           return res.status(400).json({ success: false, reason: 'User already exists.' });
         }
 
         // Hash password before storing
         const hashedPassword = await hashPassword(sanitizedData.password);
+        console.log('🔐 Password hashed successfully for user:', normalizedEmail);
 
         // Generate unique ID to avoid collisions
         const userId = Date.now() + Math.floor(Math.random() * 1000);
 
         const newUser = new User({
           id: userId,
-          email: sanitizedData.email,
+          email: normalizedEmail,
           password: hashedPassword, // Store hashed password
           name: sanitizedData.name,
           mobile: sanitizedData.mobile,
@@ -302,14 +308,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
           createdAt: new Date().toISOString()
         });
 
+        console.log('💾 Attempting to save user to MongoDB...');
         await newUser.save();
-        console.log('✅ New user registered and saved to MongoDB:', sanitizedData.email);
+        console.log('✅ New user registered and saved to MongoDB:', normalizedEmail);
       
         // Generate JWT tokens for new user
         const accessToken = generateAccessToken(newUser);
         const refreshToken = generateRefreshToken(newUser);
         
         const { password: _, ...userWithoutPassword } = newUser.toObject();
+        
+        console.log('✅ Registration complete. User ID:', newUser._id);
         return res.status(201).json({ 
           success: true, 
           user: userWithoutPassword,
@@ -319,18 +328,38 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
       } catch (saveError) {
         console.error('❌ Error saving user to MongoDB:', saveError);
         const errorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
+        const errorStack = saveError instanceof Error ? saveError.stack : undefined;
+        
+        // Log full error details for debugging
+        console.error('Registration error details:', { 
+          message: errorMessage, 
+          stack: errorStack,
+          email: normalizedEmail 
+        });
         
         // Check for duplicate key error (email already exists)
-        if (saveError instanceof Error && saveError.message.includes('E11000')) {
+        if (saveError instanceof Error && 
+            (saveError.message.includes('E11000') || 
+             saveError.message.includes('duplicate key') ||
+             saveError.message.includes('email_1 dup key'))) {
           return res.status(400).json({ 
             success: false, 
             reason: 'User with this email already exists.' 
           });
         }
         
+        // Check for validation errors
+        if (saveError instanceof Error && saveError.name === 'ValidationError') {
+          return res.status(400).json({ 
+            success: false, 
+            reason: 'Invalid user data provided.',
+            error: errorMessage
+          });
+        }
+        
         return res.status(500).json({ 
           success: false, 
-          reason: 'Failed to save user to database. Please try again later.',
+          reason: 'Failed to save user to database. Please check MongoDB connection and try again.',
           error: errorMessage
         });
       }
