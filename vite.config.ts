@@ -108,7 +108,11 @@ export default defineConfig({
           if (id.includes('/utils/')) {
             return 'utils';
           }
-        }
+        },
+        // Optimize chunk names for better caching - hash changes on every build
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
       }
     },
     // Enable minification with esbuild (faster)
@@ -132,11 +136,7 @@ export default defineConfig({
     // Enable asset inlining for small files
     assetsInlineLimit: 4096,
     // Optimize for faster loading
-    reportCompressedSize: false,
-        // Optimize chunk names for better caching
-        chunkFileNames: 'assets/[name]-[hash].js',
-        entryFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash].[ext]'
+    reportCompressedSize: false
   },
   server: {
     port: 5174,
