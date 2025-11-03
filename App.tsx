@@ -132,6 +132,7 @@ const AppContent: React.FC = React.memo(() => {
     toggleCompare,
     handleLogin,
     handleRegister,
+    onCreateUser,
     onAdminUpdateUser,
     onUpdateUserPlan,
     onToggleUserStatus,
@@ -647,6 +648,7 @@ const AppContent: React.FC = React.memo(() => {
               currentUser={currentUser}
               vehicles={vehicles}
               conversations={conversations}
+              onCreateUser={onCreateUser}
               onAdminUpdateUser={onAdminUpdateUser}
               onToggleUserStatus={onToggleUserStatus}
               onDeleteUser={deleteUser}

@@ -129,6 +129,7 @@ interface AdminPanelProps {
     currentUser: User;
     vehicles: Vehicle[];
     conversations: Conversation[];
+    onCreateUser?: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
     onToggleUserStatus: (email: string) => void;
     onDeleteUser: (email: string) => void;
     onAdminUpdateUser: (email: string, details: { name: string; mobile: string; role: User['role'] }) => void;

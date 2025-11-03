@@ -87,6 +87,7 @@ interface AppContextType {
   navigate: (view: View, params?: { city?: string }) => void;
   
   // Admin functions
+  onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
   onAdminUpdateUser: (email: string, details: { name: string; mobile: string; role: User['role'] }) => void;
   onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => void;
   onToggleUserStatus: (email: string) => void;
@@ -536,11 +537,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     navigate,
     
     // Admin functions
-    onAdminUpdateUser: (email: string, details: { name: string; mobile: string; role: User['role'] }) => {
+    onAdminUpdateUser: async (email: string, details: { name: string; mobile: string; role: User['role'] }) => {
       setUsers(prev => prev.map(user => 
         user.email === email ? { ...user, ...details } : user
       ));
+      
+      // Also update in MongoDB
+      try {
+        await updateUser(email, details);
+      } catch (error) {
+        console.warn('Failed to sync user update to MongoDB:', error);
+      }
+      
       addToast(`User ${email} updated successfully`, 'success');
+    },
+    onCreateUser: async (userData: Omit<User, 'status'>): Promise<{ success: boolean, reason: string }> => {
+      try {
+        // Check if user already exists
+        const existingUser = users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
+        if (existingUser) {
+          return { success: false, reason: 'User with this email already exists.' };
+        }
+
+        // Add to local state
+        const newUser: User = {
+          ...userData,
+          status: 'active',
+          subscriptionPlan: userData.subscriptionPlan || 'free',
+          featuredCredits: userData.featuredCredits || 0,
+          usedCertifications: userData.usedCertifications || 0,
+        };
+        
+        setUsers(prev => [...prev, newUser]);
+        
+        // Save to localStorage in development
+        const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost';
+        if (isDevelopment) {
+          const { getUsersLocal } = await import('../services/userService');
+          const users = await getUsersLocal();
+          users.push(newUser);
+          localStorage.setItem('reRideUsers', JSON.stringify(users));
+        }
+        
+        // Save to MongoDB via API
+        try {
+          const response = await fetch('/api/main', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'register',
+              email: newUser.email,
+              password: newUser.password,
+              name: newUser.name,
+              mobile: newUser.mobile,
+              role: newUser.role,
+            }),
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
+            console.warn('⚠️ Failed to save user to MongoDB:', errorData.reason || 'Unknown error');
+            // User is still created locally, just MongoDB sync failed
+            addToast(`User created locally. MongoDB sync failed: ${errorData.reason || 'Unknown error'}`, 'warning');
+          } else {
+            console.log('✅ User created and saved to MongoDB:', newUser.email);
+            addToast(`User ${newUser.name} created successfully`, 'success');
+          }
+        } catch (apiError) {
+          console.error('❌ Error saving user to MongoDB:', apiError);
+          addToast(`User created locally. Failed to sync to MongoDB.`, 'warning');
+        }
+        
+        return { success: true, reason: '' };
+      } catch (error) {
+        console.error('Error creating user:', error);
+        return { success: false, reason: error instanceof Error ? error.message : 'Failed to create user.' };
+      }
     },
     onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => {
       setUsers(prev => prev.map(user => 
