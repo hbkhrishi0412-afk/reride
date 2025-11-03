@@ -248,6 +248,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ success: false, reason: 'All fields are required.' });
       }
 
+      // Ensure database connection before proceeding
+      try {
+        if (mongoose.connection.readyState !== 1) {
+          console.log('🔄 Connecting to database for user registration...');
+          await connectToDatabase();
+        }
+      } catch (dbError) {
+        console.error('❌ Database connection error during registration:', dbError);
+        return res.status(503).json({ 
+          success: false, 
+          reason: 'Database connection failed. Please check MONGODB_URI configuration.',
+          error: dbError instanceof Error ? dbError.message : 'Connection error'
+        });
+      }
+
       // Sanitize and validate input data
       const sanitizedData = sanitizeObject({ email, password, name, mobile, role });
       const validation = validateUserInput(sanitizedData);
@@ -260,44 +275,65 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const existingUser = await User.findOne({ email: sanitizedData.email });
-      if (existingUser) {
-        return res.status(400).json({ success: false, reason: 'User already exists.' });
+      try {
+        const existingUser = await User.findOne({ email: sanitizedData.email });
+        if (existingUser) {
+          return res.status(400).json({ success: false, reason: 'User already exists.' });
+        }
+
+        // Hash password before storing
+        const hashedPassword = await hashPassword(sanitizedData.password);
+
+        // Generate unique ID to avoid collisions
+        const userId = Date.now() + Math.floor(Math.random() * 1000);
+
+        const newUser = new User({
+          id: userId,
+          email: sanitizedData.email,
+          password: hashedPassword, // Store hashed password
+          name: sanitizedData.name,
+          mobile: sanitizedData.mobile,
+          role: sanitizedData.role,
+          status: 'active',
+          isVerified: false,
+          subscriptionPlan: 'free', // Fixed: should be subscriptionPlan not plan
+          featuredCredits: 0,
+          usedCertifications: 0,
+          createdAt: new Date().toISOString()
+        });
+
+        await newUser.save();
+        console.log('✅ New user registered and saved to MongoDB:', sanitizedData.email);
+      
+        // Generate JWT tokens for new user
+        const accessToken = generateAccessToken(newUser);
+        const refreshToken = generateRefreshToken(newUser);
+        
+        const { password: _, ...userWithoutPassword } = newUser.toObject();
+        return res.status(201).json({ 
+          success: true, 
+          user: userWithoutPassword,
+          accessToken,
+          refreshToken
+        });
+      } catch (saveError) {
+        console.error('❌ Error saving user to MongoDB:', saveError);
+        const errorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
+        
+        // Check for duplicate key error (email already exists)
+        if (saveError instanceof Error && saveError.message.includes('E11000')) {
+          return res.status(400).json({ 
+            success: false, 
+            reason: 'User with this email already exists.' 
+          });
+        }
+        
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Failed to save user to database. Please try again later.',
+          error: errorMessage
+        });
       }
-
-      // Hash password before storing
-      const hashedPassword = await hashPassword(sanitizedData.password);
-
-      // Generate unique ID to avoid collisions
-      const userId = Date.now() + Math.floor(Math.random() * 1000);
-
-      const newUser = new User({
-        id: userId,
-        email: sanitizedData.email,
-        password: hashedPassword, // Store hashed password
-        name: sanitizedData.name,
-        mobile: sanitizedData.mobile,
-        role: sanitizedData.role,
-        status: 'active',
-        isVerified: false,
-        plan: 'basic',
-        featuredCredits: 0,
-        createdAt: new Date().toISOString()
-      });
-
-      await newUser.save();
-      
-      // Generate JWT tokens for new user
-      const accessToken = generateAccessToken(newUser);
-      const refreshToken = generateRefreshToken(newUser);
-      
-      const { password: _, ...userWithoutPassword } = newUser.toObject();
-      return res.status(201).json({ 
-        success: true, 
-        user: userWithoutPassword,
-        accessToken,
-        refreshToken
-      });
     }
 
     // OAUTH LOGIN
