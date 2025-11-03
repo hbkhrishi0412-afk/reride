@@ -1260,9 +1260,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           // Update local state
           onUpdateVehicle(result.vehicle);
           console.log('✅ Vehicle marked as sold');
+        } else {
+          console.error('❌ Failed to mark vehicle as sold:', result.reason || 'Unknown error');
         }
       } else {
-        console.error('❌ Failed to mark vehicle as sold');
+        const errorText = await response.text();
+        console.error('❌ Failed to mark vehicle as sold:', response.status, errorText);
       }
     } catch (error) {
       console.error('❌ Error marking vehicle as sold:', error);
