@@ -787,7 +787,7 @@ const AppContent: React.FC = React.memo(() => {
                       conv.id === conversation.id ? {
                         ...conv,
                         messages: [...conv.messages, {
-                          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                          id: Date.now() + Math.floor(Math.random() * 1000),
                           sender: 'user' as const,
                           text: messageText,
                           timestamp: new Date().toISOString(),
