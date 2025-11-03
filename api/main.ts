@@ -583,8 +583,42 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(nearbyVehicles);
     }
 
-    // Get all vehicles
+    // Get all vehicles and auto-disable expired listings
     const vehicles = await Vehicle.find({}).sort({ createdAt: -1 });
+    
+    // Migration: Set expiry dates for existing vehicles without listingExpiresAt
+    const now = new Date();
+    for (const vehicle of vehicles) {
+      // If vehicle is published but has no expiry date, migrate it
+      if (!vehicle.listingExpiresAt && vehicle.status === 'published') {
+        const seller = await User.findOne({ email: vehicle.sellerEmail });
+        if (seller) {
+          if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
+            // Premium plan: use plan expiry date
+            vehicle.listingExpiresAt = seller.planExpiryDate;
+            await vehicle.save();
+          } else if (seller.subscriptionPlan !== 'premium') {
+            // Free and Pro plans get 30-day expiry from today
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + 30);
+            vehicle.listingExpiresAt = expiryDate.toISOString();
+            await vehicle.save();
+          }
+        }
+      }
+      
+      // Auto-disable expired listings
+      if (vehicle.listingExpiresAt && vehicle.status === 'published') {
+        const expiryDate = new Date(vehicle.listingExpiresAt);
+        if (expiryDate < now) {
+          vehicle.status = 'unpublished';
+          vehicle.listingStatus = 'expired';
+          await vehicle.save();
+        }
+      }
+    }
+    
+    // Return vehicles after checking expiry
     return res.status(200).json(vehicles);
   }
 
@@ -710,11 +744,46 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, vehicle });
     }
 
+    if (action === 'unsold') {
+      const { vehicleId } = req.body;
+      const vehicle = await Vehicle.findOne({ id: vehicleId });
+      
+      if (!vehicle) {
+        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+      }
+      
+      vehicle.status = 'published';
+      vehicle.listingStatus = 'active';
+      vehicle.soldAt = undefined;
+      
+      await vehicle.save();
+      return res.status(200).json({ success: true, vehicle });
+    }
+
     // Create new vehicle
+    // Set listingExpiresAt based on seller's plan expiry date
+    let listingExpiresAt: string | undefined;
+    if (req.body.sellerEmail) {
+      const seller = await User.findOne({ email: req.body.sellerEmail });
+      if (seller) {
+        if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
+          // Premium plan: use plan expiry date
+          listingExpiresAt = seller.planExpiryDate;
+        } else if (seller.subscriptionPlan !== 'premium') {
+          // Free and Pro plans get 30-day expiry from today
+          const expiryDate = new Date();
+          expiryDate.setDate(expiryDate.getDate() + 30);
+          listingExpiresAt = expiryDate.toISOString();
+        }
+        // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+      }
+    }
+    
     const newVehicle = new Vehicle({
       id: Date.now(),
       ...req.body,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      listingExpiresAt
     });
     
     await newVehicle.save();

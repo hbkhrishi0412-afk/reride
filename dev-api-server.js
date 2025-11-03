@@ -263,6 +263,17 @@ app.get('/api/vehicles', (req, res) => {
     res.json(mockVehicleData);
   } else {
     console.log('🚗 GET /api/vehicles - Returning mock vehicles list');
+    // Auto-disable expired listings
+    const now = new Date();
+    for (const vehicle of mockVehicles) {
+      if (vehicle.listingExpiresAt && vehicle.status === 'published') {
+        const expiryDate = new Date(vehicle.listingExpiresAt);
+        if (expiryDate < now) {
+          vehicle.status = 'unpublished';
+          vehicle.listingStatus = 'expired';
+        }
+      }
+    }
     res.json(mockVehicles);
   }
 });
@@ -392,6 +403,21 @@ app.post('/api/vehicles', (req, res) => {
     vehicle.status = 'sold';
     vehicle.listingStatus = 'sold';
     vehicle.soldAt = new Date().toISOString();
+    
+    return res.status(200).json({ success: true, vehicle });
+  }
+
+  if (action === 'unsold') {
+    const { vehicleId } = req.body;
+    const vehicle = mockVehicles.find(v => v.id === vehicleId);
+    
+    if (!vehicle) {
+      return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+    }
+    
+    vehicle.status = 'published';
+    vehicle.listingStatus = 'active';
+    vehicle.soldAt = undefined;
     
     return res.status(200).json({ success: true, vehicle });
   }

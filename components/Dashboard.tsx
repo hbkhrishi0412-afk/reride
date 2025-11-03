@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, memo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types';
 import { View, VehicleCategory } from '../types';
 import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
@@ -34,6 +34,7 @@ interface DashboardProps {
   onUpdateVehicle: (vehicle: Vehicle) => void;
   onDeleteVehicle: (vehicleId: number) => void;
   onMarkAsSold: (vehicleId: number) => void;
+  onMarkAsUnsold?: (vehicleId: number) => void;
   conversations: Conversation[];
   onSellerSendMessage: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   onMarkConversationAsReadBySeller: (conversationId: string) => void;
@@ -1098,7 +1099,7 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse }) => {
   const [activeView, setActiveView] = useState<DashboardView>('overview');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
@@ -1109,8 +1110,40 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // Pagination state for Active Listings
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  // Month selector state for analytics
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
   
   // Location data is now handled by individual components that need it
+  
+  // Helper function to filter vehicles by month
+  const filterVehiclesByMonth = useCallback((vehicles: Vehicle[], month: string): Vehicle[] => {
+    if (month === 'all') return vehicles;
+    
+    const [year, monthNum] = month.split('-');
+    const startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+    const endDate = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59, 999);
+    
+    return vehicles.filter(v => {
+      const vehicleDate = v.createdAt ? new Date(v.createdAt) : null;
+      if (!vehicleDate) return false;
+      return vehicleDate >= startDate && vehicleDate <= endDate;
+    });
+  }, []);
+  
+  // Generate month options for the last 12 months
+  const getMonthOptions = useCallback(() => {
+    const months: { value: string; label: string }[] = [{ value: 'all', label: 'All Time' }];
+    const now = new Date();
+    
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+      months.push({ value: monthValue, label: monthLabel });
+    }
+    
+    return months;
+  }, []);
 
   useEffect(() => {
     if (selectedConv) {
@@ -1236,6 +1269,29 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
   };
 
+  const handleMarkAsUnsold = async (vehicleId: number) => {
+    try {
+      const response = await fetch('/api/vehicles?action=unsold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Update local state
+          onUpdateVehicle(result.vehicle);
+          console.log('✅ Vehicle marked as unsold');
+        }
+      } else {
+        console.error('❌ Failed to mark vehicle as unsold');
+      }
+    } catch (error) {
+      console.error('❌ Error marking vehicle as unsold:', error);
+    }
+  };
+
   const handleFeatureVehicle = async (vehicleId: number) => {
     console.log('🚀 handleFeatureVehicle called for vehicle:', vehicleId);
     try {
@@ -1298,6 +1354,16 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   const soldListings = useMemo(() => sellerVehicles.filter(v => v.status === 'sold'), [sellerVehicles]);
   const reportedCount = useMemo(() => reportedVehicles.length, [reportedVehicles]);
   
+  // Filter listings by selected month for analytics
+  const filteredActiveListings = useMemo(() => 
+    filterVehiclesByMonth(activeListings, selectedMonth), 
+    [activeListings, selectedMonth, filterVehiclesByMonth]
+  );
+  const filteredSoldListings = useMemo(() => 
+    filterVehiclesByMonth(soldListings, selectedMonth), 
+    [soldListings, selectedMonth, filterVehiclesByMonth]
+  );
+  
   // Pagination calculations for Active Listings
   const totalPages = useMemo(() => Math.ceil(activeListings.length / itemsPerPage), [activeListings.length, itemsPerPage]);
   const paginatedListings = useMemo(() => {
@@ -1312,16 +1378,16 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   }, [activeListings.length, activeView]);
   
   const analyticsData = useMemo(() => {
-    const totalSalesValue = soldListings.reduce((sum: number, v) => sum + (v.price || 0), 0);
-    const totalViews = activeListings.reduce((sum, v) => sum + (v.views || 0), 0);
-    const totalInquiries = activeListings.reduce((sum, v) => sum + (v.inquiriesCount || 0), 0);
-    const chartLabels = activeListings.map(v => `${v.year} ${v.model} ${v.variant || ''}`.trim().slice(0, 25));
+    const totalSalesValue = filteredSoldListings.reduce((sum: number, v) => sum + (v.price || 0), 0);
+    const totalViews = filteredActiveListings.reduce((sum, v) => sum + (v.views || 0), 0);
+    const totalInquiries = filteredActiveListings.reduce((sum, v) => sum + (v.inquiriesCount || 0), 0);
+    const chartLabels = filteredActiveListings.map(v => `${v.year} ${v.model} ${v.variant || ''}`.trim().slice(0, 25));
     const chartData = {
       labels: chartLabels,
       datasets: [
         {
           label: 'Views',
-          data: activeListings.map(v => v.views || 0),
+          data: filteredActiveListings.map(v => v.views || 0),
           backgroundColor: 'rgba(255, 107, 53, 0.5)',
           borderColor: 'rgba(255, 107, 53, 1)',
           borderWidth: 1,
@@ -1329,7 +1395,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         },
         {
           label: 'Inquiries',
-          data: activeListings.map(v => v.inquiriesCount || 0),
+          data: filteredActiveListings.map(v => v.inquiriesCount || 0),
           backgroundColor: 'rgba(30, 136, 229, 0.5)',
           borderColor: 'rgba(30, 136, 229, 1)',
           borderWidth: 1,
@@ -1338,7 +1404,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       ],
     };
     return { totalSalesValue, totalViews, totalInquiries, chartData };
-  }, [activeListings, soldListings]);
+  }, [filteredActiveListings, filteredSoldListings]);
 
   const getCertificationButton = (vehicle: Vehicle) => {
       const status = vehicle.certificationStatus || 'none';
@@ -1378,8 +1444,28 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       case 'analytics':
         return (
             <div className="space-y-6">
+                {/* Month Selector */}
+                <div className="bg-white p-4 rounded-lg shadow-md flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Analytics Overview</h2>
+                    <div className="flex items-center gap-3">
+                        <label htmlFor="month-selector" className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                            Filter by Month:
+                        </label>
+                        <select
+                            id="month-selector"
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className="px-4 py-2 border border-gray-300 rounded-lg bg-white dark:bg-white text-spinny-text-dark focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-transparent"
+                        >
+                            {getMonthOptions().map(month => (
+                                <option key={month.value} value={month.value}>{month.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+                
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <StatCard title="Active Listings" value={activeListings.length} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17v-2a4 4 0 00-4-4h-1.5m1.5 4H13m-2 0a2 2 0 104 0 2 2 0 00-4 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11V7a4 4 0 00-4-4H7a4 4 0 00-4 4v4" /></svg>} />
+                    <StatCard title="Active Listings" value={filteredActiveListings.length} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17v-2a4 4 0 00-4-4h-1.5m1.5 4H13m-2 0a2 2 0 104 0 2 2 0 00-4 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11V7a4 4 0 00-4-4H7a4 4 0 00-4 4v4" /></svg>} />
                     <StatCard title="Total Sales Value" value={`₹${analyticsData.totalSalesValue.toLocaleString('en-IN')}`} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>} />
                     <StatCard title="Total Views" value={analyticsData.totalViews.toLocaleString('en-IN')} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057 5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>} />
                     <StatCard title="Total Inquiries" value={analyticsData.totalInquiries.toLocaleString('en-IN')} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
@@ -1444,7 +1530,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 
                 <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
                     <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Listing Performance</h2>
-                    {activeListings.length > 0 ? (
+                    {filteredActiveListings.length > 0 ? (
                         <Bar 
                             data={analyticsData.chartData} 
                             options={{ 
@@ -1481,7 +1567,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     ) : (
                         <div className="text-center py-16 px-6">
                             <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">No Data to Display</h3>
-                            <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">Add a vehicle to see performance data.</p>
+                            <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">
+                                {selectedMonth === 'all' 
+                                    ? 'Add a vehicle to see performance data.' 
+                                    : 'No data available for the selected month.'}
+                            </p>
                         </div>
                     )}
                 </div>
@@ -1820,12 +1910,26 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             {soldListings.length > 0 ? (
                 <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead className="bg-white dark:bg-white"><tr><th className="px-6 py-3 text-left text-xs font-medium uppercase">Vehicle</th><th className="px-6 py-3 text-left text-xs font-medium uppercase">Sold Price</th></tr></thead>
+                  <thead className="bg-white dark:bg-white">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">Vehicle</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">Sold Price</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase">Action</th>
+                    </tr>
+                  </thead>
                   <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
                     {soldListings.map((v) => (
                       <tr key={v.id}>
                         <td className="px-6 py-4 font-medium">{v.year} {v.make} {v.model} {v.variant || ''}</td>
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => handleMarkAsUnsold(v.id)}
+                            className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-300 rounded-lg hover:bg-green-100 hover:text-green-800 transition-colors"
+                          >
+                            Mark as Unsold
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

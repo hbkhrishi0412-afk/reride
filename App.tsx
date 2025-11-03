@@ -436,6 +436,19 @@ const AppContent: React.FC = React.memo(() => {
               sellerVehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => v.sellerEmail === currentUser.email), users)}
               reportedVehicles={[]}
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
+                // Set listingExpiresAt based on subscription plan expiry date
+                let listingExpiresAt: string | undefined;
+                if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
+                  // Premium plan: use plan expiry date
+                  listingExpiresAt = currentUser.planExpiryDate;
+                } else if (currentUser.subscriptionPlan !== 'premium') {
+                  // Free and Pro plans get 30-day expiry from today
+                  const expiryDate = new Date();
+                  expiryDate.setDate(expiryDate.getDate() + 30);
+                  listingExpiresAt = expiryDate.toISOString();
+                }
+                // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+                
                 const newVehicle = {
                   ...vehicleData,
                   id: Date.now(),
@@ -444,11 +457,25 @@ const AppContent: React.FC = React.memo(() => {
                   ratingCount: 0,
                   isFeatured: isFeaturing,
                   createdAt: new Date().toISOString(),
+                  listingExpiresAt,
                 };
                 setVehicles(prev => [...prev, newVehicle]);
                 addToast('Vehicle added successfully', 'success');
               }}
               onAddMultipleVehicles={async (vehiclesData) => {
+                // Set listingExpiresAt based on subscription plan expiry date
+                let listingExpiresAt: string | undefined;
+                if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
+                  // Premium plan: use plan expiry date
+                  listingExpiresAt = currentUser.planExpiryDate;
+                } else if (currentUser.subscriptionPlan !== 'premium') {
+                  // Free and Pro plans get 30-day expiry from today
+                  const expiryDate = new Date();
+                  expiryDate.setDate(expiryDate.getDate() + 30);
+                  listingExpiresAt = expiryDate.toISOString();
+                }
+                // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+                
                 const newVehicles = vehiclesData.map(vehicle => ({
                   ...vehicle,
                   id: Date.now() + Math.random(),
@@ -456,6 +483,7 @@ const AppContent: React.FC = React.memo(() => {
                   averageRating: 0,
                   ratingCount: 0,
                   createdAt: new Date().toISOString(),
+                  listingExpiresAt,
                 }));
                 setVehicles(prev => [...prev, ...newVehicles]);
                 addToast(`${newVehicles.length} vehicles added successfully`, 'success');
@@ -475,6 +503,12 @@ const AppContent: React.FC = React.memo(() => {
                   v.id === vehicleId ? { ...v, status: 'sold', soldAt: new Date().toISOString() } : v
                 ));
                 addToast('Vehicle marked as sold', 'success');
+              }}
+              onMarkAsUnsold={async (vehicleId) => {
+                setVehicles(prev => prev.map(v => 
+                  v.id === vehicleId ? { ...v, status: 'published', soldAt: undefined } : v
+                ));
+                addToast('Vehicle marked as unsold', 'success');
               }}
               conversations={conversations}
               onSellerSendMessage={(conversationId, messageText, _type, _payload) => sendMessage(conversationId, messageText)}

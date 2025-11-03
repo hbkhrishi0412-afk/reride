@@ -66,11 +66,16 @@ const ListingLifecycleIndicator: React.FC<ListingLifecycleIndicatorProps> = ({
             <h3 className="font-semibold" style={{ color: colors.text }}>
               {getStatusText()}
             </h3>
-            <p className="text-sm" style={{ color: colors.text, opacity: 0.8 }}>
-              {vehicle.listingExpiresAt 
-                ? `Expires: ${new Date(vehicle.listingExpiresAt).toLocaleDateString()}`
-                : 'No expiry date set'}
-            </p>
+            {vehicle.listingExpiresAt && daysUntilExpiry !== -1 && (
+              <p className="text-sm" style={{ color: colors.text, opacity: 0.8 }}>
+                Expires: {new Date(vehicle.listingExpiresAt).toLocaleDateString()}
+              </p>
+            )}
+            {!vehicle.listingExpiresAt && daysUntilExpiry === -1 && (
+              <p className="text-sm" style={{ color: colors.text, opacity: 0.8 }}>
+                No expiry date set
+              </p>
+            )}
           </div>
         </div>
 

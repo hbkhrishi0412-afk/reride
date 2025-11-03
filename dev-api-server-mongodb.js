@@ -105,6 +105,39 @@ app.get('/api/vehicles', async (req, res) => {
     try {
         console.log('🚗 GET /api/vehicles - Fetching vehicles from MongoDB');
         const vehicles = await Vehicle.find({}).sort({ createdAt: -1 });
+        
+        // Migration: Set expiry dates for existing vehicles without listingExpiresAt
+        const now = new Date();
+        for (const vehicle of vehicles) {
+            // If vehicle is published but has no expiry date, migrate it
+            if (!vehicle.listingExpiresAt && vehicle.status === 'published') {
+                const seller = await User.findOne({ email: vehicle.sellerEmail });
+                if (seller) {
+                    if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
+                        // Premium plan: use plan expiry date
+                        vehicle.listingExpiresAt = new Date(seller.planExpiryDate);
+                        await vehicle.save();
+                    } else if (seller.subscriptionPlan !== 'premium') {
+                        // Free and Pro plans get 30-day expiry from today
+                        const expiryDate = new Date();
+                        expiryDate.setDate(expiryDate.getDate() + 30);
+                        vehicle.listingExpiresAt = expiryDate;
+                        await vehicle.save();
+                    }
+                }
+            }
+            
+            // Auto-disable expired listings
+            if (vehicle.listingExpiresAt && vehicle.status === 'published') {
+                const expiryDate = new Date(vehicle.listingExpiresAt);
+                if (expiryDate < now) {
+                    vehicle.status = 'unpublished';
+                    vehicle.listingStatus = 'expired';
+                    await vehicle.save();
+                }
+            }
+        }
+        
         console.log(`✅ Found ${vehicles.length} vehicles`);
         res.json(vehicles);
     } catch (error) {
@@ -182,6 +215,22 @@ app.post('/api/vehicles', async (req, res) => {
             return res.status(200).json({ success: true, vehicle });
         }
         
+        if (action === 'unsold') {
+            console.log('✅ POST /api/vehicles - Mark as unsold');
+            const vehicle = await Vehicle.findOne({ id: vehicleId });
+            
+            if (!vehicle) {
+                return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+            }
+            
+            vehicle.status = 'published';
+            vehicle.listingStatus = 'active';
+            vehicle.soldAt = undefined;
+            
+            await vehicle.save();
+            return res.status(200).json({ success: true, vehicle });
+        }
+        
         if (action === 'feature') {
             console.log('⭐ POST /api/vehicles - Feature listing');
             const vehicle = await Vehicle.findOne({ id: vehicleId });
@@ -247,7 +296,28 @@ app.post('/api/vehicles', async (req, res) => {
         
         // Default: Create new vehicle
         console.log('🚗 POST /api/vehicles - Creating new vehicle');
-        const vehicle = new Vehicle(req.body);
+        // Set listingExpiresAt based on seller's plan expiry date
+        let listingExpiresAt = undefined;
+        if (req.body.sellerEmail) {
+            const seller = await User.findOne({ email: req.body.sellerEmail });
+            if (seller) {
+                if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
+                    // Premium plan: use plan expiry date
+                    listingExpiresAt = new Date(seller.planExpiryDate);
+                } else if (seller.subscriptionPlan !== 'premium') {
+                    // Free and Pro plans get 30-day expiry from today
+                    const expiryDate = new Date();
+                    expiryDate.setDate(expiryDate.getDate() + 30);
+                    listingExpiresAt = expiryDate;
+                }
+                // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+            }
+        }
+        
+        const vehicle = new Vehicle({
+            ...req.body,
+            listingExpiresAt
+        });
         await vehicle.save();
         res.status(201).json(vehicle);
         
