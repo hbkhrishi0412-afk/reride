@@ -1433,19 +1433,37 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   }, [filteredActiveListings, filteredSoldListings]);
 
   const getCertificationButton = (vehicle: Vehicle) => {
-      const status = vehicle.certificationStatus || 'none';
-      switch (status) {
-          case 'requested':
-              return <button disabled className="px-1.5 py-0.5 text-spinny-text-dark text-xs border border-gray-300 rounded opacity-50" title="Certification pending approval">🔄 Pending</button>;
-          case 'approved':
-              return <span className="px-1.5 py-0.5 text-spinny-green text-xs border border-spinny-green rounded bg-spinny-green-light" title="Vehicle is certified">✅ Certified</span>;
-          case 'rejected':
-              return <button onClick={() => handleCertifyVehicle(vehicle.id)} className="px-1.5 py-0.5 text-spinny-orange hover:text-spinny-orange text-xs border border-spinny-orange rounded hover:bg-spinny-orange-light" title="Certification was rejected, you can request again.">🔄 Retry</button>;
-          case 'none':
-          default:
-              return <button onClick={() => handleCertifyVehicle(vehicle.id)} className="px-1.5 py-0.5 text-teal-600 hover:text-teal-800 text-xs border border-teal-600 rounded hover:bg-teal-50" title="Request a certified inspection report">🛡️ Certify</button>;
-      }
-  };
+        const status = vehicle.certificationStatus || 'none';
+        switch (status) {
+            case 'requested':
+                return <button type="button" disabled className="px-1.5 py-0.5 text-spinny-text-dark text-xs border border-gray-300 rounded opacity-50" title="Certification pending approval">🕐 Pending</button>;
+            case 'approved':
+                return <span className="px-1.5 py-0.5 text-spinny-green text-xs border border-spinny-green rounded bg-spinny-green-light" title="Vehicle is certified">✅ Certified</span>;
+            case 'rejected':
+                return <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleCertifyVehicle(vehicle.id);
+                  }} 
+                  className="px-1.5 py-0.5 text-spinny-orange hover:text-spinny-orange text-xs border border-spinny-orange rounded hover:bg-spinny-orange-light cursor-pointer" 
+                  title="Certification was rejected, you can request again."
+                >🔄 Retry</button>;
+            case 'none':
+            default:
+                return <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleCertifyVehicle(vehicle.id);
+                  }} 
+                  className="px-1.5 py-0.5 text-teal-600 hover:text-teal-800 text-xs border border-teal-600 rounded hover:bg-teal-50 cursor-pointer" 
+                  title="Request a certified inspection report"
+                >🛡️ Certify</button>;
+        }
+    };
 
   const renderContent = () => {
     switch(activeView) {
@@ -1674,16 +1692,27 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             {/* First Row - 4 buttons */}
                             <div className="flex items-center space-x-1">
                               <button 
-                                onClick={() => { setVehicleToBoost(v); setShowBoostModal(true); }} 
-                                className="px-2 py-0.5 bg-spinny-orange text-white rounded hover:bg-orange-600 text-xs font-medium" 
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setVehicleToBoost(v);
+                                    setShowBoostModal(true);
+                                  }} 
+                                className="px-2 py-0.5 bg-spinny-orange text-white rounded hover:bg-orange-600 text-xs font-medium cursor-pointer" 
                                 title="Boost for more visibility"
                               >
                                 🚀 Boost
                               </button>
                               {!v.isFeatured && (seller.featuredCredits ?? 0) > 0 ? (
                                 <button 
-                                  onClick={() => handleFeatureVehicle(v.id)} 
-                                  className="px-1.5 py-0.5 text-spinny-orange hover:text-spinny-orange text-xs border border-spinny-orange rounded hover:bg-spinny-orange-light" 
+                                  type="button"
+                                  onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleFeatureVehicle(v.id);
+                                    }} 
+                                  className="px-1.5 py-0.5 text-spinny-orange hover:text-spinny-orange text-xs border border-spinny-orange rounded hover:bg-spinny-orange-light cursor-pointer" 
                                   title="Use a credit to feature this listing"
                                 >
                                   ⭐ Feature
@@ -1699,6 +1728,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             <div className="flex items-center space-x-1">
                               {getCertificationButton(v)}
                               <button 
+                                type="button"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -1710,6 +1740,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                 ✅ Sold
                               </button>
                               <button 
+                                type="button"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -1721,6 +1752,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                 ✏️ Edit
                               </button>
                               <button 
+                                type="button"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
@@ -1740,15 +1772,26 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                               {/* First Row - 4 buttons */}
                               <div className="flex items-center space-x-1">
                                 <button 
-                                  onClick={() => { setVehicleToBoost(v); setShowBoostModal(true); }} 
-                                  className="px-1.5 py-0.5 bg-spinny-orange text-white rounded text-xs"
+                                  type="button"
+                                  onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setVehicleToBoost(v);
+                                      setShowBoostModal(true);
+                                    }} 
+                                  className="px-1.5 py-0.5 bg-spinny-orange text-white rounded text-xs cursor-pointer"
                                   title="Boost"
                                 >
                                   🚀
                                 </button>
                                 <button 
-                                  onClick={() => handleFeatureVehicle(v.id)} 
-                                  className="px-1.5 py-0.5 text-spinny-orange text-xs border border-spinny-orange rounded"
+                                  type="button"
+                                  onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleFeatureVehicle(v.id);
+                                    }} 
+                                  className="px-1.5 py-0.5 text-spinny-orange text-xs border border-spinny-orange rounded cursor-pointer"
                                   title="Feature"
                                 >
                                   ⭐
@@ -1759,6 +1802,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                               <div className="flex items-center space-x-1">
                                 {getCertificationButton(v)}
                                 <button 
+                                  type="button"
                                   onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
@@ -1771,6 +1815,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                   ✅
                                 </button>
                                 <button 
+                                  type="button"
                                   onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
@@ -1783,6 +1828,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                   ✏️
                                 </button>
                                 <button 
+                                  type="button"
                                   onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
