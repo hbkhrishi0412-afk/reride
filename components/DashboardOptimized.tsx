@@ -103,6 +103,9 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
             onToggleCompare={handleToggleCompare}
             wishlist={[]}
             onToggleWishlist={handleToggleWishlist}
+            onNavigateToAnalytics={() => setActiveView('analytics')}
+            onBulkUpload={onAddMultipleVehicles}
+            sellerEmail={seller.email}
           />
         );
       case 'messages':

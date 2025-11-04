@@ -89,10 +89,10 @@ interface AppContextType {
   // Admin functions
   onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
   onAdminUpdateUser: (email: string, details: { name: string; mobile: string; role: User['role'] }) => void;
-  onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => void;
-  onToggleUserStatus: (email: string) => void;
-  onToggleVehicleStatus: (vehicleId: number) => void;
-  onToggleVehicleFeature: (vehicleId: number) => void;
+      onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => Promise<void>;
+    onToggleUserStatus: (email: string) => Promise<void>;
+    onToggleVehicleStatus: (vehicleId: number) => Promise<void>;
+    onToggleVehicleFeature: (vehicleId: number) => Promise<void>;
   onResolveFlag: (type: 'vehicle' | 'conversation', id: number | string) => void;
   onUpdateSettings: (settings: PlatformSettings) => void;
   onSendBroadcast: (message: string) => void;
@@ -614,30 +614,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         return { success: false, reason: error instanceof Error ? error.message : 'Failed to create user.' };
       }
     },
-    onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => {
-      setUsers(prev => prev.map(user => 
-        user.email === email ? { ...user, subscriptionPlan: plan } : user
-      ));
-      addToast(`Plan updated for ${email}`, 'success');
-    },
-    onToggleUserStatus: (email: string) => {
-      setUsers(prev => prev.map(user => 
-        user.email === email ? { ...user, status: user.status === 'active' ? 'inactive' : 'active' } : user
-      ));
-      addToast(`User status toggled for ${email}`, 'success');
-    },
-    onToggleVehicleStatus: (vehicleId: number) => {
-      setVehicles(prev => prev.map(vehicle => 
-        vehicle.id === vehicleId ? { ...vehicle, status: vehicle.status === 'published' ? 'unpublished' : 'published' } : vehicle
-      ));
-      addToast(`Vehicle status toggled`, 'success');
-    },
-    onToggleVehicleFeature: (vehicleId: number) => {
-      setVehicles(prev => prev.map(vehicle => 
-        vehicle.id === vehicleId ? { ...vehicle, isFeatured: !vehicle.isFeatured } : vehicle
-      ));
-      addToast(`Vehicle feature status toggled`, 'success');
-    },
+          onUpdateUserPlan: async (email: string, plan: SubscriptionPlan) => {
+        try {
+          await updateUser(email, { subscriptionPlan: plan });
+          setUsers(prev => prev.map(user => 
+            user.email === email ? { ...user, subscriptionPlan: plan } : user
+          ));
+          addToast(`Plan updated for ${email}`, 'success');
+        } catch (error) {
+          console.error('Failed to update user plan:', error);
+          addToast('Failed to update user plan', 'error');
+        }
+      },
+      onToggleUserStatus: async (email: string) => {
+        try {
+          const user = users.find(u => u.email === email);
+          if (!user) return;
+          
+          const newStatus = user.status === 'active' ? 'inactive' : 'active';
+          await updateUser(email, { status: newStatus });
+          setUsers(prev => prev.map(user => 
+            user.email === email ? { ...user, status: newStatus } : user
+          ));
+          addToast(`User status toggled for ${email}`, 'success');
+        } catch (error) {
+          console.error('Failed to toggle user status:', error);
+          addToast('Failed to toggle user status', 'error');
+        }
+      },
+      onToggleVehicleStatus: async (vehicleId: number) => {
+        try {
+          const vehicle = vehicles.find(v => v.id === vehicleId);
+          if (!vehicle) return;
+          
+          const newStatus = vehicle.status === 'published' ? 'unpublished' : 'published';
+          await updateVehicle(vehicleId, { status: newStatus });
+          addToast(`Vehicle status updated to ${newStatus}`, 'success');
+        } catch (error) {
+          console.error('Failed to toggle vehicle status:', error);
+          addToast('Failed to update vehicle status', 'error');
+        }
+      },
+      onToggleVehicleFeature: async (vehicleId: number) => {
+        try {
+          const vehicle = vehicles.find(v => v.id === vehicleId);
+          if (!vehicle) return;
+          
+          await updateVehicle(vehicleId, { isFeatured: !vehicle.isFeatured });
+          addToast(`Vehicle featured status updated`, 'success');
+        } catch (error) {
+          console.error('Failed to toggle vehicle feature:', error);
+          addToast('Failed to update vehicle feature status', 'error');
+        }
+      },
     onResolveFlag: (type: 'vehicle' | 'conversation', id: number | string) => {
       if (type === 'vehicle') {
         setVehicles(prev => prev.map(vehicle => 

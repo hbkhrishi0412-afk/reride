@@ -1,9 +1,9 @@
-
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types';
 import { View, VehicleCategory } from '../types';
 import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
 import { getSafeImageSrc } from '../utils/imageUtils';
+import { formatSalesValue } from '../utils/numberUtils';
 import VehicleCard from './VehicleCard';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
@@ -81,15 +81,15 @@ const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type
 
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; gradient?: string }> = memo(({ title, value, icon, gradient = "from-blue-500 to-indigo-600" }) => (
-  <div className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 border border-gray-100 hover:border-blue-200 hover:-translate-y-1">
-    <div className="flex items-center justify-between mb-4">
-      <div className={`w-12 h-12 bg-gradient-to-br ${gradient} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+  <div className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 border border-gray-100 hover:border-blue-200 hover:-translate-y-1 overflow-hidden">
+    <div className="flex items-center justify-between mb-4 gap-3 overflow-hidden">
+      <div className={`w-12 h-12 flex-shrink-0 bg-gradient-to-br ${gradient} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
         <div className="text-white">
           {icon}
         </div>
       </div>
-      <div className="text-right">
-        <p className="text-3xl font-black bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
+      <div className="text-right min-w-0 flex-1 overflow-hidden">
+        <p className="text-xs sm:text-sm md:text-base lg:text-lg font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent break-words break-all">
           {value}
         </p>
       </div>
@@ -1081,8 +1081,31 @@ const ReportsView: React.FC<{
                         <p className="mt-2 text-sm italic text-spinny-text-dark dark:text-spinny-text-dark">Reason: "{v.flagReason || 'No reason provided.'}"</p>
                         <p className="text-xs text-spinny-text-dark dark:text-spinny-text-dark mt-2">An administrator will review this report. You can edit the listing to correct any issues or delete it if it's no longer valid.</p>
                         <div className="mt-3 space-x-4">
-                            <button onClick={() => onEditVehicle(v)} className="font-semibold text-sm hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}> Edit Listing</button>
-                            <button onClick={() => onDeleteVehicle(v.id)} className="text-spinny-orange font-semibold text-sm hover:underline">Delete Listing</button>
+                            <button 
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onEditVehicle(v);
+                                }} 
+                                className="font-semibold text-sm hover:underline transition-colors cursor-pointer" 
+                                style={{ color: '#FF6B35' }} 
+                                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} 
+                                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}
+                            > 
+                                Edit Listing
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onDeleteVehicle(v.id);
+                                }} 
+                                className="text-spinny-orange font-semibold text-sm hover:underline cursor-pointer"
+                            >
+                                Delete Listing
+                            </button>
                         </div>
                     </div>
                 ))}
@@ -1469,7 +1492,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     <StatCard title="Active Listings" value={filteredActiveListings.length} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17v-2a4 4 0 00-4-4h-1.5m1.5 4H13m-2 0a2 2 0 104 0 2 2 0 00-4 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11V7a4 4 0 00-4-4H7a4 4 0 00-4 4v4" /></svg>} />
-                    <StatCard title="Total Sales Value" value={`₹${analyticsData.totalSalesValue.toLocaleString('en-IN')}`} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>} />
+                    <StatCard title="Total Sales Value" value={formatSalesValue(analyticsData.totalSalesValue)} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>} />
                     <StatCard title="Total Views" value={analyticsData.totalViews.toLocaleString('en-IN')} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057 5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>} />
                     <StatCard title="Total Inquiries" value={analyticsData.totalInquiries.toLocaleString('en-IN')} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
                 </div>

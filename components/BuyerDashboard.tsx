@@ -231,9 +231,9 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
               onClick={stat.action}
               className="bg-white dark:bg-brand-gray-800 rounded-xl shadow-soft p-6 hover:shadow-lg transition-all"
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-3xl">{stat.icon}</span>
-                <span className="text-3xl font-bold text-spinny-orange">
+              <div className="flex items-center justify-between mb-2 gap-3">
+                <span className="text-2xl flex-shrink-0">{stat.icon}</span>
+                <span className="text-lg sm:text-xl lg:text-2xl font-bold text-spinny-orange whitespace-nowrap overflow-hidden text-ellipsis min-w-0 flex-1 text-right">
                   {stat.value}
                 </span>
               </div>
