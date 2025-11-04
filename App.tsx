@@ -599,7 +599,7 @@ const AppContent: React.FC = React.memo(() => {
             currentUser={currentUser}
             vehicles={vehicles}
             wishlist={wishlist}
-            conversations={conversations}
+            conversations={(conversations || []).filter(c => c.customerId === currentUser.email)}
             onNavigate={navigate}
             onSelectVehicle={selectVehicle}
             onToggleWishlist={(id) => {
