@@ -862,67 +862,135 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, vehicle });
     }
 
-    if (action === 'certify') {
-      const { vehicleId } = req.body;
-      const vehicle = await Vehicle.findOne({ id: vehicleId });
-      
-      if (!vehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-      }
-      
-      vehicle.certificationStatus = 'requested';
-      vehicle.certificationRequestedAt = new Date().toISOString();
-      
-      await vehicle.save();
-      return res.status(200).json({ success: true, vehicle });
-    }
+      if (action === 'certify') {
+        try {
+          const { vehicleId } = req.body;
+          if (!vehicleId) {
+            return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+          }
 
-    if (action === 'feature') {
-      const { vehicleId } = req.body;
-      const vehicle = await Vehicle.findOne({ id: vehicleId });
-      
-      if (!vehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          await connectToDatabase();
+          const vehicle = await Vehicle.findOne({ id: vehicleId });
+          
+          if (!vehicle) {
+            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          }
+          
+          vehicle.certificationStatus = 'requested';
+          vehicle.certificationRequestedAt = new Date().toISOString();
+          
+          await vehicle.save();
+          
+          // Convert Mongoose document to plain object
+          const vehicleObj = vehicle.toObject();
+          
+          return res.status(200).json({ success: true, vehicle: vehicleObj });
+        } catch (error) {
+          console.error('❌ Error requesting vehicle certification:', error);
+          return res.status(500).json({ 
+            success: false, 
+            reason: error instanceof Error ? error.message : 'Unknown error' 
+          });
+        }
       }
-      
-      vehicle.isFeatured = true;
-      vehicle.featuredAt = new Date().toISOString();
-      
-      await vehicle.save();
-      return res.status(200).json({ success: true, vehicle });
-    }
 
-    if (action === 'sold') {
-      const { vehicleId } = req.body;
-      const vehicle = await Vehicle.findOne({ id: vehicleId });
-      
-      if (!vehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-      }
-      
-      vehicle.status = 'sold';
-      vehicle.listingStatus = 'sold';
-      vehicle.soldAt = new Date().toISOString();
-      
-      await vehicle.save();
-      return res.status(200).json({ success: true, vehicle });
-    }
+      if (action === 'feature') {
+        try {
+          const { vehicleId } = req.body;
+          if (!vehicleId) {
+            return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+          }
 
-    if (action === 'unsold') {
-      const { vehicleId } = req.body;
-      const vehicle = await Vehicle.findOne({ id: vehicleId });
-      
-      if (!vehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          await connectToDatabase();
+          const vehicle = await Vehicle.findOne({ id: vehicleId });
+          
+          if (!vehicle) {
+            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          }
+          
+          vehicle.isFeatured = true;
+          vehicle.featuredAt = new Date().toISOString();
+          
+          await vehicle.save();
+          
+          // Convert Mongoose document to plain object
+          const vehicleObj = vehicle.toObject();
+          
+          return res.status(200).json({ success: true, vehicle: vehicleObj });
+        } catch (error) {
+          console.error('❌ Error featuring vehicle:', error);
+          return res.status(500).json({ 
+            success: false, 
+            reason: error instanceof Error ? error.message : 'Unknown error' 
+          });
+        }
+            }
+
+      if (action === 'sold') {
+        try {
+          const { vehicleId } = req.body;
+          if (!vehicleId) {
+            return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+          }
+
+          await connectToDatabase();
+          const vehicle = await Vehicle.findOne({ id: vehicleId });
+          
+          if (!vehicle) {
+            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          }
+          
+          vehicle.status = 'sold';
+          vehicle.listingStatus = 'sold';
+          vehicle.soldAt = new Date().toISOString();
+          
+          await vehicle.save();
+          
+          // Convert Mongoose document to plain object
+          const vehicleObj = vehicle.toObject();
+          
+          return res.status(200).json({ success: true, vehicle: vehicleObj });
+        } catch (error) {
+          console.error('❌ Error marking vehicle as sold:', error);
+          return res.status(500).json({ 
+            success: false, 
+            reason: error instanceof Error ? error.message : 'Unknown error' 
+          });
+        }
       }
-      
-      vehicle.status = 'published';
-      vehicle.listingStatus = 'active';
-      vehicle.soldAt = undefined;
-      
-      await vehicle.save();
-      return res.status(200).json({ success: true, vehicle });
-    }
+
+      if (action === 'unsold') {
+        try {
+          const { vehicleId } = req.body;
+          if (!vehicleId) {
+            return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
+          }
+
+          await connectToDatabase();
+          const vehicle = await Vehicle.findOne({ id: vehicleId });
+          
+          if (!vehicle) {
+            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          }
+          
+          vehicle.status = 'published';
+          vehicle.listingStatus = 'active';
+          vehicle.soldAt = undefined;
+          
+          await vehicle.save();
+          
+          // Convert Mongoose document to plain object
+          const vehicleObj = vehicle.toObject();
+          
+          return res.status(200).json({ success: true, vehicle: vehicleObj });
+        } catch (error) {
+          console.error('❌ Error marking vehicle as unsold:', error);
+          return res.status(500).json({ 
+            success: false, 
+            reason: error instanceof Error ? error.message : 'Unknown error' 
+          });
+        }
+      }
 
     // Create new vehicle
     // Set listingExpiresAt based on seller's plan expiry date
