@@ -929,22 +929,38 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
       if (action === 'sold') {
         try {
           const { vehicleId } = req.body;
-          if (!vehicleId) {
+          console.log('📝 Marking vehicle as sold, vehicleId:', vehicleId, 'type:', typeof vehicleId);
+          
+          if (!vehicleId && vehicleId !== 0) {
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
+          // Convert vehicleId to number if it's a string
+          const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
+          if (isNaN(vehicleIdNum)) {
+            return res.status(400).json({ success: false, reason: 'Invalid vehicle ID format' });
+          }
+
+          // Ensure database connection is established
+          console.log('🔌 Connecting to database...');
           await connectToDatabase();
-          const vehicle = await Vehicle.findOne({ id: vehicleId });
+          console.log('✅ Database connected, readyState:', mongoose.connection.readyState);
+          
+          console.log('🔍 Finding vehicle with id:', vehicleIdNum);
+          const vehicle = await Vehicle.findOne({ id: vehicleIdNum });
           
           if (!vehicle) {
+            console.warn('⚠️ Vehicle not found with id:', vehicleIdNum);
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
           
+          console.log('✏️ Updating vehicle status to sold...');
           vehicle.status = 'sold';
           vehicle.listingStatus = 'sold';
           vehicle.soldAt = new Date().toISOString();
           
           await vehicle.save();
+          console.log('✅ Vehicle saved successfully');
           
           // Convert Mongoose document to plain object
           const vehicleObj = vehicle.toObject();
@@ -952,9 +968,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json({ success: true, vehicle: vehicleObj });
         } catch (error) {
           console.error('❌ Error marking vehicle as sold:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          const errorStack = error instanceof Error ? error.stack : undefined;
+          console.error('❌ Error message:', errorMessage);
+          if (errorStack) {
+            console.error('❌ Error stack:', errorStack);
+          }
           return res.status(500).json({ 
             success: false, 
-            reason: error instanceof Error ? error.message : 'Unknown error' 
+            reason: errorMessage
           });
         }
       }
