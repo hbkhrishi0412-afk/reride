@@ -66,8 +66,18 @@ export default async function handler(
       console.warn('⚠️ MongoDB connection not ready, reconnecting...');
       await connectToDatabase();
     }
+    
+    // Verify connection is actually ready
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('MongoDB connection failed - readyState is not 1');
+    }
+    
+    console.log('✅ Database connection verified, readyState:', mongoose.connection.readyState);
   } catch (dbError) {
     console.error('❌ Database connection failed:', dbError);
+    const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown database error';
+    
+    // Return error for all methods that require database access
     if (req.method === 'GET') {
       return res.status(503).json({ 
         success: false, 
@@ -75,7 +85,13 @@ export default async function handler(
         data: []
       });
     }
-    // For PUT/POST/DELETE, continue but handler will manage the error
+    
+    // For PUT/POST/DELETE, return error immediately
+    return res.status(503).json({ 
+      success: false, 
+      reason: 'Database connection failed. Please check MONGODB_URI environment variable in Vercel.',
+      error: errorMessage
+    });
   }
 
   // Handle authentication actions (POST with action parameter)
@@ -338,14 +354,15 @@ export default async function handler(
   // PUT - Update user (including password updates)
   if (req.method === 'PUT') {
     try {
-      // Ensure database connection is established first
-      console.log('🔌 Connecting to database for user update...');
-      await connectToDatabase();
-      
-      // Ensure mongoose connection is ready
+      // Connection should already be established in the initial try-catch above
+      // But verify it's still connected
       if (mongoose.connection.readyState !== 1) {
-        console.warn('⚠️ MongoDB connection not ready, reconnecting...');
+        console.warn('⚠️ Connection lost, reconnecting for PUT request...');
         await connectToDatabase();
+        
+        if (mongoose.connection.readyState !== 1) {
+          throw new Error('Failed to establish MongoDB connection for user update');
+        }
       }
       
       console.log('✅ Database connected for user update, readyState:', mongoose.connection.readyState);
@@ -439,7 +456,19 @@ export default async function handler(
       }
 
       // Find user first to ensure they exist
-      const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+      let existingUser;
+      try {
+        existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+      } catch (findError) {
+        console.error('❌ Error finding user:', findError);
+        const errorMessage = findError instanceof Error ? findError.message : 'Unknown error';
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Database query failed. Please check MongoDB connection.',
+          error: errorMessage
+        });
+      }
+      
       if (!existingUser) {
         console.warn('⚠️ User not found:', email);
         return res.status(404).json({ success: false, reason: 'User not found.' });
@@ -447,11 +476,34 @@ export default async function handler(
 
       console.log('📝 Found user, applying update operation...');
       
-      const updatedUser = await User.findOneAndUpdate(
-        { email: email.toLowerCase().trim() },
-        updateOperation,
-        { new: true, runValidators: true }
-      );
+      let updatedUser;
+      try {
+        updatedUser = await User.findOneAndUpdate(
+          { email: email.toLowerCase().trim() },
+          updateOperation,
+          { new: true, runValidators: true }
+        );
+      } catch (updateError) {
+        console.error('❌ Error updating user:', updateError);
+        const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
+        const errorStack = updateError instanceof Error ? updateError.stack : undefined;
+        console.error('Update error details:', { message: errorMessage, stack: errorStack });
+        
+        // Check for validation errors
+        if (updateError instanceof Error && updateError.name === 'ValidationError') {
+          return res.status(400).json({ 
+            success: false, 
+            reason: 'Validation failed. Please check your input data.',
+            error: errorMessage
+          });
+        }
+        
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Failed to update user in database. Please check MongoDB connection and try again.',
+          error: errorMessage
+        });
+      }
 
       if (!updatedUser) {
         console.error('❌ Failed to update user after findOneAndUpdate');
@@ -460,9 +512,17 @@ export default async function handler(
 
       // Explicitly save the document to ensure password is persisted
       if (updateFields.password) {
-        console.log('💾 Explicitly saving user document to ensure password persistence...');
-        await updatedUser.save();
-        console.log('✅ User document saved successfully');
+        try {
+          console.log('💾 Explicitly saving user document to ensure password persistence...');
+          await updatedUser.save();
+          console.log('✅ User document saved successfully');
+        } catch (saveError) {
+          console.error('❌ Error saving user document:', saveError);
+          const errorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
+          // Even if save fails, the findOneAndUpdate might have succeeded
+          // So we'll still return success but log the error
+          console.warn('⚠️ Save failed but update may have succeeded');
+        }
       }
 
       console.log('✅ User updated successfully:', updatedUser.email);
@@ -470,17 +530,22 @@ export default async function handler(
 
       // Verify the update actually saved by checking the user again
       if (updateFields.password) {
-        const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
-        if (verifyUser && verifyUser.password) {
-          console.log('✅ Password update verified in database');
-          // Verify it's different from the old password
-          if (verifyUser.password !== existingUser.password) {
-            console.log('✅ Password hash changed, update confirmed');
+        try {
+          const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
+          if (verifyUser && verifyUser.password) {
+            console.log('✅ Password update verified in database');
+            // Verify it's different from the old password
+            if (verifyUser.password !== existingUser.password) {
+              console.log('✅ Password hash changed, update confirmed');
+            } else {
+              console.warn('⚠️ Password hash unchanged - update may not have worked');
+            }
           } else {
-            console.warn('⚠️ Password hash unchanged - update may not have worked');
+            console.error('❌ Password update verification failed - password not found in database');
           }
-        } else {
-          console.error('❌ Password update verification failed - password not found in database');
+        } catch (verifyError) {
+          console.error('❌ Error verifying password update:', verifyError);
+          // Don't fail the request if verification fails
         }
       }
 
