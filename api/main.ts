@@ -1023,36 +1023,61 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PUT') {
-    const { id, ...updateData } = req.body;
-    if (!id) {
-      return res.status(400).json({ success: false, reason: 'Vehicle ID is required for update.' });
+    try {
+      // Ensure database connection
+      await connectToDatabase();
+      
+      const { id, ...updateData } = req.body;
+      if (!id) {
+        return res.status(400).json({ success: false, reason: 'Vehicle ID is required for update.' });
+      }
+      
+      const updatedVehicle = await Vehicle.findOneAndUpdate(
+        { id },
+        updateData,
+        { new: true }
+      );
+      
+      if (!updatedVehicle) {
+        return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+      }
+      
+      // Convert Mongoose document to plain object for JSON serialization
+      const vehicleObj = updatedVehicle.toObject();
+      
+      return res.status(200).json(vehicleObj);
+    } catch (error) {
+      console.error('❌ Error updating vehicle:', error);
+      return res.status(500).json({ 
+        success: false, 
+        reason: error instanceof Error ? error.message : 'Unknown error' 
+      });
     }
-    
-    const updatedVehicle = await Vehicle.findOneAndUpdate(
-      { id },
-      updateData,
-      { new: true }
-    );
-    
-    if (!updatedVehicle) {
-      return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
-    }
-    
-    return res.status(200).json(updatedVehicle);
   }
 
   if (req.method === 'DELETE') {
-    const { id } = req.body;
-    if (!id) {
-      return res.status(400).json({ success: false, reason: 'Vehicle ID is required for deletion.' });
+    try {
+      // Ensure database connection
+      await connectToDatabase();
+      
+      const { id } = req.body;
+      if (!id) {
+        return res.status(400).json({ success: false, reason: 'Vehicle ID is required for deletion.' });
+      }
+      
+      const deletedVehicle = await Vehicle.findOneAndDelete({ id });
+      if (!deletedVehicle) {
+        return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+      }
+      
+      return res.status(200).json({ success: true, message: 'Vehicle deleted successfully.' });
+    } catch (error) {
+      console.error('❌ Error deleting vehicle:', error);
+      return res.status(500).json({ 
+        success: false, 
+        reason: error instanceof Error ? error.message : 'Unknown error' 
+      });
     }
-    
-    const deletedVehicle = await Vehicle.findOneAndDelete({ id });
-    if (!deletedVehicle) {
-      return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
-    }
-    
-    return res.status(200).json({ success: true, message: 'Vehicle deleted successfully.' });
   }
 
   return res.status(405).json({ success: false, reason: 'Method not allowed.' });
