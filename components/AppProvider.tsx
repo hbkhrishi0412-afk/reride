@@ -1003,6 +1003,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // Now update MongoDB via API call (production or when API is available)
         try {
+          console.log('📡 Sending user update request to API...', { email, hasPassword: !!updates.password });
+          
           const response = await fetch('/api/users', {
             method: 'PUT',
             headers: {
@@ -1014,43 +1016,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             })
           });
           
+          console.log('📥 API response received:', { status: response.status, ok: response.ok });
+          
           if (!response.ok) {
             const errorText = await response.text();
             let errorMessage = `API call failed: ${response.status}`;
+            let errorData: any = {};
             
             try {
-              const errorData = JSON.parse(errorText);
+              errorData = JSON.parse(errorText);
               if (errorData.reason) {
                 errorMessage = errorData.reason;
+              } else if (errorData.error) {
+                errorMessage = errorData.error;
+              } else if (errorData.message) {
+                errorMessage = errorData.message;
               }
             } catch {
               // If we can't parse the error, use the status text
               errorMessage = response.statusText || errorMessage;
             }
             
-            throw new Error(errorMessage);
+            console.error('❌ API error response:', { status: response.status, errorText, errorData });
+            throw new Error(`${response.status}: ${errorMessage}`);
+          }
+          
+          // Check content type before parsing
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('❌ Non-JSON response received:', { status: response.status, contentType, text: text.substring(0, 200) });
+            throw new Error(`Server returned non-JSON response: ${response.status}`);
           }
           
           const result = await response.json();
-          console.log('✅ User updated in MongoDB:', result);
-          addToast('User updated successfully', 'success');
+          console.log('✅ User updated in MongoDB:', { success: result.success, hasUser: !!result.user });
+          
+          if (result.success) {
+            // Update local state with the returned user data if available
+            if (result.user) {
+              setUsers(prev => prev.map(user => 
+                user.email === email ? { ...user, ...result.user } : user
+              ));
+              
+              if (currentUser && currentUser.email === email) {
+                setCurrentUser(prev => prev ? { ...prev, ...result.user } : null);
+                // Update localStorage
+                try {
+                  const updatedUser = { ...currentUser, ...result.user };
+                  localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedUser));
+                  sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
+                } catch (error) {
+                  console.warn('Failed to update localStorage with API response:', error);
+                }
+              }
+            }
+            
+            if (updates.password) {
+              addToast('Password updated successfully!', 'success');
+            } else {
+              addToast('Profile updated successfully!', 'success');
+            }
+          } else {
+            throw new Error(result.reason || result.error || 'Update failed');
+          }
           
         } catch (apiError) {
+          console.error('❌ API error during user update:', apiError);
+          
           // Determine the type of error and show appropriate message
           if (apiError instanceof Error) {
+            const errorMsg = apiError.message;
+            
             // Check for database connection errors (503)
-            if (apiError.message.includes('503') || apiError.message.includes('Database connection failed')) {
-              console.error('❌ MongoDB connection failed:', apiError.message);
+            if (errorMsg.includes('503') || errorMsg.includes('Database connection failed') || errorMsg.includes('MONGODB_URI')) {
+              console.error('❌ MongoDB connection failed:', errorMsg);
               if (updates.password) {
                 addToast('Password updated locally. MongoDB connection failed - please configure MONGODB_URI in Vercel.', 'error');
               } else {
                 addToast('Profile updated locally. MongoDB connection failed - please check server configuration.', 'error');
               }
-            } else if (apiError.message.includes('fetch') || 
-                apiError.message.includes('network') ||
-                apiError.message.includes('Failed to fetch')) {
+            } else if (errorMsg.includes('fetch') || 
+                errorMsg.includes('network') ||
+                errorMsg.includes('Failed to fetch') ||
+                errorMsg.includes('CORS')) {
               // Network errors - expected in development
-              console.warn('⚠️ Network error updating user (expected in dev):', apiError.message);
+              console.warn('⚠️ Network error updating user:', errorMsg);
               if (isDevelopment) {
                 if (updates.password) {
                   addToast('Password updated successfully (saved locally)', 'success');
@@ -1058,21 +1109,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                   addToast('Profile updated locally', 'success');
                 }
               } else {
-                addToast('Profile updated locally. Will sync when connection is restored.', 'warning');
+                addToast('Network error. Please check your connection and try again.', 'error');
               }
-            } else if (apiError.message.includes('404') || apiError.message.includes('Not Found')) {
+            } else if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
               // 404 errors - expected when API endpoint doesn't exist (dev mode)
-              // Only log warning instead of error to reduce console noise
               console.warn('⚠️ API endpoint not found (dev mode): Profile updated locally');
               if (isDevelopment) {
-                addToast('Password updated successfully (saved locally)', 'success');
+                if (updates.password) {
+                  addToast('Password updated successfully (saved locally)', 'success');
+                } else {
+                  addToast('Profile updated locally', 'success');
+                }
               } else {
-                addToast('Profile updated successfully', 'success');
+                addToast('API endpoint not found. Please check deployment.', 'error');
               }
-            } else if (apiError.message.includes('400')) {
+            } else if (errorMsg.includes('400')) {
               console.error('❌ Invalid profile data:', apiError);
-              addToast('Invalid profile data. Please check your input.', 'error');
-            } else if (apiError.message.includes('500') || apiError.message.includes('Database error')) {
+              addToast(`Invalid data: ${errorMsg.replace('400: ', '')}`, 'error');
+            } else if (errorMsg.includes('500') || errorMsg.includes('Database error') || errorMsg.includes('Internal server')) {
               console.error('❌ Server/Database error updating user:', apiError);
               // For password updates, provide specific feedback
               if (updates.password) {
@@ -1082,36 +1136,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 } else {
                   // Production: Database error - likely MongoDB issue
                   console.error('MongoDB update failed - check MONGODB_URI environment variable and MongoDB Atlas connection in Vercel');
-                  addToast('Password updated locally. MongoDB error occurred - please check server logs and MongoDB configuration.', 'error');
+                  addToast('Password update failed. Please check server logs or try again.', 'error');
                 }
               } else {
                 addToast('Server error. Profile updated locally, will retry later.', 'warning');
               }
             } else {
-              console.warn('⚠️ Failed to sync profile with server:', apiError.message);
+              console.warn('⚠️ Failed to sync profile with server:', errorMsg);
               // For password updates specifically
               if (updates.password) {
                 if (isDevelopment) {
                   addToast('Password updated successfully (saved locally)', 'success');
                 } else {
-                  // Production mode but MongoDB failed
-                  addToast('Password updated locally. Server sync failed - please check MongoDB configuration.', 'error');
+                  // Show the actual error message if available
+                  const displayError = errorMsg.replace(/^\d+:\s*/, ''); // Remove status code prefix
+                  addToast(`Password update failed: ${displayError}`, 'error');
                 }
               } else {
-                addToast('Profile updated locally, but failed to sync with server', 'warning');
+                addToast(`Profile update failed: ${errorMsg.replace(/^\d+:\s*/, '')}`, 'warning');
               }
             }
           } else {
-            console.warn('⚠️ Failed to sync profile with server');
+            console.warn('⚠️ Failed to sync profile with server - unknown error type');
             // For password updates specifically
             if (updates.password) {
               if (isDevelopment) {
                 addToast('Password updated successfully (saved locally)', 'success');
               } else {
-                addToast('Password updated locally. Server sync failed - please check MongoDB configuration.', 'error');
+                addToast('Password update failed. Please try again or check server logs.', 'error');
               }
             } else {
-              addToast('Profile updated locally, but failed to sync with server', 'warning');
+              addToast('Profile update failed. Please try again.', 'warning');
             }
           }
         }
