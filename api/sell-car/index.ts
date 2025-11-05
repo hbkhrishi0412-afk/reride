@@ -2,7 +2,7 @@
 // This file handles the actual MongoDB operations on the server
 
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient, Db, ObjectId } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.DB_NAME || 'reride';
@@ -31,21 +31,43 @@ let cachedDb: Db | null = null;
 
 async function connectToDatabase() {
   if (cachedClient && cachedDb) {
-    return { client: cachedClient, db: cachedDb };
+    // Check if connection is still alive
+    try {
+      await cachedDb.admin().ping();
+      return { client: cachedClient, db: cachedDb };
+    } catch (error) {
+      // Connection is dead, reset cache
+      console.warn('⚠️ Cached connection is dead, reconnecting...');
+      cachedClient = null;
+      cachedDb = null;
+    }
   }
 
   try {
-    const client = new MongoClient(MONGODB_URI);
+    if (!MONGODB_URI || MONGODB_URI === 'mongodb://localhost:27017') {
+      throw new Error('MONGODB_URI environment variable is not set');
+    }
+
+    console.log('🔌 Connecting to MongoDB for sell-car API...');
+    const client = new MongoClient(MONGODB_URI, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
+    
     await client.connect();
     const db = client.db(DB_NAME);
     
+    console.log('✅ MongoDB connected successfully for sell-car API');
     cachedClient = client;
     cachedDb = db;
     
     return { client, db };
   } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw new Error('Database connection failed');
+    console.error('❌ MongoDB connection error:', error);
+    cachedClient = null;
+    cachedDb = null;
+    throw new Error(`Database connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -70,6 +92,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     switch (method) {
       case 'POST':
         // Submit new sell car data
+        console.log('📝 POST /api/sell-car - Received submission data');
+        console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+        
         const submissionData: SellCarSubmission = {
           ...req.body,
           submittedAt: new Date().toISOString(),
@@ -83,30 +108,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'transmission', 'customerContact'
         ];
 
+        const missingFields: string[] = [];
         for (const field of requiredFields) {
           if (!submissionData[field as keyof SellCarSubmission]) {
-            return res.status(400).json({ 
-              error: `Missing required field: ${field}` 
-            });
+            missingFields.push(field);
           }
         }
 
+        if (missingFields.length > 0) {
+          console.error('❌ Missing required fields:', missingFields);
+          return res.status(400).json({ 
+            error: `Missing required fields: ${missingFields.join(', ')}` 
+          });
+        }
+
         // Check if registration number already exists
+        console.log('🔍 Checking for existing submission with registration:', submissionData.registration);
         const existingSubmission = await collection.findOne({
           registration: submissionData.registration
         });
 
         if (existingSubmission) {
+          console.warn('⚠️ Duplicate registration number:', submissionData.registration);
           return res.status(409).json({ 
             error: 'Car with this registration number already submitted' 
           });
         }
 
+        console.log('💾 Inserting new submission into database...');
         const result = await collection.insertOne(submissionData as any);
+        console.log('✅ Submission inserted successfully with ID:', result.insertedId);
         
         res.status(201).json({
           success: true,
-          id: result.insertedId,
+          id: result.insertedId.toString(),
           message: 'Car submission received successfully'
         });
         break;
@@ -162,6 +197,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'Submission ID is required' });
         }
 
+        // Convert string ID to ObjectId
+        let objectId;
+        try {
+          objectId = new ObjectId(id);
+        } catch (error) {
+          return res.status(400).json({ error: 'Invalid submission ID format' });
+        }
+
         const updateData: any = {};
         if (updateStatus) updateData.status = updateStatus;
         if (adminNotes) updateData.adminNotes = adminNotes;
@@ -169,7 +212,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updateData.updatedAt = new Date().toISOString();
 
         const updateResult = await collection.updateOne(
-          { _id: id },
+          { _id: objectId },
           { $set: updateData }
         );
 
@@ -191,7 +234,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'Submission ID is required' });
         }
 
-        const deleteResult = await collection.deleteOne({ _id: deleteId });
+        // Convert string ID to ObjectId
+        let deleteObjectId;
+        try {
+          deleteObjectId = new ObjectId(deleteId as string);
+        } catch (error) {
+          return res.status(400).json({ error: 'Invalid submission ID format' });
+        }
+
+        const deleteResult = await collection.deleteOne({ _id: deleteObjectId });
         
         if (deleteResult.deletedCount === 0) {
           return res.status(404).json({ error: 'Submission not found' });
@@ -208,10 +259,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(405).json({ error: `Method ${method} not allowed` });
     }
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('❌ Sell Car API Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('❌ Error details:', errorMessage);
+    if (errorStack) {
+      console.error('❌ Error stack:', errorStack);
+    }
     res.status(500).json({ 
       error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: errorMessage
     });
   }
 }
