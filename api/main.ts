@@ -464,7 +464,16 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'PUT') {
     try {
       // Ensure database connection is established first
+      console.log('🔌 Connecting to database for user update...');
       await connectToDatabase();
+      
+      // Ensure mongoose connection is ready
+      if (mongoose.connection.readyState !== 1) {
+        console.warn('⚠️ MongoDB connection not ready, reconnecting...');
+        await connectToDatabase();
+      }
+      
+      console.log('✅ Database connected for user update, readyState:', mongoose.connection.readyState);
       
       const { email, ...updateData } = req.body;
       
@@ -542,8 +551,29 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ success: false, reason: 'No fields to update.' });
       }
 
-      console.log('💾 Updating user in database...', { email, operationKeys: Object.keys(updateOperation) });
+      console.log('💾 Updating user in database...', { 
+        email, 
+        operationKeys: Object.keys(updateOperation),
+        hasPasswordUpdate: !!updateFields.password,
+        updateFields: Object.keys(updateFields),
+        connectionState: mongoose.connection.readyState
+      });
 
+      // Double-check connection before update
+      if (mongoose.connection.readyState !== 1) {
+        console.warn('⚠️ Connection not ready before update, reconnecting...');
+        await connectToDatabase();
+      }
+
+      // Find user first to ensure they exist
+      const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+      if (!existingUser) {
+        console.warn('⚠️ User not found:', email);
+        return res.status(404).json({ success: false, reason: 'User not found.' });
+      }
+
+      console.log('📝 Found user, applying update operation...');
+      
       const updatedUser = await User.findOneAndUpdate(
         { email: email.toLowerCase().trim() }, // Ensure email is normalized
         updateOperation,
@@ -551,11 +581,35 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
       );
 
       if (!updatedUser) {
-        console.warn('⚠️ User not found:', email);
-        return res.status(404).json({ success: false, reason: 'User not found.' });
+        console.error('❌ Failed to update user after findOneAndUpdate');
+        return res.status(500).json({ success: false, reason: 'Failed to update user.' });
+      }
+
+      // Explicitly save the document to ensure password is persisted
+      if (updateFields.password) {
+        console.log('💾 Explicitly saving user document to ensure password persistence...');
+        await updatedUser.save();
+        console.log('✅ User document saved successfully');
       }
 
       console.log('✅ User updated successfully:', updatedUser.email);
+      console.log('✅ Password updated:', !!updateFields.password);
+
+      // Verify the update actually saved by checking the user again
+      if (updateFields.password) {
+        const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
+        if (verifyUser && verifyUser.password) {
+          console.log('✅ Password update verified in database');
+          // Verify it's different from the old password (if we can check)
+          if (verifyUser.password !== existingUser.password) {
+            console.log('✅ Password hash changed, update confirmed');
+          } else {
+            console.warn('⚠️ Password hash unchanged - update may not have worked');
+          }
+        } else {
+          console.error('❌ Password update verification failed - password not found in database');
+        }
+      }
 
       // Remove password from response for security
       const { password: _, ...userWithoutPassword } = updatedUser.toObject();
