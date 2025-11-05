@@ -463,6 +463,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
   // PUT - Update user
   if (req.method === 'PUT') {
     try {
+      // Ensure database connection is established first
+      await connectToDatabase();
+      
       const { email, ...updateData } = req.body;
       
       if (!email) {
@@ -540,21 +543,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
       }
 
       console.log('💾 Updating user in database...', { email, operationKeys: Object.keys(updateOperation) });
-
-      // Ensure database connection is active (should already be connected from top-level check)
-      try {
-        if (mongoose.connection.readyState !== 1) {
-          console.warn('⚠️ Database connection not ready, attempting reconnect...');
-          await connectToDatabase();
-        }
-      } catch (connError) {
-        console.error('❌ Database connection error:', connError);
-        return res.status(503).json({ 
-          success: false, 
-          reason: 'Database connection failed. Please try again later.',
-          error: connError instanceof Error ? connError.message : 'Connection error'
-        });
-      }
 
       const updatedUser = await User.findOneAndUpdate(
         { email: email.toLowerCase().trim() }, // Ensure email is normalized

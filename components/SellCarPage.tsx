@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
 import { fetchCarDataFromSpinny, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/spinnyScraper';
-import { sellCarAPI } from '../api/sell-car';
+import { sellCarAPI } from '../services/sellCarService';
 
 interface SellCarPageProps {
   onNavigate: (view: ViewEnum) => void;

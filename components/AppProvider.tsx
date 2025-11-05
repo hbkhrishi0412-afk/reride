@@ -1003,7 +1003,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // Now update MongoDB via API call (production or when API is available)
         try {
-          const response = await fetch('/api/main', {
+          const response = await fetch('/api/users', {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
-import { sellCarAPI } from '../api/sell-car';
+import { sellCarAPI } from '../services/sellCarService';
 
 interface SellCarSubmission {
   _id: string;
