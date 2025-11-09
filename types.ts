@@ -228,6 +228,24 @@ export interface User {
   
   // ENHANCED: Trust & Safety
   verificationStatus?: VerificationStatus;
+  
+  // Document Verification (Aadhar & PAN)
+  aadharCard?: {
+    number: string;
+    documentUrl: string;
+    isVerified: boolean;
+    verifiedAt?: string;
+    verifiedBy?: string;
+    uploadedAt?: string;
+  };
+  panCard?: {
+    number: string;
+    documentUrl: string;
+    isVerified: boolean;
+    verifiedAt?: string;
+    verifiedBy?: string;
+    uploadedAt?: string;
+  };
 }
 
 export interface ChatMessage {

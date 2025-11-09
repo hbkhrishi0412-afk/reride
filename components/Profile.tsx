@@ -4,24 +4,22 @@ import PasswordInput from './PasswordInput';
 
 interface ProfileProps {
   currentUser: User;
-  onUpdateProfile: (details: { 
-    name: string; 
-    mobile: string; 
-    avatarUrl?: string;
-    dealershipName?: string;
-    bio?: string;
-    logoUrl?: string;
-  }) => void;
+  onUpdateProfile: (details: Partial<User>) => Promise<void> | void;
   onUpdatePassword: (passwords: { current: string; new: string }) => Promise<boolean>;
 }
 
 interface FormErrors {
   name?: string;
+  email?: string;
   mobile?: string;
   dealershipName?: string;
   bio?: string;
   avatar?: string;
   logo?: string;
+  aadharCard?: string;
+  panCard?: string;
+  aadharNumber?: string;
+  panNumber?: string;
 }
 
 interface PasswordStrength {
@@ -42,7 +40,7 @@ const ProfileInput: React.FC<{
   maxLength?: number;
   required?: boolean;
 }> = ({ label, name, value, onChange, type = 'text', disabled = false, placeholder, error, maxLength, required }) => {
-  const charCount = value.length;
+  const charCount = (value || '').length;
   const showCharCount = maxLength && maxLength > 0;
 
   return (
@@ -134,11 +132,16 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
   
   const [formData, setFormData] = useState({
     name: currentUser.name,
+    email: currentUser.email,
     mobile: currentUser.mobile,
     avatarUrl: currentUser.avatarUrl || '',
     dealershipName: (currentUser as any).dealershipName || '',
     bio: (currentUser as any).bio || '',
     logoUrl: (currentUser as any).logoUrl || '',
+    aadharNumber: (currentUser as any).aadharCard?.number || '',
+    aadharDocumentUrl: (currentUser as any).aadharCard?.documentUrl || '',
+    panNumber: (currentUser as any).panCard?.number || '',
+    panDocumentUrl: (currentUser as any).panCard?.documentUrl || '',
   });
 
   const [originalFormData, setOriginalFormData] = useState(formData);
@@ -152,19 +155,31 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
   const [passwordError, setPasswordError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, feedback: '', meetsRequirements: false });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
-  const [uploadProgress, setUploadProgress] = useState<{ avatar: boolean; logo: boolean }>({ avatar: false, logo: false });
+  const [uploadProgress, setUploadProgress] = useState<{ avatar: boolean; logo: boolean; aadhar: boolean; pan: boolean }>({ 
+    avatar: false, 
+    logo: false, 
+    aadhar: false, 
+    pan: false 
+  });
 
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const aadharInputRef = useRef<HTMLInputElement>(null);
+  const panInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const newFormData = {
       name: currentUser.name,
+      email: currentUser.email,
       mobile: currentUser.mobile,
       avatarUrl: currentUser.avatarUrl || '',
       dealershipName: (currentUser as any).dealershipName || '',
       bio: (currentUser as any).bio || '',
       logoUrl: (currentUser as any).logoUrl || '',
+      aadharNumber: (currentUser as any).aadharCard?.number || '',
+      aadharDocumentUrl: (currentUser as any).aadharCard?.documentUrl || '',
+      panNumber: (currentUser as any).panCard?.number || '',
+      panDocumentUrl: (currentUser as any).panCard?.documentUrl || '',
     };
     setFormData(newFormData);
     setOriginalFormData(newFormData);
@@ -208,11 +223,43 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     return undefined;
   };
 
+  const validateEmail = (email: string): string | undefined => {
+    if (!email.trim()) {
+      return 'Email is required';
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return 'Please enter a valid email address';
+    }
+    return undefined;
+  };
+
+  const validateAadhar = (aadhar: string): string | undefined => {
+    if (!aadhar.trim()) return undefined; // Optional field
+    const aadharRegex = /^\d{12}$/;
+    if (!aadharRegex.test(aadhar.replace(/\s/g, ''))) {
+      return 'Aadhar number must be 12 digits';
+    }
+    return undefined;
+  };
+
+  const validatePAN = (pan: string): string | undefined => {
+    if (!pan.trim()) return undefined; // Optional field
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    if (!panRegex.test(pan.toUpperCase())) {
+      return 'PAN must be in format: ABCDE1234F';
+    }
+    return undefined;
+  };
+
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
     
     const nameError = validateName(formData.name);
     if (nameError) errors.name = nameError;
+
+    const emailError = validateEmail(formData.email);
+    if (emailError) errors.email = emailError;
 
     const mobileError = validateMobile(formData.mobile);
     if (mobileError) errors.mobile = mobileError;
@@ -227,6 +274,17 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       if (formData.bio && formData.bio.length > 500) {
         errors.bio = 'Bio must be less than 500 characters';
       }
+    }
+
+    // Validate Aadhar and PAN if provided
+    if (formData.aadharNumber) {
+      const aadharError = validateAadhar(formData.aadharNumber);
+      if (aadharError) errors.aadharNumber = aadharError;
+    }
+
+    if (formData.panNumber) {
+      const panError = validatePAN(formData.panNumber);
+      if (panError) errors.panNumber = panError;
     }
 
     setFormErrors(errors);
@@ -245,7 +303,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
   const validateImageFile = (file: File): { valid: boolean; error?: string } => {
     const maxSize = 5 * 1024 * 1024; // 5MB
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
 
     if (!allowedTypes.includes(file.type)) {
       return { valid: false, error: 'Please upload a valid image (JPEG, PNG, WebP, or GIF)' };
@@ -260,7 +318,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
   const handleImageUpload = (
     e: React.ChangeEvent<HTMLInputElement>, 
-    type: 'avatar' | 'logo'
+    type: 'avatar' | 'logo' | 'aadhar' | 'pan'
   ) => {
     if (!e.target.files || !e.target.files[0]) return;
 
@@ -281,10 +339,15 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     const reader = new FileReader();
     reader.onload = (event) => {
       if (event.target && typeof event.target.result === 'string') {
-        setFormData(prev => ({ 
-          ...prev, 
-          [type === 'avatar' ? 'avatarUrl' : 'logoUrl']: event.target.result as string 
-        }));
+        if (type === 'avatar') {
+          setFormData(prev => ({ ...prev, avatarUrl: event.target.result as string }));
+        } else if (type === 'logo') {
+          setFormData(prev => ({ ...prev, logoUrl: event.target.result as string }));
+        } else if (type === 'aadhar') {
+          setFormData(prev => ({ ...prev, aadharDocumentUrl: event.target.result as string }));
+        } else if (type === 'pan') {
+          setFormData(prev => ({ ...prev, panDocumentUrl: event.target.result as string }));
+        }
         setUploadProgress(prev => ({ ...prev, [type]: false }));
       }
     };
@@ -325,7 +388,43 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
     setIsSaving(true);
     try {
-      await Promise.resolve(onUpdateProfile(formData));
+      const profileData: Partial<User> = {
+        name: formData.name,
+        email: formData.email,
+        mobile: formData.mobile,
+        avatarUrl: formData.avatarUrl,
+        dealershipName: formData.dealershipName,
+        bio: formData.bio,
+        logoUrl: formData.logoUrl,
+      };
+
+      // Always include aadharCard data to ensure MongoDB saves it
+      const existingAadhar = currentUser.aadharCard;
+      profileData.aadharCard = {
+        number: formData.aadharNumber || '',
+        documentUrl: formData.aadharDocumentUrl || '',
+        isVerified: existingAadhar?.isVerified ?? false,
+        verifiedAt: existingAadhar?.verifiedAt,
+        verifiedBy: existingAadhar?.verifiedBy,
+        uploadedAt: formData.aadharDocumentUrl && !existingAadhar?.uploadedAt
+          ? new Date().toISOString()
+          : existingAadhar?.uploadedAt,
+      };
+
+      // Always include panCard data to ensure MongoDB saves it
+      const existingPAN = currentUser.panCard;
+      profileData.panCard = {
+        number: formData.panNumber || '',
+        documentUrl: formData.panDocumentUrl || '',
+        isVerified: existingPAN?.isVerified ?? false,
+        verifiedAt: existingPAN?.verifiedAt,
+        verifiedBy: existingPAN?.verifiedBy,
+        uploadedAt: formData.panDocumentUrl && !existingPAN?.uploadedAt
+          ? new Date().toISOString()
+          : existingPAN?.uploadedAt,
+      };
+
+      await Promise.resolve(onUpdateProfile(profileData));
       setOriginalFormData(formData);
       setHasChanges(false);
       setIsEditing(false);
@@ -470,7 +569,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-gray-900 text-lg">{formData.name}</p>
-                      <p className="text-sm text-gray-500 mt-1">{currentUser.email}</p>
+                      {!isEditing && (
+                        <p className="text-sm text-gray-500 mt-1">{currentUser.email}</p>
+                      )}
                       {formErrors.avatar && (
                         <p className="text-xs text-red-600 mt-1">{formErrors.avatar}</p>
                       )}
@@ -488,6 +589,18 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                       placeholder="Enter your full name"
                       error={formErrors.name}
                       maxLength={50}
+                      required
+                    />
+                    
+                    <ProfileInput
+                      label="Email Address"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      disabled={!isEditing}
+                      placeholder="your.email@example.com"
+                      error={formErrors.email}
                       required
                     />
                     
@@ -517,26 +630,26 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                           required
                         />
                         
-                        {/* Enhanced Dealership Logo */}
-                        <div className="space-y-2">
-                          <label className="text-sm font-semibold text-gray-700">Dealership Logo</label>
-                          <div className="flex items-center space-x-4">
-                            <div className="relative">
-                              <img
-                                src={formData.logoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.dealershipName || 'Logo')}&size=80&background=6366f1&color=fff&bold=true`}
-                                alt="Dealership Logo"
-                                className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200 shadow-sm"
-                              />
-                              {uploadProgress.logo && (
-                                <div className="absolute inset-0 bg-indigo-500/20 rounded-lg flex items-center justify-center">
-                                  <svg className="animate-spin h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
-                            {isEditing && (
+                        {/* Dealership Logo - Use same as profile picture for sellers */}
+                        {isEditing && (
+                          <div className="space-y-2">
+                            <label className="text-sm font-semibold text-gray-700">Dealership Logo (Optional)</label>
+                            <div className="flex items-center space-x-4">
+                              <div className="relative">
+                                <img
+                                  src={formData.logoUrl || formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.dealershipName || 'Logo')}&size=80&background=6366f1&color=fff&bold=true`}
+                                  alt="Dealership Logo"
+                                  className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200 shadow-sm"
+                                />
+                                {uploadProgress.logo && (
+                                  <div className="absolute inset-0 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                                    <svg className="animate-spin h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
                               <div>
                                 <label 
                                   htmlFor="logo-upload" 
@@ -557,12 +670,12 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                                 />
                                 <p className="text-xs text-gray-500 mt-2">JPEG, PNG, WebP, or GIF (Max 5MB)</p>
                               </div>
-                            )}
-                            {formErrors.logo && (
-                              <p className="text-xs text-red-600">{formErrors.logo}</p>
-                            )}
+                              {formErrors.logo && (
+                                <p className="text-xs text-red-600">{formErrors.logo}</p>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Enhanced Bio */}
                         <div className="space-y-1.5">
@@ -599,6 +712,162 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                         </div>
                       </>
                     )}
+
+                    {/* Document Verification Section */}
+                    <div className="pt-6 mt-6 border-t border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Document Verification</h3>
+                      <p className="text-sm text-gray-500 mb-5">Upload your Aadhar Card and PAN Card for verification. These documents will be reviewed by our admin team.</p>
+                      
+                      {/* Aadhar Card */}
+                      <div className="space-y-3 mb-6">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-semibold text-gray-700">Aadhar Card</label>
+                          {(currentUser as any).aadharCard?.isVerified && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              Verified
+                            </span>
+                          )}
+                        </div>
+                        <ProfileInput
+                          label="Aadhar Number"
+                          name="aadharNumber"
+                          value={formData.aadharNumber || ''}
+                          onChange={handleInputChange}
+                          disabled={!isEditing}
+                          placeholder="1234 5678 9012"
+                          error={formErrors.aadharNumber}
+                          maxLength={12}
+                        />
+                        <div className="space-y-2">
+                          <label className="text-sm font-semibold text-gray-700">Aadhar Card Document</label>
+                          <div className="flex items-center space-x-4">
+                            {formData.aadharDocumentUrl && (
+                              <div className="relative">
+                                <img
+                                  src={formData.aadharDocumentUrl}
+                                  alt="Aadhar Card"
+                                  className="w-24 h-32 object-cover border-2 border-gray-200 rounded-lg shadow-sm"
+                                />
+                                {uploadProgress.aadhar && (
+                                  <div className="absolute inset-0 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                    <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {isEditing && (
+                              <div>
+                                <label 
+                                  htmlFor="aadhar-upload" 
+                                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg cursor-pointer transition-all duration-200 border border-blue-200 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                                >
+                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                  </svg>
+                                  {formData.aadharDocumentUrl ? 'Change Document' : 'Upload Document'}
+                                </label>
+                                <input 
+                                  id="aadhar-upload" 
+                                  ref={aadharInputRef}
+                                  type="file" 
+                                  className="sr-only" 
+                                  accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf" 
+                                  onChange={(e) => handleImageUpload(e, 'aadhar')} 
+                                />
+                                <p className="text-xs text-gray-500 mt-2">JPEG, PNG, PDF (Max 5MB)</p>
+                              </div>
+                            )}
+                          </div>
+                          {formErrors.aadharCard && (
+                            <p className="text-xs text-red-600">{formErrors.aadharCard}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* PAN Card */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-semibold text-gray-700">PAN Card</label>
+                          {(currentUser as any).panCard?.isVerified && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              Verified
+                            </span>
+                          )}
+                        </div>
+                        <ProfileInput
+                          label="PAN Number"
+                          name="panNumber"
+                          value={(formData.panNumber || '').toUpperCase()}
+                          onChange={(e) => {
+                            const upperValue = e.target.value.toUpperCase();
+                            setFormData(prev => ({ ...prev, panNumber: upperValue }));
+                            if (formErrors.panNumber) {
+                              setFormErrors(prev => ({ ...prev, panNumber: undefined }));
+                            }
+                          }}
+                          disabled={!isEditing}
+                          placeholder="ABCDE1234F"
+                          error={formErrors.panNumber}
+                          maxLength={10}
+                        />
+                        <div className="space-y-2">
+                          <label className="text-sm font-semibold text-gray-700">PAN Card Document</label>
+                          <div className="flex items-center space-x-4">
+                            {formData.panDocumentUrl && (
+                              <div className="relative">
+                                <img
+                                  src={formData.panDocumentUrl}
+                                  alt="PAN Card"
+                                  className="w-24 h-32 object-cover border-2 border-gray-200 rounded-lg shadow-sm"
+                                />
+                                {uploadProgress.pan && (
+                                  <div className="absolute inset-0 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                    <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {isEditing && (
+                              <div>
+                                <label 
+                                  htmlFor="pan-upload" 
+                                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg cursor-pointer transition-all duration-200 border border-blue-200 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                                >
+                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                  </svg>
+                                  {formData.panDocumentUrl ? 'Change Document' : 'Upload Document'}
+                                </label>
+                                <input 
+                                  id="pan-upload" 
+                                  ref={panInputRef}
+                                  type="file" 
+                                  className="sr-only" 
+                                  accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf" 
+                                  onChange={(e) => handleImageUpload(e, 'pan')} 
+                                />
+                                <p className="text-xs text-gray-500 mt-2">JPEG, PNG, PDF (Max 5MB)</p>
+                              </div>
+                            )}
+                          </div>
+                          {formErrors.panCard && (
+                            <p className="text-xs text-red-600">{formErrors.panCard}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {formErrors.general && (

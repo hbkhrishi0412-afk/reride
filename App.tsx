@@ -18,7 +18,8 @@ import CommandPalette from './components/CommandPalette';
 import { ChatWidget } from './components/ChatWidget';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
-import { View as ViewEnum, Vehicle } from './types';
+import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation } from './types';
+import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 
 // Simple loading component
@@ -78,12 +79,15 @@ const AppContent: React.FC = React.memo(() => {
   
   const { 
     currentView, 
+    setCurrentView,
     navigate, 
     currentUser, 
+    setCurrentUser,
     handleLogout, 
     comparisonList, 
     wishlist, 
     notifications,
+    setNotifications,
     userLocation,
     setUserLocation,
     addToast,
@@ -100,6 +104,7 @@ const AppContent: React.FC = React.memo(() => {
     toasts,
     activeChat,
     users,
+    setUsers,
     vehicleData,
     faqItems,
     platformSettings,
@@ -164,6 +169,55 @@ const AppContent: React.FC = React.memo(() => {
     displayMode: window.matchMedia('(display-mode: standalone)').matches
   });
   
+  // Restore persisted session on first load
+  useEffect(() => {
+    if (currentUser) {
+      return;
+    }
+
+    try {
+      const storedUser =
+        localStorage.getItem('reRideCurrentUser') ||
+        sessionStorage.getItem('currentUser');
+
+      if (!storedUser) {
+        return;
+      }
+
+      const parsedUser: User = JSON.parse(storedUser);
+      if (!parsedUser?.email || !parsedUser?.role) {
+        return;
+      }
+
+      console.log('🔄 Restoring persisted session for:', parsedUser.email);
+      setCurrentUser(parsedUser);
+
+      const loginViews: ViewEnum[] = [
+        ViewEnum.LOGIN_PORTAL,
+        ViewEnum.CUSTOMER_LOGIN,
+        ViewEnum.SELLER_LOGIN,
+        ViewEnum.ADMIN_LOGIN,
+        ViewEnum.NEW_CARS_ADMIN_LOGIN,
+      ];
+
+      if (loginViews.includes(currentView)) {
+        switch (parsedUser.role) {
+          case 'seller':
+            setCurrentView(ViewEnum.SELLER_DASHBOARD);
+            break;
+          case 'admin':
+            setCurrentView(ViewEnum.ADMIN_PANEL);
+            break;
+          default:
+            setCurrentView(ViewEnum.BUYER_DASHBOARD);
+            break;
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to restore persisted session:', error);
+    }
+  }, [currentUser, currentView, setCurrentUser, setCurrentView]);
+
   // Redirect logged-in users to their appropriate dashboard
   useEffect(() => {
     if (currentUser && currentView === ViewEnum.HOME) {
@@ -545,31 +599,156 @@ const AppContent: React.FC = React.memo(() => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ vehicleId })
                   });
-                  if (response.ok) {
-                    const result = await response.json();
-                    if (result.success) {
-                      await updateVehicle(vehicleId, result.vehicle);
+
+                  const responseText = await response.text();
+                  let result: any = {};
+                  if (responseText) {
+                    try {
+                      result = JSON.parse(responseText);
+                    } catch (parseError) {
+                      console.warn('⚠️ Failed to parse feature response JSON:', parseError);
+                      result = {};
                     }
+                  }
+
+                  if (!response.ok) {
+                    const errorMessage = result?.reason || result?.error || `Failed to feature vehicle (HTTP ${response.status})`;
+                    addToast(errorMessage, response.status === 403 ? 'warning' : 'error');
+                    return;
+                  }
+
+                  if (result?.alreadyFeatured) {
+                    addToast('This vehicle is already featured.', 'info');
+                    return;
+                  }
+
+                  if (result?.success && result.vehicle) {
+                    await updateVehicle(vehicleId, result.vehicle);
+
+                    if (typeof result.remainingCredits === 'number') {
+                      const sellerEmail = result.vehicle?.sellerEmail || currentUser?.email;
+                      const remainingCredits = result.remainingCredits;
+
+                      if (sellerEmail) {
+                        if (currentUser?.email === sellerEmail) {
+                          setCurrentUser({
+                            ...currentUser,
+                            featuredCredits: remainingCredits
+                          });
+                        }
+                        await updateUser(sellerEmail, { featuredCredits: remainingCredits });
+                      }
+
+                      addToast(`Featured credits remaining: ${remainingCredits}`, 'info');
+                    }
+                  } else {
+                    addToast('Failed to feature vehicle. Please try again.', 'error');
                   }
                 } catch (error) {
                   console.error('❌ Failed to feature vehicle:', error);
+                  addToast('Failed to feature vehicle. Please try again.', 'error');
                 }
               }}
               onRequestCertification={async (vehicleId) => {
                 try {
+                  const vehicle = vehicles.find(v => v.id === vehicleId);
+                  const sellerEmail = vehicle?.sellerEmail || currentUser?.email;
+                  const seller = sellerEmail ? users.find(u => u.email === sellerEmail) : undefined;
+
+                  if (!seller) {
+                    addToast('Unable to determine the seller for this certification request.', 'error');
+                    return;
+                  }
+
+                  const planId = (seller.subscriptionPlan || 'free') as SubscriptionPlan;
+                  const planDetails = await planService.getPlanDetails(planId);
+                  const totalCertifications = planDetails.freeCertifications ?? 0;
+                  const usedCertifications = seller.usedCertifications ?? 0;
+
+                  if (totalCertifications <= 0) {
+                    addToast(
+                      `The ${planDetails.name} plan does not include certification requests. Upgrade your plan to request certifications.`,
+                      'warning'
+                    );
+                    return;
+                  }
+
+                  if (usedCertifications >= totalCertifications) {
+                    addToast(
+                      `You have used all ${totalCertifications} certification requests included in your ${planDetails.name} plan. Upgrade to request more.`,
+                      'warning'
+                    );
+                    return;
+                  }
+
                   const response = await fetch('/api/vehicles?action=certify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ vehicleId })
                   });
-                  if (response.ok) {
-                    const result = await response.json();
-                    if (result.success) {
-                      await updateVehicle(vehicleId, result.vehicle);
+
+                  const responseText = await response.text();
+                  let result: any = {};
+                  if (responseText) {
+                    try {
+                      result = JSON.parse(responseText);
+                    } catch (parseError) {
+                      console.warn('⚠️ Failed to parse certification response JSON:', parseError);
                     }
+                  }
+
+                  if (!response.ok) {
+                    const errorMessage =
+                      result?.reason ||
+                      result?.error ||
+                      `Failed to submit certification request (HTTP ${response.status})`;
+                    addToast(errorMessage, 'error');
+                    return;
+                  }
+
+                  if (result?.alreadyRequested) {
+                    addToast('This vehicle is already pending certification review.', 'info');
+                    return;
+                  }
+
+                  if (!result?.success || !result?.vehicle) {
+                    addToast('Failed to submit certification request. Please try again.', 'error');
+                    return;
+                  }
+
+                  await updateVehicle(vehicleId, result.vehicle, {
+                    successMessage: 'Certification request submitted for review'
+                  });
+                  const updatedUsedCertifications = typeof result.usedCertifications === 'number'
+                    ? result.usedCertifications
+                    : usedCertifications + 1;
+
+                  setUsers((prevUsers: User[]) =>
+                    prevUsers.map((user: User) =>
+                      user.email === seller.email
+                        ? { ...user, usedCertifications: updatedUsedCertifications }
+                        : user
+                    )
+                  );
+
+                  if (currentUser?.email === seller.email) {
+                    setCurrentUser({
+                      ...currentUser,
+                      usedCertifications: updatedUsedCertifications
+                    });
+                  }
+
+                  await updateUser(seller.email, { usedCertifications: updatedUsedCertifications });
+
+                  if (typeof result.remainingCertifications === 'number') {
+                    addToast(
+                      `Certification requests remaining this month: ${result.remainingCertifications}`,
+                      'info'
+                    );
                   }
                 } catch (error) {
                   console.error('❌ Failed to certify vehicle:', error);
+                  addToast('Failed to submit certification request. Please try again.', 'error');
                 }
               }}
               onNavigate={navigate}
@@ -1056,6 +1235,17 @@ const AppContent: React.FC = React.memo(() => {
       if (conversation) {
         // Set the active chat
         setActiveChat(conversation);
+        setConversations((prev: Conversation[]) =>
+          prev.map((conv: Conversation) =>
+            conv.id === conversation.id
+              ? {
+                  ...conv,
+                  isReadBySeller: currentUser?.role === 'seller' ? true : conv.isReadBySeller,
+                  isReadByCustomer: currentUser?.role === 'customer' ? true : conv.isReadByCustomer,
+                }
+              : conv
+          )
+        );
         
         // Navigate to appropriate dashboard based on user role
         if (currentUser?.role === 'seller') {
@@ -1067,15 +1257,42 @@ const AppContent: React.FC = React.memo(() => {
     }
   }, [conversations, currentUser, navigate, setActiveChat]);
 
-  const handleMarkNotificationsAsRead = React.useCallback((ids: number[]) => {
-    // Handle marking notifications as read
-    console.log('Mark notifications as read:', ids);
+  const persistNotifications = React.useCallback((updated: Notification[]) => {
+    try {
+      localStorage.setItem('reRideNotifications', JSON.stringify(updated));
+    } catch (error) {
+      console.warn('Failed to persist notifications:', error);
+    }
   }, []);
 
+  const handleMarkNotificationsAsRead = React.useCallback((ids: number[]) => {
+    if (!ids.length) {
+      return;
+    }
+
+    const updated = notifications.map(notification =>
+      ids.includes(notification.id)
+        ? { ...notification, isRead: true }
+        : notification
+    );
+
+    setNotifications(updated);
+    persistNotifications(updated);
+  }, [notifications, persistNotifications, setNotifications]);
+
   const handleMarkAllNotificationsAsRead = React.useCallback(() => {
-    // Handle marking all notifications as read
-    console.log('Mark all notifications as read');
-  }, []);
+    if (!notifications.length) {
+      return;
+    }
+
+    const updated = notifications.map(notification => ({
+      ...notification,
+      isRead: true,
+    }));
+
+    setNotifications(updated);
+    persistNotifications(updated);
+  }, [notifications, persistNotifications, setNotifications]);
 
   const handleOpenCommandPalette = React.useCallback(() => {
     setIsCommandPaletteOpen(true);

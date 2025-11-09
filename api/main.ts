@@ -4,6 +4,7 @@ import connectToDatabase from '../lib/db.js';
 import User from '../models/User.js';
 import Vehicle from '../models/Vehicle.js';
 import VehicleDataModel from '../models/VehicleData.js';
+import { PLAN_DETAILS } from '../constants.js';
 import NewCar from '../models/NewCar.js';
 import { 
   hashPassword, 
@@ -899,7 +900,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
       }
       vehicle.activeBoosts.push(boostInfo);
       vehicle.isFeatured = true;
-      
+
       await vehicle.save();
       return res.status(200).json({ success: true, vehicle });
     }
@@ -918,15 +919,58 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
           
+          const seller = await User.findOne({ email: vehicle.sellerEmail });
+          if (!seller) {
+            return res.status(404).json({ success: false, reason: 'Seller not found for this vehicle' });
+          }
+
+          const planKey = (seller.subscriptionPlan || 'free') as keyof typeof PLAN_DETAILS;
+          const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
+          const allowedCertifications = planDetails.freeCertifications ?? 0;
+          const usedCertifications = seller.usedCertifications ?? 0;
+
+          if (allowedCertifications <= 0) {
+            return res.status(403).json({
+              success: false,
+              reason: 'Your current plan does not include certification requests. Please upgrade your plan.'
+            });
+          }
+
+          if (usedCertifications >= allowedCertifications) {
+            return res.status(403).json({
+              success: false,
+              reason: `You have used all ${allowedCertifications} certification requests included in your plan.`
+            });
+          }
+
+          if (vehicle.certificationStatus === 'requested') {
+            const vehicleObj = vehicle.toObject();
+            return res.status(200).json({
+              success: true,
+              vehicle: vehicleObj,
+              alreadyRequested: true,
+              usedCertifications,
+              remainingCertifications: Math.max(allowedCertifications - usedCertifications, 0)
+            });
+          }
+
           vehicle.certificationStatus = 'requested';
           vehicle.certificationRequestedAt = new Date().toISOString();
           
-          await vehicle.save();
+          seller.usedCertifications = usedCertifications + 1;
+          await Promise.all([vehicle.save(), seller.save()]);
           
           // Convert Mongoose document to plain object
           const vehicleObj = vehicle.toObject();
+          const totalUsed = seller.usedCertifications ?? usedCertifications + 1;
+          const remaining = Math.max(allowedCertifications - totalUsed, 0);
           
-          return res.status(200).json({ success: true, vehicle: vehicleObj });
+          return res.status(200).json({ 
+            success: true, 
+            vehicle: vehicleObj,
+            usedCertifications: totalUsed,
+            remainingCertifications: remaining 
+          });
         } catch (error) {
           console.error('❌ Error requesting vehicle certification:', error);
           return res.status(500).json({ 
@@ -949,16 +993,73 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
-          
+
+          if (vehicle.isFeatured) {
+            const vehicleObj = vehicle.toObject();
+            return res.status(200).json({ 
+              success: true, 
+              vehicle: vehicleObj,
+              alreadyFeatured: true 
+            });
+          }
+
+          const sellerEmail = vehicle.sellerEmail;
+          if (!sellerEmail) {
+            return res.status(400).json({ success: false, reason: 'Vehicle does not have an associated seller.' });
+          }
+
+          const seller = await User.findOne({ email: sellerEmail });
+          if (!seller) {
+            return res.status(404).json({ success: false, reason: 'Seller not found for this vehicle.' });
+          }
+
+          // Determine plan-based featured credit allowance
+          const FEATURE_CREDIT_LIMITS: Record<string, number> = {
+            free: 0,
+            pro: 2,
+            premium: 5
+          };
+
+          const sellerPlan = (seller.subscriptionPlan || 'free') as string;
+          const planLimit = FEATURE_CREDIT_LIMITS[sellerPlan] ?? 0;
+
+          // Initialize featured credits if undefined
+          let remainingCredits = typeof seller.featuredCredits === 'number' ? seller.featuredCredits : planLimit;
+          if (!Number.isFinite(remainingCredits)) {
+            remainingCredits = 0;
+          }
+
+          if (planLimit === 0) {
+            return res.status(403).json({
+              success: false,
+              reason: 'Your current plan does not include featured listings. Upgrade to unlock featured credits.',
+              remainingCredits: remainingCredits
+            });
+          }
+
+          if (remainingCredits <= 0) {
+            return res.status(403).json({
+              success: false,
+              reason: 'You have no featured credits remaining. Upgrade your plan or wait until your credits refresh.',
+              remainingCredits: remainingCredits
+            });
+          }
+
           vehicle.isFeatured = true;
           vehicle.featuredAt = new Date().toISOString();
-          
           await vehicle.save();
+
+          // Deduct one featured credit
+          seller.featuredCredits = Math.max(0, remainingCredits - 1);
+          await seller.save();
           
-          // Convert Mongoose document to plain object
           const vehicleObj = vehicle.toObject();
           
-          return res.status(200).json({ success: true, vehicle: vehicleObj });
+          return res.status(200).json({ 
+            success: true, 
+            vehicle: vehicleObj,
+            remainingCredits: seller.featuredCredits
+          });
         } catch (error) {
           console.error('❌ Error featuring vehicle:', error);
           return res.status(500).json({ 
@@ -966,7 +1067,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
             reason: error instanceof Error ? error.message : 'Unknown error' 
           });
         }
-            }
+      }
 
       if (action === 'sold') {
         try {

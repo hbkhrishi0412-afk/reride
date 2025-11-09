@@ -4,10 +4,11 @@ import type { User } from '../types';
 interface EditUserModalProps {
     user: User;
     onClose: () => void;
-    onSave: (email: string, details: { name: string; mobile: string; role: User['role'] }) => void;
+    onSave: (email: string, details: Partial<User>) => void;
+    onVerifyDocument?: (email: string, documentType: 'aadharCard' | 'panCard', verified: boolean) => void;
 }
 
-const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave }) => {
+const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, onVerifyDocument }) => {
     const [formData, setFormData] = useState({
         name: '',
         mobile: '',
@@ -73,10 +74,83 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave }) 
     if (!user) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 md:p-8 lg:p-12 animate-fade-in">
+            <div className="absolute inset-0" onClick={onClose} aria-hidden="true"></div>
+            <div className="relative bg-white rounded-[24px] shadow-2xl w-full max-w-3xl overflow-hidden transform transition-transform animate-scale-in">
+                <header className="bg-gradient-to-r from-orange-500 via-orange-400 to-orange-300 text-white px-8 py-6 flex items-center justify-between">
+                    <div>
+                        <p className="text-xs uppercase tracking-[0.3em] font-semibold opacity-80">Edit User</p>
+                        <h2 className="mt-1 text-2xl md:text-3xl font-bold tracking-tight">
+                            {user.name}
+                        </h2>
+                        <p className="text-xs md:text-sm opacity-80 mt-1">{user.email}</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-white text-2xl hover:text-orange-100 transition-colors ml-4"
+                        aria-label="Close"
+                    >
+                        &times;
+                    </button>
+                </header>
                 <form onSubmit={handleSubmit}>
-                    <div className="p-6">
+                    <div className="max-h-[70vh] overflow-y-auto px-8 py-6 space-y-8 custom-scrollbar">
+                        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                    Full Name
+                                </label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    value={formData.name}
+                                    onChange={handleChange}
+                                    required
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                    Mobile Number
+                                </label>
+                                <input
+                                    type="tel"
+                                    name="mobile"
+                                    value={formData.mobile}
+                                    onChange={handleChange}
+                                    required
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                    Role
+                                </label>
+                                <select
+                                    name="role"
+                                    value={formData.role}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm bg-white"
+                                >
+                                    <option value="customer">Customer</option>
+                                    <option value="seller">Seller</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                    Email (Read Only)
+                                </label>
+                                <input
+                                    type="email"
+                                    value={user.email}
+                                    disabled
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed shadow-sm"
+                                />
+                            </div>
+                        </section>
+
                         <div className="flex justify-between items-center mb-4">
                            <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Edit User: {user.name}</h2>
                            <button type="button" onClick={onClose} className="text-spinny-text-dark dark:text-spinny-text-dark text-2xl hover:text-spinny-text-dark dark:hover:text-spinny-text-dark">&times;</button>
@@ -163,6 +237,105 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave }) 
                                     </button>
                                 </div>
                             )}
+                        </div>
+
+                        {/* Document Verification Section */}
+                        <div className="mt-6 pt-6 border-t border-gray-200">
+                            <h3 className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-4">Document Verification</h3>
+                            
+                            {/* Aadhar Card Verification */}
+                            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Aadhar Card</label>
+                                    {user.aadharCard?.isVerified ? (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                            Verified
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            Pending
+                                        </span>
+                                    )}
+                                </div>
+                                {user.aadharCard?.number && (
+                                    <p className="text-xs text-gray-600 mb-2">Number: {user.aadharCard.number}</p>
+                                )}
+                                {user.aadharCard?.documentUrl && (
+                                    <div className="mb-2">
+                                        <a 
+                                            href={user.aadharCard.documentUrl} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                        >
+                                            View Document
+                                        </a>
+                                    </div>
+                                )}
+                                {onVerifyDocument && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onVerifyDocument(user.email, 'aadharCard', !user.aadharCard?.isVerified)}
+                                        className={`mt-2 px-3 py-1 text-xs rounded-md ${
+                                            user.aadharCard?.isVerified
+                                                ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                        }`}
+                                    >
+                                        {user.aadharCard?.isVerified ? 'Mark as Unverified' : 'Verify Document'}
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* PAN Card Verification */}
+                            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">PAN Card</label>
+                                    {user.panCard?.isVerified ? (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                            </svg>
+                                            Verified
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            Pending
+                                        </span>
+                                    )}
+                                </div>
+                                {user.panCard?.number && (
+                                    <p className="text-xs text-gray-600 mb-2">Number: {user.panCard.number}</p>
+                                )}
+                                {user.panCard?.documentUrl && (
+                                    <div className="mb-2">
+                                        <a 
+                                            href={user.panCard.documentUrl} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                        >
+                                            View Document
+                                        </a>
+                                    </div>
+                                )}
+                                {onVerifyDocument && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onVerifyDocument(user.email, 'panCard', !user.panCard?.isVerified)}
+                                        className={`mt-2 px-3 py-1 text-xs rounded-md ${
+                                            user.panCard?.isVerified
+                                                ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                        }`}
+                                    >
+                                        {user.panCard?.isVerified ? 'Mark as Unverified' : 'Verify Document'}
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg">

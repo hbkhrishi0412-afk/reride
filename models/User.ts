@@ -87,6 +87,24 @@ const userSchema = new mongoose.Schema({
     govtIdVerified: { type: Boolean, default: false },
   },
   
+  // Document Verification (Aadhar & PAN)
+  aadharCard: {
+    number: { type: String, default: '' },
+    documentUrl: { type: String, default: '' },
+    isVerified: { type: Boolean, default: false },
+    verifiedAt: { type: String, default: '' },
+    verifiedBy: { type: String, default: '' },
+    uploadedAt: { type: String, default: '' },
+  },
+  panCard: {
+    number: { type: String, default: '' },
+    documentUrl: { type: String, default: '' },
+    isVerified: { type: Boolean, default: false },
+    verifiedAt: { type: String, default: '' },
+    verifiedBy: { type: String, default: '' },
+    uploadedAt: { type: String, default: '' },
+  },
+  
   // Activity & Reputation
   responseTime: Number, // in minutes
   responseRate: Number, // percentage 0-100

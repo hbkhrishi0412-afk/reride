@@ -43,7 +43,7 @@ interface DashboardProps {
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onUpdateSellerProfile: (details: { dealershipName: string; bio: string; logoUrl: string; }) => void;
   vehicleData: VehicleData;
-  onFeatureListing: (vehicleId: number) => void;
+  onFeatureListing: (vehicleId: number) => Promise<void>;
   onRequestCertification: (vehicleId: number) => void;
   onNavigate: (view: View) => void;
   onTestDriveResponse?: (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => void;
@@ -103,8 +103,9 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
 const PlanStatusCard: React.FC<{
     seller: User;
     activeListingsCount: number;
+    featuredListingsCount: number;
     onNavigate: (view: View) => void;
-}> = memo(({ seller, activeListingsCount, onNavigate }) => {
+}> = memo(({ seller, activeListingsCount, featuredListingsCount, onNavigate }) => {
     const [plan, setPlan] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     
@@ -141,6 +142,12 @@ const PlanStatusCard: React.FC<{
     }
     
     const listingLimit = plan.listingLimit === 'unlimited' ? Infinity : plan.listingLimit;
+    const planFeaturedCredits = typeof plan.featuredCredits === 'number' ? plan.featuredCredits : 0;
+    const storedRemainingCredits = typeof seller.featuredCredits === 'number'
+        ? seller.featuredCredits
+        : planFeaturedCredits;
+    const featuredCreditsAfterUsage = Math.max(planFeaturedCredits - featuredListingsCount, 0);
+    const effectiveFeaturedCredits = Math.min(storedRemainingCredits, featuredCreditsAfterUsage);
     const usagePercentage = listingLimit === Infinity ? 0 : (activeListingsCount / listingLimit) * 100;
 
     return (
@@ -161,11 +168,13 @@ const PlanStatusCard: React.FC<{
                 </div>
                 <div className="flex justify-between">
                     <span>Featured Credits:</span>
-                    <span className="font-semibold">{seller.featuredCredits ?? 0} remaining</span>
+                    <span className="font-semibold">{effectiveFeaturedCredits} remaining</span>
                 </div>
                  <div className="flex justify-between">
                     <span>Free Certifications:</span>
-                    <span className="font-semibold">{plan.freeCertifications - (seller.usedCertifications || 0)} remaining</span>
+                    <span className="font-semibold">
+                        {Math.max((plan.freeCertifications ?? 0) - (seller.usedCertifications || 0), 0)} remaining
+                    </span>
                 </div>
 
                 {(seller.planActivatedDate || seller.planExpiryDate) && (
@@ -292,7 +301,7 @@ interface VehicleFormProps {
     allVehicles: Vehicle[];
     onAddVehicle: (vehicle: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, isFeaturing: boolean) => void;
     onUpdateVehicle: (vehicle: Vehicle) => void;
-    onFeatureListing: (vehicleId: number) => void;
+    onFeatureListing: (vehicleId: number) => Promise<void>;
     onCancel: () => void;
     vehicleData: VehicleData;
 }
@@ -663,7 +672,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             console.log('✏️ Editing existing vehicle:', editingVehicle.id);
             onUpdateVehicle({ ...editingVehicle, ...sanitizedFormData });
             if (isFeaturing && !editingVehicle.isFeatured) {
-                onFeatureListing(editingVehicle.id);
+                void onFeatureListing(editingVehicle.id);
             }
         } else {
             console.log('➕ Adding new vehicle');
@@ -1015,7 +1024,11 @@ const InquiriesView: React.FC<{
                     {!conv.isReadBySeller && <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF6B35' }}></div>}
                     <div>
                       <p className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{conv.customerName} - <span className="font-normal text-spinny-text-dark dark:text-spinny-text-dark">{conv.vehicleName}</span></p>
-                      <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark truncate max-w-md">{conv.messages[conv.messages.length - 1].text}</p>
+                      <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark truncate max-w-md">
+                        {conv.messages && conv.messages.length > 0
+                          ? conv.messages[conv.messages.length - 1].text || 'New conversation'
+                          : 'No messages yet'}
+                      </p>
                     </div>
                 </div>
                 <span className="text-xs text-spinny-text-dark dark:text-spinny-text-dark">{new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
@@ -1321,27 +1334,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   const handleFeatureVehicle = async (vehicleId: number) => {
     console.log('🚀 handleFeatureVehicle called for vehicle:', vehicleId);
     try {
-      const response = await fetch('/api/vehicles?action=feature', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vehicleId })
-      });
-      
-      console.log('📡 Feature response status:', response.status);
-      if (response.ok) {
-        const result = await response.json();
-        console.log('📡 Feature response data:', result);
-        if (result.success) {
-          // Update local state
-          onUpdateVehicle(result.vehicle);
-          console.log('✅ Vehicle featured successfully');
-        }
-      } else {
-        const errorText = await response.text();
-        console.error('❌ Failed to feature vehicle:', errorText);
-      }
+      await onFeatureListing(vehicleId);
     } catch (error) {
-      console.error('❌ Error featuring vehicle:', error);
+      console.error('❌ Error featuring vehicle via callback:', error);
     }
   };
   
@@ -1475,7 +1470,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               <StatCard title="Unread Messages" value={unreadCount} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
               <StatCard title="Your Seller Rating" value={`${(seller?.averageRating || 0).toFixed(1)} (${seller?.ratingCount || 0})`} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.522 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.522 4.674c.3.921-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.784.57-1.838-.197-1.539-1.118l1.522-4.674a1 1 0 00-.363-1.118L2.98 8.11c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.522-4.674z" /></svg>} />
             </div>
-            <PlanStatusCard seller={seller} activeListingsCount={activeListings.length} onNavigate={onNavigate} />
+            <PlanStatusCard
+              seller={seller}
+              activeListingsCount={activeListings.length}
+              featuredListingsCount={sellerVehicles.filter(v => v.isFeatured).length}
+              onNavigate={onNavigate}
+            />
             <PaymentStatusCard currentUser={seller} />
             <AiAssistant
               vehicles={activeListings}

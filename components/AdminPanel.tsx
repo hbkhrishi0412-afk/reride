@@ -132,7 +132,7 @@ interface AdminPanelProps {
     onCreateUser?: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
     onToggleUserStatus: (email: string) => void;
     onDeleteUser: (email: string) => void;
-    onAdminUpdateUser: (email: string, details: { name: string; mobile: string; role: User['role'] }) => void;
+    onAdminUpdateUser: (email: string, details: Partial<User>) => void;
     onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => void;
     onUpdateVehicle: (vehicle: Vehicle) => void;
     onDeleteVehicle: (vehicleId: number) => void;
@@ -914,6 +914,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const {
         users, currentUser, vehicles, conversations, onToggleUserStatus, onDeleteUser,
         onAdminUpdateUser, onUpdateUserPlan, onUpdateVehicle, onDeleteVehicle, onToggleVehicleStatus,
+        onToggleVehicleFeature,
         onResolveFlag, platformSettings, onUpdateSettings, onSendBroadcast,
         auditLog, onExportUsers, onExportVehicles, onNavigate, onLogout, vehicleData, onUpdateVehicleData,
         supportTickets, onUpdateSupportTicket, faqItems, onAddFaq, onUpdateFaq, onDeleteFaq,
@@ -987,7 +988,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         };
     }, [users, vehicles, conversations]);
 
-    const handleSaveUser = (email: string, details: { name: string; mobile: string; role: User['role'] }) => {
+    const handleSaveUser = (email: string, details: Partial<User>) => {
         onAdminUpdateUser(email, details);
         setEditingUser(null);
     };
@@ -1133,6 +1134,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Mobile</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Role</th>
                                         <SortableHeader title="Status" sortKey="status" sortConfig={sortConfig} requestSort={requestSort} />
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Documents</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
@@ -1157,6 +1159,31 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 }`}>
                                                     {user.status}
                                                 </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex flex-col gap-1">
+                                                    {user.aadharCard?.documentUrl && (
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                                            user.aadharCard?.isVerified 
+                                                                ? 'bg-green-100 text-green-800' 
+                                                                : 'bg-yellow-100 text-yellow-800'
+                                                        }`}>
+                                                            Aadhar: {user.aadharCard.isVerified ? '✓' : 'Pending'}
+                                                        </span>
+                                                    )}
+                                                    {user.panCard?.documentUrl && (
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                                            user.panCard?.isVerified 
+                                                                ? 'bg-green-100 text-green-800' 
+                                                                : 'bg-yellow-100 text-yellow-800'
+                                                        }`}>
+                                                            PAN: {user.panCard.isVerified ? '✓' : 'Pending'}
+                                                        </span>
+                                                    )}
+                                                    {(!user.aadharCard?.documentUrl && !user.panCard?.documentUrl) && (
+                                                        <span className="text-xs text-gray-400">No documents</span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                                 <button 
@@ -1303,6 +1330,30 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     }`}
                                                 >
                                                     {loadingActions.has(`toggle-vehicle-${vehicle.id}`) ? '...' : (vehicle.status === 'published' ? 'Unpublish' : 'Publish')}
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleActionWithLoading(
+                                                            `feature-vehicle-${vehicle.id}`,
+                                                            () => onToggleVehicleFeature(vehicle.id)
+                                                        );
+                                                    }}
+                                                    disabled={loadingActions.has(`feature-vehicle-${vehicle.id}`)}
+                                                    className={`cursor-pointer ${
+                                                        loadingActions.has(`feature-vehicle-${vehicle.id}`)
+                                                            ? 'text-gray-400 cursor-not-allowed'
+                                                            : vehicle.isFeatured
+                                                                ? 'text-purple-600 hover:text-purple-800'
+                                                                : 'text-green-600 hover:text-green-800'
+                                                    }`}
+                                                >
+                                                    {loadingActions.has(`feature-vehicle-${vehicle.id}`)
+                                                        ? '...'
+                                                        : vehicle.isFeatured
+                                                            ? 'Unfeature'
+                                                            : 'Feature'}
                                                 </button>
                                                 <button 
                                                     onClick={(e) => {
@@ -1744,6 +1795,18 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             
             const userVehicles = vehicles.filter((v: Vehicle) => v.sellerEmail === user.email);
             const activeListings = userVehicles.filter((v: Vehicle) => v.status === 'published').length;
+            const featuredListings = userVehicles.filter((v: Vehicle) => v.isFeatured).length;
+
+            const planFeaturedCredits = planDetails?.featuredCredits ?? 0;
+            const storedRemainingCredits = typeof user.featuredCredits === 'number'
+                ? user.featuredCredits
+                : planFeaturedCredits;
+
+            const calculatedRemaining = Math.min(
+                storedRemainingCredits,
+                Math.max(planFeaturedCredits - featuredListings, 0)
+            );
+            const usedCredits = Math.max(planFeaturedCredits - calculatedRemaining, featuredListings);
             
             if (!planDetails) {
                 return (
@@ -1791,7 +1854,21 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {planFeaturedCredits > 0 ? (
+                            <div>
+                                <div className="font-medium">
+                                    {usedCredits} used / {planFeaturedCredits}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                    Remaining: {Math.max(planFeaturedCredits - usedCredits, 0)}
+                                </div>
+                            </div>
+                        ) : (
+                            <span className="text-gray-400">Not included</span>
+                        )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <div className="flex flex-col gap-2">
                                             {currentPlan !== 'free' && (
                                                 <button 
@@ -2151,6 +2228,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">User</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Current Plan</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Usage</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Featured Credits</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Actions</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Plan Activated</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Expiry Date</th>
@@ -2722,7 +2800,46 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 </main>
             </div>
 
-            {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} onSave={(email, details) => handleSaveUser(email, details)} />}
+            {editingUser && (
+                <EditUserModal 
+                    user={editingUser} 
+                    onClose={() => setEditingUser(null)} 
+                    onSave={(email, details) => handleSaveUser(email, details)}
+                    onVerifyDocument={async (email, documentType, verified) => {
+                        try {
+                            const user = users.find(u => u.email === email);
+                            if (!user) return;
+
+                            const updateData: any = {};
+                            if (documentType === 'aadharCard') {
+                                updateData.aadharCard = {
+                                    ...user.aadharCard,
+                                    isVerified: verified,
+                                    verifiedAt: verified ? new Date().toISOString() : '',
+                                    verifiedBy: verified ? currentUser?.email || 'admin' : '',
+                                };
+                            } else if (documentType === 'panCard') {
+                                updateData.panCard = {
+                                    ...user.panCard,
+                                    isVerified: verified,
+                                    verifiedAt: verified ? new Date().toISOString() : '',
+                                    verifiedBy: verified ? currentUser?.email || 'admin' : '',
+                                };
+                            }
+
+                            await onAdminUpdateUser(email, updateData);
+                            
+                            // Update local state
+                            setEditingUser({
+                                ...editingUser,
+                                ...updateData
+                            });
+                        } catch (error) {
+                            console.error('Failed to verify document:', error);
+                        }
+                    }}
+                />
+            )}
             {editingVehicle && <EditVehicleModal vehicle={editingVehicle} onClose={() => setEditingVehicle(null)} onSave={handleSaveVehicle} />}
             
             {/* Seller Form Preview Modal */}

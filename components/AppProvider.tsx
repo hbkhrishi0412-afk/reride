@@ -13,6 +13,11 @@ import { loadingManager, LOADING_OPERATIONS, withLoadingTimeout } from '../utils
 import { useTimeout } from '../hooks/useCleanup';
 import { VEHICLE_DATA } from './vehicleData';
 
+interface VehicleUpdateOptions {
+  successMessage?: string;
+  skipToast?: boolean;
+}
+
 interface AppContextType {
   // State
   currentView: View;
@@ -88,7 +93,7 @@ interface AppContextType {
   
   // Admin functions
   onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
-  onAdminUpdateUser: (email: string, details: { name: string; mobile: string; role: User['role'] }) => void;
+  onAdminUpdateUser: (email: string, details: Partial<User>) => void;
       onUpdateUserPlan: (email: string, plan: SubscriptionPlan) => Promise<void>;
     onToggleUserStatus: (email: string) => Promise<void>;
     onToggleVehicleStatus: (vehicleId: number) => Promise<void>;
@@ -116,7 +121,7 @@ interface AppContextType {
   flagContent: (type: 'vehicle' | 'conversation', id: number | string) => void;
   updateUser: (email: string, updates: Partial<User>) => Promise<void>;
   deleteUser: (email: string) => void;
-  updateVehicle: (id: number, updates: Partial<Vehicle>) => void;
+  updateVehicle: (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => Promise<void>;
   deleteVehicle: (id: number) => void;
   selectVehicle: (vehicle: Vehicle) => void;
   toggleWishlist: (vehicleId: number) => void;
@@ -463,6 +468,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     };
   }, [addToast]);
 
+  const updateVehicleHandler = useCallback(async (id: number, updates: Partial<Vehicle>, options: VehicleUpdateOptions = {}) => {
+    try {
+      const vehicleToUpdate = vehicles.find(v => v.id === id);
+      if (!vehicleToUpdate) {
+        addToast('Vehicle not found', 'error');
+        return;
+      }
+
+      const updatedVehicle = { ...vehicleToUpdate, ...updates };
+      const { updateVehicle: updateVehicleApi } = await import('../services/vehicleService');
+      const result = await updateVehicleApi(updatedVehicle);
+
+      setVehicles(prev =>
+        prev.map(vehicle => (vehicle.id === id ? result : vehicle))
+      );
+
+      const wasFeatured = Boolean(vehicleToUpdate.isFeatured);
+      const isNowFeatured = Boolean(result?.isFeatured);
+      const statusChanged = updates.status !== undefined && updates.status !== vehicleToUpdate.status;
+      const { successMessage, skipToast } = options;
+      let fallbackMessage = 'Vehicle updated successfully';
+      if (statusChanged) {
+        fallbackMessage = `Vehicle status updated to ${updates.status}`;
+      } else if (!wasFeatured && isNowFeatured) {
+        fallbackMessage = 'Vehicle featured successfully';
+      } else if (wasFeatured && !isNowFeatured) {
+        fallbackMessage = 'Vehicle unfeatured successfully';
+      }
+
+      if (!skipToast) {
+        addToast(successMessage ?? fallbackMessage, 'success');
+      }
+      console.log('✅ Vehicle updated via API:', result);
+    } catch (error) {
+      console.error('❌ Failed to update vehicle:', error);
+      addToast('Failed to update vehicle. Please try again.', 'error');
+    }
+  }, [vehicles, addToast, setVehicles]);
+
   const contextValue: AppContextType = useMemo(() => ({
     // State
     currentView,
@@ -537,14 +581,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     navigate,
     
     // Admin functions
-    onAdminUpdateUser: async (email: string, details: { name: string; mobile: string; role: User['role'] }) => {
-      setUsers(prev => prev.map(user => 
-        user.email === email ? { ...user, ...details } : user
-      ));
+    onAdminUpdateUser: async (email: string, details: Partial<User>) => {
+      const sanitizedDetails = Object.fromEntries(
+        Object.entries(details).filter(([, value]) => value !== undefined)
+      ) as Partial<User>;
+
+      setUsers(prev =>
+        prev.map(user =>
+          user.email === email ? { ...user, ...sanitizedDetails } : user
+        )
+      );
       
       // Also update in MongoDB
       try {
-        await updateUser(email, details);
+        await updateUser(email, sanitizedDetails);
       } catch (error) {
         console.warn('Failed to sync user update to MongoDB:', error);
       }
@@ -648,8 +698,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           if (!vehicle) return;
           
           const newStatus = vehicle.status === 'published' ? 'unpublished' : 'published';
-          await updateVehicle(vehicleId, { status: newStatus });
-          addToast(`Vehicle status updated to ${newStatus}`, 'success');
+          await updateVehicleHandler(vehicleId, { status: newStatus });
         } catch (error) {
           console.error('Failed to toggle vehicle status:', error);
           addToast('Failed to update vehicle status', 'error');
@@ -658,10 +707,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       onToggleVehicleFeature: async (vehicleId: number) => {
         try {
           const vehicle = vehicles.find(v => v.id === vehicleId);
-          if (!vehicle) return;
-          
-          await updateVehicle(vehicleId, { isFeatured: !vehicle.isFeatured });
-          addToast(`Vehicle featured status updated`, 'success');
+          if (!vehicle) {
+            addToast('Vehicle not found', 'error');
+            return;
+          }
+
+          // Unfeature path: simple toggle off
+          if (vehicle.isFeatured) {
+            await updateVehicleHandler(vehicleId, { isFeatured: false });
+            return;
+          }
+
+          // Feature path: use API to enforce credits
+          const response = await fetch('/api/vehicles?action=feature', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vehicleId })
+          });
+
+          const responseText = await response.text();
+          let result: any = {};
+          if (responseText) {
+            try {
+              result = JSON.parse(responseText);
+            } catch (parseError) {
+              console.warn('⚠️ Failed to parse feature response JSON:', parseError);
+            }
+          }
+
+          if (!response.ok) {
+            const message =
+              result?.reason ||
+              result?.error ||
+              `Failed to feature vehicle (HTTP ${response.status})`;
+            addToast(message, response.status === 403 ? 'warning' : 'error');
+            return;
+          }
+
+          if (result?.alreadyFeatured) {
+            addToast('Vehicle is already featured.', 'info');
+            return;
+          }
+
+          if (result?.success && result.vehicle) {
+            setVehicles(prev =>
+              prev.map(v => (v.id === vehicleId ? result.vehicle : v))
+            );
+
+            const sellerEmail = result.vehicle?.sellerEmail;
+            if (typeof result.remainingCredits === 'number' && sellerEmail) {
+              const remainingCredits = result.remainingCredits;
+
+              setUsers(prev =>
+                prev.map(user =>
+                  user.email === sellerEmail
+                    ? { ...user, featuredCredits: remainingCredits }
+                    : user
+                )
+              );
+
+              setCurrentUser(prev =>
+                prev && prev.email === sellerEmail
+                  ? { ...prev, featuredCredits: remainingCredits }
+                  : prev
+              );
+
+              addToast(
+                `Vehicle featured successfully. Credits remaining: ${remainingCredits}`,
+                'success'
+              );
+            } else {
+              addToast('Vehicle featured successfully', 'success');
+            }
+          } else {
+            addToast('Failed to feature vehicle. Please try again.', 'error');
+          }
         } catch (error) {
           console.error('Failed to toggle vehicle feature:', error);
           addToast('Failed to update vehicle feature status', 'error');
@@ -1180,33 +1300,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       setUsers(prev => prev.filter(user => user.email !== email));
       addToast('User deleted successfully', 'success');
     },
-    updateVehicle: async (id: number, updates: Partial<Vehicle>) => {
-      try {
-        // Find the vehicle to update
-        const vehicleToUpdate = vehicles.find(v => v.id === id);
-        if (!vehicleToUpdate) {
-          addToast('Vehicle not found', 'error');
-          return;
-        }
-
-        // Create updated vehicle object
-        const updatedVehicle = { ...vehicleToUpdate, ...updates };
-        
-        // Call API to persist changes
-        const { updateVehicle: updateVehicleApi } = await import('../services/vehicleService');
-        const result = await updateVehicleApi(updatedVehicle);
-        
-        // Update local state with the result from API
-        setVehicles(prev => prev.map(vehicle => 
-          vehicle.id === id ? result : vehicle
-        ));
-        
-        addToast('Vehicle updated successfully', 'success');
-        console.log('✅ Vehicle updated via API:', result);
-      } catch (error) {
-        console.error('❌ Failed to update vehicle:', error);
-        addToast('Failed to update vehicle. Please try again.', 'error');
-      }
+    updateVehicle: async (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => {
+      await updateVehicleHandler(id, updates, options);
     },
     deleteVehicle: async (id: number) => {
       try {
@@ -1343,6 +1438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     setIsCommandPaletteOpen, setUserLocation, setSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
     setNotifications, addToast, removeToast, navigate, handleLogin, handleLogout,
+    updateVehicleHandler,
     // Add missing dependencies
     setCurrentUser, setUsers
   ]);

@@ -210,8 +210,10 @@ const deleteUserLocal = async (email: string): Promise<{ success: boolean, email
     return { success: true, email };
 };
 
-const loginLocal = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
-    const { email, password, role } = credentials;
+const loginLocal = async (
+    credentials: any & { skipRoleCheck?: boolean }
+): Promise<{ success: boolean, user?: User, reason?: string }> => {
+    const { email, password, role, skipRoleCheck } = credentials;
     
     // Normalize email (trim and lowercase for comparison)
     const normalizedEmail = (email || '').trim().toLowerCase();
@@ -274,7 +276,7 @@ const loginLocal = async (credentials: any): Promise<{ success: boolean, user?: 
         return { success: false, reason: 'Invalid credentials.' };
     }
     
-    if (role && user.role !== role) {
+    if (!skipRoleCheck && role && user.role !== role) {
         console.log('❌ loginLocal: Role mismatch', { expected: role, actual: user.role });
         return { success: false, reason: `User is not a registered ${role}.` };
     }
@@ -452,12 +454,12 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
     } catch (error) {
       console.warn('⚠️  API login failed, falling back to local storage:', error);
       // Fallback to local storage if API fails
-      return await loginLocal(credentials);
+      return await loginLocal({ ...credentials, skipRoleCheck: true });
     }
   } else {
     // Development mode - use local storage directly
     console.log('💻 Development mode - using local storage directly');
-    return await loginLocal(credentials);
+    return await loginLocal({ ...credentials, skipRoleCheck: true });
   }
 };
 export const register = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {

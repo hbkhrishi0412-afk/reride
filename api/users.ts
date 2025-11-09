@@ -118,6 +118,14 @@ export default async function handler(
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
       }
       
+      // Ensure user has a password set (OAuth users may not)
+      if (!user.password || typeof user.password !== 'string') {
+        return res.status(400).json({ 
+          success: false, 
+          reason: 'Password login is not available for this account. Please use your original sign-in method.' 
+        });
+      }
+
       // Verify password using bcrypt
       const isPasswordValid = await validatePassword(sanitizedData.password, user.password);
       if (!isPasswordValid) {
@@ -521,7 +529,7 @@ export default async function handler(
           const errorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
           // Even if save fails, the findOneAndUpdate might have succeeded
           // So we'll still return success but log the error
-          console.warn('⚠️ Save failed but update may have succeeded');
+          console.warn('⚠️ Save failed but update may have succeeded:', errorMessage);
         }
       }
 
