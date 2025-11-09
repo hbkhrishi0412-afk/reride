@@ -64,24 +64,46 @@ const getAuthHeader = () => {
 };
 
 const handleResponse = async <T>(response: Response): Promise<T> => {
-    if (!response.ok) {
-        // For 500 errors, don't throw - let the fallback mechanism handle it
-        if (response.status >= 500) {
-            console.warn(`API returned ${response.status}: ${response.statusText}, will use fallback data`);
-            throw new Error(`API Error: ${response.status} - ${response.statusText}`);
-        }
-        const error = await response.json().catch(() => ({ error: `API Error: ${response.statusText}` }));
-        throw new Error(error.error || `Failed to fetch: ${response.statusText}`);
+  if (!response.ok) {
+    // For 500 errors, don't throw - let the fallback mechanism handle it
+    if (response.status >= 500) {
+      console.warn(`API returned ${response.status}: ${response.statusText}, will use fallback data`);
+      throw new Error(`API Error: ${response.status} - ${response.statusText}`);
     }
-    
-    const data = await response.json();
-    
-    // Type guard for API responses
-    if (isApiResponse<T>(data)) {
-        return data.data;
+
+    let errorPayload: any = null;
+    try {
+      errorPayload = await response.json();
+    } catch {
+      // Ignore JSON parse errors for non-JSON payloads
     }
-    
-    return data;
+
+    const errorMessage =
+      errorPayload?.error ||
+      errorPayload?.reason ||
+      errorPayload?.message ||
+      `Failed to fetch: ${response.statusText}`;
+    throw new Error(errorMessage);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    console.error('Unexpected non-JSON response from API:', text.slice(0, 300));
+    if (text.includes('Authentication Required') || text.includes('Vercel Authentication')) {
+      throw new Error('Authentication is required to access the API. Please ensure the deployment protection bypass cookie is set.');
+    }
+    throw new Error('Unexpected response from server. Expected JSON but received a different format.');
+  }
+
+  const data = await response.json();
+
+  // Type guard for API responses
+  if (isApiResponse<T>(data)) {
+    return data.data;
+  }
+
+  return data;
 };
 
 // --- Local Development (localStorage) Functions ---
@@ -148,7 +170,13 @@ const deleteVehicleLocal = async (vehicleId: number): Promise<{ success: boolean
 // --- Production (API) Functions ---
 
 const getVehiclesApi = async (): Promise<Vehicle[]> => {
-  const response = await fetch('/api/vehicles');
+  const response = await fetch('/api/vehicles', {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+    credentials: 'include',
+  });
   const data = await handleResponse<Vehicle[]>(response);
   
   // Validate that all items are vehicles
@@ -165,33 +193,48 @@ const getVehiclesApi = async (): Promise<Vehicle[]> => {
 };
 
 const addVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
-    const authHeaders = getAuthHeader();
-    const response = await fetch('/api/vehicles', {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify(vehicleData),
-    });
-    return handleResponse(response);
+  const authHeaders = getAuthHeader();
+  const response = await fetch('/api/vehicles', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...authHeaders,
+    },
+    credentials: 'include',
+    body: JSON.stringify(vehicleData),
+  });
+  return handleResponse(response);
 };
 
 const updateVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
-    const authHeaders = getAuthHeader();
-    const response = await fetch('/api/vehicles', {
-        method: 'PUT',
-        headers: authHeaders,
-        body: JSON.stringify(vehicleData),
-    });
-    return handleResponse(response);
+  const authHeaders = getAuthHeader();
+  const response = await fetch('/api/vehicles', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...authHeaders,
+    },
+    credentials: 'include',
+    body: JSON.stringify(vehicleData),
+  });
+  return handleResponse(response);
 };
 
 const deleteVehicleApi = async (vehicleId: number): Promise<{ success: boolean, id: number }> => {
-    const authHeaders = getAuthHeader();
-    const response = await fetch('/api/vehicles', {
-        method: 'DELETE',
-        headers: authHeaders,
-        body: JSON.stringify({ id: vehicleId }),
-    });
-    return handleResponse(response);
+  const authHeaders = getAuthHeader();
+  const response = await fetch('/api/vehicles', {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...authHeaders,
+    },
+    credentials: 'include',
+    body: JSON.stringify({ id: vehicleId }),
+  });
+  return handleResponse(response);
 };
 
 

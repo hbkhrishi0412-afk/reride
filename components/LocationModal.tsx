@@ -22,15 +22,72 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
     useEffect(() => {
         const loadLocationData = async () => {
             try {
-                const { INDIAN_STATES, CITIES_BY_STATE } = await import('../constants');
-                setIndianStates(INDIAN_STATES);
-                setCitiesByState(CITIES_BY_STATE);
+                const { loadLocationData } = await import('../utils/dataLoaders');
+                const { INDIAN_STATES, CITIES_BY_STATE } = await loadLocationData();
+
+                if (Array.isArray(INDIAN_STATES) && INDIAN_STATES.length > 0) {
+                    setIndianStates(INDIAN_STATES);
+                } else {
+                    console.warn('Location data loader returned empty states list. Falling back to static data.');
+                }
+
+                if (CITIES_BY_STATE && Object.keys(CITIES_BY_STATE).length > 0) {
+                    setCitiesByState(CITIES_BY_STATE);
+                } else {
+                    console.warn('Location data loader returned empty cities list. Falling back to static data.');
+                }
             } catch (error) {
                 console.error('Failed to load location data:', error);
             }
         };
         loadLocationData();
     }, []);
+
+    // Sync dropdown selection with current location when modal opens or data changes
+    useEffect(() => {
+        if (!isOpen) return;
+
+        if (!currentLocation) {
+            setSelectedState('');
+            setSelectedCity('');
+            return;
+        }
+
+        const normalizedLocation = currentLocation.trim().toLowerCase();
+
+        // Attempt to match by city first
+        const matchedEntry = Object.entries(citiesByState).find(([, cities]) =>
+            cities.some(city => city.toLowerCase() === normalizedLocation)
+        );
+
+        if (matchedEntry) {
+            const [stateCode, cities] = matchedEntry;
+            setSelectedState(stateCode);
+            const matchedCity = cities.find(city => city.toLowerCase() === normalizedLocation) || cities[0];
+            setSelectedCity(matchedCity);
+            return;
+        }
+
+        // Fallback: try partial match against state names
+        const matchedState = indianStates.find(state =>
+            state.name.toLowerCase().includes(normalizedLocation) ||
+            normalizedLocation.includes(state.name.toLowerCase())
+        );
+
+        if (matchedState) {
+            setSelectedState(matchedState.code);
+            const stateCities = citiesByState[matchedState.code] || [];
+            if (stateCities.length > 0) {
+                setSelectedCity(stateCities[0]);
+            } else {
+                setSelectedCity(currentLocation);
+            }
+        } else {
+            // If nothing matches, just set the city field to the current location
+            setSelectedState('');
+            setSelectedCity(currentLocation);
+        }
+    }, [isOpen, currentLocation, indianStates, citiesByState]);
 
     const availableCities = useMemo(() => {
         if (!selectedState) return [];
@@ -203,12 +260,18 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
     };
     
     const handleManualSelect = () => {
-        if (selectedCity) {
-            onLocationChange(selectedCity);
-            onClose();
-        } else {
-            addToast('Please select a city.', 'info');
+        if (!selectedState) {
+            addToast('Please select a state.', 'info');
+            return;
         }
+
+        if (!selectedCity) {
+            addToast('Please select a city.', 'info');
+            return;
+        }
+
+        onLocationChange(selectedCity);
+        onClose();
     };
 
     if (!isOpen) return null;
@@ -259,7 +322,17 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="state-select" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">State</label>
-                            <select id="state-select" value={selectedState} onChange={e => { setSelectedState(e.target.value); setSelectedCity(''); }} className="w-full p-2 border border-gray-200 dark:border-gray-200-300 rounded-md bg-white dark:bg-brand-gray-700">
+                            <select
+                                id="state-select"
+                                value={selectedState}
+                                onChange={e => {
+                                    const newState = e.target.value;
+                                    setSelectedState(newState);
+                                    const defaultCity = (citiesByState[newState] || [])[0] || '';
+                                    setSelectedCity(defaultCity);
+                                }}
+                                className="w-full p-2 border border-gray-200 dark:border-gray-200-300 rounded-md bg-white dark:bg-brand-gray-700"
+                            >
                                 <option value="" disabled>Select a state</option>
                                 {indianStates.map(state => <option key={state.code} value={state.code}>{state.name}</option>)}
                             </select>
@@ -275,7 +348,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 </div>
                 <div className="bg-white px-6 py-4 flex justify-end gap-4 rounded-b-xl">
                     <button onClick={onClose} className="px-4 py-2 bg-white-dark dark:bg-white text-spinny-text-dark dark:text-spinny-text-dark rounded-md hover:bg-white dark:hover:bg-white0">Cancel</button>
-                    <button onClick={handleManualSelect} disabled={!selectedCity} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50">Set Location</button>
+                    <button onClick={handleManualSelect} disabled={!selectedCity || !selectedState} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50">Set Location</button>
                 </div>
             </div>
         </div>

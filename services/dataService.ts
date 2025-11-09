@@ -30,23 +30,33 @@ class DataService {
     endpoint: string, 
     options: RequestInit = {}
   ): Promise<T> {
+    const method = (options.method || 'GET').toUpperCase();
+    const shouldSendJson = method !== 'GET' && method !== 'HEAD';
+
+    const headers: HeadersInit = {
+      Accept: 'application/json',
+      ...(shouldSendJson ? { 'Content-Type': 'application/json' } : {}),
+      ...this.getAuthHeaders(),
+      ...(options.headers || {})
+    };
+
+    const fetchOptions: RequestInit = {
+      ...options,
+      method,
+      headers,
+      credentials: 'include'
+    };
+
     // Check cache for GET requests
     const cacheKey = `${endpoint}_${JSON.stringify(options)}`;
-    if (options.method === 'GET' || !options.method) {
+    if (method === 'GET') {
       const cached = this.cache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
         return cached.data;
       }
     }
 
-    const response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...this.getAuthHeaders(),
-        ...options.headers,
-      },
-      ...options,
-    });
+    const response = await fetch(`${this.apiBaseUrl}${endpoint}`, fetchOptions);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -62,10 +72,20 @@ class DataService {
       throw new Error(errorMessage);
     }
 
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Unexpected non-JSON response from API:', text.slice(0, 300));
+      if (text.includes('Authentication Required') || text.includes('Vercel Authentication')) {
+        throw new Error('Authentication is required to access the API. Please ensure the deployment protection bypass cookie is set.');
+      }
+      throw new Error('Unexpected response from server. Expected JSON but received a different format.');
+    }
+
     const data = await response.json();
     
     // Cache GET requests
-    if (options.method === 'GET' || !options.method) {
+    if (method === 'GET') {
       this.cache.set(cacheKey, { data, timestamp: Date.now() });
     }
     

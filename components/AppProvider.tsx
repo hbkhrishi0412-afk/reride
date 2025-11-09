@@ -176,8 +176,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   const [recommendations, setRecommendations] = useState<Vehicle[]>([]);
   const [initialSearchQuery, setInitialSearchQuery] = useState<string>('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [userLocation, setUserLocation] = useState<string>('Mumbai');
-  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [userLocation, setUserLocationState] = useState<string>(() => {
+    try {
+      const storedLocation = localStorage.getItem('reRideUserLocation');
+      if (storedLocation && storedLocation.trim().length > 0) {
+        return storedLocation;
+      }
+    } catch (error) {
+      console.warn('Failed to load user location from localStorage:', error);
+    }
+    return 'Mumbai';
+  });
+  const [selectedCity, setSelectedCityState] = useState<string>(() => {
+    try {
+      const storedCity = localStorage.getItem('reRideSelectedCity');
+      if (storedCity && storedCity.trim().length > 0) {
+        return storedCity;
+      }
+      const storedLocation = localStorage.getItem('reRideUserLocation');
+      if (storedLocation && storedLocation.trim().length > 0) {
+        return storedLocation;
+      }
+    } catch (error) {
+      console.warn('Failed to load selected city from localStorage:', error);
+    }
+    return '';
+  });
   const [users, setUsers] = useState<User[]>([]);
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => getSettings());
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>(() => getAuditLog());
@@ -301,6 +325,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     }
   }, [addToast]);
 
+  const updateUserLocation = useCallback((location: string) => {
+    const nextLocation = (location ?? '').trim();
+    if (nextLocation.length === 0) {
+      setUserLocationState('Mumbai');
+      setSelectedCityState('');
+      try {
+        localStorage.removeItem('reRideUserLocation');
+        localStorage.removeItem('reRideSelectedCity');
+      } catch (error) {
+        console.warn('Failed to clear stored location:', error);
+      }
+      return;
+    }
+
+    setUserLocationState(prev => (prev === nextLocation ? prev : nextLocation));
+    setSelectedCityState(prev => (prev === nextLocation ? prev : nextLocation));
+
+    try {
+      localStorage.setItem('reRideUserLocation', nextLocation);
+    } catch (error) {
+      console.warn('Failed to persist location selection:', error);
+    }
+
+    try {
+      localStorage.setItem('reRideSelectedCity', nextLocation);
+    } catch (error) {
+      console.warn('Failed to persist selected city:', error);
+    }
+  }, []);
+
+  const updateSelectedCity = useCallback((city: string) => {
+    const trimmedCity = (city ?? '').trim();
+
+    setSelectedCityState(prev => (prev === trimmedCity ? prev : trimmedCity));
+
+    try {
+      if (trimmedCity.length > 0) {
+        localStorage.setItem('reRideSelectedCity', trimmedCity);
+        setUserLocationState(prev => (prev === trimmedCity ? prev : trimmedCity));
+        localStorage.setItem('reRideUserLocation', trimmedCity);
+      } else {
+        localStorage.removeItem('reRideSelectedCity');
+      }
+    } catch (error) {
+      console.warn('Failed to persist selected city:', error);
+    }
+  }, []);
+
   const navigate = useCallback((view: View, params?: { city?: string }) => {
     const isNavigatingAwayFromSellerProfile = currentView === View.SELLER_PROFILE && view !== View.SELLER_PROFILE;
     if (isNavigatingAwayFromSellerProfile) { 
@@ -318,10 +390,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     
     if (view === View.USED_CARS && currentView !== View.HOME) setSelectedCategory('ALL');
     if (view === View.CITY_LANDING && params?.city) {
-      setSelectedCity(params.city);
+      updateSelectedCity(params.city);
     }
     if (view === View.USED_CARS && params?.city) {
-      setSelectedCity(params.city);
+      updateSelectedCity(params.city);
     }
     if (view === View.SELLER_DASHBOARD && currentUser?.role !== 'seller') setCurrentView(View.LOGIN_PORTAL);
     else if (view === View.ADMIN_PANEL && currentUser?.role !== 'admin') setCurrentView(View.ADMIN_LOGIN);
@@ -399,6 +471,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
 
     loadInitialData();
   }, [addToast]);
+
+  // Refresh server-sourced data whenever the authenticated user changes
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    let isSubscribed = true;
+
+    const syncLatestData = async () => {
+      try {
+        setIsLoading(true);
+        const [vehiclesData, usersData] = await Promise.all([
+          dataService.getVehicles(),
+          dataService.getUsers()
+        ]);
+
+        if (!isSubscribed) {
+          return;
+        }
+
+        setVehicles(vehiclesData);
+        setUsers(usersData);
+
+        // Update recommendations with the latest data
+        if (vehiclesData && vehiclesData.length > 0) {
+          setRecommendations(vehiclesData.slice(0, 6));
+        }
+      } catch (error) {
+        console.error('AppProvider: Failed to sync latest data after authentication:', error);
+        addToast('Unable to sync the latest listings. Showing cached data instead.', 'warning');
+      } finally {
+        if (isSubscribed) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    syncLatestData();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [currentUser?.email, currentUser?.role, addToast]);
 
   // Save conversations to localStorage whenever they change
   useEffect(() => {
@@ -560,8 +676,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     setRecommendations,
     setInitialSearchQuery,
     setIsCommandPaletteOpen,
-    setUserLocation,
-    setSelectedCity,
+    setUserLocation: updateUserLocation,
+    setSelectedCity: updateSelectedCity,
     setUsers,
     setPlatformSettings,
     setAuditLog,
@@ -1423,24 +1539,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       addToast(`Offer ${response} successfully`, 'success');
     },
   }), [
-    // Dependencies for useMemo
     currentView, previousView, selectedVehicle, vehicles, isLoading, currentUser,
     comparisonList, ratings, sellerRatings, wishlist, conversations, toasts,
     forgotPasswordRole, typingStatus, selectedCategory, publicSellerProfile,
     activeChat, isAnnouncementVisible, recommendations, initialSearchQuery,
     isCommandPaletteOpen, userLocation, selectedCity, users, platformSettings,
     auditLog, vehicleData, faqItems, supportTickets, notifications,
-    // Functions that don't change often
     setCurrentView, setPreviousView, setSelectedVehicle, setVehicles, setIsLoading,
     setCurrentUser, setComparisonList, setWishlist, setConversations, setToasts,
     setForgotPasswordRole, setTypingStatus, setSelectedCategory, setPublicSellerProfile,
     setActiveChat, setIsAnnouncementVisible, setRecommendations, setInitialSearchQuery,
-    setIsCommandPaletteOpen, setUserLocation, setSelectedCity, setUsers,
+    setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
     setNotifications, addToast, removeToast, navigate, handleLogin, handleLogout,
-    updateVehicleHandler,
-    // Add missing dependencies
-    setCurrentUser, setUsers
+    updateVehicleHandler
   ]);
 
   return (
