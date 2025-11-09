@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import connectToDatabase from '../lib/db.js';
-import VehicleDataModel from '../models/VehicleData.js';
+import connectToDatabase from '../lib/db';
+import VehicleDataModel from '../models/VehicleData';
 
 export default async function handler(
   req: VercelRequest,

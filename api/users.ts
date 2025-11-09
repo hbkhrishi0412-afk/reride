@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
-import connectToDatabase from '../lib/db.js';
-import User from '../models/User.js';
+import connectToDatabase from '../lib/db';
+import User from '../models/User';
 import { 
   hashPassword, 
   validatePassword, 
@@ -11,8 +11,8 @@ import {
   getSecurityHeaders,
   sanitizeObject,
   validateEmail
-} from '../utils/security.js';
-import { getSecurityConfig } from '../utils/security-config.js';
+} from '../utils/security';
+import { getSecurityConfig } from '../utils/security-config';
 
 // Helper function to calculate trust score (if needed)
 function calculateTrustScore(user: any): number {

@@ -1,4 +1,9 @@
-import { validateEmail, validatePassword, validateMobile, validateUserInput } from '../api/main';
+import {
+  validateEmail,
+  validateMobile,
+  validateUserInput,
+  validatePasswordStrength,
+} from '../utils/security';
 
 describe('API Input Validation', () => {
   describe('validateEmail', () => {
@@ -18,23 +23,23 @@ describe('API Input Validation', () => {
   });
 
   describe('validatePassword', () => {
-    it('should validate passwords with 8+ characters', () => {
-      expect(validatePassword('password123')).toBe(true);
-      expect(validatePassword('12345678')).toBe(true);
-      expect(validatePassword('MySecurePass!')).toBe(true);
+    it('should validate strong passwords', () => {
+      expect(validatePasswordStrength('Password123!').isValid).toBe(true);
+      expect(validatePasswordStrength('SecurePass1@').isValid).toBe(true);
+      expect(validatePasswordStrength('Another$Pass2').isValid).toBe(true);
     });
 
-    it('should reject passwords with less than 8 characters', () => {
-      expect(validatePassword('1234567')).toBe(false);
-      expect(validatePassword('pass')).toBe(false);
-      expect(validatePassword('')).toBe(false);
+    it('should reject weak passwords', () => {
+      expect(validatePasswordStrength('1234567').isValid).toBe(false);
+      expect(validatePasswordStrength('password').isValid).toBe(false);
+      expect(validatePasswordStrength('').isValid).toBe(false);
     });
   });
 
   describe('validateMobile', () => {
     it('should validate 10-digit mobile numbers', () => {
       expect(validateMobile('9876543210')).toBe(true);
-      expect(validateMobile('1234567890')).toBe(true);
+      expect(validateMobile('9123456789')).toBe(true);
     });
 
     it('should reject invalid mobile numbers', () => {
@@ -49,7 +54,7 @@ describe('API Input Validation', () => {
     it('should validate complete user data', () => {
       const userData = {
         email: 'test@example.com',
-        password: 'password123',
+        password: 'Password123!',
         name: 'John Doe',
         mobile: '9876543210',
         role: 'customer'
@@ -72,8 +77,11 @@ describe('API Input Validation', () => {
       const result = validateUserInput(userData);
       expect(result.isValid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors).toContain('Valid email is required');
+      expect(result.errors).toContain('Valid email address is required');
       expect(result.errors).toContain('Password must be at least 8 characters long');
+      expect(result.errors).toContain('Password must contain at least one uppercase letter');
+      expect(result.errors).toContain('Password must contain at least one lowercase letter');
+      expect(result.errors).toContain('Password must contain at least one special character');
       expect(result.errors).toContain('Name must be at least 2 characters long');
       expect(result.errors).toContain('Valid 10-digit mobile number is required');
       expect(result.errors).toContain('Valid role (customer, seller, admin) is required');
@@ -164,7 +172,7 @@ describe('API Endpoints', () => {
 
       const validation = validateUserInput(mockRequest.body);
       expect(validation.isValid).toBe(false);
-      expect(validation.errors).toContain('Valid email is required');
+      expect(validation.errors).toContain('Valid email address is required');
     });
 
     it('should reject registration with existing email', async () => {

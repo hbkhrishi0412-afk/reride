@@ -12,6 +12,7 @@ import { dataService } from '../services/dataService';
 import { loadingManager, LOADING_OPERATIONS, withLoadingTimeout } from '../utils/loadingManager';
 import { useTimeout } from '../hooks/useCleanup';
 import { VEHICLE_DATA } from './vehicleData';
+import { isDevelopmentEnvironment } from '../utils/environment';
 
 interface VehicleUpdateOptions {
   successMessage?: string;
@@ -737,7 +738,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         setUsers(prev => [...prev, newUser]);
         
         // Save to localStorage in development
-        const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost';
+        const isDevelopment = isDevelopmentEnvironment() || window.location.hostname === 'localhost';
         if (isDevelopment) {
           const { getUsersLocal } = await import('../services/userService');
           const users = await getUsersLocal();
@@ -1186,7 +1187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     updateUser: async (email: string, updates: Partial<User>) => {
       try {
         // Check if we're in development mode (localStorage)
-        const isDevelopment = import.meta.env.DEV || 
+        const isDevelopment = isDevelopmentEnvironment() ||
                              window.location.hostname === 'localhost' || 
                              window.location.hostname === '127.0.0.1' ||
                              window.location.hostname.includes('localhost') ||

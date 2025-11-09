@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
-import connectToDatabase from '../lib/db.js';
-import User from '../models/User.js';
-import Vehicle from '../models/Vehicle.js';
-import VehicleDataModel from '../models/VehicleData.js';
-import { PLAN_DETAILS } from '../constants.js';
-import NewCar from '../models/NewCar.js';
+import connectToDatabase from '../lib/db';
+import User from '../models/User';
+import Vehicle from '../models/Vehicle';
+import VehicleDataModel from '../models/VehicleData';
+import { PLAN_DETAILS } from '../constants';
+import NewCar from '../models/NewCar';
 import { 
   hashPassword, 
   validatePassword, 
@@ -15,8 +15,8 @@ import {
   getSecurityHeaders,
   sanitizeObject,
   validateEmail
-} from '../utils/security.js';
-import { getSecurityConfig } from '../utils/security-config.js';
+} from '../utils/security';
+import { getSecurityConfig } from '../utils/security-config';
 
 // Helper: Calculate distance between coordinates
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {

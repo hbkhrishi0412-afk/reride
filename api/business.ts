@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import connectToDatabase from '../lib/db.js';
-import { planService } from '../services/planService.js';
+import connectToDatabase from '../lib/db';
+import { planService } from '../services/planService';
 
 export default async function handler(
   req: VercelRequest,

@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { isDevelopmentEnvironment } from '../utils/environment';
 
 interface Props {
   children: ReactNode;
@@ -36,7 +37,7 @@ class ErrorBoundary extends Component<Props, State> {
     }
 
     // Log error to external service in production
-    if (import.meta.env.PROD) {
+    if (!isDevelopmentEnvironment()) {
       // TODO: Send to error tracking service (e.g., Sentry, LogRocket)
       console.error('Production error:', {
         context: this.props.context,
@@ -78,7 +79,7 @@ class ErrorBoundary extends Component<Props, State> {
               </p>
             </div>
 
-            {import.meta.env.DEV && this.state.error && (
+            {isDevelopmentEnvironment() && this.state.error && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
                 <h4 className="text-sm font-medium text-red-800 mb-2">Error Details (Development)</h4>
                 <p className="text-xs text-red-700 font-mono">{this.state.error.message}</p>

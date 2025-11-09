@@ -1,6 +1,7 @@
 
 import type { Vehicle, User, VehicleCategory } from '../types';
 import { isVehicle, isApiResponse } from '../types';
+import { isDevelopmentEnvironment } from '../utils/environment';
 
 // Fallback mock vehicles to prevent loading issues
 const FALLBACK_VEHICLES: Vehicle[] = [
@@ -242,7 +243,7 @@ const deleteVehicleApi = async (vehicleId: number): Promise<{ success: boolean, 
 // Use local storage in development, API in production
 const isDevelopment = (): boolean => {
   try {
-    return import.meta.env.DEV || 
+    return isDevelopmentEnvironment() || 
            window.location.hostname === 'localhost' || 
            window.location.hostname === '127.0.0.1' ||
            window.location.hostname.includes('localhost') ||

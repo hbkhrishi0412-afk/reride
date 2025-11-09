@@ -21,6 +21,7 @@ import useIsMobileApp from './hooks/useIsMobileApp';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation } from './types';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
+import { isDevelopmentEnvironment } from './utils/environment';
 
 // Simple loading component
 const LoadingSpinner: React.FC = () => (
@@ -903,7 +904,7 @@ const AppContent: React.FC = React.memo(() => {
                   
                   // Current password is correct, now update to new password
                   // Check if we're in production (using API) or development (localStorage)
-                  const isDevelopment = import.meta.env.DEV || 
+                  const isDevelopment = isDevelopmentEnvironment() || 
                                        window.location.hostname === 'localhost' || 
                                        window.location.hostname === '127.0.0.1' ||
                                        window.location.hostname.includes('localhost') ||

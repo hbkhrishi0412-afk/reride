@@ -5,6 +5,7 @@ import './index.css';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { reportWebVitals, logPerformanceMetrics } from './utils/performance';
+import { isDevelopmentEnvironment } from './utils/environment';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -16,7 +17,11 @@ const root = ReactDOM.createRoot(rootElement);
 // Disable StrictMode in development for faster loading
 // StrictMode causes intentional double-renders which slows down initial load
 // Re-enable for production builds or when debugging
-const isDev = import.meta.env.DEV;
+const isDev = isDevelopmentEnvironment();
+
+if (typeof window !== 'undefined') {
+  (window as any).__APP_DEV__ = isDev;
+}
 
 root.render(
   isDev ? (
@@ -35,7 +40,7 @@ root.render(
 // Service worker disabled to prevent caching issues
 // Uncomment when caching strategy is fully tested
 /*
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && !isDev) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')

@@ -1,5 +1,6 @@
 
 import type { User } from '../types';
+import { isDevelopmentEnvironment } from '../utils/environment';
 
 // Fallback mock users to prevent loading issues
 const FALLBACK_USERS: User[] = [
@@ -378,12 +379,13 @@ const authApi = async (body: any): Promise<any> => {
 // --- Environment Detection ---
 // Use local storage in development, API in production
 // Force development mode on localhost even if running on different ports
-const isDevelopment = import.meta.env.DEV || 
-                     window.location.hostname === 'localhost' || 
-                     window.location.hostname === '127.0.0.1' ||
-                     window.location.hostname.includes('localhost') ||
-                     window.location.hostname.includes('127.0.0.1') ||
-                     window.location.port !== '';
+const isDevelopment =
+  isDevelopmentEnvironment() ||
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname.includes('localhost') ||
+  window.location.hostname.includes('127.0.0.1') ||
+  window.location.port !== '';
 
 // --- Exported Environment-Aware Service Functions ---
 
