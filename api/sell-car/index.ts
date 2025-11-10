@@ -30,22 +30,68 @@ let cachedClient: MongoClient | null = null;
 let cachedDb: Db | null = null;
 
 async function connectToDatabase() {
+  // Check if cached connection is still alive
   if (cachedClient && cachedDb) {
-    return { client: cachedClient, db: cachedDb };
+    try {
+      // Ping the database to verify connection is alive
+      await cachedDb.admin().ping();
+      return { client: cachedClient, db: cachedDb };
+    } catch (error) {
+      // Connection is dead, reset cache
+      console.warn('⚠️ Cached MongoDB connection is dead, reconnecting...');
+      try {
+        await cachedClient.close();
+      } catch (closeError) {
+        // Ignore close errors
+      }
+      cachedClient = null;
+      cachedDb = null;
+    }
+  }
+
+  if (!process.env.MONGODB_URI) {
+    throw new Error('MONGODB_URI environment variable is not configured');
   }
 
   try {
-    const client = new MongoClient(MONGODB_URI);
+    const client = new MongoClient(MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
+    
     await client.connect();
-    const db = client.db(DB_NAME);
+    
+    // Parse URI to check if database name is already included
+    let dbNameFromUri: string | null = null;
+    
+    try {
+      // Handle mongodb:// and mongodb+srv:// URIs
+      const uriMatch = MONGODB_URI.match(/mongodb(\+srv)?:\/\/[^/]+(?:\/([^?]+))?/);
+      if (uriMatch && uriMatch[2]) {
+        dbNameFromUri = uriMatch[2];
+      }
+    } catch (error) {
+      // If URI parsing fails, use default database name
+      console.warn('⚠️ Could not parse MongoDB URI, using default database name');
+    }
+    
+    const dbName = dbNameFromUri || DB_NAME;
+    
+    const db = client.db(dbName);
+    
+    // Verify connection by pinging
+    await db.admin().ping();
     
     cachedClient = client;
     cachedDb = db;
     
+    console.log(`✅ MongoDB connected successfully to database: ${dbName}`);
     return { client, db };
   } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw new Error('Database connection failed');
+    console.error('❌ MongoDB connection error:', error);
+    cachedClient = null;
+    cachedDb = null;
+    throw new Error(`Database connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
