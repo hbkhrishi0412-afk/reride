@@ -2,12 +2,23 @@
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
+import { config } from 'dotenv';
+
+// Load environment variables from .env file
+config();
 
 const app = express();
 const PORT = 3001;
 
-// MongoDB connection
-const MONGODB_URI = 'mongodb+srv://hbk_hrishi0412:Qaz%403755@cluster0.nmiwnl7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+// MongoDB connection - Use environment variable (SECURE)
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI environment variable is not set!');
+  console.error('📝 Please create a .env file with your MongoDB connection string.');
+  console.error('💡 See .env.example for the required format.');
+  process.exit(1);
+}
 
 // Enable CORS for all routes
 app.use(cors());
