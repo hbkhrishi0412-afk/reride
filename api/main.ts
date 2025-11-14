@@ -52,6 +52,11 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const config = getSecurityConfig();
 
+type HandlerOptions = {
+  mongoAvailable: boolean;
+  mongoFailureReason?: string;
+};
+
 const checkRateLimit = (identifier: string): { allowed: boolean; remaining: number } => {
   const now = Date.now();
   const key = identifier;
@@ -115,32 +120,33 @@ export default async function handler(
   res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
 
   try {
-    // Try to connect to database, but don't fail if it's not available
-    // For PUT/POST/DELETE requests, let individual handlers manage connection errors
-    // For GET requests, return early if connection fails
-    if (req.method === 'GET') {
+    let mongoAvailable = true;
+    let mongoFailureReason: string | undefined;
+
+    const connectWithGracefulFallback = async () => {
       try {
         await connectToDatabase();
       } catch (dbError) {
-        const reason = dbError instanceof MongoConfigError
+        mongoAvailable = false;
+        mongoFailureReason = dbError instanceof MongoConfigError
           ? 'MongoDB is not configured. Set MONGODB_URI in your environment.'
           : 'Database temporarily unavailable. Please try again later.';
-        console.warn('Database connection failed for GET request, using fallback data:', dbError);
-        return res.status(503).json({ 
-          success: false, 
-          reason,
-          fallback: true,
-          data: []
-        });
+        console.warn('Database connection issue:', dbError);
+        if (req.method !== 'GET') {
+          return res.status(503).json({
+            success: false,
+            reason: mongoFailureReason,
+            fallback: true
+          });
+        }
+        res.setHeader('X-Database-Fallback', 'true');
       }
-    } else {
-      // For non-GET requests, attempt connection but let handler manage errors
-      try {
-        await connectToDatabase();
-      } catch (dbError) {
-        console.warn('Database connection warning for', req.method, 'request:', dbError);
-        // Don't return early - let the handler manage the connection error
-      }
+      return undefined;
+    };
+
+    const earlyResponse = await connectWithGracefulFallback();
+    if (earlyResponse) {
+      return earlyResponse;
     }
 
     // Route based on the path
@@ -148,23 +154,28 @@ export default async function handler(
     const pathname = url.pathname;
 
     // Route to appropriate handler
+    const handlerOptions: HandlerOptions = {
+      mongoAvailable,
+      mongoFailureReason
+    };
+
     if (pathname.includes('/users') || pathname.endsWith('/users')) {
-      return await handleUsers(req, res);
+      return await handleUsers(req, res, handlerOptions);
     } else if (pathname.includes('/vehicles') || pathname.endsWith('/vehicles')) {
-      return await handleVehicles(req, res);
+      return await handleVehicles(req, res, handlerOptions);
     } else if (pathname.includes('/admin') || pathname.endsWith('/admin')) {
-      return await handleAdmin(req, res);
+      return await handleAdmin(req, res, handlerOptions);
     } else if (pathname.includes('/db-health') || pathname.endsWith('/db-health')) {
       return await handleHealth(req, res);
     } else if (pathname.includes('/seed') || pathname.endsWith('/seed')) {
-      return await handleSeed(req, res);
+      return await handleSeed(req, res, handlerOptions);
     } else if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
-      return await handleVehicleData(req, res);
+      return await handleVehicleData(req, res, handlerOptions);
     } else if (pathname.includes('/new-cars') || pathname.endsWith('/new-cars')) {
-      return await handleNewCars(req, res);
+      return await handleNewCars(req, res, handlerOptions);
     } else {
       // Default to users for backward compatibility
-      return await handleUsers(req, res);
+      return await handleUsers(req, res, handlerOptions);
     }
 
   } catch (error) {
@@ -195,9 +206,20 @@ export default async function handler(
 }
 
 // Users handler - preserves exact functionality from users.ts
-async function handleUsers(req: VercelRequest, res: VercelResponse) {
+async function handleUsers(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  const { mongoAvailable, mongoFailureReason } = options;
+  const unavailableResponse = () => res.status(503).json({
+    success: false,
+    reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
+    fallback: true
+  });
+
   // Handle authentication actions (POST with action parameter)
   if (req.method === 'POST') {
+    if (!mongoAvailable) {
+      return unavailableResponse();
+    }
+
     const { action, email, password, role, name, mobile, firebaseUid, authProvider, avatarUrl } = req.body;
 
     // LOGIN
@@ -444,6 +466,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
   // GET - Get all users
   if (req.method === 'GET') {
     const { action, email } = req.query;
+
+    if (!mongoAvailable) {
+      const fallbackUsers = await getFallbackUsers();
+      if (action === 'trust-score' && email) {
+        const user = fallbackUsers.find(u => u.email === email);
+        if (!user) {
+          return res.status(404).json({ success: false, reason: 'User not found', fallback: true });
+        }
+        const trustScore = calculateTrustScore(user);
+        return res.status(200).json({
+          success: true,
+          trustScore,
+          email: user.email,
+          name: user.name,
+          fallback: true
+        });
+      }
+      return res.status(200).json(fallbackUsers);
+    }
     
     if (action === 'trust-score' && email) {
       const user = await User.findOne({ email: email as string });
@@ -466,6 +507,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
 
   // PUT - Update user
   if (req.method === 'PUT') {
+    if (!mongoAvailable) {
+      return unavailableResponse();
+    }
     try {
       // Ensure database connection is established first
       console.log('🔌 Connecting to database for user update...');
@@ -636,6 +680,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
 
   // DELETE - Delete user
   if (req.method === 'DELETE') {
+    if (!mongoAvailable) {
+      return unavailableResponse();
+    }
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ success: false, reason: 'Email is required for deletion.' });
@@ -653,9 +700,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse) {
 }
 
 // Vehicles handler - preserves exact functionality from vehicles.ts
-async function handleVehicles(req: VercelRequest, res: VercelResponse) {
+async function handleVehicles(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  const { mongoAvailable, mongoFailureReason } = options;
   // Check action type from query parameter
   const { type, action } = req.query;
+  const unavailableResponse = () => res.status(503).json({
+    success: false,
+    reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
+    fallback: true
+  });
 
   // VEHICLE DATA ENDPOINTS (brands, models, variants)
   if (type === 'data') {
@@ -704,6 +757,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
     };
 
     if (req.method === 'GET') {
+      if (!mongoAvailable) {
+        return res.status(200).json(defaultData);
+      }
       try {
         await connectToDatabase();
         console.log('📡 Connected to database for vehicles data fetch operation');
@@ -724,6 +780,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
+      if (!mongoAvailable) {
+        console.warn('⚠️ Vehicle data save attempted without MongoDB. Returning fallback acknowledgement.');
+        return res.status(200).json({
+          success: true,
+          data: req.body,
+          message: 'Vehicle data processed (database unavailable, using fallback)',
+          fallback: true,
+          timestamp: new Date().toISOString()
+        });
+      }
       try {
         await connectToDatabase();
         console.log('📡 Connected to database for vehicles data save operation');
@@ -767,6 +833,38 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
 
   // VEHICLE CRUD OPERATIONS
   if (req.method === 'GET') {
+    if (!mongoAvailable) {
+      const fallbackVehicles = await getFallbackVehicles();
+      if (action === 'city-stats' && req.query.city) {
+        const cityVehicles = fallbackVehicles.filter(v => v.city === req.query.city);
+        const stats = {
+          totalVehicles: cityVehicles.length,
+          averagePrice: cityVehicles.reduce((sum, v) => sum + (v.price || 0), 0) / (cityVehicles.length || 1),
+          popularMakes: getPopularMakes(cityVehicles),
+          priceRange: getPriceRange(cityVehicles)
+        };
+        return res.status(200).json({ ...stats, fallback: true });
+      }
+
+      if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
+        const nearbyVehicles = fallbackVehicles.filter(vehicle => {
+          if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
+          const distance = calculateDistance(
+            parseFloat(req.query.lat as string),
+            parseFloat(req.query.lng as string),
+            vehicle.exactLocation.lat,
+            vehicle.exactLocation.lng
+          );
+          return distance <= parseFloat(req.query.radius as string);
+        });
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json(nearbyVehicles);
+      }
+
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json(fallbackVehicles);
+    }
+
     if (action === 'city-stats' && req.query.city) {
       const cityVehicles = await Vehicle.find({ city: req.query.city as string });
       const stats = {
@@ -862,6 +960,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
+    if (!mongoAvailable) {
+      return unavailableResponse();
+    }
     if (action === 'refresh') {
       const { vehicleId, refreshAction, sellerEmail } = req.body;
       const vehicle = await Vehicle.findOne({ id: vehicleId });
@@ -1220,6 +1321,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PUT') {
+    if (!mongoAvailable) {
+      return unavailableResponse();
+    }
     try {
       // Ensure database connection
       await connectToDatabase();
@@ -1253,6 +1357,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'DELETE') {
+    if (!mongoAvailable) {
+      return unavailableResponse();
+    }
     try {
       // Ensure database connection
       await connectToDatabase();
@@ -1281,8 +1388,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
 }
 
 // Admin handler - preserves exact functionality from admin.ts
-async function handleAdmin(req: VercelRequest, res: VercelResponse) {
+async function handleAdmin(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   const { action } = req.query;
+  const { mongoAvailable, mongoFailureReason } = options;
 
   if (action === 'health') {
     try {
@@ -1295,6 +1403,17 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse) {
           details: 'Please add MONGODB_URI in Vercel dashboard under Environment Variables',
           checks: [
             { name: 'MongoDB URI Configuration', status: 'FAIL', details: 'MONGODB_URI environment variable not found' }
+          ]
+        });
+      }
+
+      if (!mongoAvailable) {
+        return res.status(200).json({
+          success: false,
+          message: mongoFailureReason || 'Database connection unavailable.',
+          details: mongoFailureReason || 'The API is running in fallback mode without MongoDB.',
+          checks: [
+            { name: 'MongoDB Availability', status: 'FAIL', details: mongoFailureReason || 'Connection failed' }
           ]
         });
       }
@@ -1322,6 +1441,13 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse) {
   }
 
   if (action === 'seed') {
+    if (!mongoAvailable) {
+      return res.status(503).json({
+        success: false,
+        message: mongoFailureReason || 'Database unavailable. Cannot seed data.',
+        fallback: true
+      });
+    }
     try {
       const users = await seedUsers();
       const vehicles = await seedVehicles();
@@ -1373,9 +1499,17 @@ async function handleHealth(_req: VercelRequest, res: VercelResponse) {
 }
 
 // Seed handler - preserves exact functionality from seed.ts
-async function handleSeed(req: VercelRequest, res: VercelResponse) {
+async function handleSeed(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  }
+
+  if (!options.mongoAvailable) {
+    return res.status(503).json({
+      success: false,
+      message: options.mongoFailureReason || 'Database unavailable. Cannot seed data.',
+      fallback: true
+    });
   }
 
   try {
@@ -1399,30 +1533,34 @@ async function handleSeed(req: VercelRequest, res: VercelResponse) {
 }
 
 // Vehicle Data handler - preserves exact functionality from vehicle-data.ts
-async function handleVehicleData(req: VercelRequest, res: VercelResponse) {
+async function handleVehicleData(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  const defaultData = {
+    FOUR_WHEELER: [
+      {
+        name: "Maruti Suzuki",
+        models: [
+          { name: "Swift", variants: ["LXi", "VXi", "VXi (O)", "ZXi", "ZXi+"] },
+          { name: "Baleno", variants: ["Sigma", "Delta", "Zeta", "Alpha"] }
+        ]
+      }
+    ],
+    TWO_WHEELER: [
+      {
+        name: "Honda",
+        models: [
+          { name: "Activa 6G", variants: ["Standard", "DLX", "Smart"] }
+        ]
+      }
+    ]
+  };
+
   if (req.method === 'GET') {
+    if (!options.mongoAvailable) {
+      return res.status(200).json(defaultData);
+    }
+
     let vehicleDataDoc = await VehicleDataModel.findOne();
     if (!vehicleDataDoc) {
-      const defaultData = {
-        FOUR_WHEELER: [
-          {
-            name: "Maruti Suzuki",
-            models: [
-              { name: "Swift", variants: ["LXi", "VXi", "VXi (O)", "ZXi", "ZXi+"] },
-              { name: "Baleno", variants: ["Sigma", "Delta", "Zeta", "Alpha"] }
-            ]
-          }
-        ],
-        TWO_WHEELER: [
-          {
-            name: "Honda",
-            models: [
-              { name: "Activa 6G", variants: ["Standard", "DLX", "Smart"] }
-            ]
-          }
-        ]
-      };
-      
       vehicleDataDoc = new VehicleDataModel({ data: defaultData });
       await vehicleDataDoc.save();
     }
@@ -1431,6 +1569,16 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
+    if (!options.mongoAvailable) {
+      return res.status(200).json({
+        success: true,
+        data: req.body,
+        message: 'Vehicle data processed (database unavailable, using fallback)',
+        fallback: true,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     const vehicleData = await VehicleDataModel.findOneAndUpdate(
       {},
       { data: req.body },
@@ -1440,6 +1588,49 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(405).json({ success: false, reason: 'Method not allowed' });
+}
+
+let cachedFallbackVehicles: any[] | null = null;
+let cachedFallbackUsers: any[] | null = null;
+
+async function getFallbackVehicles(): Promise<any[]> {
+  if (cachedFallbackVehicles) {
+    return cachedFallbackVehicles;
+  }
+
+  try {
+    const { MOCK_VEHICLES } = await import('../constants');
+    const vehicles = await MOCK_VEHICLES();
+    cachedFallbackVehicles = vehicles;
+    return vehicles;
+  } catch (error) {
+    console.warn('⚠️ Unable to load MOCK_VEHICLES fallback:', error);
+  }
+
+  cachedFallbackVehicles = [];
+  return cachedFallbackVehicles;
+}
+
+async function getFallbackUsers(): Promise<any[]> {
+  if (cachedFallbackUsers) {
+    return cachedFallbackUsers;
+  }
+
+  cachedFallbackUsers = [
+    {
+      name: 'Demo User',
+      email: 'demo@reride.com',
+      mobile: '9876543210',
+      role: 'customer',
+      location: 'Mumbai',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      subscriptionPlan: 'free',
+      isVerified: false
+    }
+  ];
+
+  return cachedFallbackUsers;
 }
 
 // Helper functions
@@ -1478,7 +1669,15 @@ function getPriceRange(vehicles: any[]): { min: number; max: number } {
 }
 
 // New Cars handler - CRUD for new car catalog
-async function handleNewCars(req: VercelRequest, res: VercelResponse) {
+async function handleNewCars(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  if (!options.mongoAvailable) {
+    return res.status(503).json({
+      success: false,
+      reason: options.mongoFailureReason || 'Database unavailable. New car catalog requires MongoDB.',
+      fallback: true
+    });
+  }
+
   if (req.method === 'GET') {
     const items = await NewCar.find({}).sort({ updatedAt: -1 });
     return res.status(200).json(items);
