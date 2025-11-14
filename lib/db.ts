@@ -19,6 +19,30 @@ if (!cached) {
   cached = (globalThis as any).mongoose = { conn: null, promise: null };
 }
 
+function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
+  try {
+    const parsed = new URL(uri);
+    const hasDatabase = parsed.pathname && parsed.pathname !== '/' && parsed.pathname.length > 1;
+    if (!hasDatabase) {
+      parsed.pathname = `/${dbName}`;
+      console.warn(`⚠️ MONGODB_URI missing database name. Defaulting to /${dbName}.`);
+      return parsed.toString();
+    }
+    return uri;
+  } catch (error) {
+    console.warn('⚠️ Unable to parse MONGODB_URI. Falling back to manual handling.', error);
+    if (uri.includes(`/${dbName}`)) {
+      return uri;
+    }
+    if (uri.includes('?')) {
+      const [base, query] = uri.split('?');
+      const sanitizedBase = base.endsWith('/') ? base.slice(0, -1) : base;
+      return `${sanitizedBase}/${dbName}?${query}`;
+    }
+    return uri.endsWith('/') ? `${uri}${dbName}` : `${uri}/${dbName}`;
+  }
+}
+
 async function connectToDatabase(): Promise<Mongoose> {
   // Return existing connection if available
   if (cached.conn && mongoose.connection.readyState === 1) {
@@ -40,8 +64,10 @@ async function connectToDatabase(): Promise<Mongoose> {
         throw new MongoConfigError('Please define the MONGODB_URI environment variable.');
     }
 
+    const normalizedUri = ensureDatabaseInUri(process.env.MONGODB_URI);
+
     console.log('🔄 Creating new MongoDB connection...');
-    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts)
+    cached.promise = mongoose.connect(normalizedUri, opts)
       .then(async (mongooseInstance) => {
         console.log('✅ MongoDB connected successfully to database:', mongooseInstance.connection.name);
         return mongooseInstance;
