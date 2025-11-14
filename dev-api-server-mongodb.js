@@ -2,12 +2,18 @@
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const app = express();
 const PORT = 3001;
 
 // MongoDB connection
-const MONGODB_URI = 'mongodb+srv://hbk_hrishi0412:Qaz%403755@cluster0.nmiwnl7.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+    console.warn('⚠️  MONGODB_URI is not defined. Set it in your .env file or shell before starting dev-api-server-mongodb.');
+}
 
 // Enable CORS for all routes
 app.use(cors());
@@ -16,6 +22,10 @@ app.use(express.json());
 // Connect to MongoDB
 async function connectToDatabase() {
     try {
+        if (!MONGODB_URI) {
+            throw new Error('MONGODB_URI is not configured');
+        }
+
         await mongoose.connect(MONGODB_URI, {
             bufferCommands: false,
             maxPoolSize: 10,

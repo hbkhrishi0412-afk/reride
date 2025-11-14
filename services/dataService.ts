@@ -14,13 +14,18 @@ class DataService {
 
   private detectDevelopment(): boolean {
     try {
-      // Force API usage instead of localStorage for now
-      return false;
-      // return import.meta.env.DEV || 
-      //        window.location.hostname === 'localhost' || 
-      //        window.location.hostname === '127.0.0.1' ||
-      //        window.location.hostname.includes('localhost') ||
-      //        window.location.protocol === 'file:';
+      if (typeof import.meta !== 'undefined' && import.meta.env) {
+        if (import.meta.env.VITE_FORCE_API === 'true') {
+          return false;
+        }
+      }
+      
+      const hostname = window?.location?.hostname ?? '';
+      const isLocalhost = hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.includes('localhost');
+      
+      return import.meta.env.DEV || isLocalhost || window.location.protocol === 'file:';
     } catch {
       return false;
     }

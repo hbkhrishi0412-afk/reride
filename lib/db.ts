@@ -3,6 +3,13 @@
 import mongoose from 'mongoose';
 import type { Mongoose } from 'mongoose';
 
+class MongoConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MongoConfigError';
+  }
+}
+
 // Connection caching logic to prevent multiple connections in a serverless environment.
 // FIX: Replace 'global' with 'globalThis' for broader environment compatibility.
 let cached = (globalThis as any).mongoose;
@@ -30,7 +37,7 @@ async function connectToDatabase(): Promise<Mongoose> {
     };
 
     if (!process.env.MONGODB_URI) {
-        throw new Error('Please define the MONGODB_URI environment variable.');
+        throw new MongoConfigError('Please define the MONGODB_URI environment variable.');
     }
 
     console.log('🔄 Creating new MongoDB connection...');
@@ -55,4 +62,5 @@ async function connectToDatabase(): Promise<Mongoose> {
   }
 }
 
+export { MongoConfigError };
 export default connectToDatabase;

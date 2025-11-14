@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
-import connectToDatabase from '../lib/db';
+import connectToDatabase, { MongoConfigError } from '../lib/db';
 import User from '../models/User';
 import Vehicle from '../models/Vehicle';
 import VehicleDataModel from '../models/VehicleData';
@@ -122,10 +122,13 @@ export default async function handler(
       try {
         await connectToDatabase();
       } catch (dbError) {
+        const reason = dbError instanceof MongoConfigError
+          ? 'MongoDB is not configured. Set MONGODB_URI in your environment.'
+          : 'Database temporarily unavailable. Please try again later.';
         console.warn('Database connection failed for GET request, using fallback data:', dbError);
         return res.status(503).json({ 
           success: false, 
-          reason: 'Database temporarily unavailable. Please try again later.',
+          reason,
           fallback: true,
           data: []
         });
@@ -793,40 +796,69 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse) {
     // Get all vehicles and auto-disable expired listings
     const vehicles = await Vehicle.find({}).sort({ createdAt: -1 });
     
-    // Migration: Set expiry dates for existing vehicles without listingExpiresAt
     const now = new Date();
-    for (const vehicle of vehicles) {
-      // If vehicle is published but has no expiry date, migrate it
-      if (!vehicle.listingExpiresAt && vehicle.status === 'published') {
-        const seller = await User.findOne({ email: vehicle.sellerEmail });
+    const sellerEmails = new Set<string>();
+    
+    vehicles.forEach(vehicle => {
+      if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
+        sellerEmails.add(vehicle.sellerEmail.toLowerCase());
+      }
+    });
+    
+    const sellerMap = new Map<string, any>();
+    if (sellerEmails.size > 0) {
+      const sellers = await User.find({ email: { $in: Array.from(sellerEmails) } }).lean();
+      sellers.forEach(seller => {
+        sellerMap.set(seller.email.toLowerCase(), seller);
+      });
+    }
+    
+    const bulkUpdates: any[] = [];
+    
+    vehicles.forEach(vehicle => {
+      const updateFields: Record<string, any> = {};
+      
+      if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
+        const seller = sellerMap.get(vehicle.sellerEmail.toLowerCase());
         if (seller) {
           if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
-            // Premium plan: use plan expiry date
-            vehicle.listingExpiresAt = seller.planExpiryDate;
-            await vehicle.save();
+            updateFields.listingExpiresAt = seller.planExpiryDate;
           } else if (seller.subscriptionPlan !== 'premium') {
-            // Free and Pro plans get 30-day expiry from today
             const expiryDate = new Date();
             expiryDate.setDate(expiryDate.getDate() + 30);
-            vehicle.listingExpiresAt = expiryDate.toISOString();
-            await vehicle.save();
+            updateFields.listingExpiresAt = expiryDate.toISOString();
           }
         }
       }
       
-      // Auto-disable expired listings
       if (vehicle.listingExpiresAt && vehicle.status === 'published') {
         const expiryDate = new Date(vehicle.listingExpiresAt);
         if (expiryDate < now) {
-          vehicle.status = 'unpublished';
-          vehicle.listingStatus = 'expired';
-          await vehicle.save();
+          updateFields.status = 'unpublished';
+          updateFields.listingStatus = 'expired';
         }
       }
+      
+      if (Object.keys(updateFields).length > 0) {
+        bulkUpdates.push({
+          updateOne: {
+            filter: { _id: vehicle._id },
+            update: { $set: updateFields }
+          }
+        });
+      }
+    });
+    
+    if (bulkUpdates.length > 0) {
+      await Vehicle.bulkWrite(bulkUpdates, { ordered: false });
     }
     
-    // Return vehicles after checking expiry
-    return res.status(200).json(vehicles);
+    // Return vehicles after checking expiry (latest data)
+    const refreshedVehicles = bulkUpdates.length > 0
+      ? await Vehicle.find({}).sort({ createdAt: -1 })
+      : vehicles;
+    
+    return res.status(200).json(refreshedVehicles);
   }
 
   if (req.method === 'POST') {
@@ -1414,9 +1446,10 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse) {
 function calculateTrustScore(user: any): number {
   let score = 50; // Base score
   
+  const plan = user.subscriptionPlan || user.plan;
   if (user.isVerified) score += 20;
-  if (user.plan === 'premium') score += 15;
-  if (user.plan === 'pro') score += 10;
+  if (plan === 'premium') score += 15;
+  if (plan === 'pro') score += 10;
   if (user.status === 'active') score += 10;
   
   return Math.min(100, score);
@@ -1592,3 +1625,4 @@ async function seedVehicles(): Promise<any[]> {
   const vehicles = await Vehicle.insertMany(sampleVehicles);
   return vehicles;
 }
+

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
-import connectToDatabase from '../lib/db';
+import connectToDatabase, { MongoConfigError } from '../lib/db';
 import User from '../models/User';
 import { 
   hashPassword, 
@@ -79,6 +79,13 @@ export default async function handler(
     
     // Return error for all methods that require database access
     if (req.method === 'GET') {
+      if (dbError instanceof MongoConfigError) {
+        return res.status(503).json({
+          success: false,
+          reason: 'MongoDB is not configured. Set MONGODB_URI in your environment.',
+          data: []
+        });
+      }
       return res.status(503).json({ 
         success: false, 
         reason: 'Database temporarily unavailable. Please try again later.',
@@ -87,6 +94,13 @@ export default async function handler(
     }
     
     // For PUT/POST/DELETE, return error immediately
+    if (dbError instanceof MongoConfigError) {
+      return res.status(503).json({
+        success: false,
+        reason: 'MongoDB is not configured. Please set MONGODB_URI in Vercel or your environment.',
+      });
+    }
+    
     return res.status(503).json({ 
       success: false, 
       reason: 'Database connection failed. Please check MONGODB_URI environment variable in Vercel.',
@@ -166,6 +180,12 @@ export default async function handler(
         }
       } catch (dbError) {
         console.error('❌ Database connection error during registration:', dbError);
+        if (dbError instanceof MongoConfigError) {
+          return res.status(503).json({
+            success: false,
+            reason: 'MongoDB is not configured. Set MONGODB_URI before registering users.'
+          });
+        }
         return res.status(503).json({ 
           success: false, 
           reason: 'Database connection failed. Please check MONGODB_URI configuration.',
