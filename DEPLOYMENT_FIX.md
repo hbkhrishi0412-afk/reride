@@ -6,7 +6,7 @@
 
 ### Step 1: Verify GitHub Connection ✅
 Your repository is linked to:
-- **GitHub**: `https://github.com/hbkhrishi0412-afk/strapi-cloud-template-blog-756ddeb066.git`
+- **GitHub**: `https://github.com/hbkhrishi0412-afk/reride.git`
 - **Vercel Project**: `reride-2` (Project ID: `prj_LBOUSWcbZMbpSURNvhiie5FKqvGK`)
 
 ### Step 2: Check Vercel Dashboard

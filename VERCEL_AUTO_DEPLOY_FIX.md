@@ -12,7 +12,7 @@
 3. Go to **Settings** → **Git**
 4. Verify:
    - ✅ GitHub repository is connected
-   - ✅ Repository: `hbkhrishi0412-afk/strapi-cloud-template-blog-756ddeb066`
+   - ✅ Repository: `hbkhrishi0412-afk/reride`
    - ✅ Production Branch: `main`
    - ✅ **Auto-deploy** is **ENABLED**
 
@@ -149,7 +149,7 @@ cat .vercel/project.json
 
 - **Project Name:** reride-2
 - **Project ID:** prj_LBOUSWcbZMbpSURNvhiie5FKqvGK
-- **GitHub Repo:** hbkhrishi0412-afk/strapi-cloud-template-blog-756ddeb066
+- **GitHub Repo:** hbkhrishi0412-afk/reride
 - **Branch:** main
 - **Latest Commit:** ac13e62 (should trigger deployment)
 
@@ -166,6 +166,7 @@ cat .vercel/project.json
 **Need Help?**
 - Vercel Docs: https://vercel.com/docs/concepts/git
 - Support: https://vercel.com/support
+
 
 
 
