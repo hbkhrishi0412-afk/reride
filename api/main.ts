@@ -17,6 +17,7 @@ import {
   validateEmail
 } from '../utils/security';
 import { getSecurityConfig } from '../utils/security-config';
+import { MongoClient, ObjectId } from 'mongodb';
 
 // Helper: Calculate distance between coordinates
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -173,6 +174,16 @@ export default async function handler(
       return await handleVehicleData(req, res, handlerOptions);
     } else if (pathname.includes('/new-cars') || pathname.endsWith('/new-cars')) {
       return await handleNewCars(req, res, handlerOptions);
+    } else if (pathname.includes('/system') || pathname.endsWith('/system')) {
+      return await handleSystem(req, res, handlerOptions);
+    } else if (pathname.includes('/utils') || pathname.endsWith('/utils') || pathname.includes('/test-connection')) {
+      return await handleUtils(req, res, handlerOptions);
+    } else if (pathname.includes('/ai') || pathname.endsWith('/ai') || pathname.includes('/gemini')) {
+      return await handleAI(req, res, handlerOptions);
+    } else if (pathname.includes('/content') || pathname.endsWith('/content')) {
+      return await handleContent(req, res, handlerOptions);
+    } else if (pathname.includes('/sell-car') || pathname.endsWith('/sell-car')) {
+      return await handleSellCar(req, res, handlerOptions);
     } else {
       // Default to users for backward compatibility
       return await handleUsers(req, res, handlerOptions);
@@ -1966,5 +1977,697 @@ async function seedVehicles(): Promise<any[]> {
   await Vehicle.deleteMany({});
   const vehicles = await Vehicle.insertMany(sampleVehicles);
   return vehicles;
+}
+
+// System handler - consolidates system.ts
+async function handleSystem(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  const { action } = req.query;
+  
+  switch (action) {
+    case 'health':
+      return await handleHealth(req, res);
+    case 'test-connection':
+      return await handleTestConnection(req, res);
+    default:
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid system action. Use ?action=health or ?action=test-connection' 
+      });
+  }
+}
+
+// Test Connection Handler
+async function handleTestConnection(_req: VercelRequest, res: VercelResponse) {
+  try {
+    console.log('🔍 Testing MongoDB connection and collection...');
+    
+    await connectToDatabase();
+    
+    return res.status(200).json({
+      success: true,
+      message: 'MongoDB connection test successful',
+      timestamp: new Date().toISOString(),
+      details: {
+        connection: 'active',
+        database: 'reride',
+        collections: 'accessible'
+      }
+    });
+  } catch (error) {
+    console.error('❌ MongoDB connection test failed:', error);
+    
+    return res.status(500).json({
+      success: false,
+      message: 'MongoDB connection test failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString(),
+      details: {
+        connection: 'failed',
+        database: 'unreachable',
+        collections: 'inaccessible'
+      }
+    });
+  }
+}
+
+// Utils handler - consolidates utils.ts
+async function handleUtils(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
+  const url = new URL(req.url || '', `http://${req.headers.host}`);
+  const pathname = url.pathname;
+
+  if (pathname.includes('/test-connection') || pathname.endsWith('/test-connection')) {
+    return await handleTestConnection(req, res);
+  } else {
+    return res.status(404).json({ success: false, reason: 'Utility endpoint not found' });
+  }
+}
+
+// AI handler - consolidates ai.ts
+async function handleAI(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
+  const url = new URL(req.url || '', `http://${req.headers.host}`);
+  const pathname = url.pathname;
+
+  if (pathname.includes('/gemini') || pathname.endsWith('/gemini')) {
+    return await handleGemini(req, res);
+  } else {
+    return res.status(404).json({ success: false, reason: 'AI endpoint not found' });
+  }
+}
+
+// Gemini handler
+async function handleGemini(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  }
+
+  try {
+    const { payload } = req.body;
+    
+    if (!payload) {
+      return res.status(400).json({ 
+        success: false, 
+        reason: 'Payload is required' 
+      });
+    }
+
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + process.env.GEMINI_API_KEY, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: payload.prompt || JSON.stringify(payload)
+          }]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(errorBody || `API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+
+    return res.status(200).json({
+      success: true,
+      response: generatedText,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Gemini API Error:', error);
+    
+    return res.status(500).json({
+      success: false,
+      reason: 'Gemini API call failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+// Content handler - consolidates content.ts
+async function handleContent(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  if (!options.mongoAvailable) {
+    return res.status(503).json({
+      success: false,
+      reason: options.mongoFailureReason || 'Database is currently unavailable'
+    });
+  }
+
+  try {
+    const mongoose = await connectToDatabase();
+    const db = mongoose.connection.db;
+    
+    if (!db) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Database connection not available' 
+      });
+    }
+    
+    const { type } = req.query;
+    
+    switch (type) {
+      case 'faqs':
+        return await handleFAQs(req, res, db);
+      case 'support-tickets':
+        return await handleSupportTickets(req, res, db);
+      default:
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Invalid content type. Use ?type=faqs or ?type=support-tickets' 
+        });
+    }
+  } catch (error) {
+    console.error('Content API Error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+}
+
+// FAQs Handler
+async function handleFAQs(req: VercelRequest, res: VercelResponse, db: any) {
+  const collection = db.collection('faqs');
+
+  switch (req.method) {
+    case 'GET':
+      return await handleGetFAQs(req, res, collection);
+    case 'POST':
+      return await handleCreateFAQ(req, res, collection);
+    case 'PUT':
+      return await handleUpdateFAQ(req, res, collection);
+    case 'DELETE':
+      return await handleDeleteFAQ(req, res, collection);
+    default:
+      return res.status(405).json({ error: 'Method not allowed' });
+  }
+}
+
+async function handleGetFAQs(req: VercelRequest, res: VercelResponse, collection: any) {
+  try {
+    const { category } = req.query;
+    
+    let query: any = {};
+    
+    if (category && category !== 'all') {
+      query.category = category;
+    }
+
+    const faqs = await collection.find(query).toArray();
+    
+    return res.status(200).json({
+      success: true,
+      faqs: faqs,
+      count: faqs.length
+    });
+  } catch (error) {
+    console.error('Error fetching FAQs:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch FAQs' 
+    });
+  }
+}
+
+async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, collection: any) {
+  try {
+    const faqData = req.body;
+    
+    if (!faqData.question || !faqData.answer || !faqData.category) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: question, answer, category'
+      });
+    }
+
+    const result = await collection.insertOne({
+      ...faqData,
+      createdAt: new Date().toISOString()
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'FAQ created successfully',
+      faq: { ...faqData, _id: result.insertedId }
+    });
+  } catch (error) {
+    console.error('Error creating FAQ:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to create FAQ'
+    });
+  }
+}
+
+async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, collection: any) {
+  try {
+    const { id } = req.query;
+    const updateData = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'FAQ ID is required'
+      });
+    }
+
+    const result = await collection.updateOne(
+      { _id: id },
+      { $set: { ...updateData, updatedAt: new Date().toISOString() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'FAQ not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'FAQ updated successfully',
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Error updating FAQ:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to update FAQ'
+    });
+  }
+}
+
+async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, collection: any) {
+  try {
+    const { id } = req.query;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'FAQ ID is required'
+      });
+    }
+
+    const result = await collection.deleteOne({ _id: id });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'FAQ not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'FAQ deleted successfully',
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Error deleting FAQ:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete FAQ'
+    });
+  }
+}
+
+// Support Tickets Handler
+async function handleSupportTickets(req: VercelRequest, res: VercelResponse, db: any) {
+  const collection = db.collection('supportTickets');
+
+  switch (req.method) {
+    case 'GET':
+      return await handleGetSupportTickets(req, res, collection);
+    case 'POST':
+      return await handleCreateSupportTicket(req, res, collection);
+    case 'PUT':
+      return await handleUpdateSupportTicket(req, res, collection);
+    case 'DELETE':
+      return await handleDeleteSupportTicket(req, res, collection);
+    default:
+      return res.status(405).json({ error: 'Method not allowed' });
+  }
+}
+
+async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, collection: any) {
+  try {
+    const { userEmail, status } = req.query;
+    
+    let query: any = {};
+    
+    if (userEmail) {
+      query.userEmail = userEmail;
+    }
+    
+    if (status) {
+      query.status = status;
+    }
+
+    const tickets = await collection.find(query).sort({ createdAt: -1 }).toArray();
+    
+    return res.status(200).json({
+      success: true,
+      tickets: tickets,
+      count: tickets.length
+    });
+  } catch (error) {
+    console.error('Error fetching support tickets:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch support tickets' 
+    });
+  }
+}
+
+async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse, collection: any) {
+  try {
+    const ticketData = req.body;
+    
+    if (!ticketData.userEmail || !ticketData.userName || !ticketData.subject || !ticketData.message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: userEmail, userName, subject, message'
+      });
+    }
+
+    const result = await collection.insertOne({
+      ...ticketData,
+      status: 'Open',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      replies: []
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Support ticket created successfully',
+      ticket: { ...ticketData, _id: result.insertedId }
+    });
+  } catch (error) {
+    console.error('Error creating support ticket:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to create support ticket'
+    });
+  }
+}
+
+async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse, collection: any) {
+  try {
+    const { id } = req.query;
+    const updateData = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Support ticket ID is required'
+      });
+    }
+
+    const result = await collection.updateOne(
+      { _id: id },
+      { $set: { ...updateData, updatedAt: new Date().toISOString() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Support ticket not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Support ticket updated successfully',
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Error updating support ticket:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to update support ticket'
+    });
+  }
+}
+
+async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse, collection: any) {
+  try {
+    const { id } = req.query;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Support ticket ID is required'
+      });
+    }
+
+    const result = await collection.deleteOne({ _id: id });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Support ticket not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Support ticket deleted successfully',
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Error deleting support ticket:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete support ticket'
+    });
+  }
+}
+
+// Sell Car handler - consolidates sell-car/index.ts
+async function handleSellCar(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  if (!options.mongoAvailable) {
+    return res.status(503).json({
+      success: false,
+      reason: options.mongoFailureReason || 'Database is currently unavailable'
+    });
+  }
+
+  const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+  const DB_NAME = process.env.DB_NAME || 'reride';
+
+  let cachedClient: MongoClient | null = null;
+  let cachedDb: any = null;
+
+  async function connectToDatabaseSellCar() {
+    if (cachedClient && cachedDb) {
+      try {
+        await cachedDb.admin().ping();
+        return { client: cachedClient, db: cachedDb };
+      } catch (error) {
+        cachedClient = null;
+        cachedDb = null;
+      }
+    }
+
+    try {
+      if (!MONGODB_URI || MONGODB_URI === 'mongodb://localhost:27017') {
+        throw new Error('MONGODB_URI environment variable is not set');
+      }
+
+      const client = new MongoClient(MONGODB_URI, {
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+      });
+      
+      await client.connect();
+      const db = client.db(DB_NAME);
+      
+      cachedClient = client;
+      cachedDb = db;
+      
+      return { client, db };
+    } catch (error) {
+      cachedClient = null;
+      cachedDb = null;
+      throw new Error(`Database connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  const { method } = req;
+
+  try {
+    const { db } = await connectToDatabaseSellCar();
+    const collection = db.collection('sellCarSubmissions');
+
+    switch (method) {
+      case 'POST':
+        const submissionData = {
+          ...req.body,
+          submittedAt: new Date().toISOString(),
+          status: 'pending'
+        };
+
+        const requiredFields = [
+          'registration', 'make', 'model', 'variant', 'year', 
+          'district', 'noOfOwners', 'kilometers', 'fuelType', 
+          'transmission', 'customerContact'
+        ];
+
+        const missingFields: string[] = [];
+        for (const field of requiredFields) {
+          if (!submissionData[field as keyof typeof submissionData]) {
+            missingFields.push(field);
+          }
+        }
+
+        if (missingFields.length > 0) {
+          return res.status(400).json({ 
+            error: `Missing required fields: ${missingFields.join(', ')}` 
+          });
+        }
+
+        const existingSubmission = await collection.findOne({
+          registration: submissionData.registration
+        });
+
+        if (existingSubmission) {
+          return res.status(409).json({ 
+            error: 'Car with this registration number already submitted' 
+          });
+        }
+
+        const result = await collection.insertOne(submissionData as any);
+        
+        res.status(201).json({
+          success: true,
+          id: result.insertedId.toString(),
+          message: 'Car submission received successfully'
+        });
+        break;
+
+      case 'GET':
+        const { page = 1, limit = 10, status: statusFilter, search } = req.query;
+        const pageNum = parseInt(page as string);
+        const limitNum = parseInt(limit as string);
+        const skip = (pageNum - 1) * limitNum;
+
+        let filter: any = {};
+        
+        if (statusFilter) {
+          filter.status = statusFilter;
+        }
+        
+        if (search) {
+          filter.$or = [
+            { registration: { $regex: search, $options: 'i' } },
+            { make: { $regex: search, $options: 'i' } },
+            { model: { $regex: search, $options: 'i' } },
+            { customerContact: { $regex: search, $options: 'i' } }
+          ];
+        }
+
+        const submissions = await collection
+          .find(filter)
+          .sort({ submittedAt: -1 })
+          .skip(skip)
+          .limit(limitNum)
+          .toArray();
+
+        const total = await collection.countDocuments(filter);
+
+        res.status(200).json({
+          success: true,
+          data: submissions,
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total,
+            pages: Math.ceil(total / limitNum)
+          }
+        });
+        break;
+
+      case 'PUT':
+        const { id, status: updateStatus, adminNotes, estimatedPrice } = req.body;
+        
+        if (!id) {
+          return res.status(400).json({ error: 'Submission ID is required' });
+        }
+
+        let objectId;
+        try {
+          objectId = new ObjectId(id);
+        } catch (error) {
+          return res.status(400).json({ error: 'Invalid submission ID format' });
+        }
+
+        const updateData: any = {};
+        if (updateStatus) updateData.status = updateStatus;
+        if (adminNotes) updateData.adminNotes = adminNotes;
+        if (estimatedPrice) updateData.estimatedPrice = estimatedPrice;
+        updateData.updatedAt = new Date().toISOString();
+
+        const updateResult = await collection.updateOne(
+          { _id: objectId },
+          { $set: updateData }
+        );
+
+        if (updateResult.matchedCount === 0) {
+          return res.status(404).json({ error: 'Submission not found' });
+        }
+
+        res.status(200).json({
+          success: true,
+          message: 'Submission updated successfully'
+        });
+        break;
+
+      case 'DELETE':
+        const { id: deleteId } = req.query;
+        
+        if (!deleteId) {
+          return res.status(400).json({ error: 'Submission ID is required' });
+        }
+
+        let deleteObjectId;
+        try {
+          deleteObjectId = new ObjectId(deleteId as string);
+        } catch (error) {
+          return res.status(400).json({ error: 'Invalid submission ID format' });
+        }
+
+        const deleteResult = await collection.deleteOne({ _id: deleteObjectId });
+        
+        if (deleteResult.deletedCount === 0) {
+          return res.status(404).json({ error: 'Submission not found' });
+        }
+
+        res.status(200).json({
+          success: true,
+          message: 'Submission deleted successfully'
+        });
+        break;
+
+      default:
+        res.setHeader('Allow', 'POST, GET, PUT, DELETE');
+        res.status(405).json({ error: `Method ${method} not allowed` });
+    }
+  } catch (error) {
+    console.error('❌ Sell Car API Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: errorMessage
+    });
+  }
 }
 

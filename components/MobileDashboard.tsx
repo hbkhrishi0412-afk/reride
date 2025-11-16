@@ -186,16 +186,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           <div>
             <h2 className="text-xl font-bold mb-1">Welcome back, {currentUser.name?.split(' ')[0]}!</h2>
             <p className="text-orange-50 text-sm leading-relaxed">
-              {isSeller ? 'Manage your vehicle listings' : 
-               isAdmin ? 'Monitor platform activity' : 
-               'Track your car search journey'}
-            </p>
-          </div>
+          {isSeller ? 'Manage your vehicle listings' : 
+           isAdmin ? 'Monitor platform activity' : 
+           'Track your car search journey'}
+        </p>
+      </div>
           <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
             <span className="text-2xl">👋</span>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Stats Grid - Native Style */}
       <div className="grid grid-cols-2 gap-4">
@@ -212,7 +212,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 {totalListings}
               </span>
             )}
-          </div>
+            </div>
           <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Listings</p>
           <p className="text-2xl font-bold text-gray-900">{totalListings}</p>
           {activeListings > 0 && (
@@ -233,7 +233,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 {unreadMessages}
               </span>
             )}
-          </div>
+            </div>
           <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Messages</p>
           <p className="text-2xl font-bold text-gray-900">{unreadMessages}</p>
           {conversations.length > 0 && (
@@ -246,13 +246,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
               <span className="text-xl">👁️</span>
             </div>
-          </div>
+            </div>
           <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Total Views</p>
           <p className="text-2xl font-bold text-gray-900">{totalViews}</p>
           {totalViews > 0 && (
             <p className="text-xs text-gray-500 mt-1">Across all listings</p>
           )}
-        </div>
+          </div>
 
         <div className="native-card p-4">
           <div className="flex items-center justify-between mb-2">
@@ -807,12 +807,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     return (
       <div className="space-y-5 pb-4">
         <div className="native-card p-4">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-orange-600 font-bold text-xl">
+            <span className="text-orange-600 font-bold text-xl">
                 {currentUser.name?.charAt(0).toUpperCase() || 'U'}
-              </span>
-            </div>
+            </span>
+          </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-lg font-bold text-gray-900 truncate">{currentUser.name}</h3>
               <p className="text-sm text-gray-500 truncate">{currentUser.email}</p>
@@ -820,9 +820,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               {isSeller && (currentUser as any).dealershipName && (
                 <p className="text-sm text-gray-700 font-medium mt-1">{(currentUser as any).dealershipName}</p>
               )}
-            </div>
           </div>
         </div>
+      </div>
 
         <div className="native-card p-4">
           <h4 className="font-bold text-gray-900 mb-4 text-base">Account Settings</h4>
@@ -834,9 +834,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <div className="flex items-center gap-3">
                 <span className="text-xl">✏️</span>
                 <span className="text-gray-900 font-medium">Edit Profile</span>
-              </div>
+            </div>
               <span className="text-gray-400">›</span>
-            </button>
+          </button>
             <button 
               onClick={() => setActiveTab('notifications')}
               className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
@@ -850,10 +850,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                       {unreadNotifications.length}
                     </span>
                   )}
-                </div>
+            </div>
               </div>
               <span className="text-gray-400">›</span>
-            </button>
+          </button>
             <button 
               onClick={() => onNavigate(ViewEnum.SUPPORT)}
               className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
@@ -871,12 +871,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <div className="flex items-center gap-3">
                 <span className="text-xl">💬</span>
                 <span className="text-gray-900 font-medium">Help & Support</span>
-              </div>
+            </div>
               <span className="text-gray-400">›</span>
-            </button>
-            {onLogout && (
-              <button 
-                onClick={onLogout}
+          </button>
+          {onLogout && (
+            <button 
+              onClick={onLogout}
                 className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-red-50 flex items-center justify-between mt-2"
               >
                 <div className="flex items-center gap-3">
@@ -886,7 +886,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 <span className="text-red-400">›</span>
               </button>
             )}
-          </div>
+              </div>
         </div>
       </div>
     );
@@ -918,7 +918,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           <div className="text-center py-12 px-4">
             <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-4xl">🔔</span>
-            </div>
+      </div>
             <h4 className="text-xl font-bold text-gray-900 mb-2">No notifications</h4>
             <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
               You're all caught up! New notifications will appear here
@@ -976,8 +976,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             ))}
           </div>
         )}
-      </div>
-    );
+    </div>
+  );
   };
 
   const handleAddFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1317,16 +1317,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const renderEditVehicle = () => {
     if (!editingVehicle) {
       return (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">Edit Vehicle</h3>
-            <button 
+        <button 
               onClick={() => setActiveTab('listings')}
-              className="p-2 text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
+          className="p-2 text-gray-400 hover:text-gray-600"
+        >
+          ✕
+        </button>
+      </div>
           <div className="bg-white rounded-lg p-4 shadow-sm text-center py-8">
             <p className="text-gray-500">No vehicle selected for editing.</p>
           </div>
@@ -1340,18 +1340,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">Edit Vehicle</h3>
-            <button 
+          <button 
               onClick={() => setActiveTab('listings')}
               className="p-2 text-gray-400 hover:text-gray-600"
-            >
+          >
               ✕
-            </button>
-          </div>
+          </button>
+        </div>
           <div className="bg-white rounded-lg p-4 shadow-sm text-center py-8">
             <p className="text-gray-500">No vehicle selected for editing.</p>
-          </div>
-        </div>
-      );
+      </div>
+    </div>
+  );
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1420,17 +1420,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     };
 
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Edit Vehicle</h3>
-          <button 
-            onClick={() => setActiveTab('listings')}
-            className="p-2 text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
-        
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">Edit Vehicle</h3>
+        <button 
+          onClick={() => setActiveTab('listings')}
+          className="p-2 text-gray-400 hover:text-gray-600"
+        >
+          ✕
+        </button>
+      </div>
+      
         <form onSubmit={handleSubmit} className="bg-white rounded-lg p-4 shadow-sm space-y-4">
           {/* Basic Information */}
           <div className="space-y-4">
@@ -1449,7 +1449,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 required
               />
               {editErrors.make && <p className="text-red-500 text-xs mt-1">{editErrors.make}</p>}
-            </div>
+          </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1673,7 +1673,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
           {/* Actions */}
           <div className="flex gap-3 pt-4 border-t">
-            <button
+          <button 
               type="button"
               onClick={() => setActiveTab('listings')}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
@@ -1686,11 +1686,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
+          </button>
+        </div>
         </form>
-      </div>
-    );
+    </div>
+  );
   };
 
   const renderContent = () => {
