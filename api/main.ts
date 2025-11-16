@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
-import connectToDatabase, { MongoConfigError } from '../lib/db';
+import connectToDatabase, { MongoConfigError, ensureDatabaseInUri } from '../lib/db';
 import User from '../models/User';
 import Vehicle from '../models/Vehicle';
 import VehicleDataModel from '../models/VehicleData';
@@ -2482,7 +2482,11 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
         throw new Error('MONGODB_URI environment variable is not set');
       }
 
-      const client = new MongoClient(MONGODB_URI, {
+      // Normalize the URI to ensure correct database name
+      const normalizedUri = ensureDatabaseInUri(MONGODB_URI, DB_NAME);
+      console.log(`🔗 Connecting to MongoDB with normalized URI (database: ${DB_NAME})`);
+
+      const client = new MongoClient(normalizedUri, {
         maxPoolSize: 10,
         serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
@@ -2494,11 +2498,15 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
       cachedClient = client;
       cachedDb = db;
       
+      console.log(`✅ MongoDB client connected to database: ${db.databaseName}`);
+      
       return { client, db };
     } catch (error) {
       cachedClient = null;
       cachedDb = null;
-      throw new Error(`Database connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ MongoDB client connection failed: ${errorMessage}`);
+      throw new Error(`Database connection failed: ${errorMessage}`);
     }
   }
 

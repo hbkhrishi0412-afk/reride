@@ -19,7 +19,7 @@ if (!cached) {
   cached = (globalThis as any).mongoose = { conn: null, promise: null };
 }
 
-function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
+export function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
   try {
     const parsed = new URL(uri);
     const hasDatabase = parsed.pathname && parsed.pathname !== '/' && parsed.pathname.length > 1;
@@ -82,9 +82,18 @@ async function connectToDatabase(): Promise<Mongoose> {
     const normalizedUri = ensureDatabaseInUri(process.env.MONGODB_URI);
 
     console.log('🔄 Creating new MongoDB connection...');
+    console.log(`📡 Database name in connection options: ${opts.dbName}`);
     cached.promise = mongoose.connect(normalizedUri, opts)
       .then(async (mongooseInstance) => {
-        console.log('✅ MongoDB connected successfully to database:', mongooseInstance.connection.name);
+        const actualDbName = mongooseInstance.connection.name;
+        console.log('✅ MongoDB connected successfully to database:', actualDbName);
+        
+        // Verify database name matches expected
+        if (actualDbName.toLowerCase() !== 'reride') {
+          console.warn(`⚠️ WARNING: Connected to database "${actualDbName}" but expected "reride"`);
+          console.warn(`   This may cause data retrieval issues. Please verify your MONGODB_URI.`);
+        }
+        
         return mongooseInstance;
       })
       .catch((error) => {
