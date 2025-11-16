@@ -48,6 +48,7 @@ interface DashboardProps {
   onNavigate: (view: View) => void;
   onTestDriveResponse?: (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
+  onViewVehicle?: (vehicle: Vehicle) => void;
 }
 
 type DashboardView = 'overview' | 'listings' | 'form' | 'inquiries' | 'analytics' | 'salesHistory' | 'reports';
@@ -1148,7 +1149,7 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
   const [activeView, setActiveView] = useState<DashboardView>('overview');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
@@ -1671,7 +1672,15 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
                       {paginatedListings.map((v) => (
-                      <tr key={v.id}>
+                      <tr 
+                        key={v.id}
+                        onClick={() => {
+                          if (onViewVehicle) {
+                            onViewVehicle(v);
+                          }
+                        }}
+                        className="cursor-pointer hover:bg-gray-50 transition-colors"
+                      >
                         <td className="px-6 py-4 font-medium">{v.year} {v.make} {v.model} {v.variant || ''}</td>
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4">
@@ -1712,7 +1721,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             })}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td 
+                          className="px-6 py-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {/* Desktop Layout - 4+4 Grid */}
                           <div className="hidden lg:flex flex-col space-y-1">
                             {/* First Row - 4 buttons */}
@@ -2017,12 +2029,26 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
                     {paginatedSoldListings.map((v) => (
-                      <tr key={v.id}>
+                      <tr 
+                        key={v.id}
+                        onClick={() => {
+                          if (onViewVehicle) {
+                            onViewVehicle(v);
+                          }
+                        }}
+                        className="cursor-pointer hover:bg-gray-50 transition-colors"
+                      >
                         <td className="px-6 py-4 font-medium">{v.year} {v.make} {v.model} {v.variant || ''}</td>
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
-                        <td className="px-6 py-4">
+                        <td 
+                          className="px-6 py-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <button
-                            onClick={() => handleMarkAsUnsold(v.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkAsUnsold(v.id);
+                            }}
                             className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-300 rounded-lg hover:bg-green-100 hover:text-green-800 transition-colors"
                           >
                             Mark as Unsold
@@ -2079,15 +2105,35 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             allVehicles={allVehicles}
         />;
       case 'inquiries':
-        return <InquiriesView 
-                    conversations={conversations} 
-                    sellerEmail={seller.email}
-                    onMarkConversationAsReadBySeller={onMarkConversationAsReadBySeller} 
-                    onMarkMessagesAsRead={onMarkMessagesAsRead}
-                    onSelectConv={setSelectedConv}
-                    onTestDriveResponse={onTestDriveResponse}
-                    onSellerSendMessage={onSellerSendMessage}
-                />;
+        return (
+          <div className="space-y-6">
+            <InquiriesView 
+              conversations={conversations} 
+              sellerEmail={seller.email}
+              onMarkConversationAsReadBySeller={onMarkConversationAsReadBySeller} 
+              onMarkMessagesAsRead={onMarkMessagesAsRead}
+              onSelectConv={setSelectedConv}
+              onTestDriveResponse={onTestDriveResponse}
+              onSellerSendMessage={onSellerSendMessage}
+            />
+            {selectedConv && (
+              <div className="bg-white p-6 rounded-lg shadow-md">
+                <ChatWidget
+                  conversation={selectedConv}
+                  currentUserRole="seller"
+                  otherUserName={selectedConv.customerName}
+                  onClose={() => setSelectedConv(null)}
+                  onSendMessage={(messageText) => onSellerSendMessage(selectedConv.id, messageText)}
+                  typingStatus={typingStatus}
+                  onUserTyping={onUserTyping}
+                  onMarkMessagesAsRead={onMarkMessagesAsRead}
+                  onFlagContent={() => {}}
+                  onOfferResponse={onOfferResponse}
+                />
+              </div>
+            )}
+          </div>
+        );
       case 'reports':
         return <ReportsView
                     reportedVehicles={reportedVehicles}

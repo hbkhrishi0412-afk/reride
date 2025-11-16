@@ -82,9 +82,9 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <>
-      {/* Premium Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-white/20 shadow-2xl z-40 pb-safe" data-testid="mobile-bottom-nav">
-        <div className="flex items-center justify-around h-16 px-2">
+      {/* Native Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 native-bottom-nav z-40 safe-bottom" data-testid="mobile-bottom-nav" style={{ height: '64px', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="flex items-center justify-around h-full px-2">
           {navItems.map((item) => {
             // Skip auth-required items if not logged in
             if (item.requiresAuth && !currentUser) return null;
@@ -95,35 +95,30 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.view)}
-                className="flex flex-col items-center justify-center flex-1 h-full relative group transition-all duration-300 transform hover:scale-105"
+                className="flex flex-col items-center justify-center flex-1 h-full relative active:opacity-70 native-transition"
+                style={{ minHeight: '44px' }}
               >
-                {/* Premium Icon Container */}
-                <div className={`relative p-2 rounded-xl transition-all duration-300 ${
-                  isActive 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg' 
-                    : 'hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50'
-                }`}>
-                  {item.icon(isActive)}
-                  {/* Premium Badge */}
+                {/* Icon */}
+                <div className="relative mb-1">
+                  <div className={isActive ? 'text-orange-600' : 'text-gray-500'}>
+                    {item.icon(isActive)}
+                  </div>
+                  {/* Badge */}
                   {item.badge && item.badge > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-5 flex items-center justify-center bg-gradient-to-r from-red-500 to-pink-500 text-white text-[10px] font-bold rounded-full px-1.5 shadow-lg animate-pulse">
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 flex items-center justify-center bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5">
                       {item.badge > 9 ? '9+' : item.badge}
                     </span>
                   )}
                 </div>
                 
-                {/* Premium Label */}
-                <span className={`text-[10px] mt-1 font-semibold transition-all duration-300 ${
-                  isActive 
-                    ? 'text-blue-600 font-bold' 
-                    : 'text-gray-600 group-hover:text-blue-500'
-                }`}>
+                {/* Label */}
+                <span className={`text-[11px] font-medium ${isActive ? 'text-orange-600' : 'text-gray-500'}`}>
                   {item.label}
                 </span>
                 
-                {/* Premium Active Indicator */}
+                {/* Active Indicator */}
                 {isActive && (
-                  <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full shadow-lg animate-pulse"></div>
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-orange-600 rounded-full"></div>
                 )}
               </button>
             );
@@ -131,8 +126,8 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         </div>
       </nav>
 
-      {/* Premium Spacer for fixed bottom nav */}
-      <div className="h-16 pb-safe"></div>
+      {/* Spacer for fixed bottom nav */}
+      <div className="h-16 safe-bottom"></div>
     </>
   );
 };

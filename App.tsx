@@ -773,6 +773,7 @@ const AppContent: React.FC = React.memo(() => {
               onTestDriveResponse={() => {}}
               allVehicles={vehicles}
               onOfferResponse={() => {}}
+              onViewVehicle={selectVehicle}
             />
           </DashboardErrorBoundary>
         ) : (
@@ -1413,8 +1414,15 @@ const AppContent: React.FC = React.memo(() => {
       
       // For seller/customer users, show MobileDashboard
       return (
-        <div className="min-h-screen bg-gray-50">
-          <MobileDashboard
+        <div className="native-app fixed inset-0 bg-white">
+          <div 
+            className="overflow-y-auto native-scroll h-full w-full"
+            style={{
+              paddingTop: '56px',
+              paddingBottom: '64px'
+            }}
+          >
+            <MobileDashboard
             currentUser={currentUser}
             userVehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => v.sellerEmail === currentUser.email), users)}
             conversations={conversations}
@@ -1449,21 +1457,39 @@ const AppContent: React.FC = React.memo(() => {
             }}
             onFlagContent={flagContent}
             onLogout={handleLogout}
+            onViewVehicle={selectVehicle}
             onAddVehicle={async (vehicleData, isFeaturing = false) => {
               try {
                 console.log('🚀 Mobile Add Vehicle called with:', vehicleData);
+                
+                // Set listingExpiresAt based on subscription plan expiry date
+                let listingExpiresAt: string | undefined;
+                if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
+                  listingExpiresAt = currentUser.planExpiryDate;
+                } else if (currentUser.subscriptionPlan !== 'premium') {
+                  const expiryDate = new Date();
+                  expiryDate.setDate(expiryDate.getDate() + 30);
+                  listingExpiresAt = expiryDate.toISOString();
+                }
+                
                 const { addVehicle } = await import('./services/vehicleService');
                 const vehicleToAdd = {
                   ...vehicleData,
                   id: Date.now() + Math.floor(Math.random() * 1000),
+                  sellerEmail: currentUser.email,
                   averageRating: 0,
                   ratingCount: 0,
                   isFeatured: isFeaturing,
-                  status: 'published'
+                  status: 'published',
+                  createdAt: new Date().toISOString(),
+                  listingExpiresAt,
                 } as Vehicle;
                 
                 const newVehicle = await addVehicle(vehicleToAdd);
                 console.log('✅ Vehicle added successfully:', newVehicle);
+                
+                // Update local state
+                setVehicles(prev => [...prev, newVehicle]);
                 addToast('Vehicle added successfully!', 'success');
               } catch (error) {
                 console.error('❌ Failed to add vehicle:', error);
@@ -1473,24 +1499,45 @@ const AppContent: React.FC = React.memo(() => {
             onUpdateVehicle={async (vehicleData) => {
               try {
                 console.log('🚀 Mobile Update Vehicle called with:', vehicleData);
-                const { updateVehicle } = await import('./services/vehicleService');
-                const updatedVehicle = await updateVehicle(vehicleData);
-                console.log('✅ Vehicle updated successfully:', updatedVehicle);
-                addToast('Vehicle updated successfully!', 'success');
+                
+                // Use the updateVehicle from useApp hook which automatically updates state
+                await updateVehicle(vehicleData.id, vehicleData);
+                
+                console.log('✅ Vehicle updated successfully');
+                // Toast is shown by updateVehicle function
               } catch (error) {
                 console.error('❌ Failed to update vehicle:', error);
                 addToast('Failed to update vehicle. Please try again.', 'error');
               }
             }}
             vehicleData={vehicleData}
+            onUpdateProfile={async (profileData: Partial<User>) => {
+              try {
+                await updateUser(currentUser.email || currentUser.id?.toString() || '', profileData);
+                // Update current user state
+                setCurrentUser((prev: User | null) => {
+                  if (!prev) return prev;
+                  return { ...prev, ...profileData };
+                });
+                addToast('Profile updated successfully!', 'success');
+              } catch (error) {
+                console.error('Failed to update profile:', error);
+                addToast('Failed to update profile. Please try again.', 'error');
+                throw error;
+              }
+            }}
+            notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
+            onNotificationClick={handleNotificationClick}
+            onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
           />
+          </div>
         </div>
       );
     }
 
     // For ALL other views (Home, Browse, Detail, etc.), show mobile UI
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="native-app fixed inset-0 bg-white">
         <MobileHeader
           onNavigate={navigate}
           currentUser={currentUser}
@@ -1500,7 +1547,13 @@ const AppContent: React.FC = React.memo(() => {
           onBack={() => navigate(ViewEnum.USED_CARS)}
         />
         
-        <main className="mobile-app-content bg-gray-50 mobile-page-transition">
+        <main 
+          className="overflow-y-auto native-scroll h-full w-full bg-white"
+          style={{
+            paddingTop: '56px',
+            paddingBottom: '64px'
+          }}
+        >
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
               {renderView()}

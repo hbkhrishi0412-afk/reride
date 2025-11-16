@@ -20,6 +20,8 @@ interface DashboardListingsProps {
   onNavigateToAnalytics?: () => void;
   onBulkUpload?: (vehicles: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => void;
   sellerEmail?: string;
+  // New prop for viewing vehicle details
+  onViewVehicle?: (vehicle: Vehicle) => void;
 }
 
 const DashboardListings: React.FC<DashboardListingsProps> = memo(({
@@ -36,7 +38,8 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
   onToggleWishlist,
   onNavigateToAnalytics,
   onBulkUpload,
-  sellerEmail
+  sellerEmail,
+  onViewVehicle
 }) => {
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const activeVehicles = sellerVehicles.filter(v => v.status === 'published');
@@ -119,7 +122,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
           {activeVehicles.length > 0 ? (
             <VirtualizedVehicleList
               vehicles={activeVehicles}
-              onSelectVehicle={onEditVehicle}
+              onSelectVehicle={onViewVehicle || onEditVehicle}
               onToggleCompare={onToggleCompare}
               onToggleWishlist={onToggleWishlist}
               comparisonList={comparisonList}
@@ -143,7 +146,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
             </h2>
             <VirtualizedVehicleList
               vehicles={soldVehicles}
-              onSelectVehicle={onEditVehicle}
+              onSelectVehicle={onViewVehicle || onEditVehicle}
               onToggleCompare={onToggleCompare}
               onToggleWishlist={onToggleWishlist}
               comparisonList={comparisonList}

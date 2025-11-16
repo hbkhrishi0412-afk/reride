@@ -30,69 +30,71 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
 
   return (
     <>
-      {/* Compact Mobile Header - 56px height */}
-      <header className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-50 h-14" data-testid="mobile-header">
+      {/* Native Mobile Header - 56px height */}
+      <header className="fixed top-0 left-0 right-0 native-header z-50 h-14 safe-top" data-testid="mobile-header">
         <div className="flex items-center justify-between h-full px-4">
           {/* Left Section */}
           <div className="flex items-center gap-3">
             {showBack ? (
               <button
                 onClick={onBack}
-                className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 -ml-2 active:opacity-50 native-transition"
+                style={{ minWidth: '44px', minHeight: '44px' }}
                 aria-label="Go back"
               >
-                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
             ) : (
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 -ml-2 active:opacity-50 native-transition"
+                style={{ minWidth: '44px', minHeight: '44px' }}
                 aria-label="Menu"
                 data-testid="mobile-menu-button"
               >
-                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
             )}
             
-            <div className="flex items-center gap-2">
-              <Logo size="sm" showText={false} />
-              <h1 className="text-base font-bold text-gray-900 truncate max-w-[180px]">
-                {title}
-              </h1>
-            </div>
+            {/* Center Title */}
+            <h1 className="text-base font-semibold text-gray-900 absolute left-1/2 transform -translate-x-1/2 max-w-[200px] truncate">
+              {title}
+            </h1>
           </div>
 
           {/* Right Section */}
           <div className="flex items-center gap-2">
             {rightAction || (
               <>
-                {/* Search Icon - Small */}
+                {/* Search Icon */}
                 <button
                   onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                  className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 active:opacity-50 native-transition"
+                  style={{ minWidth: '44px', minHeight: '44px' }}
                   aria-label="Search"
                   data-testid="mobile-search-button"
                 >
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
 
-                {/* Notifications Icon - Small */}
+                {/* Notifications Icon */}
                 {currentUser && (
                   <button
-                    className="p-1.5 hover:bg-gray-100 rounded-full transition-colors relative"
+                    className="p-2 active:opacity-50 native-transition relative"
+                    style={{ minWidth: '44px', minHeight: '44px' }}
                     aria-label="Notifications"
                   >
-                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-6 h-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
                     {/* Notification badge */}
-                    <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-orange-500 rounded-full"></span>
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-orange-500 rounded-full"></span>
                   </button>
                 )}
               </>
