@@ -919,6 +919,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
         const seller = sellerMap.get(vehicle.sellerEmail.toLowerCase());
         if (seller) {
+          // If seller's plan has expired, force-unpublish even if listingExpiresAt is not set
+          if (seller.planExpiryDate) {
+            const sellerExpiry = new Date(seller.planExpiryDate);
+            if (!isNaN(sellerExpiry.getTime()) && sellerExpiry < now) {
+              updateFields.status = 'unpublished';
+              updateFields.listingStatus = 'expired';
+            }
+          }
+          
           if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
             updateFields.listingExpiresAt = seller.planExpiryDate;
           } else if (seller.subscriptionPlan !== 'premium') {
@@ -947,6 +956,51 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
     });
     
+    // Enforce plan listing limits: keep most recent listings within limit, unpublish extras
+    try {
+      // Build per-seller published vehicles list (newest first)
+      const sellerToPublished: Map<string, any[]> = new Map();
+      vehicles.forEach(v => {
+        if (v.status === 'published' && v.sellerEmail) {
+          const key = v.sellerEmail.toLowerCase();
+          if (!sellerToPublished.has(key)) sellerToPublished.set(key, []);
+          sellerToPublished.get(key)!.push(v);
+        }
+      });
+      sellerToPublished.forEach(list => {
+        list.sort((a, b) => {
+          const aTime = new Date(a.createdAt || a._id?.getTimestamp?.() || 0).getTime();
+          const bTime = new Date(b.createdAt || b._id?.getTimestamp?.() || 0).getTime();
+          return bTime - aTime;
+        });
+      });
+      
+      // For each seller, apply plan limit
+      sellerToPublished.forEach((publishedVehicles, email) => {
+        const seller = sellerMap.get(email);
+        const planKey = (seller?.subscriptionPlan || 'free') as keyof typeof PLAN_DETAILS;
+        const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
+        const limit = planDetails.listingLimit;
+        if (limit === 'unlimited') {
+          return;
+        }
+        const numericLimit = Number(limit) || 0;
+        if (publishedVehicles.length > numericLimit) {
+          const extras = publishedVehicles.slice(numericLimit); // older ones
+          extras.forEach(v => {
+            bulkUpdates.push({
+              updateOne: {
+                filter: { _id: v._id },
+                update: { $set: { status: 'unpublished', listingStatus: 'suspended' } }
+              }
+            });
+          });
+        }
+      });
+    } catch (limitErr) {
+      console.warn('⚠️ Error applying plan listing limits:', limitErr);
+    }
+    
     if (bulkUpdates.length > 0) {
       await Vehicle.bulkWrite(bulkUpdates, { ordered: false });
     }
@@ -962,6 +1016,59 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
   if (req.method === 'POST') {
     if (!mongoAvailable) {
       return unavailableResponse();
+    }
+    // Enforce plan expiry and listing limits for creation (no action or unknown action)
+    // Only applies to standard create flow (i.e., when not handling action sub-routes above)
+    if (!action || (action !== 'refresh' && action !== 'boost' && action !== 'certify' && action !== 'sold' && action !== 'unsold' && action !== 'feature')) {
+      try {
+        const { sellerEmail } = req.body || {};
+        if (!sellerEmail || typeof sellerEmail !== 'string') {
+          return res.status(400).json({ success: false, reason: 'Seller email is required' });
+        }
+        // Normalize email
+        const normalizedEmail = sellerEmail.toLowerCase().trim();
+        // Ensure DB connection for safety
+        await connectToDatabase();
+        // Load seller
+        const seller = await User.findOne({ email: normalizedEmail });
+        if (!seller) {
+          return res.status(404).json({ success: false, reason: 'Seller not found' });
+        }
+        // Check plan expiry
+        const nowIso = new Date();
+        const planExpiryDate = seller.planExpiryDate ? new Date(seller.planExpiryDate) : undefined;
+        const planExpired = !!(planExpiryDate && planExpiryDate.getTime() < nowIso.getTime());
+        if (planExpired) {
+          return res.status(403).json({
+            success: false,
+            reason: 'Your subscription plan has expired. Please renew your plan to create new listings.',
+            planExpired: true,
+            expiredOn: seller.planExpiryDate
+          });
+        }
+        // Determine listing limit for current plan
+        const planKey = (seller.subscriptionPlan || 'free') as keyof typeof PLAN_DETAILS;
+        const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
+        const listingLimit = planDetails.listingLimit;
+        if (listingLimit !== 'unlimited') {
+          const currentActiveCount = await Vehicle.countDocuments({ sellerEmail: normalizedEmail, status: 'published' });
+          if (currentActiveCount >= (Number(listingLimit) || 0)) {
+            return res.status(403).json({
+              success: false,
+              reason: `Listing limit reached for your ${planDetails.name} plan. You can have up to ${listingLimit} active listing(s).`,
+              limitReached: true,
+              activeListings: currentActiveCount,
+              limit: listingLimit
+            });
+          }
+        }
+      } catch (guardError) {
+        console.error('❌ Error validating plan/limits before vehicle creation:', guardError);
+        return res.status(500).json({
+          success: false,
+          reason: 'Failed to validate plan or listing limits. Please try again.',
+        });
+      }
     }
     if (action === 'refresh') {
       const { vehicleId, refreshAction, sellerEmail } = req.body;
@@ -1296,16 +1403,23 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     if (req.body.sellerEmail) {
       const seller = await User.findOne({ email: req.body.sellerEmail });
       if (seller) {
-        if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
-          // Premium plan: use plan expiry date
-          listingExpiresAt = seller.planExpiryDate;
+        // If plan has expired, block already above; here we only compute expiry for active plans
+        const isExpired = seller.planExpiryDate ? new Date(seller.planExpiryDate) < new Date() : false;
+        if (seller.subscriptionPlan === 'premium') {
+          if (!isExpired && seller.planExpiryDate) {
+            // Premium plan active: use plan expiry date
+            listingExpiresAt = seller.planExpiryDate;
+          } else {
+            // Premium without expiry date: leave undefined (no expiry)
+            listingExpiresAt = listingExpiresAt;
+          }
         } else if (seller.subscriptionPlan !== 'premium') {
           // Free and Pro plans get 30-day expiry from today
           const expiryDate = new Date();
           expiryDate.setDate(expiryDate.getDate() + 30);
           listingExpiresAt = expiryDate.toISOString();
         }
-        // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
+        // If Premium without planExpiryDate, listingExpiresAt remains as-is (no expiry)
       }
     }
     

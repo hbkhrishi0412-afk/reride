@@ -149,6 +149,7 @@ const PlanStatusCard: React.FC<{
     const featuredCreditsAfterUsage = Math.max(planFeaturedCredits - featuredListingsCount, 0);
     const effectiveFeaturedCredits = Math.min(storedRemainingCredits, featuredCreditsAfterUsage);
     const usagePercentage = listingLimit === Infinity ? 0 : (activeListingsCount / listingLimit) * 100;
+    const planIsExpired = !!seller.planExpiryDate && new Date(seller.planExpiryDate) < new Date();
 
     return (
         <div className="text-white p-6 rounded-lg shadow-lg flex flex-col h-full" style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}>
@@ -241,12 +242,12 @@ const PlanStatusCard: React.FC<{
                     </ul>
                 </div>
             </div>
-            {plan.id !== 'premium' && (
+            {(planIsExpired || plan.id !== 'premium') && (
                 <button
                     onClick={() => onNavigate(View.PRICING)}
                     className="mt-6 w-full bg-white text-spinny-orange font-bold py-2 px-4 rounded-lg hover:bg-white transition-colors"
                 >
-                    Upgrade Plan
+                    {planIsExpired ? 'Renew Plan' : 'Upgrade Plan'}
                 </button>
             )}
         </div>
@@ -632,8 +633,15 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
       finally { setIsGeneratingDesc(false); }
     };
 
+    // Determine if seller's plan is expired (client-side UX guard; server still enforces)
+    const isPlanExpired = !!seller?.planExpiryDate && new Date(seller.planExpiryDate) < new Date();
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (isPlanExpired) {
+            alert('Your subscription plan has expired. Please renew your plan to create new listings.');
+            return;
+        }
         console.log('📝 Dashboard form submitted');
         console.log('📋 Form data:', formData);
         console.log('⭐ Is featuring:', isFeaturing);
@@ -701,6 +709,11 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6 border-b dark:border-gray-200-200 pb-4">
           {editingVehicle ? 'Edit Vehicle Listing' : 'List a New Vehicle'}
         </h2>
+        {isPlanExpired && (
+            <div className="mb-4 p-3 rounded bg-red-50 text-red-700 border border-red-200">
+                Your plan has expired. Renew your plan to add new listings.
+            </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
           {/* Form Column */}
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -944,7 +957,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             </FormFieldset>
 
             <div className="pt-4 flex flex-col sm:flex-row items-center gap-4">
-                <button type="submit" className="w-full sm:w-auto flex-grow btn-brand-primary font-bold py-3 px-6 rounded-lg text-lg"> {editingVehicle ? 'Update Vehicle' : 'List My Vehicle'} </button>
+                <button type="submit" disabled={isPlanExpired} className={`w-full sm:w-auto flex-grow font-bold py-3 px-6 rounded-lg text-lg ${isPlanExpired ? 'opacity-50 cursor-not-allowed btn-brand-primary' : 'btn-brand-primary'}`}> {editingVehicle ? 'Update Vehicle' : 'List My Vehicle'} </button>
                 <button type="button" onClick={onCancel} className="w-full sm:w-auto bg-white0 text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-white">Cancel</button>
             </div>
           </form>
@@ -1374,6 +1387,19 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   const activeListings = useMemo(() => sellerVehicles.filter(v => v.status !== 'sold'), [sellerVehicles]);
   const soldListings = useMemo(() => sellerVehicles.filter(v => v.status === 'sold'), [sellerVehicles]);
   const reportedCount = useMemo(() => reportedVehicles.length, [reportedVehicles]);
+  
+  // Pagination for sold listings (Sales History)
+  const [soldPage, setSoldPage] = useState(1);
+  const SOLD_PAGE_SIZE = 10;
+  const totalSoldPages = Math.max(1, Math.ceil(soldListings.length / SOLD_PAGE_SIZE));
+  const paginatedSoldListings = useMemo(() => {
+    const start = (soldPage - 1) * SOLD_PAGE_SIZE;
+    return soldListings.slice(start, start + SOLD_PAGE_SIZE);
+  }, [soldListings, soldPage]);
+  useEffect(() => {
+    // Reset to first page whenever the underlying list changes
+    setSoldPage(1);
+  }, [soldListings]);
   
   // Filter listings by selected month for analytics
   const filteredActiveListings = useMemo(() => 
@@ -1990,7 +2016,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
-                    {soldListings.map((v) => (
+                    {paginatedSoldListings.map((v) => (
                       <tr key={v.id}>
                         <td className="px-6 py-4 font-medium">{v.year} {v.make} {v.model} {v.variant || ''}</td>
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
@@ -2006,6 +2032,35 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     ))}
                   </tbody>
                 </table>
+                {/* Pagination Controls */}
+                {totalSoldPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 px-2">
+                    <div className="text-xs text-gray-600">
+                      Showing {(soldPage - 1) * SOLD_PAGE_SIZE + 1}
+                      {' - '}
+                      {Math.min(soldPage * SOLD_PAGE_SIZE, soldListings.length)} of {soldListings.length}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSoldPage(p => Math.max(1, p - 1))}
+                        disabled={soldPage === 1}
+                        className={`px-3 py-1.5 text-xs rounded-lg border ${soldPage === 1 ? 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed' : 'text-gray-700 bg-white hover:bg-gray-50 border-gray-300'}`}
+                      >
+                        Previous
+                      </button>
+                      <span className="text-xs text-gray-600">
+                        Page {soldPage} of {totalSoldPages}
+                      </span>
+                      <button
+                        onClick={() => setSoldPage(p => Math.min(totalSoldPages, p + 1))}
+                        disabled={soldPage === totalSoldPages}
+                        className={`px-3 py-1.5 text-xs rounded-lg border ${soldPage === totalSoldPages ? 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed' : 'text-gray-700 bg-white hover:bg-gray-50 border-gray-300'}`}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
                 <p className="text-center text-spinny-text-dark dark:text-spinny-text-dark py-8">You have not sold any vehicles yet.</p>

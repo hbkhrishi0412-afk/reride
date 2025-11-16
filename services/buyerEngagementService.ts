@@ -320,6 +320,30 @@ export function getFollowedSellers(userId: string): FollowedSeller[] {
   }
 }
 
+// Get all followers of a seller (users who follow this seller)
+export function getFollowersOfSeller(sellerEmail: string): FollowedSeller[] {
+  try {
+    const stored = localStorage.getItem(FOLLOWED_SELLERS_KEY);
+    if (!stored) return [];
+
+    const follows: FollowedSeller[] = JSON.parse(stored);
+    return follows.filter(f => f.sellerEmail === sellerEmail);
+  } catch (error) {
+    console.error('Error getting followers of seller:', error);
+    return [];
+  }
+}
+
+// Convenience: count followers for a seller
+export function getFollowersCount(sellerEmail: string): number {
+  return getFollowersOfSeller(sellerEmail).length;
+}
+
+// Convenience: count how many sellers a user is following
+export function getFollowingCount(userId: string): number {
+  return getFollowedSellers(userId).length;
+}
+
 // Check if user is following a seller
 export function isFollowingSeller(userId: string, sellerEmail: string): boolean {
   try {

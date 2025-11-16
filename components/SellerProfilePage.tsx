@@ -5,7 +5,8 @@ import StarRating from './StarRating';
 import QuickViewModal from './QuickViewModal';
 import BadgeDisplay from './BadgeDisplay';
 import TrustBadgeDisplay from './TrustBadgeDisplay';
-import { followSeller, unfollowSeller, isFollowingSeller } from '../services/buyerEngagementService';
+import VerifiedBadge, { isUserVerified } from './VerifiedBadge';
+import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount, getFollowersOfSeller, getFollowedSellers } from '../services/buyerEngagementService';
 
 interface SellerProfilePageProps {
     seller: User;
@@ -23,8 +24,27 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
     const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     // NEW: Follow seller feature
-    const currentUserId = localStorage.getItem('currentUserEmail') || 'guest';
-    const [isFollowing, setIsFollowing] = useState(() => isFollowingSeller(currentUserId, seller.email));
+    // Restore logged-in user from storage (used to gate owner-only views)
+    const storedUserJson = localStorage.getItem('reRideCurrentUser');
+    const storedUser: User | null = storedUserJson ? JSON.parse(storedUserJson) : null;
+    const currentUserId = storedUser?.email || localStorage.getItem('currentUserEmail') || 'guest';
+    const [isFollowing, setIsFollowing] = useState(() => isFollowingSeller(currentUserId as string, seller.email));
+
+    // Derived engagement counts
+    const followersCount = useMemo(() => getFollowersCount(seller.email), [seller.email, isFollowing]);
+    // IMPORTANT: Show how many accounts THIS seller follows, not the viewer
+    const followingCount = useMemo(() => getFollowingCount(seller.email), [seller.email, isFollowing]);
+
+    // Owner-only visibility (seller viewing their own page)
+    const isOwnerSeller = storedUser?.role === 'seller' && storedUser.email === seller.email;
+
+    // Owner modals state
+    const [showFollowers, setShowFollowers] = useState(false);
+    const [showFollowing, setShowFollowing] = useState(false);
+
+    // Lists for owner view
+    const followersList = useMemo(() => getFollowersOfSeller(seller.email), [seller.email, isFollowing]);
+    const followingList = useMemo(() => getFollowedSellers(seller.email), [seller.email, isFollowing]);
     
     const handleFollowToggle = () => {
         if (isFollowing) {
@@ -56,13 +76,24 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
             </button>
             
             <header className="bg-white p-8 rounded-xl shadow-soft-lg mb-8 flex flex-col md:flex-row items-center gap-8">
-                <img 
-                    src={seller.logoUrl || `https://i.pravatar.cc/150?u=${seller.email}`} 
-                    alt={`${seller.dealershipName || seller.name} logo`} 
-                    className="w-32 h-32 rounded-full object-cover border-4 shadow-lg" style={{ borderColor: '#1E88E5' }}
-                />
+                <div className="relative">
+                    <img 
+                        src={seller.logoUrl || `https://i.pravatar.cc/150?u=${seller.email}`} 
+                        alt={`${seller.dealershipName || seller.name} logo`} 
+                        className="w-32 h-32 rounded-full object-cover border-4 shadow-lg" style={{ borderColor: '#1E88E5' }}
+                    />
+                    <VerifiedBadge
+                        show={isUserVerified(seller)}
+                        iconOnly
+                        size="md"
+                        className="absolute -bottom-2 -right-2 h-7 w-7 ring-4 ring-white rounded-full"
+                    />
+                </div>
                 <div>
-                    <h1 className="text-4xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark">{seller.dealershipName || seller.name}</h1>
+                    <h1 className="text-4xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark flex items-center gap-3">
+                        {seller.dealershipName || seller.name}
+                        <VerifiedBadge show={isUserVerified(seller)} />
+                    </h1>
                     <div className="mt-2 flex items-center gap-3 flex-wrap">
                         <BadgeDisplay badges={seller.badges || []} />
                         <TrustBadgeDisplay user={seller} showDetails={true} />
@@ -74,6 +105,21 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                             <span className="text-brand-gray-600 dark:text-spinny-text font-semibold">
                                 {seller.averageRating?.toFixed(1) || 'No Rating'} ({seller.ratingCount || 0} ratings)
                             </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-brand-gray-600 dark:text-spinny-text font-semibold">
+                            {isOwnerSeller ? (
+                                <>
+                                    <button className="hover:underline" onClick={() => setShowFollowers(true)}>{followersCount} Followers</button>
+                                    <span className="opacity-40">•</span>
+                                    <button className="hover:underline" onClick={() => setShowFollowing(true)}>{followingCount} Following</button>
+                                </>
+                            ) : (
+                                <>
+                                    <span>{followersCount} Followers</span>
+                                    <span className="opacity-40">•</span>
+                                    <span>{followingCount} Following</span>
+                                </>
+                            )}
                         </div>
                         <button
                             onClick={handleFollowToggle}
@@ -153,6 +199,58 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                 comparisonList={comparisonList}
                 wishlist={wishlist}
             />
+
+            {/* Owner-only Modals */}
+            {isOwnerSeller && showFollowers && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-soft-lg">
+                        <h3 className="text-lg font-bold mb-3 text-spinny-text-dark">Your Followers</h3>
+                        <ul className="max-h-64 overflow-auto space-y-2 text-sm">
+                            {followersList.length === 0 ? (
+                                <li className="text-gray-600">No followers yet.</li>
+                            ) : (
+                                followersList.map(f => (
+                                    <li key={f.id} className="text-gray-800 flex items-center justify-between gap-2">
+                                        <span className="truncate">{f.userId}</span>
+                                        <button
+                                            className="text-xs px-2 py-1 rounded bg-spinny-light-gray hover:bg-brand-gray-300"
+                                            onClick={() => onViewSellerProfile(f.userId)}
+                                        >
+                                            View Profile
+                                        </button>
+                                    </li>
+                                ))
+                            )}
+                        </ul>
+                        <button className="mt-4 px-4 py-2 rounded bg-gray-200 hover:bg-gray-300" onClick={() => setShowFollowers(false)}>Close</button>
+                    </div>
+                </div>
+            )}
+            {isOwnerSeller && showFollowing && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-soft-lg">
+                        <h3 className="text-lg font-bold mb-3 text-spinny-text-dark">You’re Following</h3>
+                        <ul className="max-h-64 overflow-auto space-y-2 text-sm">
+                            {followingList.length === 0 ? (
+                                <li className="text-gray-600">Not following anyone yet.</li>
+                            ) : (
+                                followingList.map(f => (
+                                    <li key={f.id} className="text-gray-800 flex items-center justify-between gap-2">
+                                        <span className="truncate">{f.sellerEmail}</span>
+                                        <button
+                                            className="text-xs px-2 py-1 rounded bg-spinny-light-gray hover:bg-brand-gray-300"
+                                            onClick={() => onViewSellerProfile(f.sellerEmail)}
+                                        >
+                                            View Profile
+                                        </button>
+                                    </li>
+                                ))
+                            )}
+                        </ul>
+                        <button className="mt-4 px-4 py-2 rounded bg-gray-200 hover:bg-gray-300" onClick={() => setShowFollowing(false)}>Close</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

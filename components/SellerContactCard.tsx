@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Vehicle, User } from '../types';
+import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
 
 interface SellerContactCardProps {
   vehicle: Vehicle;
@@ -142,6 +143,18 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
             <p className="text-gray-600 dark:text-gray-400">Response Rate</p>
             <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
               {seller.responseRate ? `${seller.responseRate}%` : 'N/A'}
+            </p>
+          </div>
+          <div>
+            <p className="text-gray-600 dark:text-gray-400">Followers</p>
+            <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+              {getFollowersCount(seller.email)}
+            </p>
+          </div>
+          <div>
+            <p className="text-gray-600 dark:text-gray-400">Following</p>
+            <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+              {getFollowingCount(seller.email)}
             </p>
           </div>
           <div>

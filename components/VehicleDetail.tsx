@@ -9,6 +9,7 @@ import Benefits from './Benefits';
 import QuickViewModal from './QuickViewModal';
 import BadgeDisplay from './BadgeDisplay';
 import VehicleHistory from './VehicleHistory';
+import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -373,6 +374,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                         <span className="text-xs text-spinny-text dark:text-spinny-text">({seller.ratingCount || 0})</span>
                                     </div>
                                     <BadgeDisplay badges={seller.badges || []} size="sm" />
+                                    <div className="text-xs text-brand-gray-600 dark:text-spinny-text mt-1">
+                                        {getFollowersCount(seller.email)} Followers • {getFollowingCount(seller.email)} Following
+                                    </div>
                                 </div>
                             </div>
                             <button onClick={() => onViewSellerProfile(seller.email)} className="mt-4 w-full text-center text-sm font-bold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>View Seller Profile</button>

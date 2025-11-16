@@ -336,32 +336,69 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     setUploadProgress(prev => ({ ...prev, [type]: true }));
     setFormErrors(prev => ({ ...prev, [type]: undefined }));
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target && typeof event.target.result === 'string') {
+    const compressAndSet = async () => {
+      try {
+        const dataUrl = await compressImageToDataUrl(file, {
+          maxWidth: 800,
+          maxHeight: 800,
+          maxBytes: 300 * 1024,
+          mimeType: file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+        });
         if (type === 'avatar') {
-          setFormData(prev => ({ ...prev, avatarUrl: event.target.result as string }));
+          setFormData(prev => ({ ...prev, avatarUrl: dataUrl }));
         } else if (type === 'logo') {
-          setFormData(prev => ({ ...prev, logoUrl: event.target.result as string }));
+          setFormData(prev => ({ ...prev, logoUrl: dataUrl }));
         } else if (type === 'aadhar') {
-          setFormData(prev => ({ ...prev, aadharDocumentUrl: event.target.result as string }));
+          setFormData(prev => ({ ...prev, aadharDocumentUrl: dataUrl }));
         } else if (type === 'pan') {
-          setFormData(prev => ({ ...prev, panDocumentUrl: event.target.result as string }));
+          setFormData(prev => ({ ...prev, panDocumentUrl: dataUrl }));
         }
+      } catch (err) {
+        setFormErrors(prev => ({ 
+          ...prev, 
+          [type]: 'Failed to process image. Please try a different file.' 
+        }));
+      } finally {
         setUploadProgress(prev => ({ ...prev, [type]: false }));
       }
     };
-    
-    reader.onerror = () => {
-      setFormErrors(prev => ({ 
-        ...prev, 
-        [type]: 'Failed to read image file' 
-      }));
-      setUploadProgress(prev => ({ ...prev, [type]: false }));
-    };
 
-    reader.readAsDataURL(file);
+    compressAndSet();
   };
+
+  async function compressImageToDataUrl(
+    file: File,
+    opts: { maxWidth: number; maxHeight: number; maxBytes: number; mimeType: string }
+  ): Promise<string> {
+    const arrayBuffer = await file.arrayBuffer();
+    const blob = new Blob([arrayBuffer]);
+    const imgBitmap = await createImageBitmap(blob);
+
+    const scale = Math.min(1, opts.maxWidth / imgBitmap.width, opts.maxHeight / imgBitmap.height);
+    const targetWidth = Math.max(1, Math.round(imgBitmap.width * scale));
+    const targetHeight = Math.max(1, Math.round(imgBitmap.height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Canvas not supported');
+    }
+    ctx.drawImage(imgBitmap, 0, 0, targetWidth, targetHeight);
+
+    // Iteratively lower quality to fit under maxBytes
+    let quality = 0.9;
+    let dataUrl = canvas.toDataURL(opts.mimeType, quality);
+    const maxIterations = 6;
+    let iterations = 0;
+    while (dataUrl.length * 0.75 > opts.maxBytes && iterations < maxIterations) {
+      quality = Math.max(0.4, quality - 0.15);
+      dataUrl = canvas.toDataURL(opts.mimeType, quality);
+      iterations++;
+    }
+    return dataUrl;
+  }
   
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -491,28 +528,28 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="space-y-6">
-          {/* Enhanced Header */}
-          <div className="text-center space-y-2">
-            <h1 className="text-4xl font-bold text-gray-900">My Profile</h1>
-            <p className="text-lg text-gray-600">Manage your account settings and preferences</p>
+    <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto">
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="text-center space-y-1">
+            <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
+            <p className="text-sm text-gray-600">Manage your account settings and preferences</p>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Account Details Card */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="p-6 sm:p-8">
+            <div className="bg-white rounded-xl shadow border border-gray-100 overflow-hidden">
+              <div className="p-5">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">Account Details</h2>
-                    <p className="text-sm text-gray-500 mt-1">Your personal information</p>
+                    <h2 className="text-lg font-semibold text-gray-900">Account Details</h2>
+                    <p className="text-xs text-gray-500 mt-1">Your personal information</p>
                   </div>
                   {!isEditing && (
                     <button 
                       onClick={handleEditToggle}
-                      className="px-4 py-2 text-sm font-semibold text-blue-600 hover:text-blue-700 border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      className="px-3 py-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 border border-blue-600 rounded-lg hover:bg-blue-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                       aria-label="Edit profile"
                     >
                       <span className="flex items-center gap-2">
@@ -527,13 +564,13 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
                 <form onSubmit={handleProfileSave}>
                   {/* Enhanced Profile Picture */}
-                  <div className="flex items-center space-x-4 mb-8 pb-6 border-b border-gray-200">
+                  <div className="flex items-center space-x-3 mb-6 pb-5 border-b border-gray-200">
                     <div className="relative group">
                       <div className="relative">
                         <img
-                          src={formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&size=120&background=3b82f6&color=fff&bold=true`}
+                          src={formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&size=96&background=3b82f6&color=fff&bold=true`}
                           alt="Profile"
-                          className="w-20 h-20 rounded-full object-cover border-4 border-gray-100 shadow-md transition-transform duration-200 group-hover:scale-105"
+                          className="w-16 h-16 rounded-full object-cover border-2 border-gray-100 shadow-sm transition-transform duration-200 group-hover:scale-105"
                         />
                         {uploadProgress.avatar && (
                           <div className="absolute inset-0 bg-blue-500/20 rounded-full flex items-center justify-center">
@@ -568,9 +605,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                       )}
                     </div>
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-900 text-lg">{formData.name}</p>
+                      <p className="font-semibold text-gray-900 text-base">{formData.name}</p>
                       {!isEditing && (
-                        <p className="text-sm text-gray-500 mt-1">{currentUser.email}</p>
+                        <p className="text-xs text-gray-500 mt-1">{currentUser.email}</p>
                       )}
                       {formErrors.avatar && (
                         <p className="text-xs text-red-600 mt-1">{formErrors.avatar}</p>
@@ -579,7 +616,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                   </div>
 
                   {/* Form Fields */}
-                  <div className="space-y-5">
+                  <div className="space-y-4">
                     <ProfileInput
                       label="Full Name"
                       name="name"
@@ -618,6 +655,51 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
                     {currentUser.role === 'seller' && (
                       <>
+                        {/* Seller Share Link & QR Code */}
+                        <div className="p-4 mb-2 rounded-lg border border-gray-200 bg-gray-50">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-semibold text-gray-900">Seller Share Link & QR</h3>
+                          </div>
+                          {(() => {
+                            const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                            const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
+                            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}`;
+                            return (
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                                <div className="md:col-span-2">
+                                  <label className="text-xs text-gray-500">Public seller URL</label>
+                                  <div className="mt-1 flex">
+                                    <input
+                                      type="text"
+                                      readOnly
+                                      value={shareUrl}
+                                      className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg text-sm bg-white"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => { navigator.clipboard.writeText(shareUrl); }}
+                                      className="px-3 py-2 text-sm font-semibold bg-blue-600 text-white rounded-r-lg hover:bg-blue-700"
+                                    >
+                                      Copy
+                                    </button>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-2">Share this link or the QR code to showcase your seller profile and listings.</p>
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <img src={qrUrl} alt="Seller QR code" className="w-40 h-40 border rounded-lg bg-white" />
+                                  <a
+                                    href={qrUrl}
+                                    download={`seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\\s+/g,'-')}.png`}
+                                    className="mt-2 text-xs text-blue-600 hover:underline"
+                                  >
+                                    Download QR
+                                  </a>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+
                         <ProfileInput
                           label="Dealership Name"
                           name="dealershipName"
@@ -632,14 +714,14 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                         
                         {/* Dealership Logo - Use same as profile picture for sellers */}
                         {isEditing && (
-                          <div className="space-y-2">
+                        <div className="space-y-2">
                             <label className="text-sm font-semibold text-gray-700">Dealership Logo (Optional)</label>
                             <div className="flex items-center space-x-4">
                               <div className="relative">
                                 <img
                                   src={formData.logoUrl || formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.dealershipName || 'Logo')}&size=80&background=6366f1&color=fff&bold=true`}
                                   alt="Dealership Logo"
-                                  className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200 shadow-sm"
+                                className="w-14 h-14 rounded-lg object-cover border-2 border-gray-200 shadow-sm"
                                 />
                                 {uploadProgress.logo && (
                                   <div className="absolute inset-0 bg-indigo-500/20 rounded-lg flex items-center justify-center">
@@ -653,7 +735,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                               <div>
                                 <label 
                                   htmlFor="logo-upload" 
-                                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg cursor-pointer transition-all duration-200 border border-indigo-200 hover:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                                  className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg cursor-pointer transition-all duration-200 border border-indigo-200 hover:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                                 >
                                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -690,7 +772,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                             value={formData.bio}
                             onChange={handleInputChange}
                             disabled={!isEditing}
-                            rows={4}
+                            rows={3}
                             maxLength={500}
                             className={`w-full px-4 py-2.5 border rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed resize-none ${
                               formErrors.bio 
@@ -714,9 +796,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                     )}
 
                     {/* Document Verification Section */}
-                    <div className="pt-6 mt-6 border-t border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Document Verification</h3>
-                      <p className="text-sm text-gray-500 mb-5">Upload your Aadhar Card and PAN Card for verification. These documents will be reviewed by our admin team.</p>
+                    <div className="pt-5 mt-5 border-t border-gray-200">
+                      <h3 className="text-base font-semibold text-gray-900 mb-3">Document Verification</h3>
+                      <p className="text-xs text-gray-500 mb-4">Upload your Aadhar Card and PAN Card for verification.</p>
                       
                       {/* Aadhar Card */}
                       <div className="space-y-3 mb-6">
@@ -746,11 +828,21 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                           <div className="flex items-center space-x-4">
                             {formData.aadharDocumentUrl && (
                               <div className="relative">
-                                <img
-                                  src={formData.aadharDocumentUrl}
-                                  alt="Aadhar Card"
-                                  className="w-24 h-32 object-cover border-2 border-gray-200 rounded-lg shadow-sm"
-                                />
+                                {/^data:application\/pdf|\.pdf(\?|$)/i.test(formData.aadharDocumentUrl)
+                                  ? (
+                                    <iframe
+                                      src={formData.aadharDocumentUrl}
+                                      title="Aadhar Document"
+                                      className="w-40 h-40 border-2 border-gray-200 rounded-lg shadow-sm"
+                                    />
+                                  ) : (
+                                    <img
+                                      src={formData.aadharDocumentUrl}
+                                      alt="Aadhar Card"
+                                      className="w-24 h-32 object-cover border-2 border-gray-200 rounded-lg shadow-sm"
+                                    />
+                                  )
+                                }
                                 {uploadProgress.aadhar && (
                                   <div className="absolute inset-0 bg-blue-500/20 rounded-lg flex items-center justify-center">
                                     <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
@@ -759,6 +851,14 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                                     </svg>
                                   </div>
                                 )}
+                                <a
+                                  href={formData.aadharDocumentUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="absolute -bottom-2 left-0 text-xs bg-white px-1 rounded shadow border hover:underline"
+                                >
+                                  View Document
+                                </a>
                               </div>
                             )}
                             {isEditing && (
@@ -824,11 +924,21 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                           <div className="flex items-center space-x-4">
                             {formData.panDocumentUrl && (
                               <div className="relative">
-                                <img
-                                  src={formData.panDocumentUrl}
-                                  alt="PAN Card"
-                                  className="w-24 h-32 object-cover border-2 border-gray-200 rounded-lg shadow-sm"
-                                />
+                                {/^data:application\/pdf|\.pdf(\?|$)/i.test(formData.panDocumentUrl)
+                                  ? (
+                                    <iframe
+                                      src={formData.panDocumentUrl}
+                                      title="PAN Document"
+                                      className="w-40 h-40 border-2 border-gray-200 rounded-lg shadow-sm"
+                                    />
+                                  ) : (
+                                    <img
+                                      src={formData.panDocumentUrl}
+                                      alt="PAN Card"
+                                      className="w-24 h-32 object-cover border-2 border-gray-200 rounded-lg shadow-sm"
+                                    />
+                                  )
+                                }
                                 {uploadProgress.pan && (
                                   <div className="absolute inset-0 bg-blue-500/20 rounded-lg flex items-center justify-center">
                                     <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
@@ -837,6 +947,14 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                                     </svg>
                                   </div>
                                 )}
+                                <a
+                                  href={formData.panDocumentUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="absolute -bottom-2 left-0 text-xs bg-white px-1 rounded shadow border hover:underline"
+                                >
+                                  View Document
+                                </a>
                               </div>
                             )}
                             {isEditing && (
@@ -878,19 +996,19 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
                   {/* Enhanced Action Buttons */}
                   {isEditing && (
-                    <div className="flex justify-end space-x-3 mt-8 pt-6 border-t border-gray-200">
+                    <div className="flex justify-end space-x-2 mt-6 pt-5 border-t border-gray-200">
                       <button 
                         type="button" 
                         onClick={handleEditToggle}
                         disabled={isSaving}
-                        className="px-6 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
                       <button 
                         type="submit"
                         disabled={isSaving || !hasChanges}
-                        className="px-6 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
                         {isSaving ? (
                           <>
@@ -916,11 +1034,11 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
             </div>
 
             {/* Enhanced Change Password Card */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="p-6 sm:p-8">
+            <div className="bg-white rounded-xl shadow border border-gray-100 overflow-hidden">
+              <div className="p-5">
                 <div className="mb-6">
-                  <h2 className="text-xl font-bold text-gray-900">Change Password</h2>
-                  <p className="text-sm text-gray-500 mt-1">Update your account password</p>
+                  <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
+                  <p className="text-xs text-gray-500 mt-1">Update your account password</p>
                 </div>
                 
                 <form onSubmit={handlePasswordSave}>

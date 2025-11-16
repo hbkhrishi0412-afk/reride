@@ -2,6 +2,8 @@ import React from 'react';
 import type { User } from '../types';
 import StarRating from './StarRating';
 import BadgeDisplay from './BadgeDisplay';
+import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
+import VerifiedBadge, { isUserVerified } from './VerifiedBadge';
 
 interface DealerProfilesProps {
   sellers: User[];
@@ -18,13 +20,19 @@ const DealerCard: React.FC<{ seller: User; onViewProfile: (sellerEmail: string) 
             alt={`${seller.dealershipName || seller.name}'s logo`}
             className="w-24 h-24 rounded-full object-cover border-4 border-gray-200-200 dark:border-gray-200-200 mb-4"
         />
-        <h3 className="font-bold text-xl text-spinny-text-dark dark:text-spinny-text-dark">{seller.dealershipName || seller.name}</h3>
+        <h3 className="font-bold text-xl text-spinny-text-dark dark:text-spinny-text-dark flex items-center gap-2">
+            {seller.dealershipName || seller.name}
+            <VerifiedBadge show={isUserVerified(seller)} size="sm" />
+        </h3>
         <div className="my-2">
              <BadgeDisplay badges={seller.badges || []} />
         </div>
         <div className="flex items-center gap-2 mt-1">
             <StarRating rating={seller.averageRating || 0} readOnly size="sm" />
             <span className="text-xs text-spinny-text dark:text-spinny-text">({seller.ratingCount || 0} reviews)</span>
+        </div>
+        <div className="text-xs text-brand-gray-600 dark:text-spinny-text mt-2">
+            {getFollowersCount(seller.email)} Followers • {getFollowingCount(seller.email)} Following
         </div>
         <p className="text-sm text-brand-gray-600 dark:text-spinny-text mt-3 flex-grow line-clamp-3">{seller.bio}</p>
         <button className="mt-4 w-full btn-brand-primary text-white font-bold py-2 px-4 rounded-lg transition-colors">

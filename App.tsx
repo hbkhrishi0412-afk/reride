@@ -256,6 +256,23 @@ const AppContent: React.FC = React.memo(() => {
     }
   }, [currentView, selectedVehicle]);
 
+  // Handle deep links: open seller profile via ?seller=email
+  React.useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sellerParam = params.get('seller');
+      if (sellerParam) {
+        const seller = users.find(u => u.email.toLowerCase() === sellerParam.toLowerCase());
+        if (seller) {
+          setPublicProfile(seller);
+          navigate(ViewEnum.SELLER_PROFILE);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to process deep link params', e);
+    }
+  }, [users]);
+
 
   const renderView = React.useCallback(() => {
     switch (currentView) {
