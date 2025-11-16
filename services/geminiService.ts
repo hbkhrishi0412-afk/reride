@@ -308,8 +308,8 @@ export const generateSellerSuggestions = async (vehicles: Vehicle[], conversatio
         vehicleName: c.vehicleName,
         isReadBySeller: c.isReadBySeller,
         lastMessageTimestamp: c.lastMessageAt,
-        lastMessageText: c.messages[c.messages.length - 1].text,
-        lastMessageSender: c.messages[c.messages.length - 1].sender,
+        lastMessageText: (c.messages && c.messages.length > 0) ? (c.messages[c.messages.length - 1].text ?? '') : '',
+        lastMessageSender: (c.messages && c.messages.length > 0) ? (c.messages[c.messages.length - 1].sender ?? 'buyer') : 'buyer',
     })).filter(c => c.lastMessageSender !== 'seller' && !c.isReadBySeller);
 
     const prompt = `You are an expert AI Sales Assistant for a used vehicle marketplace. Your goal is to provide actionable suggestions to a seller to help them sell their vehicles faster and improve customer communication.

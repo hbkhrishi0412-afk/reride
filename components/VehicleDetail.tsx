@@ -10,6 +10,7 @@ import QuickViewModal from './QuickViewModal';
 import BadgeDisplay from './BadgeDisplay';
 import VehicleHistory from './VehicleHistory';
 import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
+import { useApp } from './AppProvider';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -277,6 +278,45 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
       return recommendations.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
   }, [recommendations, safeVehicle.id]);
   
+  // Track a view when the detail page is opened
+  useEffect(() => {
+    const trackView = async () => {
+      try {
+        const res = await fetch('/api/vehicles?action=track-view', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vehicleId: safeVehicle.id })
+        });
+        const data = await res.json().catch(() => ({}));
+        // Optimistically update local state if API responded
+        if (data && typeof data.views === 'number') {
+          try {
+            // Update selectedVehicle persisted copy
+            const stored = sessionStorage.getItem('selectedVehicle');
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (parsed?.id === safeVehicle.id) {
+                parsed.views = data.views;
+                sessionStorage.setItem('selectedVehicle', JSON.stringify(parsed));
+              }
+            }
+          } catch {}
+          // Update global vehicles state via context so dashboards reflect the change
+          try {
+            const { updateVehicle } = useApp();
+            // Call asynchronously; ignore errors
+            updateVehicle(safeVehicle.id, { views: data.views }).catch(() => {});
+          } catch {}
+        }
+      } catch (_err) {
+        // Silently ignore tracking errors
+      }
+    };
+    if (safeVehicle?.id) {
+      trackView();
+    }
+  }, [safeVehicle?.id]);
+
   console.log('🎯 VehicleDetail about to render JSX');
   return (
     <>

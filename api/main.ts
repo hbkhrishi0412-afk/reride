@@ -1019,7 +1019,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     }
     // Enforce plan expiry and listing limits for creation (no action or unknown action)
     // Only applies to standard create flow (i.e., when not handling action sub-routes above)
-    if (!action || (action !== 'refresh' && action !== 'boost' && action !== 'certify' && action !== 'sold' && action !== 'unsold' && action !== 'feature')) {
+    if (!action || (action !== 'refresh' && action !== 'boost' && action !== 'certify' && action !== 'sold' && action !== 'unsold' && action !== 'feature' && action !== 'track-view')) {
       try {
         const { sellerEmail } = req.body || {};
         if (!sellerEmail || typeof sellerEmail !== 'string') {
@@ -1068,6 +1068,31 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           success: false,
           reason: 'Failed to validate plan or listing limits. Please try again.',
         });
+      }
+    }
+
+    // Track a single view for a vehicle
+    if (action === 'track-view') {
+      try {
+        const { vehicleId } = req.body || {};
+        const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
+        if (!vehicleIdNum || Number.isNaN(vehicleIdNum)) {
+          return res.status(400).json({ success: false, reason: 'Valid vehicleId is required' });
+        }
+
+        await connectToDatabase();
+        const vehicle = await Vehicle.findOne({ id: vehicleIdNum });
+        if (!vehicle) {
+          return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+        }
+
+        const currentViews = typeof vehicle.views === 'number' ? vehicle.views : 0;
+        vehicle.views = currentViews + 1;
+        await vehicle.save();
+
+        return res.status(200).json({ success: true, views: vehicle.views });
+      } catch (error) {
+        return res.status(500).json({ success: false, reason: 'Failed to track view', error: error instanceof Error ? error.message : 'Unknown error' });
       }
     }
     if (action === 'refresh') {
@@ -1426,6 +1451,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     const newVehicle = new Vehicle({
       id: Date.now(),
       ...req.body,
+      views: 0,
+      inquiriesCount: 0,
       createdAt: new Date().toISOString(),
       listingExpiresAt
     });
@@ -1906,6 +1933,7 @@ async function seedVehicles(): Promise<any[]> {
   const sampleVehicles = [
     {
       id: 1,
+      views: 324,
       make: 'Maruti Suzuki',
       model: 'Swift',
       variant: 'VXi',
@@ -1920,6 +1948,7 @@ async function seedVehicles(): Promise<any[]> {
     },
     {
       id: 2,
+      views: 512,
       make: 'Honda',
       model: 'City',
       variant: 'VX',

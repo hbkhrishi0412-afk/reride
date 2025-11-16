@@ -10,7 +10,7 @@ export const createPaymentRequest = async (
   transactionId?: string
 ): Promise<PaymentRequest> => {
   try {
-    const response = await fetch('/api/payment-requests?action=create', {
+    const response = await fetch('/api/payments?action=create', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,7 +41,7 @@ export const createPaymentRequest = async (
 // Get payment request status for a seller
 export const getPaymentRequestStatus = async (sellerEmail: string): Promise<PaymentRequest | null> => {
   try {
-    const response = await fetch(`/api/payment-requests?action=status&sellerEmail=${encodeURIComponent(sellerEmail)}`);
+    const response = await fetch(`/api/payments?action=status&sellerEmail=${encodeURIComponent(sellerEmail)}`);
     
     if (!response.ok) {
       // Check if response is JSON
@@ -58,7 +58,8 @@ export const getPaymentRequestStatus = async (sellerEmail: string): Promise<Paym
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
       const data = await response.json();
-      return data.paymentRequest;
+      // Backend returns { paymentStatus }, normalize to PaymentRequest-like object if present
+      return data.paymentRequest || data.paymentStatus || null;
     } else {
       throw new Error('API returned non-JSON response');
     }
@@ -71,7 +72,7 @@ export const getPaymentRequestStatus = async (sellerEmail: string): Promise<Paym
 // Admin functions
 export const getPaymentRequests = async (adminEmail: string, status?: string): Promise<PaymentRequest[]> => {
   try {
-    const url = `/api/payment-requests?action=list&adminEmail=${encodeURIComponent(adminEmail)}${status ? `&status=${status}` : ''}`;
+    const url = `/api/payments?action=list&adminEmail=${encodeURIComponent(adminEmail)}${status ? `&status=${status}` : ''}`;
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -80,7 +81,7 @@ export const getPaymentRequests = async (adminEmail: string, status?: string): P
     }
 
     const data = await response.json();
-    return data.paymentRequests;
+    return data.paymentRequests || [];
   } catch (error) {
     console.error('Error getting payment requests:', error);
     throw error;
@@ -93,8 +94,8 @@ export const approvePaymentRequest = async (
   notes?: string
 ): Promise<PaymentRequest> => {
   try {
-    const response = await fetch('/api/payment-requests?action=approve', {
-      method: 'PUT',
+    const response = await fetch('/api/payments?action=approve', {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -111,7 +112,7 @@ export const approvePaymentRequest = async (
     }
 
     const data = await response.json();
-    return data.paymentRequest;
+    return data.paymentRequest || { id: paymentRequestId } as unknown as PaymentRequest;
   } catch (error) {
     console.error('Error approving payment request:', error);
     throw error;
@@ -124,8 +125,8 @@ export const rejectPaymentRequest = async (
   rejectionReason?: string
 ): Promise<PaymentRequest> => {
   try {
-    const response = await fetch('/api/payment-requests?action=reject', {
-      method: 'PUT',
+    const response = await fetch('/api/payments?action=reject', {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -142,7 +143,7 @@ export const rejectPaymentRequest = async (
     }
 
     const data = await response.json();
-    return data.paymentRequest;
+    return data.paymentRequest || { id: paymentRequestId } as unknown as PaymentRequest;
   } catch (error) {
     console.error('Error rejecting payment request:', error);
     throw error;
