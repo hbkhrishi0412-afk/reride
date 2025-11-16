@@ -699,19 +699,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     
     // Admin functions
     onAdminUpdateUser: async (email: string, details: Partial<User>) => {
-      const sanitizedDetails = Object.fromEntries(
-        Object.entries(details).filter(([, value]) => value !== undefined)
-      ) as Partial<User>;
+      // Separate null values (to be removed) from regular updates
+      const updateFields: Partial<User> = {};
+      const fieldsToRemove: string[] = [];
+      
+      Object.entries(details).forEach(([key, value]) => {
+        if (value === null) {
+          fieldsToRemove.push(key);
+        } else if (value !== undefined) {
+          updateFields[key as keyof User] = value;
+        }
+      });
 
       setUsers(prev =>
-        prev.map(user =>
-          user.email === email ? { ...user, ...sanitizedDetails } : user
-        )
+        prev.map(user => {
+          if (user.email === email) {
+            const updatedUser = { ...user, ...updateFields };
+            // Remove fields that are set to null
+            fieldsToRemove.forEach(key => {
+              delete (updatedUser as any)[key];
+            });
+            return updatedUser;
+          }
+          return user;
+        })
       );
       
-      // Also update in MongoDB
+      // Also update in MongoDB - pass both updates and nulls
       try {
-        await updateUser(email, sanitizedDetails);
+        await updateUser(email, details); // Pass original details to preserve null values
       } catch (error) {
         console.warn('Failed to sync user update to MongoDB:', error);
       }

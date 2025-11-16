@@ -152,8 +152,38 @@ export default async function handler(
     }
 
     // Route based on the path
-    const url = new URL(req.url || '', `http://${req.headers.host}`);
-    const pathname = url.pathname;
+    // Handle Vercel rewrites - check original path if available
+    let pathname = '/';
+    try {
+      const originalPath = req.headers['x-vercel-original-path'] as string;
+      const requestUrl = originalPath || req.url || '';
+      
+      // If requestUrl doesn't start with /, it might be a full URL or relative
+      if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
+        const url = new URL(requestUrl);
+        pathname = url.pathname;
+      } else if (requestUrl.startsWith('/')) {
+        pathname = requestUrl.split('?')[0]; // Remove query string
+      } else {
+        // Try to construct URL
+        const url = new URL(requestUrl, `http://${req.headers.host || 'localhost'}`);
+        pathname = url.pathname;
+      }
+    } catch (urlError) {
+      console.warn('⚠️ Error parsing URL, using fallback:', urlError);
+      // Fallback: try to extract pathname from req.url directly
+      if (req.url) {
+        const match = req.url.match(/^([^?]+)/);
+        if (match) {
+          pathname = match[1];
+        }
+      }
+    }
+    
+    // Log for debugging (only in development)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`📍 Request pathname: ${pathname}, url: ${req.url}`);
+    }
 
     // Route to appropriate handler
     const handlerOptions: HandlerOptions = {
@@ -879,152 +909,163 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       return res.status(200).json(fallbackVehicles);
     }
 
-    if (action === 'city-stats' && req.query.city) {
-      const cityVehicles = await Vehicle.find({ city: req.query.city as string });
-      const stats = {
-        totalVehicles: cityVehicles.length,
-        averagePrice: cityVehicles.reduce((sum, v) => sum + v.price, 0) / cityVehicles.length || 0,
-        popularMakes: getPopularMakes(cityVehicles),
-        priceRange: getPriceRange(cityVehicles)
-      };
-      return res.status(200).json(stats);
-    }
-
-    if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
-      const vehicles = await Vehicle.find({ status: 'published' });
-      const nearbyVehicles = vehicles.filter(vehicle => {
-        if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
-        const distance = calculateDistance(
-          parseFloat(req.query.lat as string),
-          parseFloat(req.query.lng as string),
-          vehicle.exactLocation.lat,
-          vehicle.exactLocation.lng
-        );
-        return distance <= parseFloat(req.query.radius as string);
-      });
-      return res.status(200).json(nearbyVehicles);
-    }
-
-    // Get all vehicles and auto-disable expired listings
-    const vehicles = await Vehicle.find({}).sort({ createdAt: -1 });
-    
-    const now = new Date();
-    const sellerEmails = new Set<string>();
-    
-    vehicles.forEach(vehicle => {
-      if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
-        sellerEmails.add(vehicle.sellerEmail.toLowerCase());
-      }
-    });
-    
-    const sellerMap = new Map<string, any>();
-    if (sellerEmails.size > 0) {
-      const sellers = await User.find({ email: { $in: Array.from(sellerEmails) } }).lean();
-      sellers.forEach(seller => {
-        sellerMap.set(seller.email.toLowerCase(), seller);
-      });
-    }
-    
-    const bulkUpdates: any[] = [];
-    
-    vehicles.forEach(vehicle => {
-      const updateFields: Record<string, any> = {};
+    try {
+      // Ensure database connection is established
+      await connectToDatabase();
       
-      if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
-        const seller = sellerMap.get(vehicle.sellerEmail.toLowerCase());
-        if (seller) {
-          // If seller's plan has expired, force-unpublish even if listingExpiresAt is not set
-          if (seller.planExpiryDate) {
-            const sellerExpiry = new Date(seller.planExpiryDate);
-            if (!isNaN(sellerExpiry.getTime()) && sellerExpiry < now) {
-              updateFields.status = 'unpublished';
-              updateFields.listingStatus = 'expired';
+      if (action === 'city-stats' && req.query.city) {
+        const cityVehicles = await Vehicle.find({ city: req.query.city as string });
+        const stats = {
+          totalVehicles: cityVehicles.length,
+          averagePrice: cityVehicles.reduce((sum, v) => sum + v.price, 0) / cityVehicles.length || 0,
+          popularMakes: getPopularMakes(cityVehicles),
+          priceRange: getPriceRange(cityVehicles)
+        };
+        return res.status(200).json(stats);
+      }
+
+      if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
+        const vehicles = await Vehicle.find({ status: 'published' });
+        const nearbyVehicles = vehicles.filter(vehicle => {
+          if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
+          const distance = calculateDistance(
+            parseFloat(req.query.lat as string),
+            parseFloat(req.query.lng as string),
+            vehicle.exactLocation.lat,
+            vehicle.exactLocation.lng
+          );
+          return distance <= parseFloat(req.query.radius as string);
+        });
+        return res.status(200).json(nearbyVehicles);
+      }
+
+      // Get all vehicles and auto-disable expired listings
+      const vehicles = await Vehicle.find({}).sort({ createdAt: -1 });
+      
+      const now = new Date();
+      const sellerEmails = new Set<string>();
+      
+      vehicles.forEach(vehicle => {
+        if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
+          sellerEmails.add(vehicle.sellerEmail.toLowerCase());
+        }
+      });
+      
+      const sellerMap = new Map<string, any>();
+      if (sellerEmails.size > 0) {
+        const sellers = await User.find({ email: { $in: Array.from(sellerEmails) } }).lean();
+        sellers.forEach(seller => {
+          sellerMap.set(seller.email.toLowerCase(), seller);
+        });
+      }
+      
+      const bulkUpdates: any[] = [];
+      
+      vehicles.forEach(vehicle => {
+        const updateFields: Record<string, any> = {};
+        
+        if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
+          const seller = sellerMap.get(vehicle.sellerEmail.toLowerCase());
+          if (seller) {
+            // If seller's plan has expired, force-unpublish even if listingExpiresAt is not set
+            if (seller.planExpiryDate) {
+              const sellerExpiry = new Date(seller.planExpiryDate);
+              if (!isNaN(sellerExpiry.getTime()) && sellerExpiry < now) {
+                updateFields.status = 'unpublished';
+                updateFields.listingStatus = 'expired';
+              }
+            }
+            
+            if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
+              updateFields.listingExpiresAt = seller.planExpiryDate;
+            } else if (seller.subscriptionPlan !== 'premium') {
+              const expiryDate = new Date();
+              expiryDate.setDate(expiryDate.getDate() + 30);
+              updateFields.listingExpiresAt = expiryDate.toISOString();
             }
           }
-          
-          if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
-            updateFields.listingExpiresAt = seller.planExpiryDate;
-          } else if (seller.subscriptionPlan !== 'premium') {
-            const expiryDate = new Date();
-            expiryDate.setDate(expiryDate.getDate() + 30);
-            updateFields.listingExpiresAt = expiryDate.toISOString();
+        }
+        
+        if (vehicle.listingExpiresAt && vehicle.status === 'published') {
+          const expiryDate = new Date(vehicle.listingExpiresAt);
+          if (expiryDate < now) {
+            updateFields.status = 'unpublished';
+            updateFields.listingStatus = 'expired';
           }
         }
-      }
-      
-      if (vehicle.listingExpiresAt && vehicle.status === 'published') {
-        const expiryDate = new Date(vehicle.listingExpiresAt);
-        if (expiryDate < now) {
-          updateFields.status = 'unpublished';
-          updateFields.listingStatus = 'expired';
-        }
-      }
-      
-      if (Object.keys(updateFields).length > 0) {
-        bulkUpdates.push({
-          updateOne: {
-            filter: { _id: vehicle._id },
-            update: { $set: updateFields }
-          }
-        });
-      }
-    });
-    
-    // Enforce plan listing limits: keep most recent listings within limit, unpublish extras
-    try {
-      // Build per-seller published vehicles list (newest first)
-      const sellerToPublished: Map<string, any[]> = new Map();
-      vehicles.forEach(v => {
-        if (v.status === 'published' && v.sellerEmail) {
-          const key = v.sellerEmail.toLowerCase();
-          if (!sellerToPublished.has(key)) sellerToPublished.set(key, []);
-          sellerToPublished.get(key)!.push(v);
-        }
-      });
-      sellerToPublished.forEach(list => {
-        list.sort((a, b) => {
-          const aTime = new Date(a.createdAt || a._id?.getTimestamp?.() || 0).getTime();
-          const bTime = new Date(b.createdAt || b._id?.getTimestamp?.() || 0).getTime();
-          return bTime - aTime;
-        });
-      });
-      
-      // For each seller, apply plan limit
-      sellerToPublished.forEach((publishedVehicles, email) => {
-        const seller = sellerMap.get(email);
-        const planKey = (seller?.subscriptionPlan || 'free') as keyof typeof PLAN_DETAILS;
-        const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
-        const limit = planDetails.listingLimit;
-        if (limit === 'unlimited') {
-          return;
-        }
-        const numericLimit = Number(limit) || 0;
-        if (publishedVehicles.length > numericLimit) {
-          const extras = publishedVehicles.slice(numericLimit); // older ones
-          extras.forEach(v => {
-            bulkUpdates.push({
-              updateOne: {
-                filter: { _id: v._id },
-                update: { $set: { status: 'unpublished', listingStatus: 'suspended' } }
-              }
-            });
+        
+        if (Object.keys(updateFields).length > 0) {
+          bulkUpdates.push({
+            updateOne: {
+              filter: { _id: vehicle._id },
+              update: { $set: updateFields }
+            }
           });
         }
       });
-    } catch (limitErr) {
-      console.warn('⚠️ Error applying plan listing limits:', limitErr);
+      
+      // Enforce plan listing limits: keep most recent listings within limit, unpublish extras
+      try {
+        // Build per-seller published vehicles list (newest first)
+        const sellerToPublished: Map<string, any[]> = new Map();
+        vehicles.forEach(v => {
+          if (v.status === 'published' && v.sellerEmail) {
+            const key = v.sellerEmail.toLowerCase();
+            if (!sellerToPublished.has(key)) sellerToPublished.set(key, []);
+            sellerToPublished.get(key)!.push(v);
+          }
+        });
+        sellerToPublished.forEach(list => {
+          list.sort((a, b) => {
+            const aTime = new Date(a.createdAt || a._id?.getTimestamp?.() || 0).getTime();
+            const bTime = new Date(b.createdAt || b._id?.getTimestamp?.() || 0).getTime();
+            return bTime - aTime;
+          });
+        });
+        
+        // For each seller, apply plan limit
+        sellerToPublished.forEach((publishedVehicles, email) => {
+          const seller = sellerMap.get(email);
+          const planKey = (seller?.subscriptionPlan || 'free') as keyof typeof PLAN_DETAILS;
+          const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
+          const limit = planDetails.listingLimit;
+          if (limit === 'unlimited') {
+            return;
+          }
+          const numericLimit = Number(limit) || 0;
+          if (publishedVehicles.length > numericLimit) {
+            const extras = publishedVehicles.slice(numericLimit); // older ones
+            extras.forEach(v => {
+              bulkUpdates.push({
+                updateOne: {
+                  filter: { _id: v._id },
+                  update: { $set: { status: 'unpublished', listingStatus: 'suspended' } }
+                }
+              });
+            });
+          }
+        });
+      } catch (limitErr) {
+        console.warn('⚠️ Error applying plan listing limits:', limitErr);
+      }
+      
+      if (bulkUpdates.length > 0) {
+        await Vehicle.bulkWrite(bulkUpdates, { ordered: false });
+      }
+      
+      // Return vehicles after checking expiry (latest data)
+      const refreshedVehicles = bulkUpdates.length > 0
+        ? await Vehicle.find({}).sort({ createdAt: -1 })
+        : vehicles;
+      
+      return res.status(200).json(refreshedVehicles);
+    } catch (error) {
+      console.error('❌ Error fetching vehicles:', error);
+      // Fallback to mock data if database query fails
+      const fallbackVehicles = await getFallbackVehicles();
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json(fallbackVehicles);
     }
-    
-    if (bulkUpdates.length > 0) {
-      await Vehicle.bulkWrite(bulkUpdates, { ordered: false });
-    }
-    
-    // Return vehicles after checking expiry (latest data)
-    const refreshedVehicles = bulkUpdates.length > 0
-      ? await Vehicle.find({}).sort({ createdAt: -1 })
-      : vehicles;
-    
-    return res.status(200).json(refreshedVehicles);
   }
 
   if (req.method === 'POST') {

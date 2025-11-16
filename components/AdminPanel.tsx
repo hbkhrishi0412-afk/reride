@@ -2274,55 +2274,40 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         }}
                         onSave={async (expiryDate: string | null) => {
                             try {
-                                const { updateUser, getUsers } = await import('../services/userService');
-                                
                                 // Prepare update data
-                                const updateData: any = {
-                                    email: editingExpiryUser.email
-                                };
+                                const updateData: Partial<User> = {};
                                 
                                 // Handle expiry date update
                                 if (expiryDate !== null && expiryDate !== '') {
-                                    // Set expiry date
-                                    updateData.planExpiryDate = expiryDate;
+                                    // Ensure date is in ISO string format
+                                    const dateObj = new Date(expiryDate);
+                                    if (isNaN(dateObj.getTime())) {
+                                        throw new Error('Invalid date format');
+                                    }
+                                    updateData.planExpiryDate = dateObj.toISOString();
                                 } else {
                                     // Remove expiry date by setting to null
-                                    updateData.planExpiryDate = null;
+                                    updateData.planExpiryDate = null as any;
                                 }
                                 
-                                console.log('Updating user expiry date:', updateData);
+                                console.log('Updating user expiry date:', {
+                                    email: editingExpiryUser.email,
+                                    planExpiryDate: updateData.planExpiryDate
+                                });
                                 
-                                await updateUser(updateData);
+                                // Update via onAdminUpdateUser which updates both local state and MongoDB
+                                await onAdminUpdateUser(editingExpiryUser.email, updateData);
                                 
-                                // Close modal first
+                                // Close modal
                                 setShowExpiryEditModal(false);
                                 setEditingExpiryUser(null);
                                 
-                                // Show success message without blocking
+                                // Show success message
                                 const successMsg = expiryDate 
                                     ? `Expiry date set to ${new Date(expiryDate).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}`
                                     : 'Expiry date removed successfully';
                                 
-                                // Use a non-blocking notification
                                 console.log('✅', successMsg);
-                                
-                                // Show brief notification without blocking
-                                const notification = document.createElement('div');
-                                notification.textContent = successMsg;
-                                notification.className = 'fixed top-5 right-5 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[9999] text-sm font-medium animate-slide-up';
-                                document.body.appendChild(notification);
-                                
-                                // Remove notification after 3 seconds with fade out
-                                setTimeout(() => {
-                                    notification.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
-                                    notification.style.opacity = '0';
-                                    notification.style.transform = 'translateX(100%)';
-                                    setTimeout(() => {
-                                        if (notification.parentNode) {
-                                            notification.parentNode.removeChild(notification);
-                                        }
-                                    }, 300);
-                                }, 3000);
                                 
                             } catch (error: any) {
                                 console.error('Failed to update expiry date:', error);
