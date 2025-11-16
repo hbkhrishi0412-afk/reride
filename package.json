@@ -24,6 +24,8 @@
     "verify-deployment:local": "node scripts/verify-deployment.js http://localhost:5173",
     "test-categories": "node scripts/test-category-sync.js",
     "test-categories:local": "node scripts/test-category-sync.js http://localhost:5173",
+    "db:verify": "node scripts/verify-database-structure.js",
+    "db:setup": "node scripts/setup-database-collections.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

@@ -23,16 +23,31 @@ function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
   try {
     const parsed = new URL(uri);
     const hasDatabase = parsed.pathname && parsed.pathname !== '/' && parsed.pathname.length > 1;
+    
     if (!hasDatabase) {
       parsed.pathname = `/${dbName}`;
       console.warn(`⚠️ MONGODB_URI missing database name. Defaulting to /${dbName}.`);
       return parsed.toString();
     }
-    return uri;
+    
+    // Normalize database name in URI to lowercase 'reride' if it's a variation
+    const currentDbName = parsed.pathname.slice(1); // Remove leading slash
+    const normalizedDbName = currentDbName.toLowerCase();
+    
+    // If the database name in URI is a variation of 'reride', normalize it
+    if (normalizedDbName === 're-ride' || normalizedDbName === 'reride' || normalizedDbName === 're_ride') {
+      if (currentDbName !== dbName) {
+        console.warn(`⚠️ Database name in URI is "${currentDbName}", normalizing to "${dbName}"`);
+        parsed.pathname = `/${dbName}`;
+      }
+    }
+    
+    return parsed.toString();
   } catch (error) {
     console.warn('⚠️ Unable to parse MONGODB_URI. Falling back to manual handling.', error);
-    if (uri.includes(`/${dbName}`)) {
-      return uri;
+    if (uri.includes(`/${dbName}`) || uri.toLowerCase().includes('/re-ride') || uri.toLowerCase().includes('/re_ride')) {
+      // Replace variations with correct database name
+      return uri.replace(/\/re-ride/i, `/${dbName}`).replace(/\/re_ride/i, `/${dbName}`);
     }
     if (uri.includes('?')) {
       const [base, query] = uri.split('?');
