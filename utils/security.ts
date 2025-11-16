@@ -1,12 +1,32 @@
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
-import DOMPurify from 'dompurify';
 import validator from 'validator';
 import type { User } from '../types';
 import { getSecurityConfig } from './security-config';
 
 // Get security configuration
 const config = getSecurityConfig();
+
+// Safe HTML sanitizer usable in both browser and server environments.
+// - In browser: use DOMPurify if available.
+// - In server (Vercel functions): fall back to validator-based escaping.
+const sanitizeHtml = (input: string): string => {
+  try {
+    // Use DOMPurify only when running in a browser-like environment
+    if (typeof window !== 'undefined') {
+      // Lazy import to avoid bundling issues in serverless
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const DOMPurify = require('dompurify');
+      if (DOMPurify && DOMPurify.sanitize) {
+        return DOMPurify.sanitize(input);
+      }
+    }
+  } catch {
+    // Ignore and fall back to validator escaping below
+  }
+  // Server-side fallback: escape potentially dangerous characters
+  return validator.escape(input);
+};
 
 // Password hashing utilities
 export const hashPassword = async (password: string): Promise<string> => {
@@ -90,11 +110,11 @@ export const sanitizeString = (input: string): string => {
   if (typeof input !== 'string') {
     return '';
   }
-  
-  // Remove potential XSS attacks
-  const sanitized = DOMPurify.sanitize(input);
-  
-  // Escape HTML entities
+
+  // Remove potential XSS attacks (browser) or escape (server)
+  const sanitized = sanitizeHtml(input);
+
+  // Ensure HTML entities are escaped even after DOMPurify
   return validator.escape(sanitized);
 };
 
