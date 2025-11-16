@@ -19,7 +19,21 @@ export default async function handler(
 
   try {
     // Route based on business type
-    const { type } = req.query;
+    // Support both query-based routing and path-based routing for compatibility with /api/payments and /api/plans
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const pathname = url.pathname || '';
+    
+    // Preferred: explicit query (?type=payments|plans)
+    let type = (req.query.type as string) || '';
+    
+    // Backward/alternate compatibility: infer from path
+    if (!type) {
+      if (pathname.includes('/payments')) {
+        type = 'payments';
+      } else if (pathname.includes('/plans')) {
+        type = 'plans';
+      }
+    }
     
     switch (type) {
       case 'payments':

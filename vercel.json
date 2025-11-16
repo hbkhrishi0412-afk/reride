@@ -7,6 +7,22 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/payments",
+      "destination": "/api/business?type=payments"
+    },
+    {
+      "source": "/api/payments/(.*)",
+      "destination": "/api/business?type=payments"
+    },
+    {
+      "source": "/api/plans",
+      "destination": "/api/business?type=plans"
+    },
+    {
+      "source": "/api/plans/(.*)",
+      "destination": "/api/business?type=plans"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
