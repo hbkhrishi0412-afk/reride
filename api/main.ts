@@ -194,15 +194,41 @@ export default async function handler(
     if (pathname.includes('/users') || pathname.endsWith('/users')) {
       return await handleUsers(req, res, handlerOptions);
     } else if (pathname.includes('/vehicles') || pathname.endsWith('/vehicles')) {
-      return await handleVehicles(req, res, handlerOptions);
+      try {
+        return await handleVehicles(req, res, handlerOptions);
+      } catch (error) {
+        console.error('⚠️ Error in handleVehicles wrapper:', error);
+        // For vehicles?type=data, ensure we never return 500
+        if (req.query?.type === 'data') {
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('X-Data-Fallback', 'true');
+          return res.status(200).json({
+            FOUR_WHEELER: [{ name: "Maruti Suzuki", models: [{ name: "Swift", variants: ["LXi", "VXi", "ZXi"] }] }],
+            TWO_WHEELER: [{ name: "Honda", models: [{ name: "Activa 6G", variants: ["Standard", "DLX"] }] }]
+          });
+        }
+        // For other vehicle endpoints, let the error propagate to outer catch
+        throw error;
+      }
     } else if (pathname.includes('/admin') || pathname.endsWith('/admin')) {
       return await handleAdmin(req, res, handlerOptions);
     } else if (pathname.includes('/db-health') || pathname.endsWith('/db-health')) {
       return await handleHealth(req, res);
     } else if (pathname.includes('/seed') || pathname.endsWith('/seed')) {
       return await handleSeed(req, res, handlerOptions);
-    } else if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
-      return await handleVehicleData(req, res, handlerOptions);
+    } else     if (pathname.includes('/vehicle-data') || pathname.endsWith('/vehicle-data')) {
+      try {
+        return await handleVehicleData(req, res, handlerOptions);
+      } catch (error) {
+        console.error('⚠️ Error in handleVehicleData wrapper:', error);
+        // Ensure we never return 500 for vehicle-data endpoints
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json({
+          FOUR_WHEELER: [{ name: "Maruti Suzuki", models: [{ name: "Swift", variants: ["LXi", "VXi", "ZXi"] }] }],
+          TWO_WHEELER: [{ name: "Honda", models: [{ name: "Activa 6G", variants: ["Standard", "DLX"] }] }]
+        });
+      }
     } else if (pathname.includes('/new-cars') || pathname.endsWith('/new-cars')) {
       return await handleNewCars(req, res, handlerOptions);
     } else if (pathname.includes('/system') || pathname.endsWith('/system')) {
@@ -227,6 +253,19 @@ export default async function handler(
     
     // Ensure we always return JSON, never HTML
     res.setHeader('Content-Type', 'application/json');
+    
+    // Special handling for vehicle-data endpoints - NEVER return 500
+    const pathname = req.url?.split('?')[0] || '';
+    const isVehicleDataEndpoint = pathname.includes('/vehicle-data') || 
+                                  pathname.includes('/vehicles') && req.query?.type === 'data';
+    
+    if (isVehicleDataEndpoint) {
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json({
+        FOUR_WHEELER: [{ name: "Maruti Suzuki", models: [{ name: "Swift", variants: ["LXi", "VXi", "ZXi"] }] }],
+        TWO_WHEELER: [{ name: "Honda", models: [{ name: "Activa 6G", variants: ["Standard", "DLX"] }] }]
+      });
+    }
     
     if (error instanceof Error && error.message.includes('MONGODB_URI')) {
       return res.status(500).json({ 
@@ -756,6 +795,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
 
   // VEHICLE DATA ENDPOINTS (brands, models, variants)
   if (type === 'data') {
+    // Ensure JSON content type
+    res.setHeader('Content-Type', 'application/json');
+    
     // Default vehicle data (fallback)
     const defaultData = {
       FOUR_WHEELER: [
@@ -800,74 +842,97 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       ]
     };
 
-    if (req.method === 'GET') {
-      if (!mongoAvailable) {
-        return res.status(200).json(defaultData);
-      }
-      try {
-        await connectToDatabase();
-        console.log('📡 Connected to database for vehicles data fetch operation');
-        
-        let vehicleDataDoc = await VehicleDataModel.findOne();
-        if (!vehicleDataDoc) {
-          // Create default vehicle data if none exists
-          vehicleDataDoc = new VehicleDataModel({ data: defaultData });
-          await vehicleDataDoc.save();
+    try {
+      if (req.method === 'GET') {
+        // Always return default data if mongo is not available
+        if (!mongoAvailable) {
+          res.setHeader('X-Data-Fallback', 'true');
+          return res.status(200).json(defaultData);
         }
-        
-        return res.status(200).json(vehicleDataDoc.data);
-      } catch (dbError) {
-        console.warn('⚠️ Database connection failed for vehicles data, returning default data:', dbError);
-        // Return default data as fallback
-        return res.status(200).json(defaultData);
-      }
-    }
-
-    if (req.method === 'POST') {
-      if (!mongoAvailable) {
-        console.warn('⚠️ Vehicle data save attempted without MongoDB. Returning fallback acknowledgement.');
-        return res.status(200).json({
-          success: true,
-          data: req.body,
-          message: 'Vehicle data processed (database unavailable, using fallback)',
-          fallback: true,
-          timestamp: new Date().toISOString()
-        });
-      }
-      try {
-        await connectToDatabase();
-        console.log('📡 Connected to database for vehicles data save operation');
-        
-        const vehicleData = await VehicleDataModel.findOneAndUpdate(
-          {},
-          { 
-            data: req.body,
-            updatedAt: new Date()
-          },
-          { 
-            upsert: true, 
-            new: true,
-            setDefaultsOnInsert: true
+        try {
+          await connectToDatabase();
+          console.log('📡 Connected to database for vehicles data fetch operation');
+          
+          let vehicleDataDoc = await VehicleDataModel.findOne();
+          if (!vehicleDataDoc) {
+            // Create default vehicle data if none exists
+            vehicleDataDoc = new VehicleDataModel({ data: defaultData });
+            await vehicleDataDoc.save();
           }
-        );
-        
-        console.log('✅ Vehicle data saved successfully to database');
-        return res.status(200).json({ 
-          success: true, 
-          data: vehicleData.data,
-          message: 'Vehicle data updated successfully',
-          timestamp: new Date().toISOString()
-        });
-      } catch (dbError) {
-        console.warn('⚠️ Database connection failed for vehicles data save:', dbError);
-        
-        // For POST requests, we should still return success but indicate fallback
-        // This prevents the sync from failing completely
-        console.log('📝 Returning success with fallback indication for POST request');
+          
+          return res.status(200).json(vehicleDataDoc.data);
+        } catch (dbError) {
+          console.warn('⚠️ Database connection failed for vehicles data, returning default data:', dbError);
+          // Return default data as fallback - NEVER return 500
+          res.setHeader('X-Data-Fallback', 'true');
+          return res.status(200).json(defaultData);
+        }
+      }
+
+      if (req.method === 'POST') {
+        // Always return success response, even if mongo is not available
+        if (!mongoAvailable) {
+          res.setHeader('X-Data-Fallback', 'true');
+          console.warn('⚠️ Vehicle data save attempted without MongoDB. Returning fallback acknowledgement.');
+          return res.status(200).json({
+            success: true,
+            data: req.body,
+            message: 'Vehicle data processed (database unavailable, using fallback)',
+            fallback: true,
+            timestamp: new Date().toISOString()
+          });
+        }
+        try {
+          await connectToDatabase();
+          console.log('📡 Connected to database for vehicles data save operation');
+          
+          const vehicleData = await VehicleDataModel.findOneAndUpdate(
+            {},
+            { 
+              data: req.body,
+              updatedAt: new Date()
+            },
+            { 
+              upsert: true, 
+              new: true,
+              setDefaultsOnInsert: true
+            }
+          );
+          
+          console.log('✅ Vehicle data saved successfully to database');
+          return res.status(200).json({ 
+            success: true, 
+            data: vehicleData.data,
+            message: 'Vehicle data updated successfully',
+            timestamp: new Date().toISOString()
+          });
+        } catch (dbError) {
+          console.warn('⚠️ Database connection failed for vehicles data save:', dbError);
+          
+          // For POST requests, we should still return success but indicate fallback
+          // This prevents the sync from failing completely - NEVER return 500
+          console.log('📝 Returning success with fallback indication for POST request');
+          res.setHeader('X-Data-Fallback', 'true');
+          return res.status(200).json({
+            success: true,
+            data: req.body,
+            message: 'Vehicle data processed (database unavailable, using fallback)',
+            fallback: true,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    } catch (error) {
+      // Ultimate fallback - catch any unexpected errors
+      console.error('⚠️ Unexpected error in handleVehicles type=data:', error);
+      res.setHeader('X-Data-Fallback', 'true');
+      if (req.method === 'GET') {
+        return res.status(200).json(defaultData);
+      } else {
         return res.status(200).json({
           success: true,
-          data: req.body,
-          message: 'Vehicle data processed (database unavailable, using fallback)',
+          data: req.body || {},
+          message: 'Vehicle data processed (error occurred, using fallback)',
           fallback: true,
           timestamp: new Date().toISOString()
         });
@@ -1730,6 +1795,9 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, options: Hand
 
 // Vehicle Data handler - preserves exact functionality from vehicle-data.ts
 async function handleVehicleData(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  // Ensure JSON content type
+  res.setHeader('Content-Type', 'application/json');
+  
   const defaultData = {
     FOUR_WHEELER: [
       {
@@ -1750,82 +1818,105 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
     ]
   };
 
-  if (req.method === 'GET') {
-    if (!options.mongoAvailable) {
-      return res.status(200).json(defaultData);
-    }
-
-    try {
-      await connectToDatabase();
-      console.log('📡 Connected to database for vehicle-data fetch operation');
-      
-      let vehicleDataDoc = await VehicleDataModel.findOne();
-      if (!vehicleDataDoc) {
-        // Create default vehicle data if none exists
-        vehicleDataDoc = new VehicleDataModel({ data: defaultData });
-        await vehicleDataDoc.save();
+  try {
+    if (req.method === 'GET') {
+      // Always return default data if mongo is not available
+      if (!options.mongoAvailable) {
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json(defaultData);
       }
-      
-      return res.status(200).json(vehicleDataDoc.data);
-    } catch (dbError) {
-      console.warn('⚠️ Database connection failed for vehicle-data, returning default data:', dbError);
-      // Return default data as fallback
-      return res.status(200).json(defaultData);
-    }
-  }
 
-  if (req.method === 'POST') {
-    if (!options.mongoAvailable) {
-      return res.status(200).json({
-        success: true,
-        data: req.body,
-        message: 'Vehicle data processed (database unavailable, using fallback)',
-        fallback: true,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    try {
-      await connectToDatabase();
-      console.log('📡 Connected to database for vehicle-data save operation');
-      
-      const vehicleData = await VehicleDataModel.findOneAndUpdate(
-        {},
-        { 
-          data: req.body,
-          updatedAt: new Date()
-        },
-        { 
-          upsert: true, 
-          new: true,
-          setDefaultsOnInsert: true
+      try {
+        await connectToDatabase();
+        console.log('📡 Connected to database for vehicle-data fetch operation');
+        
+        let vehicleDataDoc = await VehicleDataModel.findOne();
+        if (!vehicleDataDoc) {
+          // Create default vehicle data if none exists
+          vehicleDataDoc = new VehicleDataModel({ data: defaultData });
+          await vehicleDataDoc.save();
         }
-      );
-      
-      console.log('✅ Vehicle data saved successfully to database');
-      return res.status(200).json({ 
-        success: true, 
-        data: vehicleData.data,
-        message: 'Vehicle data updated successfully',
-        timestamp: new Date().toISOString()
-      });
-    } catch (dbError) {
-      console.warn('⚠️ Database connection failed for vehicle-data save:', dbError);
-      
-      // For POST requests, we should still return success but indicate fallback
-      // This prevents the sync from failing completely
-      console.log('📝 Returning success with fallback indication for POST request');
+        
+        return res.status(200).json(vehicleDataDoc.data);
+      } catch (dbError) {
+        console.warn('⚠️ Database connection failed for vehicle-data, returning default data:', dbError);
+        // Return default data as fallback - NEVER return 500
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json(defaultData);
+      }
+    }
+
+    if (req.method === 'POST') {
+      // Always return success response, even if mongo is not available
+      if (!options.mongoAvailable) {
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json({
+          success: true,
+          data: req.body,
+          message: 'Vehicle data processed (database unavailable, using fallback)',
+          fallback: true,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      try {
+        await connectToDatabase();
+        console.log('📡 Connected to database for vehicle-data save operation');
+        
+        const vehicleData = await VehicleDataModel.findOneAndUpdate(
+          {},
+          { 
+            data: req.body,
+            updatedAt: new Date()
+          },
+          { 
+            upsert: true, 
+            new: true,
+            setDefaultsOnInsert: true
+          }
+        );
+        
+        console.log('✅ Vehicle data saved successfully to database');
+        return res.status(200).json({ 
+          success: true, 
+          data: vehicleData.data,
+          message: 'Vehicle data updated successfully',
+          timestamp: new Date().toISOString()
+        });
+      } catch (dbError) {
+        console.warn('⚠️ Database connection failed for vehicle-data save:', dbError);
+        
+        // For POST requests, we should still return success but indicate fallback
+        // This prevents the sync from failing completely - NEVER return 500
+        console.log('📝 Returning success with fallback indication for POST request');
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json({
+          success: true,
+          data: req.body,
+          message: 'Vehicle data processed (database unavailable, using fallback)',
+          fallback: true,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  } catch (error) {
+    // Ultimate fallback - catch any unexpected errors
+    console.error('⚠️ Unexpected error in handleVehicleData:', error);
+    res.setHeader('X-Data-Fallback', 'true');
+    if (req.method === 'GET') {
+      return res.status(200).json(defaultData);
+    } else {
       return res.status(200).json({
         success: true,
-        data: req.body,
-        message: 'Vehicle data processed (database unavailable, using fallback)',
+        data: req.body || {},
+        message: 'Vehicle data processed (error occurred, using fallback)',
         fallback: true,
         timestamp: new Date().toISOString()
       });
     }
   }
-
-  return res.status(405).json({ success: false, reason: 'Method not allowed' });
 }
 
 let cachedFallbackVehicles: any[] | null = null;
