@@ -2415,8 +2415,19 @@ async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, collecti
       });
     }
 
+    // Convert string ID to ObjectId for MongoDB query
+    let objectId;
+    try {
+      objectId = new ObjectId(id as string);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid FAQ ID format'
+      });
+    }
+
     const result = await collection.updateOne(
-      { _id: id },
+      { _id: objectId },
       { $set: { ...updateData, updatedAt: new Date().toISOString() } }
     );
 
@@ -2452,7 +2463,18 @@ async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, collecti
       });
     }
 
-    const result = await collection.deleteOne({ _id: id });
+    // Convert string ID to ObjectId for MongoDB query
+    let objectId;
+    try {
+      objectId = new ObjectId(id as string);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid FAQ ID format'
+      });
+    }
+
+    const result = await collection.deleteOne({ _id: objectId });
 
     if (result.deletedCount === 0) {
       return res.status(404).json({
@@ -2568,8 +2590,19 @@ async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
+    // Convert string ID to ObjectId for MongoDB query
+    let objectId;
+    try {
+      objectId = new ObjectId(id as string);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid support ticket ID format'
+      });
+    }
+
     const result = await collection.updateOne(
-      { _id: id },
+      { _id: objectId },
       { $set: { ...updateData, updatedAt: new Date().toISOString() } }
     );
 
@@ -2605,7 +2638,18 @@ async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
-    const result = await collection.deleteOne({ _id: id });
+    // Convert string ID to ObjectId for MongoDB query
+    let objectId;
+    try {
+      objectId = new ObjectId(id as string);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid support ticket ID format'
+      });
+    }
+
+    const result = await collection.deleteOne({ _id: objectId });
 
     if (result.deletedCount === 0) {
       return res.status(404).json({
