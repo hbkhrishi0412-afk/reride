@@ -26,7 +26,7 @@ export function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
     
     if (!hasDatabase) {
       parsed.pathname = `/${dbName}`;
-      console.warn(`⚠️ MONGODB_URI missing database name. Defaulting to /${dbName}.`);
+      console.warn(`⚠️ MONGODB_URL/MONGODB_URI missing database name. Defaulting to /${dbName}.`);
       return parsed.toString();
     }
     
@@ -44,7 +44,7 @@ export function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
     
     return parsed.toString();
   } catch (error) {
-    console.warn('⚠️ Unable to parse MONGODB_URI. Falling back to manual handling.', error);
+    console.warn('⚠️ Unable to parse MONGODB_URL/MONGODB_URI. Falling back to manual handling.', error);
     if (uri.includes(`/${dbName}`) || uri.toLowerCase().includes('/re-ride') || uri.toLowerCase().includes('/re_ride')) {
       // Replace variations with correct database name
       return uri.replace(/\/re-ride/i, `/${dbName}`).replace(/\/re_ride/i, `/${dbName}`);
@@ -75,11 +75,14 @@ async function connectToDatabase(): Promise<Mongoose> {
       dbName: 'reride' // Explicitly specify database name
     };
 
-    if (!process.env.MONGODB_URI) {
-        throw new MongoConfigError('Please define the MONGODB_URI environment variable.');
+    // Check MONGODB_URL first, then fallback to MONGODB_URI for backward compatibility
+    const mongoUri = process.env.MONGODB_URL || process.env.MONGODB_URI;
+    
+    if (!mongoUri) {
+        throw new MongoConfigError('Please define the MONGODB_URL or MONGODB_URI environment variable.');
     }
 
-    const normalizedUri = ensureDatabaseInUri(process.env.MONGODB_URI);
+    const normalizedUri = ensureDatabaseInUri(mongoUri);
 
     console.log('🔄 Creating new MongoDB connection...');
     console.log(`📡 Database name in connection options: ${opts.dbName}`);
@@ -91,7 +94,7 @@ async function connectToDatabase(): Promise<Mongoose> {
         // Verify database name matches expected
         if (actualDbName.toLowerCase() !== 'reride') {
           console.warn(`⚠️ WARNING: Connected to database "${actualDbName}" but expected "reride"`);
-          console.warn(`   This may cause data retrieval issues. Please verify your MONGODB_URI.`);
+          console.warn(`   This may cause data retrieval issues. Please verify your MONGODB_URL or MONGODB_URI.`);
         }
         
         return mongooseInstance;
