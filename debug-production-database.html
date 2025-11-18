@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Production Database</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 6px;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #444;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #0b7dda;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .danger {
+            background: #f44336;
+        }
+        .danger:hover {
+            background: #da190b;
+        }
+        .success {
+            background: #4CAF50;
+        }
+        .success:hover {
+            background: #45a049;
+        }
+        .log {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        .stat-card .value.error {
+            color: #f44336;
+        }
+        .stat-card .value.warning {
+            color: #ff9800;
+        }
+        .stat-card .value.success {
+            color: #4CAF50;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #f5f5f5;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+        tr:hover {
+            background: #f9f9f9;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge.published {
+            background: #4CAF50;
+            color: white;
+        }
+        .badge.unpublished {
+            background: #ff9800;
+            color: white;
+        }
+        .badge.sold {
+            background: #9e9e9e;
+            color: white;
+        }
+        .badge.expired {
+            background: #f44336;
+            color: white;
+        }
+        .badge.active {
+            background: #2196F3;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Production Database Debugger</h1>
+        <p class="subtitle">Debug and analyze vehicles in production database</p>
+
+        <div class="section">
+            <h2>Configuration</h2>
+            <label>Seller Email:</label>
+            <input type="email" id="sellerEmail" placeholder="seller@test.com" value="seller@test.com">
+            
+            <label>API Base URL (leave empty for current domain):</label>
+            <input type="text" id="apiBaseUrl" placeholder="https://your-app.vercel.app or leave empty">
+            
+            <button onclick="analyzeDatabase()">🔍 Analyze Database</button>
+            <button class="success" onclick="fixIssues()" style="margin-top: 10px;">🔧 Auto-Fix Issues</button>
+        </div>
+
+        <div class="section" id="statsSection" style="display: none;">
+            <h2>Statistics</h2>
+            <div class="stats" id="statsContainer"></div>
+        </div>
+
+        <div class="section" id="issuesSection" style="display: none;">
+            <h2>Issues Found</h2>
+            <div id="issuesContainer"></div>
+        </div>
+
+        <div class="section" id="vehiclesSection" style="display: none;">
+            <h2>Vehicles Details</h2>
+            <div style="max-height: 600px; overflow-y: auto;">
+                <table id="vehiclesTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Make/Model</th>
+                            <th>Status</th>
+                            <th>Seller Email</th>
+                            <th>Expiry Date</th>
+                            <th>Is Expired</th>
+                            <th>Created At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vehiclesTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Logs</h2>
+            <button onclick="clearLogs()">Clear Logs</button>
+            <div class="log" id="logContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        let vehiclesData = [];
+        let sellerEmail = '';
+        let apiBaseUrl = '';
+
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#ff6b6b' : type === 'success' ? '#51cf66' : type === 'warning' ? '#ffd43b' : '#74c0fc';
+            logContainer.innerHTML += `<span style="color: ${color}">[${timestamp}] ${message}</span>\n`;
+            logContainer.scrollTop = logContainer.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function showStatus(message, type = 'info') {
+            // Status will be shown in logs
+            log(message, type);
+        }
+
+        function clearLogs() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+
+        async function analyzeDatabase() {
+            try {
+                sellerEmail = document.getElementById('sellerEmail').value.trim().toLowerCase();
+                apiBaseUrl = document.getElementById('apiBaseUrl').value.trim();
+                
+                if (!sellerEmail) {
+                    showStatus('Please enter your seller email', 'error');
+                    return;
+                }
+
+                const baseUrl = apiBaseUrl || window.location.origin;
+                log(`🔍 Analyzing database for seller: ${sellerEmail}...`);
+                log(`📡 Connecting to: ${baseUrl}/api/vehicles`);
+
+                // Fetch all vehicles
+                const response = await fetch(`${baseUrl}/api/vehicles`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch vehicles: ${response.status} ${response.statusText}`);
+                }
+
+                const allVehicles = await response.json();
+                log(`✅ Fetched ${allVehicles.length} total vehicles from database`);
+
+                // Filter vehicles for this seller (case-insensitive)
+                vehiclesData = allVehicles.filter(v => {
+                    const vehicleEmail = (v.sellerEmail || '').toLowerCase().trim();
+                    return vehicleEmail === sellerEmail;
+                });
+
+                log(`✅ Found ${vehiclesData.length} vehicles for ${sellerEmail}`);
+
+                if (vehiclesData.length === 0) {
+                    showStatus('No vehicles found for this seller email. Check email case sensitivity.', 'warning');
+                    log(`⚠️  Available seller emails in database: ${[...new Set(allVehicles.map(v => v.sellerEmail).filter(Boolean))].join(', ')}`, 'warning');
+                    return;
+                }
+
+                // Analyze vehicles
+                const analysis = analyzeVehicles(vehiclesData);
+                displayStats(analysis);
+                displayIssues(analysis);
+                displayVehicles(vehiclesData, analysis);
+
+                document.getElementById('statsSection').style.display = 'block';
+                document.getElementById('issuesSection').style.display = 'block';
+                document.getElementById('vehiclesSection').style.display = 'block';
+
+                showStatus(`Analysis complete. Found ${analysis.issues.length} issues.`, analysis.issues.length > 0 ? 'warning' : 'success');
+
+            } catch (error) {
+                showStatus('Error analyzing database: ' + error.message, 'error');
+                log('❌ Error details: ' + error.stack, 'error');
+            }
+        }
+
+        function analyzeVehicles(vehicles) {
+            const now = new Date();
+            const issues = [];
+
+            const stats = {
+                total: vehicles.length,
+                published: 0,
+                unpublished: 0,
+                sold: 0,
+                expired: 0,
+                withExpiry: 0,
+                withoutExpiry: 0,
+                emailMismatch: 0,
+                missingFields: 0
+            };
+
+            vehicles.forEach(vehicle => {
+                // Count by status
+                if (vehicle.status === 'published') stats.published++;
+                else if (vehicle.status === 'unpublished') stats.unpublished++;
+                else if (vehicle.status === 'sold') stats.sold++;
+
+                // Check expiry
+                if (vehicle.listingExpiresAt) {
+                    stats.withExpiry++;
+                    const expiryDate = new Date(vehicle.listingExpiresAt);
+                    if (expiryDate < now && vehicle.status === 'published') {
+                        stats.expired++;
+                        issues.push({
+                            type: 'expired',
+                            vehicle: vehicle,
+                            message: `Vehicle ${vehicle.id} (${vehicle.make} ${vehicle.model}) has expired but is still published`
+                        });
+                    }
+                } else {
+                    stats.withoutExpiry++;
+                }
+
+                // Check email case
+                const vehicleEmail = (vehicle.sellerEmail || '').toLowerCase().trim();
+                if (vehicleEmail !== sellerEmail) {
+                    stats.emailMismatch++;
+                    issues.push({
+                        type: 'email_mismatch',
+                        vehicle: vehicle,
+                        message: `Vehicle ${vehicle.id} has email mismatch: "${vehicle.sellerEmail}" vs "${sellerEmail}"`
+                    });
+                }
+
+                // Check missing required fields
+                if (!vehicle.make || !vehicle.model || !vehicle.sellerEmail) {
+                    stats.missingFields++;
+                    issues.push({
+                        type: 'missing_fields',
+                        vehicle: vehicle,
+                        message: `Vehicle ${vehicle.id} is missing required fields`
+                    });
+                }
+            });
+
+            return { stats, issues };
+        }
+
+        function displayStats(analysis) {
+            const { stats } = analysis;
+            const container = document.getElementById('statsContainer');
+            
+            container.innerHTML = `
+                <div class="stat-card">
+                    <h3>Total Vehicles</h3>
+                    <div class="value">${stats.total}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Published</h3>
+                    <div class="value ${stats.published > 0 ? 'success' : ''}">${stats.published}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Unpublished</h3>
+                    <div class="value ${stats.unpublished > 0 ? 'warning' : ''}">${stats.unpublished}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Sold</h3>
+                    <div class="value">${stats.sold}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Expired Listings</h3>
+                    <div class="value ${stats.expired > 0 ? 'error' : 'success'}">${stats.expired}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>With Expiry Date</h3>
+                    <div class="value">${stats.withExpiry}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Email Mismatches</h3>
+                    <div class="value ${stats.emailMismatch > 0 ? 'error' : 'success'}">${stats.emailMismatch}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Missing Fields</h3>
+                    <div class="value ${stats.missingFields > 0 ? 'error' : 'success'}">${stats.missingFields}</div>
+                </div>
+            `;
+        }
+
+        function displayIssues(analysis) {
+            const container = document.getElementById('issuesContainer');
+            
+            if (analysis.issues.length === 0) {
+                container.innerHTML = '<div class="status success">✅ No issues found! All vehicles are properly configured.</div>';
+                return;
+            }
+
+            let html = `<div class="status warning">⚠️ Found ${analysis.issues.length} issues:</div><ul>`;
+            analysis.issues.forEach(issue => {
+                html += `<li><strong>${issue.type}:</strong> ${issue.message}</li>`;
+            });
+            html += '</ul>';
+            container.innerHTML = html;
+        }
+
+        function displayVehicles(vehicles, analysis) {
+            const tbody = document.getElementById('vehiclesTableBody');
+            const now = new Date();
+            
+            tbody.innerHTML = vehicles.map(vehicle => {
+                const expiryDate = vehicle.listingExpiresAt ? new Date(vehicle.listingExpiresAt) : null;
+                const isExpired = expiryDate && expiryDate < now;
+                const statusBadge = `<span class="badge ${vehicle.status}">${vehicle.status}</span>`;
+                const expiredBadge = isExpired ? '<span class="badge expired">EXPIRED</span>' : '<span class="badge active">ACTIVE</span>';
+                
+                return `
+                    <tr>
+                        <td>${vehicle.id}</td>
+                        <td>${vehicle.make} ${vehicle.model}</td>
+                        <td>${statusBadge}</td>
+                        <td>${vehicle.sellerEmail || 'N/A'}</td>
+                        <td>${expiryDate ? expiryDate.toLocaleDateString() : 'No expiry'}</td>
+                        <td>${expiredBadge}</td>
+                        <td>${vehicle.createdAt ? new Date(vehicle.createdAt).toLocaleDateString() : 'N/A'}</td>
+                        <td>
+                            <button onclick="fixVehicle(${vehicle.id})" style="padding: 4px 8px; font-size: 12px;">Fix</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function fixVehicle(vehicleId) {
+            const vehicle = vehiclesData.find(v => v.id === vehicleId);
+            if (!vehicle) return;
+
+            const baseUrl = apiBaseUrl || window.location.origin;
+            log(`🔧 Fixing vehicle ${vehicleId}...`);
+
+            try {
+                const updates = {
+                    id: vehicleId,
+                    sellerEmail: sellerEmail.toLowerCase().trim()
+                };
+
+                // Remove expiry for Premium plans
+                if (vehicle.listingExpiresAt) {
+                    updates.listingExpiresAt = undefined;
+                }
+
+                // Republish if expired
+                if (vehicle.status === 'unpublished' && vehicle.listingExpiresAt) {
+                    const expiryDate = new Date(vehicle.listingExpiresAt);
+                    if (expiryDate < new Date()) {
+                        updates.status = 'published';
+                        updates.listingStatus = 'active';
+                    }
+                }
+
+                const response = await fetch(`${baseUrl}/api/vehicles`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(updates)
+                });
+
+                if (response.ok) {
+                    log(`✅ Vehicle ${vehicleId} fixed successfully`, 'success');
+                    // Re-analyze
+                    setTimeout(() => analyzeDatabase(), 1000);
+                } else {
+                    const error = await response.json();
+                    log(`❌ Failed to fix vehicle ${vehicleId}: ${error.reason || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Error fixing vehicle ${vehicleId}: ${error.message}`, 'error');
+            }
+        }
+
+        async function fixIssues() {
+            const baseUrl = apiBaseUrl || window.location.origin;
+            log('🔧 Starting auto-fix process...');
+
+            let fixedCount = 0;
+            let errorCount = 0;
+
+            for (const vehicle of vehiclesData) {
+                try {
+                    const updates = {
+                        id: vehicle.id,
+                        sellerEmail: sellerEmail.toLowerCase().trim()
+                    };
+
+                    // Remove expiry for Premium plans
+                    if (vehicle.listingExpiresAt) {
+                        updates.listingExpiresAt = undefined;
+                    }
+
+                    // Republish if expired
+                    if (vehicle.status === 'unpublished' && vehicle.listingExpiresAt) {
+                        const expiryDate = new Date(vehicle.listingExpiresAt);
+                        if (expiryDate < new Date()) {
+                            updates.status = 'published';
+                            updates.listingStatus = 'active';
+                        }
+                    }
+
+                    // Only update if there are changes
+                    if (Object.keys(updates).length > 2 || updates.sellerEmail !== vehicle.sellerEmail) {
+                        const response = await fetch(`${baseUrl}/api/vehicles`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'include',
+                            body: JSON.stringify(updates)
+                        });
+
+                        if (response.ok) {
+                            fixedCount++;
+                            log(`✅ Fixed vehicle ${vehicle.id}`, 'success');
+                        } else {
+                            errorCount++;
+                            const error = await response.json();
+                            log(`❌ Failed to fix vehicle ${vehicle.id}: ${error.reason || 'Unknown error'}`, 'error');
+                        }
+
+                        // Small delay to avoid rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                } catch (error) {
+                    errorCount++;
+                    log(`❌ Error fixing vehicle ${vehicle.id}: ${error.message}`, 'error');
+                }
+            }
+
+            showStatus(`Auto-fix complete. Fixed: ${fixedCount}, Errors: ${errorCount}`, fixedCount > 0 ? 'success' : 'error');
+            
+            // Re-analyze after fixing
+            setTimeout(() => analyzeDatabase(), 2000);
+        }
+    </script>
+</body>
+</html>
+

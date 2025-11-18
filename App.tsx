@@ -506,7 +506,12 @@ const AppContent: React.FC = React.memo(() => {
           <DashboardErrorBoundary>
             <Dashboard
               seller={currentUser}
-              sellerVehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => v.sellerEmail === currentUser.email), users)}
+              sellerVehicles={enrichVehiclesWithSellerInfo(
+                vehicles.filter(v => 
+                  v.sellerEmail?.toLowerCase().trim() === currentUser.email?.toLowerCase().trim()
+                ), 
+                users
+              )}
               reportedVehicles={[]}
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
                 try {

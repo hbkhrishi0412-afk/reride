@@ -1102,9 +1102,17 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         
         if (vehicle.listingExpiresAt && vehicle.status === 'published') {
           const expiryDate = new Date(vehicle.listingExpiresAt);
-          if (expiryDate < now) {
+          // Check if seller has Premium plan - Premium plans with no expiry shouldn't expire
+          const seller = sellerMap.get(vehicle.sellerEmail.toLowerCase());
+          const isPremiumNoExpiry = seller?.subscriptionPlan === 'premium' && !seller?.planExpiryDate;
+          
+          // Only auto-unpublish if listing has expired AND it's not a Premium plan without expiry
+          if (expiryDate < now && !isPremiumNoExpiry) {
             updateFields.status = 'unpublished';
             updateFields.listingStatus = 'expired';
+          } else if (isPremiumNoExpiry && expiryDate < now) {
+            // For Premium plans without expiry, remove the listingExpiresAt to prevent future expiry
+            updateFields.listingExpiresAt = undefined;
           }
         }
         
@@ -1172,7 +1180,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         ? await Vehicle.find({}).sort({ createdAt: -1 })
         : vehicles;
       
-      return res.status(200).json(refreshedVehicles);
+      // Normalize sellerEmail to lowercase for consistent filtering
+      const normalizedVehicles = refreshedVehicles.map(v => {
+        const vehicleObj = v.toObject ? v.toObject() : v;
+        return {
+          ...vehicleObj,
+          sellerEmail: vehicleObj.sellerEmail?.toLowerCase().trim() || vehicleObj.sellerEmail
+        };
+      });
+      
+      return res.status(200).json(normalizedVehicles);
     } catch (error) {
       console.error('❌ Error fetching vehicles:', error);
       // Fallback to mock data if database query fails
