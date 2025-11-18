@@ -1,6 +1,6 @@
 
 import mongoose from 'mongoose';
-import { VehicleCategory } from '../types';
+import { VehicleCategory } from '../types.js';
 
 const vehicleSchema = new mongoose.Schema({
   id: { type: Number, required: true, unique: true, index: true },
