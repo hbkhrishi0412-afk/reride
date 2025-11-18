@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
-import connectToDatabase, { MongoConfigError, ensureDatabaseInUri } from '../lib/db';
-import User from '../models/User';
-import Vehicle from '../models/Vehicle';
-import VehicleDataModel from '../models/VehicleData';
-import { PLAN_DETAILS } from '../constants';
-import NewCar from '../models/NewCar';
-import { planService } from '../services/planService';
+import connectToDatabase, { MongoConfigError, ensureDatabaseInUri } from '../lib/db.js';
+import User from '../models/User.js';
+import Vehicle from '../models/Vehicle.js';
+import VehicleDataModel from '../models/VehicleData.js';
+import { PLAN_DETAILS } from '../constants.js';
+import NewCar from '../models/NewCar.js';
+import { planService } from '../services/planService.js';
 import { 
   hashPassword, 
   validatePassword, 
@@ -16,8 +16,8 @@ import {
   getSecurityHeaders,
   sanitizeObject,
   validateEmail
-} from '../utils/security';
-import { getSecurityConfig } from '../utils/security-config';
+} from '../utils/security.js';
+import { getSecurityConfig } from '../utils/security-config.js';
 import { MongoClient, ObjectId } from 'mongodb';
 
 // Helper: Calculate distance between coordinates
@@ -2019,7 +2019,7 @@ async function getFallbackVehicles(): Promise<any[]> {
   }
 
   try {
-    const { MOCK_VEHICLES } = await import('../constants');
+    const { MOCK_VEHICLES } = await import('../constants.js');
     const vehicles = await MOCK_VEHICLES();
     cachedFallbackVehicles = vehicles;
     return vehicles;

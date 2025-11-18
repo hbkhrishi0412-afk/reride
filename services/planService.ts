@@ -6,7 +6,7 @@ let planUpdates: Partial<Record<SubscriptionPlan, Partial<PlanDetails>>> = {};
 export const planService = {
     // Get plan details with any updates applied
     getPlanDetails: async (planId: SubscriptionPlan): Promise<PlanDetails> => {
-        const { PLAN_DETAILS } = await import('../constants');
+        const { PLAN_DETAILS } = await import('../constants.js');
         const basePlan = PLAN_DETAILS[planId];
         const updates = planUpdates[planId] || {};
         return { ...basePlan, ...updates };
@@ -20,7 +20,7 @@ export const planService = {
 
     // Get all plan details with updates applied (max 4 plans)
     getAllPlans: async (): Promise<PlanDetails[]> => {
-        const { PLAN_DETAILS } = await import('../constants');
+        const { PLAN_DETAILS } = await import('../constants.js');
         const basePlans = await Promise.all(
             Object.keys(PLAN_DETAILS).map(planId => 
                 planService.getPlanDetails(planId as SubscriptionPlan)
@@ -56,7 +56,7 @@ export const planService = {
 
     // Delete custom plan
     deletePlan: async (planId: string): Promise<boolean> => {
-        const { PLAN_DETAILS } = await import('../constants');
+        const { PLAN_DETAILS } = await import('../constants.js');
         if (PLAN_DETAILS[planId as SubscriptionPlan]) {
             // Cannot delete base plans
             return false;
@@ -87,7 +87,7 @@ export const planService = {
 
     // Get original plan details without updates
     getOriginalPlanDetails: async (planId: SubscriptionPlan): Promise<PlanDetails> => {
-        const { PLAN_DETAILS } = await import('../constants');
+        const { PLAN_DETAILS } = await import('../constants.js');
         return PLAN_DETAILS[planId];
     },
 

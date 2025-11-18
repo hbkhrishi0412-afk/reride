@@ -2,27 +2,27 @@
 // This allows lazy loading of heavy data when needed
 
 // Core constants (always loaded)
-export { FUEL_TYPES, SAFETY_TIPS } from './fallback';
-export { INSPECTION_SERVICE_FEE, LISTING_EXPIRY_DAYS, AUTO_REFRESH_DAYS, MAX_FREE_LISTINGS, MAX_PRO_LISTINGS } from './plans';
+export { FUEL_TYPES, SAFETY_TIPS } from './fallback.js';
+export { INSPECTION_SERVICE_FEE, LISTING_EXPIRY_DAYS, AUTO_REFRESH_DAYS, MAX_FREE_LISTINGS, MAX_PRO_LISTINGS } from './plans.js';
 
 // Lazy-loaded constants (loaded on demand)
 export const loadLocationData = async () => {
-  const module = await import('./location');
+  const module = await import('./location.js');
   return module;
 };
 
 export const loadPlanDetails = async () => {
-  const module = await import('./plans');
+  const module = await import('./plans.js');
   return module.PLAN_DETAILS;
 };
 
 export const loadBoostPackages = async () => {
-  const module = await import('./boost');
+  const module = await import('./boost.js');
   return module.BOOST_PACKAGES;
 };
 
 export const loadFallbackData = async () => {
-  const module = await import('./fallback');
+  const module = await import('./fallback.js');
   return {
     vehicles: module.FALLBACK_VEHICLES,
     users: module.FALLBACK_USERS,

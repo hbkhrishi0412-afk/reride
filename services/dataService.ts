@@ -221,7 +221,7 @@ class DataService {
           console.log('✅ Loaded mock vehicles data:', vehicles.length, 'vehicles');
         } else {
           // Fallback to constants if mock data not available
-          const { MOCK_VEHICLES } = await import('../constants');
+          const { MOCK_VEHICLES } = await import('../constants.js');
           vehicles = await MOCK_VEHICLES();
           this.setLocalStorageData('reRideVehicles', vehicles);
         }
@@ -364,7 +364,7 @@ class DataService {
           console.log('✅ Loaded mock users data:', users.length, 'users');
         } else {
           // Fallback to constants if mock data not available
-          const { FALLBACK_USERS } = await import('../constants/fallback');
+          const { FALLBACK_USERS } = await import('../constants/fallback.js');
           users = FALLBACK_USERS;
           this.setLocalStorageData('reRideUsers', users);
         }
@@ -505,7 +505,7 @@ class DataService {
     
     if (Object.keys(vehicleData).length === 0) {
       try {
-        const { VEHICLE_DATA } = await import('../components/vehicleData.ts');
+        const { VEHICLE_DATA } = await import('../components/vehicleData.js');
         vehicleData = VEHICLE_DATA;
         this.setLocalStorageData('reRideVehicleData', vehicleData);
       } catch {

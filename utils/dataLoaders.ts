@@ -4,41 +4,41 @@
  */
 
 export const loadConstants = async () => {
-  const module = await import('../constants');
+  const module = await import('../constants.js');
   return module;
 };
 
 export const loadVehicleData = async () => {
-  const module = await import('../components/vehicleData');
+  const module = await import('../components/vehicleData.js');
   return module;
 };
 
 export const loadNewCarsData = async () => {
-  const module = await import('../data/newCarsData');
+  const module = await import('../data/newCarsData.js');
   return module;
 };
 
 // Helper to get PLAN_DETAILS without loading entire constants file
 export const loadPlanDetails = async () => {
-  const { loadPlanDetails: loadPlans } = await import('../constants/index');
+  const { loadPlanDetails: loadPlans } = await import('../constants/index.js');
   return loadPlans();
 };
 
 // Helper to get location data
 export const loadLocationData = async () => {
-  const { loadLocationData: loadLoc } = await import('../constants/index');
+  const { loadLocationData: loadLoc } = await import('../constants/index.js');
   return loadLoc();
 };
 
 // Helper to get boost packages
 export const loadBoostPackages = async () => {
-  const { loadBoostPackages: loadBoost } = await import('../constants/index');
+  const { loadBoostPackages: loadBoost } = await import('../constants/index.js');
   return loadBoost();
 };
 
 // Helper to get fallback data
 export const loadFallbackData = async () => {
-  const { loadFallbackData: loadFallback } = await import('../constants/index');
+  const { loadFallbackData: loadFallback } = await import('../constants/index.js');
   return loadFallback();
 };
 
@@ -56,7 +56,7 @@ export const loadMockFaqs = async () => {
 
 // Helper to get vehicle placeholder image function
 export const loadPlaceholderImageHelper = async () => {
-  const { getPlaceholderImage } = await import('../components/vehicleData');
+  const { getPlaceholderImage } = await import('../components/vehicleData.js');
   return getPlaceholderImage;
 };
 

@@ -1,6 +1,6 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getEnvValue } from '../utils/environment';
+import { getEnvValue } from '../utils/environment.js';
 
 // Firebase configuration
 // Note: These are client-safe keys - they identify your Firebase project
