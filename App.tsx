@@ -553,6 +553,16 @@ const AppContent: React.FC = React.memo(() => {
               }}
               onAddMultipleVehicles={async (vehiclesData) => {
                 try {
+                  // Check if seller's plan has expired
+                  if (currentUser.planExpiryDate) {
+                    const expiryDate = new Date(currentUser.planExpiryDate);
+                    const isExpired = expiryDate < new Date();
+                    if (isExpired) {
+                      addToast('Your subscription plan has expired. Please renew your plan to create new vehicle listings.', 'error');
+                      return;
+                    }
+                  }
+                  
                   // Set listingExpiresAt based on subscription plan expiry date
                   let listingExpiresAt: string | undefined;
                   if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {

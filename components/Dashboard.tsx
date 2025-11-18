@@ -179,55 +179,56 @@ const PlanStatusCard: React.FC<{
                     </span>
                 </div>
 
-                {(seller.planActivatedDate || seller.planExpiryDate) && (
-                    <div className="mt-4 pt-4 border-t border-spinny-white/20 space-y-2">
-                        {seller.planActivatedDate && (
-                            <div className="flex justify-between text-xs">
-                                <span>Plan Activated:</span>
-                                <span className="font-semibold">
-                                    {new Date(seller.planActivatedDate).toLocaleDateString('en-IN', { 
-                                        year: 'numeric', 
-                                        month: 'short', 
-                                        day: 'numeric' 
-                                    })}
-                                </span>
-                            </div>
-                        )}
-                        {seller.planExpiryDate && (
-                            <div className="flex justify-between text-xs">
-                                <span>Expiry Date:</span>
-                                <span className={`font-semibold ${
-                                    (() => {
-                                        const expiryDate = new Date(seller.planExpiryDate);
-                                        const isExpired = expiryDate < new Date();
-                                        const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                                        if (isExpired) return 'text-red-300';
-                                        if (daysRemaining <= 7) return 'text-orange-300';
-                                        return '';
-                                    })()
-                                }`}>
-                                    {new Date(seller.planExpiryDate).toLocaleDateString('en-IN', { 
-                                        year: 'numeric', 
-                                        month: 'short', 
-                                        day: 'numeric' 
-                                    })}
-                                    {(() => {
-                                        const expiryDate = new Date(seller.planExpiryDate);
-                                        const isExpired = expiryDate < new Date();
-                                        const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                                        if (isExpired) {
-                                            return <span className="ml-2 text-red-200">(Expired)</span>;
-                                        }
-                                        if (daysRemaining <= 30 && daysRemaining > 0) {
-                                            return <span className="ml-2 text-orange-200">({daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left)</span>;
-                                        }
-                                        return null;
-                                    })()}
-                                </span>
-                            </div>
+                {/* Always show expiry date section */}
+                <div className="mt-4 pt-4 border-t border-spinny-white/20 space-y-2">
+                    {seller.planActivatedDate && (
+                        <div className="flex justify-between text-xs">
+                            <span>Plan Activated:</span>
+                            <span className="font-semibold">
+                                {new Date(seller.planActivatedDate).toLocaleDateString('en-IN', { 
+                                    year: 'numeric', 
+                                    month: 'short', 
+                                    day: 'numeric' 
+                                })}
+                            </span>
+                        </div>
+                    )}
+                    <div className="flex justify-between text-xs">
+                        <span>Expiry Date:</span>
+                        {seller.planExpiryDate ? (
+                            <span className={`font-semibold ${
+                                (() => {
+                                    const expiryDate = new Date(seller.planExpiryDate);
+                                    const isExpired = expiryDate < new Date();
+                                    const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                    if (isExpired) return 'text-red-300';
+                                    if (daysRemaining <= 7) return 'text-orange-300';
+                                    return '';
+                                })()
+                            }`}>
+                                {new Date(seller.planExpiryDate).toLocaleDateString('en-IN', { 
+                                    year: 'numeric', 
+                                    month: 'short', 
+                                    day: 'numeric' 
+                                })}
+                                {(() => {
+                                    const expiryDate = new Date(seller.planExpiryDate);
+                                    const isExpired = expiryDate < new Date();
+                                    const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                    if (isExpired) {
+                                        return <span className="ml-2 text-red-200 font-bold">(Expired)</span>;
+                                    }
+                                    if (daysRemaining <= 30 && daysRemaining > 0) {
+                                        return <span className="ml-2 text-orange-200">({daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left)</span>;
+                                    }
+                                    return null;
+                                })()}
+                            </span>
+                        ) : (
+                            <span className="font-semibold text-gray-300 text-xs">Not set</span>
                         )}
                     </div>
-                )}
+                </div>
 
                 <div className="mt-4 pt-4 border-t border-spinny-white/20">
                     <h4 className="font-semibold mb-2">Plan Features:</h4>
@@ -639,7 +640,8 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (isPlanExpired) {
+        // Block new listings if plan is expired (allow editing existing vehicles)
+        if (!editingVehicle && isPlanExpired) {
             alert('Your subscription plan has expired. Please renew your plan to create new listings.');
             return;
         }
@@ -958,7 +960,17 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             </FormFieldset>
 
             <div className="pt-4 flex flex-col sm:flex-row items-center gap-4">
-                <button type="submit" disabled={isPlanExpired} className={`w-full sm:w-auto flex-grow font-bold py-3 px-6 rounded-lg text-lg ${isPlanExpired ? 'opacity-50 cursor-not-allowed btn-brand-primary' : 'btn-brand-primary'}`}> {editingVehicle ? 'Update Vehicle' : 'List My Vehicle'} </button>
+                <button 
+                    type="submit" 
+                    disabled={!editingVehicle && isPlanExpired} 
+                    className={`w-full sm:w-auto flex-grow font-bold py-3 px-6 rounded-lg text-lg ${
+                        !editingVehicle && isPlanExpired 
+                            ? 'opacity-50 cursor-not-allowed btn-brand-primary' 
+                            : 'btn-brand-primary'
+                    }`}
+                > 
+                    {editingVehicle ? 'Update Vehicle' : 'List My Vehicle'} 
+                </button>
                 <button type="button" onClick={onCancel} className="w-full sm:w-auto bg-white0 text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-white">Cancel</button>
             </div>
           </form>

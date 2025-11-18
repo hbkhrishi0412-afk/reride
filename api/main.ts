@@ -1609,20 +1609,34 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
 
     // Create new vehicle
+    // Check if seller's plan has expired and block creation if so
+    if (req.body.sellerEmail) {
+      const seller = await User.findOne({ email: req.body.sellerEmail });
+      if (seller && seller.planExpiryDate) {
+        const expiryDate = new Date(seller.planExpiryDate);
+        const isExpired = expiryDate < new Date();
+        if (isExpired) {
+          return res.status(403).json({ 
+            success: false, 
+            reason: 'Your subscription plan has expired. Please renew your plan to create new vehicle listings.' 
+          });
+        }
+      }
+    }
+    
     // Set listingExpiresAt based on seller's plan expiry date
     let listingExpiresAt: string | undefined;
     if (req.body.sellerEmail) {
       const seller = await User.findOne({ email: req.body.sellerEmail });
       if (seller) {
-        // If plan has expired, block already above; here we only compute expiry for active plans
-        const isExpired = seller.planExpiryDate ? new Date(seller.planExpiryDate) < new Date() : false;
+        // Plan is not expired (checked above), so compute expiry for active plans
         if (seller.subscriptionPlan === 'premium') {
-          if (!isExpired && seller.planExpiryDate) {
+          if (seller.planExpiryDate) {
             // Premium plan active: use plan expiry date
             listingExpiresAt = seller.planExpiryDate;
           } else {
             // Premium without expiry date: leave undefined (no expiry)
-            listingExpiresAt = listingExpiresAt;
+            listingExpiresAt = undefined;
           }
         } else if (seller.subscriptionPlan !== 'premium') {
           // Free and Pro plans get 30-day expiry from today
@@ -1630,7 +1644,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           expiryDate.setDate(expiryDate.getDate() + 30);
           listingExpiresAt = expiryDate.toISOString();
         }
-        // If Premium without planExpiryDate, listingExpiresAt remains as-is (no expiry)
+        // If Premium without planExpiryDate, listingExpiresAt remains undefined (no expiry)
       }
     }
     
