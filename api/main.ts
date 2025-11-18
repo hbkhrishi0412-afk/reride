@@ -290,12 +290,13 @@ export default async function handler(
 
 // Users handler - preserves exact functionality from users.ts
 async function handleUsers(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
-  const { mongoAvailable, mongoFailureReason } = options;
-  const unavailableResponse = () => res.status(503).json({
-    success: false,
-    reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
-    fallback: true
-  });
+  try {
+    const { mongoAvailable, mongoFailureReason } = options;
+    const unavailableResponse = () => res.status(503).json({
+      success: false,
+      reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
+      fallback: true
+    });
 
   // Handle authentication actions (POST with action parameter)
   if (req.method === 'POST') {
@@ -570,22 +571,39 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     }
     
     if (action === 'trust-score' && email) {
-      const user = await User.findOne({ email: email as string });
-      if (!user) {
-        return res.status(404).json({ success: false, reason: 'User not found' });
+      try {
+        const user = await User.findOne({ email: email as string });
+        if (!user) {
+          return res.status(404).json({ success: false, reason: 'User not found' });
+        }
+        
+        const trustScore = calculateTrustScore(user);
+        return res.status(200).json({ 
+          success: true, 
+          trustScore,
+          email: user.email,
+          name: user.name
+        });
+      } catch (error) {
+        console.error('Error fetching trust score:', error);
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Failed to fetch trust score',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
-      
-      const trustScore = calculateTrustScore(user);
-      return res.status(200).json({ 
-        success: true, 
-        trustScore,
-        email: user.email,
-        name: user.name
-      });
     }
     
-    const users = await User.find({}).sort({ createdAt: -1 });
-    return res.status(200).json(users);
+    try {
+      const users = await User.find({}).sort({ createdAt: -1 });
+      return res.status(200).json(users);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      // Fallback to local users if database query fails
+      const fallbackUsers = await getFallbackUsers();
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json(fallbackUsers);
+    }
   }
 
   // PUT - Update user
@@ -766,32 +784,63 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     if (!mongoAvailable) {
       return unavailableResponse();
     }
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, reason: 'Email is required for deletion.' });
-    }
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ success: false, reason: 'Email is required for deletion.' });
+      }
 
-    const deletedUser = await User.findOneAndDelete({ email });
-    if (!deletedUser) {
-      return res.status(404).json({ success: false, reason: 'User not found.' });
-    }
+      const deletedUser = await User.findOneAndDelete({ email });
+      if (!deletedUser) {
+        return res.status(404).json({ success: false, reason: 'User not found.' });
+      }
 
-    return res.status(200).json({ success: true, message: 'User deleted successfully.' });
+      return res.status(200).json({ success: true, message: 'User deleted successfully.' });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      return res.status(500).json({
+        success: false,
+        reason: 'Failed to delete user',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }
 
   return res.status(405).json({ success: false, reason: 'Method not allowed.' });
+  } catch (error) {
+    console.error('Error in handleUsers:', error);
+    // Ensure we always return JSON
+    res.setHeader('Content-Type', 'application/json');
+    
+    // If it's a database connection error, return 503
+    if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect'))) {
+      return res.status(503).json({
+        success: false,
+        reason: 'Database is currently unavailable. Please try again later.',
+        fallback: true
+      });
+    }
+    
+    // For other errors, return 500 with error details
+    return res.status(500).json({
+      success: false,
+      reason: 'An error occurred while processing the request',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 }
 
 // Vehicles handler - preserves exact functionality from vehicles.ts
 async function handleVehicles(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
-  const { mongoAvailable, mongoFailureReason } = options;
-  // Check action type from query parameter
-  const { type, action } = req.query;
-  const unavailableResponse = () => res.status(503).json({
-    success: false,
-    reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
-    fallback: true
-  });
+  try {
+    const { mongoAvailable, mongoFailureReason } = options;
+    // Check action type from query parameter
+    const { type, action } = req.query;
+    const unavailableResponse = () => res.status(503).json({
+      success: false,
+      reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
+      fallback: true
+    });
 
   // VEHICLE DATA ENDPOINTS (brands, models, variants)
   if (type === 'data') {
@@ -1646,6 +1695,48 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
   }
 
   return res.status(405).json({ success: false, reason: 'Method not allowed.' });
+  } catch (error) {
+    console.error('Error in handleVehicles:', error);
+    // Ensure we always return JSON
+    res.setHeader('Content-Type', 'application/json');
+    
+    // Special handling for vehicle-data endpoints - NEVER return 500
+    const isVehicleDataEndpoint = req.query?.type === 'data';
+    if (isVehicleDataEndpoint) {
+      res.setHeader('X-Data-Fallback', 'true');
+      const defaultData = {
+        FOUR_WHEELER: [{ name: "Maruti Suzuki", models: [{ name: "Swift", variants: ["LXi", "VXi", "ZXi"] }] }],
+        TWO_WHEELER: [{ name: "Honda", models: [{ name: "Activa 6G", variants: ["Standard", "DLX"] }] }]
+      };
+      if (req.method === 'GET') {
+        return res.status(200).json(defaultData);
+      } else {
+        return res.status(200).json({
+          success: true,
+          data: req.body || {},
+          message: 'Vehicle data processed (error occurred, using fallback)',
+          fallback: true,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+    
+    // If it's a database connection error, return 503
+    if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect'))) {
+      return res.status(503).json({
+        success: false,
+        reason: 'Database is currently unavailable. Please try again later.',
+        fallback: true
+      });
+    }
+    
+    // For other errors, return 500 with error details
+    return res.status(500).json({
+      success: false,
+      reason: 'An error occurred while processing the request',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 }
 
 // Admin handler - preserves exact functionality from admin.ts
@@ -2157,7 +2248,7 @@ async function seedVehicles(): Promise<any[]> {
 }
 
 // System handler - consolidates system.ts
-async function handleSystem(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleSystem(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   const { action } = req.query;
   
   switch (action) {
@@ -3111,9 +3202,33 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, options: 
       }
     }
 
-    return res.status(400).json({ success: false, reason: 'Invalid payment action' });
+    // Handle invalid or missing action parameter
+    if (!action) {
+      return res.status(400).json({ 
+        success: false, 
+        reason: 'Action parameter is required. Valid actions: create, status, approve, reject' 
+      });
+    }
+
+    // If action doesn't match any known action, return 400 instead of 500
+    return res.status(400).json({ 
+      success: false, 
+      reason: `Invalid payment action: ${action}. Valid actions: create, status, approve, reject` 
+    });
   } catch (error) {
     console.error('Payments Handler Error:', error);
+    // Ensure we always return JSON
+    res.setHeader('Content-Type', 'application/json');
+    
+    // If it's a database connection error, return 503
+    if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect'))) {
+      return res.status(503).json({
+        success: false,
+        reason: 'Database is currently unavailable. Please try again later.',
+        fallback: true
+      });
+    }
+    
     return res.status(500).json({
       success: false,
       reason: 'Payments handler failed',

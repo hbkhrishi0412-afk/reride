@@ -1,6 +1,5 @@
 
 
-import { ChartData } from 'chart.js';
 import React from 'react';
 import type { VehicleCategoryData } from './components/vehicleData';
 

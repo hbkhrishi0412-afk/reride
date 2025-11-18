@@ -3,9 +3,6 @@ import type { PlanDetails, SubscriptionPlan } from '../types';
 // In-memory storage for plan updates (in a real app, this would be a database)
 let planUpdates: Partial<Record<SubscriptionPlan, Partial<PlanDetails>>> = {};
 
-// Custom plan type to support additional plans beyond the base 3
-type CustomPlanId = SubscriptionPlan | string;
-
 export const planService = {
     // Get plan details with any updates applied
     getPlanDetails: async (planId: SubscriptionPlan): Promise<PlanDetails> => {
@@ -50,9 +47,8 @@ export const planService = {
     // Create new plan
     createPlan: (planData: Omit<PlanDetails, 'id'>): string => {
         const planId = `custom_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const newPlan = { ...planData, id: planId };
         
-        planUpdates[planId as SubscriptionPlan] = newPlan;
+        planUpdates[planId as SubscriptionPlan] = planData;
         localStorage.setItem('planUpdates', JSON.stringify(planUpdates));
         
         return planId;
