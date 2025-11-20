@@ -1,22 +1,35 @@
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import validator from 'validator';
-import type { User } from '../types';
-import { getSecurityConfig } from './security-config';
+import type { User } from '../types.js';
+import { getSecurityConfig } from './security-config.js';
 
 // Get security configuration
 const config = getSecurityConfig();
 
+// Cached promise for DOMPurify to avoid multiple imports
+let dompurifyPromise: Promise<any> | null = null;
+
+const getDOMPurify = async () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  
+  if (!dompurifyPromise) {
+    dompurifyPromise = import('dompurify').then(module => module.default).catch(() => null);
+  }
+  
+  return dompurifyPromise;
+};
+
 // Safe HTML sanitizer usable in both browser and server environments.
 // - In browser: use DOMPurify if available.
 // - In server (Vercel functions): fall back to validator-based escaping.
-const sanitizeHtml = (input: string): string => {
+const sanitizeHtml = async (input: string): Promise<string> => {
   try {
     // Use DOMPurify only when running in a browser-like environment
     if (typeof window !== 'undefined') {
-      // Lazy import to avoid bundling issues in serverless
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const DOMPurify = require('dompurify');
+      const DOMPurify = await getDOMPurify();
       if (DOMPurify && DOMPurify.sanitize) {
         return DOMPurify.sanitize(input);
       }
@@ -106,37 +119,37 @@ export const refreshAccessToken = (refreshToken: string): string => {
 };
 
 // Input sanitization utilities
-export const sanitizeString = (input: string): string => {
+export const sanitizeString = async (input: string): Promise<string> => {
   if (typeof input !== 'string') {
     return '';
   }
 
   // Remove potential XSS attacks (browser) or escape (server)
-  const sanitized = sanitizeHtml(input);
+  const sanitized = await sanitizeHtml(input);
 
   // Ensure HTML entities are escaped even after DOMPurify
   return validator.escape(sanitized);
 };
 
-export const sanitizeObject = (obj: any): any => {
+export const sanitizeObject = async (obj: any): Promise<any> => {
   if (obj === null || obj === undefined) {
     return obj;
   }
   
   if (typeof obj === 'string') {
-    return sanitizeString(obj);
+    return await sanitizeString(obj);
   }
   
   if (Array.isArray(obj)) {
-    return obj.map(item => sanitizeObject(item));
+    return await Promise.all(obj.map(item => sanitizeObject(item)));
   }
   
   if (typeof obj === 'object') {
     const sanitized: any = {};
     for (const [key, value] of Object.entries(obj)) {
       // Sanitize both key and value
-      const sanitizedKey = sanitizeString(key);
-      sanitized[sanitizedKey] = sanitizeObject(value);
+      const sanitizedKey = await sanitizeString(key);
+      sanitized[sanitizedKey] = await sanitizeObject(value);
     }
     return sanitized;
   }
@@ -191,7 +204,7 @@ export const validateMobile = (mobile: string): boolean => {
   return validator.isMobilePhone(mobile, 'en-IN') && mobile.length === config.VALIDATION.MOBILE_LENGTH;
 };
 
-export const validateUserInput = (userData: any): { isValid: boolean; errors: string[]; sanitizedData?: any } => {
+export const validateUserInput = async (userData: any): Promise<{ isValid: boolean; errors: string[]; sanitizedData?: any }> => {
   const errors: string[] = [];
   
   // Handle null/undefined input
@@ -204,7 +217,7 @@ export const validateUserInput = (userData: any): { isValid: boolean; errors: st
   }
   
   // Sanitize input first
-  const sanitizedData = sanitizeObject(userData);
+  const sanitizedData = await sanitizeObject(userData);
   
   // Validate email
   if (!sanitizedData.email || !validateEmail(sanitizedData.email)) {

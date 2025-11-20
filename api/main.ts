@@ -18,7 +18,7 @@ import {
   validateEmail
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
-import { MongoClient, ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 
 // Helper: Calculate distance between coordinates
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -313,7 +313,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
       
       // Sanitize input
-      const sanitizedData = sanitizeObject({ email, password, role });
+      const sanitizedData = await sanitizeObject({ email, password, role });
       
       // Validate email format
       if (!validateEmail(sanitizedData.email)) {
@@ -374,8 +374,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
 
       // Sanitize and validate input data
-      const sanitizedData = sanitizeObject({ email, password, name, mobile, role });
-      const validation = validateUserInput(sanitizedData);
+      const sanitizedData = await sanitizeObject({ email, password, name, mobile, role });
+      const validation = await validateUserInput(sanitizedData);
       
       if (!validation.isValid) {
         return res.status(400).json({ 
@@ -482,7 +482,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
 
       // Sanitize OAuth data
-      const sanitizedData = sanitizeObject({ firebaseUid, email, name, role, authProvider, avatarUrl });
+      const sanitizedData = await sanitizeObject({ firebaseUid, email, name, role, authProvider, avatarUrl });
 
       let user = await User.findOne({ email: sanitizedData.email });
       if (!user) {
@@ -2803,60 +2803,18 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
     });
   }
 
-  const MONGODB_URI = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
-  const DB_NAME = process.env.DB_NAME || 'reride';
-
-  let cachedClient: MongoClient | null = null;
-  let cachedDb: any = null;
-
-  async function connectToDatabaseSellCar() {
-    if (cachedClient && cachedDb) {
-      try {
-        await cachedDb.admin().ping();
-        return { client: cachedClient, db: cachedDb };
-      } catch (error) {
-        cachedClient = null;
-        cachedDb = null;
-      }
-    }
-
-    try {
-      if (!MONGODB_URI || MONGODB_URI === 'mongodb://localhost:27017') {
-        throw new Error('MONGODB_URL or MONGODB_URI environment variable is not set');
-      }
-
-      // Normalize the URI to ensure correct database name
-      const normalizedUri = ensureDatabaseInUri(MONGODB_URI, DB_NAME);
-      console.log(`🔗 Connecting to MongoDB with normalized URI (database: ${DB_NAME})`);
-
-      const client = new MongoClient(normalizedUri, {
-        maxPoolSize: 10,
-        serverSelectionTimeoutMS: 10000,
-        socketTimeoutMS: 45000,
-      });
-      
-      await client.connect();
-      const db = client.db(DB_NAME);
-      
-      cachedClient = client;
-      cachedDb = db;
-      
-      console.log(`✅ MongoDB client connected to database: ${db.databaseName}`);
-      
-      return { client, db };
-    } catch (error) {
-      cachedClient = null;
-      cachedDb = null;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`❌ MongoDB client connection failed: ${errorMessage}`);
-      throw new Error(`Database connection failed: ${errorMessage}`);
-    }
-  }
-
   const { method } = req;
 
   try {
-    const { db } = await connectToDatabaseSellCar();
+    await connectToDatabase();
+    const db = mongoose.connection.db;
+    
+    if (!db) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Database connection not available' 
+      });
+    }
     const collection = db.collection('sellCarSubmissions');
 
     switch (method) {
