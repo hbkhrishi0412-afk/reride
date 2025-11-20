@@ -1,7 +1,7 @@
 
-import type { Vehicle, User, PlanDetails, FAQItem, SupportTicket } from './types';
-import { VehicleCategory, type SubscriptionPlan } from './types';
-import { VEHICLE_DATA, getPlaceholderImage } from './components/vehicleData';
+import type { Vehicle, User, PlanDetails, FAQItem, SupportTicket } from './types.js';
+import { VehicleCategory, type SubscriptionPlan } from './types.js';
+import { VEHICLE_DATA, getPlaceholderImage } from './components/vehicleData.js';
 
 // Helper to generate past dates
 const daysAgo = (days: number): string => {
@@ -306,7 +306,7 @@ export const MOCK_VEHICLES = getMockVehicles;
 // ============================================
 // LOCATION & DISCOVERY CONSTANTS
 // ============================================
-export const INDIAN_LANDMARKS: import('./types').NearbyLandmark[] = [
+export const INDIAN_LANDMARKS: import('./types.js').NearbyLandmark[] = [
   // Mumbai
   { id: 1, name: 'Andheri Metro Station', type: 'metro', location: { lat: 19.1197, lng: 72.8464 }, city: 'Mumbai', state: 'MH' },
   { id: 2, name: 'CST Railway Station', type: 'railway', location: { lat: 18.9398, lng: 72.8355 }, city: 'Mumbai', state: 'MH' },
@@ -325,7 +325,7 @@ export const INDIAN_LANDMARKS: import('./types').NearbyLandmark[] = [
   { id: 12, name: 'Secunderabad Railway', type: 'railway', location: { lat: 17.4342, lng: 78.5025 }, city: 'Hyderabad', state: 'TS' },
 ];
 
-export const CITY_COORDINATES: Record<string, import('./types').LocationCoordinates> = {
+export const CITY_COORDINATES: Record<string, import('./types.js').LocationCoordinates> = {
   'Mumbai': { lat: 19.0760, lng: 72.8777 },
   'New Delhi': { lat: 28.6139, lng: 77.2090 },
   'Bengaluru': { lat: 12.9716, lng: 77.5946 },
@@ -336,7 +336,7 @@ export const CITY_COORDINATES: Record<string, import('./types').LocationCoordina
   'Kolkata': { lat: 22.5726, lng: 88.3639 },
 };
 
-export const POPULAR_SEARCHES_BY_CITY: Record<string, import('./types').PopularSearch[]> = {
+export const POPULAR_SEARCHES_BY_CITY: Record<string, import('./types.js').PopularSearch[]> = {
   'Mumbai': [
     { id: 1, query: 'Maruti Swift under 5 lakhs', count: 1250, city: 'Mumbai', state: 'MH', createdAt: new Date().toISOString() },
     { id: 2, query: 'Hyundai Creta 2020', count: 980, city: 'Mumbai', state: 'MH', createdAt: new Date().toISOString() },
@@ -355,7 +355,7 @@ export const POPULAR_SEARCHES_BY_CITY: Record<string, import('./types').PopularS
 // ============================================
 // MONETIZATION CONSTANTS
 // ============================================
-export const BOOST_PACKAGES: import('./types').BoostPackage[] = [
+export const BOOST_PACKAGES: import('./types.js').BoostPackage[] = [
   {
     id: 'top_search_3',
     name: 'Top Search - 3 Days',
