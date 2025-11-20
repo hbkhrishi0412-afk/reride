@@ -176,7 +176,7 @@ export default defineConfig({
   },
   // Optimize dependencies
   optimizeDeps: {
-    include: ['react', 'react-dom'],
+    include: ['react', 'react-dom', 'framer-motion'],
     // Exclude heavy dependencies from pre-bundling
     exclude: ['@google/genai', 'mongodb']
   },

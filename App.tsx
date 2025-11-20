@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
+import PageTransition from './components/PageTransition';
 import { 
   VehicleListErrorBoundary, 
   ChatErrorBoundary, 
@@ -1572,17 +1572,9 @@ const AppContent: React.FC = React.memo(() => {
         >
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentView}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {renderView()}
-                </motion.div>
-              </AnimatePresence>
+              <PageTransition currentView={currentView}>
+                {renderView()}
+              </PageTransition>
             </Suspense>
           </ErrorBoundary>
         </main>
@@ -1662,17 +1654,9 @@ const AppContent: React.FC = React.memo(() => {
       <main className="min-h-[calc(100vh-140px)]">
         <ErrorBoundary>
           <Suspense fallback={<LoadingSpinner />}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentView}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                {renderView()}
-              </motion.div>
-            </AnimatePresence>
+            <PageTransition currentView={currentView}>
+              {renderView()}
+            </PageTransition>
           </Suspense>
         </ErrorBoundary>
       </main>
