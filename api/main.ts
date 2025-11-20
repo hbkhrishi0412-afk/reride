@@ -237,6 +237,16 @@ export default async function handler(
       return await handleUtils(req, res, handlerOptions);
     } else if (pathname.includes('/ai') || pathname.endsWith('/ai') || pathname.includes('/gemini')) {
       return await handleAI(req, res, handlerOptions);
+    } else if (pathname.includes('/faqs') || pathname.endsWith('/faqs')) {
+      // Set query type for handleContent to route to FAQs handler
+      req.query = req.query || {};
+      req.query.type = 'faqs';
+      return await handleContent(req, res, handlerOptions);
+    } else if (pathname.includes('/support-tickets') || pathname.endsWith('/support-tickets')) {
+      // Set query type for handleContent to route to Support Tickets handler
+      req.query = req.query || {};
+      req.query.type = 'support-tickets';
+      return await handleContent(req, res, handlerOptions);
     } else if (pathname.includes('/content') || pathname.endsWith('/content')) {
       return await handleContent(req, res, handlerOptions);
     } else if (pathname.includes('/sell-car') || pathname.endsWith('/sell-car')) {
@@ -2815,6 +2825,15 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
         error: 'Database connection not available' 
       });
     }
+    
+    // Verify we're connected to the correct database (reride)
+    const dbName = db.databaseName;
+    if (dbName.toLowerCase() !== 'reride') {
+      console.warn(`⚠️ handleSellCar: Connected to database "${dbName}" but expected "reride"`);
+    } else {
+      console.log(`✅ handleSellCar: Connected to correct database: ${dbName}`);
+    }
+    
     const collection = db.collection('sellCarSubmissions');
 
     switch (method) {
