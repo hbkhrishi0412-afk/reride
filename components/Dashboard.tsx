@@ -584,29 +584,55 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         setIsUploading(true);
         const files = Array.from(input.files);
         
-        const readPromises = files.map((file: File) => new Promise<{ fileName: string, url: string }>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                if (typeof reader.result === 'string') {
-                    resolve({ fileName: file.name, url: reader.result });
-                } else {
-                    reject(new Error('File read error.'));
-                }
-            };
-            reader.onerror = (error) => reject(error);
-            reader.readAsDataURL(file);
-        }));
-
         try {
-            const results = await Promise.all(readPromises);
-            if (type === 'image') {
-                setFormData(prev => ({ ...prev, images: [...prev.images, ...results.map(r => r.url)] }));
-            } else {
-                 const docType = (document.getElementById('document-type') as HTMLSelectElement).value as VehicleDocument['name'];
-                 const newDocs: VehicleDocument[] = results.map(r => ({ name: docType, url: r.url, fileName: r.fileName }));
-                 setFormData(prev => ({ ...prev, documents: [...(prev.documents || []), ...newDocs] }));
+            // Import image upload service
+            const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
+            
+            // Validate all files first
+            for (const file of files) {
+                if (type === 'image') {
+                    const validation = validateImageFile(file);
+                    if (!validation.valid) {
+                        alert(validation.error || 'Invalid image file');
+                        setIsUploading(false);
+                        if (input) input.value = '';
+                        return;
+                    }
+                }
             }
-        } catch (error) { console.error("Error reading files:", error); } 
+            
+            // Upload images to cloud storage (or convert to base64 if not configured)
+            const uploadResults = await uploadImages(files, 'vehicles');
+            
+            // Check for upload errors
+            const failedUploads = uploadResults.filter(r => !r.success);
+            if (failedUploads.length > 0) {
+                const errorMessage = failedUploads.map(r => r.error).join(', ');
+                alert(`Failed to upload ${failedUploads.length} file(s): ${errorMessage}`);
+            }
+            
+            // Get successful upload URLs
+            const successfulUrls = uploadResults
+                .filter(r => r.success && r.url)
+                .map(r => r.url!);
+            
+            if (successfulUrls.length > 0) {
+                if (type === 'image') {
+                    setFormData(prev => ({ ...prev, images: [...prev.images, ...successfulUrls] }));
+                } else {
+                    const docType = (document.getElementById('document-type') as HTMLSelectElement).value as VehicleDocument['name'];
+                    const newDocs: VehicleDocument[] = successfulUrls.map((url, idx) => ({ 
+                        name: docType, 
+                        url, 
+                        fileName: files[idx]?.name || 'document' 
+                    }));
+                    setFormData(prev => ({ ...prev, documents: [...(prev.documents || []), ...newDocs] }));
+                }
+            }
+        } catch (error) { 
+            console.error("Error uploading files:", error);
+            alert('Failed to upload files. Please try again.');
+        } 
         finally {
             setIsUploading(false);
             if (input) input.value = '';

@@ -82,9 +82,9 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <>
-      {/* Native Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 native-bottom-nav z-40 safe-bottom" data-testid="mobile-bottom-nav" style={{ height: '64px', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="flex items-center justify-around h-full px-2">
+      {/* Native Bottom Navigation Bar with Glassmorphism */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 safe-bottom" data-testid="mobile-bottom-nav" style={{ height: '64px', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div className="bg-white/80 backdrop-blur-lg border-t border-white/20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex items-center justify-around h-full px-2">
           {navItems.map((item) => {
             // Skip auth-required items if not logged in
             if (item.requiresAuth && !currentUser) return null;

@@ -102,7 +102,13 @@ async function connectToDatabase(): Promise<Mongoose> {
         throw new MongoConfigError('Please define the MONGODB_URL or MONGODB_URI environment variable.');
     }
 
-    const normalizedUri = ensureDatabaseInUri(mongoUri);
+    let normalizedUri = ensureDatabaseInUri(mongoUri);
+    
+    // Add retryWrites parameter if not present (critical for serverless cold starts)
+    if (!normalizedUri.includes('retryWrites')) {
+      const separator = normalizedUri.includes('?') ? '&' : '?';
+      normalizedUri = `${normalizedUri}${separator}retryWrites=true&w=majority`;
+    }
 
     console.log('🔄 Creating new MongoDB connection...');
     console.log(`📡 Database name in connection options: ${opts.dbName}`);

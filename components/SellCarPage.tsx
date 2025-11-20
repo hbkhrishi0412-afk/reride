@@ -221,17 +221,21 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     };
 
     try {
+      setIsLoading(true);
       const result = await sellCarAPI.submitCarData(carSubmissionData);
       
       if (result.success) {
         alert('Car details submitted successfully! We will contact you soon.');
         onNavigate(ViewEnum.HOME);
       } else {
-        alert(result.error || 'Failed to submit car details. Please try again.');
+        alert(result.error || 'Failed to submit car details. Please check your connection and try again.');
       }
     } catch (error) {
       console.error('Error submitting car data:', error);
-      alert('Failed to submit car details. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to submit car details: ${errorMessage}. Please check your connection and try again.`);
+    } finally {
+      setIsLoading(false);
     }
   };
 

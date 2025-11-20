@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import { 
@@ -1571,7 +1572,17 @@ const AppContent: React.FC = React.memo(() => {
         >
           <ErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
-              {renderView()}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentView}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {renderView()}
+                </motion.div>
+              </AnimatePresence>
             </Suspense>
           </ErrorBoundary>
         </main>
@@ -1651,7 +1662,17 @@ const AppContent: React.FC = React.memo(() => {
       <main className="min-h-[calc(100vh-140px)]">
         <ErrorBoundary>
           <Suspense fallback={<LoadingSpinner />}>
-            {renderView()}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentView}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                {renderView()}
+              </motion.div>
+            </AnimatePresence>
           </Suspense>
         </ErrorBoundary>
       </main>
