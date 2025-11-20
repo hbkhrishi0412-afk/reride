@@ -14,18 +14,27 @@ class DataService {
 
   private detectDevelopment(): boolean {
     try {
-      if (typeof import.meta !== 'undefined' && import.meta.env) {
-        if (import.meta.env.VITE_FORCE_API === 'true') {
+      // Safe check for import.meta.env
+      // In Jest/CJS environments import.meta might not exist or have env
+      const meta = (typeof import.meta !== 'undefined' ? import.meta : {}) as any;
+      
+      if (meta && meta.env) {
+        if (meta.env.VITE_FORCE_API === 'true') {
           return false;
+        }
+        if (meta.env.DEV) {
+          return true;
         }
       }
       
-      const hostname = window?.location?.hostname ?? '';
+      const hostname = typeof window !== 'undefined' ? (window.location?.hostname ?? '') : '';
       const isLocalhost = hostname === 'localhost' ||
         hostname === '127.0.0.1' ||
         hostname.includes('localhost');
       
-      return import.meta.env.DEV || isLocalhost || window.location.protocol === 'file:';
+      const protocol = typeof window !== 'undefined' ? (window.location?.protocol ?? '') : '';
+
+      return isLocalhost || protocol === 'file:';
     } catch {
       return false;
     }
