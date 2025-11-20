@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import VehicleCard from './VehicleCard';
-import type { Vehicle, VehicleCategory, SavedSearch, SearchFilters } from '../types';
-import { VehicleCategory as CategoryEnum } from '../types';
-import { parseSearchQuery, getSearchSuggestions } from '../services/geminiService';
-import QuickViewModal from './QuickViewModal';
-import VehicleTile from './VehicleTile';
-import VehicleTileSkeleton from './VehicleTileSkeleton';
-import { saveSearch } from '../services/buyerEngagementService';
-import { getVehicleData } from '../services/vehicleDataService';
+import VehicleCard from './VehicleCard.js';
+import type { Vehicle, VehicleCategory, SavedSearch, SearchFilters } from '../types.js';
+import { VehicleCategory as CategoryEnum } from '../types.js';
+import { parseSearchQuery, getSearchSuggestions } from '../services/geminiService.js';
+import QuickViewModal from './QuickViewModal.js';
+import VehicleTile from './VehicleTile.js';
+import VehicleTileSkeleton from './VehicleTileSkeleton.js';
+import { saveSearch } from '../services/buyerEngagementService.js';
+import { getVehicleData } from '../services/vehicleDataService.js';
 // Lazy load location data when needed
 
 interface VehicleListProps {

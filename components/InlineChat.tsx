@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
-import type { Conversation, ChatMessage } from '../types';
-import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon';
+import type { Conversation, ChatMessage } from '../types.js';
+import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon.js';
 
 interface InlineChatProps {
   conversation: Conversation;

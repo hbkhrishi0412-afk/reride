@@ -1,4 +1,4 @@
-import { VehicleCategory } from '../types';
+import { VehicleCategory } from '../types.js';
 
 export interface VehicleModel {
     name: string;

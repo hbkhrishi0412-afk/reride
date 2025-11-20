@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import type { Conversation, User, ChatMessage } from '../types';
-import { OfferModal } from './ReadReceiptIcon';
-import InlineChat from './InlineChat';
+import type { Conversation, User, ChatMessage } from '../types.js';
+import { OfferModal } from './ReadReceiptIcon.js';
+import InlineChat from './InlineChat.js';
 
 interface CustomerInboxProps {
   conversations: Conversation[];

@@ -1,25 +1,25 @@
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
-import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types';
-import { View, VehicleCategory } from '../types';
-import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
-import { getSafeImageSrc } from '../utils/imageUtils';
-import { formatSalesValue } from '../utils/numberUtils';
-import VehicleCard from './VehicleCard';
+import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types.js';
+import { View, VehicleCategory } from '../types.js';
+import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService.js';
+import { getSafeImageSrc } from '../utils/imageUtils.js';
+import { formatSalesValue } from '../utils/numberUtils.js';
+import VehicleCard from './VehicleCard.js';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import AiAssistant from './AiAssistant';
+import AiAssistant from './AiAssistant.js';
 // FIX: ChatWidget is a named export, not a default. Corrected the import syntax.
-import { ChatWidget } from './ChatWidget';
+import { ChatWidget } from './ChatWidget.js';
 // Removed blocking import - will lazy load location data when needed
-import { planService } from '../services/planService';
-import BulkUploadModal from './BulkUploadModal';
-import { getPlaceholderImage } from './vehicleData';
-import PricingGuidance from './PricingGuidance';
+import { planService } from '../services/planService.js';
+import BulkUploadModal from './BulkUploadModal.js';
+import { getPlaceholderImage } from './vehicleData.js';
+import PricingGuidance from './PricingGuidance.js';
 // Removed unused OfferModal import
 // NEW FEATURES
-import BoostListingModal from './BoostListingModal';
-import ListingLifecycleIndicator from './ListingLifecycleIndicator';
-import PaymentStatusCard from './PaymentStatusCard';
+import BoostListingModal from './BoostListingModal.js';
+import ListingLifecycleIndicator from './ListingLifecycleIndicator.js';
+import PaymentStatusCard from './PaymentStatusCard.js';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController);
 

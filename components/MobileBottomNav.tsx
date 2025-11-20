@@ -1,6 +1,6 @@
 import React from 'react';
-import type { User } from '../types';
-import { View as ViewEnum } from '../types';
+import type { User } from '../types.js';
+import { View as ViewEnum } from '../types.js';
 
 interface MobileBottomNavProps {
   currentView: ViewEnum;

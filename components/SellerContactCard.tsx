@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import type { Vehicle, User } from '../types';
-import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
+import type { Vehicle, User } from '../types.js';
+import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
 
 interface SellerContactCardProps {
   vehicle: Vehicle;

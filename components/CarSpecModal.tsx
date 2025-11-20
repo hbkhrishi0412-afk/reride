@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import type { NewCarModel, NewCarVariant } from '../data/newCarsData';
+import type { NewCarModel, NewCarVariant } from '../data/newCarsData.js';
 
 interface CarSpecModalProps {
     car: NewCarModel;

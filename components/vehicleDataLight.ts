@@ -1,4 +1,4 @@
-import { VehicleCategory } from '../types';
+import { VehicleCategory } from '../types.js';
 
 export interface VehicleModel {
   name: string;
@@ -108,6 +108,6 @@ export const VEHICLE_DATA_LIGHT: Record<string, VehicleCategoryData> = {
 
 // Lazy load full vehicle data when needed
 export const loadFullVehicleData = async () => {
-  const module = await import('./vehicleData.ts');
+  const module = await import('./vehicleData.js');
   return module.VEHICLE_DATA;
 };

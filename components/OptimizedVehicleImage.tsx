@@ -1,5 +1,5 @@
 import React, { useState, memo } from 'react';
-import LazyImage from './LazyImage';
+import LazyImage from './LazyImage.js';
 
 interface OptimizedVehicleImageProps {
   src: string;

@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
-import type { User, Vehicle, Conversation, Notification } from '../types';
-import { View as ViewEnum } from '../types';
+import type { User, Vehicle, Conversation, Notification } from '../types.js';
+import { View as ViewEnum } from '../types.js';
 
 interface MobileDashboardProps {
   currentUser: User;

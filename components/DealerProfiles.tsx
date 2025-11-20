@@ -1,9 +1,9 @@
 import React from 'react';
-import type { User } from '../types';
-import StarRating from './StarRating';
-import BadgeDisplay from './BadgeDisplay';
-import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
-import VerifiedBadge, { isUserVerified } from './VerifiedBadge';
+import type { User } from '../types.js';
+import StarRating from './StarRating.js';
+import BadgeDisplay from './BadgeDisplay.js';
+import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
+import VerifiedBadge, { isUserVerified } from './VerifiedBadge.js';
 
 interface DealerProfilesProps {
   sellers: User[];

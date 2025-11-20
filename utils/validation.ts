@@ -1,4 +1,4 @@
-import type { Vehicle, User, VehicleData } from '../types';
+import type { Vehicle, User, VehicleData } from '../types.js';
 
 // Comprehensive validation and error handling system
 export class ValidationError extends Error {

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { User, Badge } from '../types';
+import type { User, Badge } from '../types.js';
 
 interface VerifiedBadgeProps {
 	show: boolean;

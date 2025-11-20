@@ -1,9 +1,9 @@
 
 
 import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
-import type { User } from '../types';
-import { View } from '../types';
-import type { Command } from '../types';
+import type { User } from '../types.js';
+import { View } from '../types.js';
+import type { Command } from '../types.js';
 
 
 interface CommandPaletteProps {

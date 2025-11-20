@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { User } from '../types';
+import type { User } from '../types.js';
 
 interface EditUserModalProps {
     user: User;

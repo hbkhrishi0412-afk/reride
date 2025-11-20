@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import type { User, Vehicle } from '../types';
-import VehicleCard from './VehicleCard';
-import StarRating from './StarRating';
-import QuickViewModal from './QuickViewModal';
-import BadgeDisplay from './BadgeDisplay';
-import TrustBadgeDisplay from './TrustBadgeDisplay';
-import VerifiedBadge, { isUserVerified } from './VerifiedBadge';
-import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount, getFollowersOfSeller, getFollowedSellers } from '../services/buyerEngagementService';
+import type { User, Vehicle } from '../types.js';
+import VehicleCard from './VehicleCard.js';
+import StarRating from './StarRating.js';
+import QuickViewModal from './QuickViewModal.js';
+import BadgeDisplay from './BadgeDisplay.js';
+import TrustBadgeDisplay from './TrustBadgeDisplay.js';
+import VerifiedBadge, { isUserVerified } from './VerifiedBadge.js';
+import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount, getFollowersOfSeller, getFollowedSellers } from '../services/buyerEngagementService.js';
 
 interface SellerProfilePageProps {
     seller: User;

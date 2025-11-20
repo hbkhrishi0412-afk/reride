@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { User } from '../types';
-import PasswordInput from './PasswordInput';
+import type { User } from '../types.js';
+import PasswordInput from './PasswordInput.js';
 
 interface ProfileProps {
   currentUser: User;

@@ -1,6 +1,6 @@
 import React from 'react';
-import Toast from './Toast';
-import type { Toast as ToastType } from '../types';
+import Toast from './Toast.js';
+import type { Toast as ToastType } from '../types.js';
 
 interface ToastContainerProps {
   toasts: ToastType[];

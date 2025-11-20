@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import type { User, View } from '../types';
-import { View as ViewEnum } from '../types';
-import PasswordInput from './PasswordInput';
+import type { User, View } from '../types.js';
+import { View as ViewEnum } from '../types.js';
+import PasswordInput from './PasswordInput.js';
 
 interface UserManagementProps {
     users: User[];

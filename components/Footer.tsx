@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { View } from '../types';
+import { View } from '../types.js';
 
 interface FooterProps {
     onNavigate: (view: View) => void;

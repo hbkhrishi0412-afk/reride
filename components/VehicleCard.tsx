@@ -1,8 +1,8 @@
 import React, { memo } from 'react';
-import type { Vehicle } from '../types';
-import StarRating from './StarRating';
-import BadgeDisplay from './BadgeDisplay';
-import { getFirstValidImage } from '../utils/imageUtils';
+import type { Vehicle } from '../types.js';
+import StarRating from './StarRating.js';
+import BadgeDisplay from './BadgeDisplay.js';
+import { getFirstValidImage } from '../utils/imageUtils.js';
 
 interface VehicleCardProps {
   vehicle: Vehicle;
