@@ -115,8 +115,15 @@ export default defineConfig({
         assetFileNames: 'assets/[name]-[hash].[ext]'
       }
     },
-    // Enable minification with esbuild (faster)
-    minify: 'esbuild',
+    // Use terser for better minification (smaller bundle size)
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+        pure_funcs: ['console.log', 'console.info', 'console.debug'],
+      },
+    },
     // Remove console logs and debugger in production for smaller bundle
     esbuild: {
       drop: ['console', 'debugger'],

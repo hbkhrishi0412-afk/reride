@@ -2,7 +2,8 @@ import React, { memo } from 'react';
 import type { Vehicle } from '../types.js';
 import StarRating from './StarRating.js';
 import BadgeDisplay from './BadgeDisplay.js';
-import { getFirstValidImage } from '../utils/imageUtils.js';
+import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils.js';
+import LazyImage from './LazyImage.js';
 
 interface VehicleCardProps {
   vehicle: Vehicle;
@@ -59,7 +60,12 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, onSelect, onToggleCo
       data-testid="vehicle-card"
     >
       <div className="relative overflow-hidden h-56">
-        <img className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" src={getFirstValidImage(vehicle.images)} alt={`${vehicle.make} ${vehicle.model}`} loading="lazy" data-testid="vehicle-image" />
+        <LazyImage
+          src={optimizeImageUrl(getFirstValidImage(vehicle.images), 800, 80)}
+          alt={`${vehicle.make} ${vehicle.model}`}
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+          data-testid="vehicle-image"
+        />
         
         {/* Premium Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>

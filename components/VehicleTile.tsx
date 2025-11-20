@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import type { Vehicle } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
+import LazyImage from './LazyImage';
 
 interface VehicleTileProps {
   vehicle: Vehicle;
@@ -36,7 +37,11 @@ const VehicleTile: React.FC<VehicleTileProps> = ({ vehicle, onSelect, onToggleCo
       onClick={() => onSelect(vehicle)}
       className="bg-white rounded-xl shadow-soft overflow-hidden transform hover:-translate-y-1 hover:shadow-soft-lg transition-all duration-300 flex cursor-pointer group hover:ring-2 ring-offset-2 dark:ring-offset-brand-gray-dark" style={{ ['--ring-color' as any]: 'var(--spinny-orange)' }} onMouseEnter={(e) => e.currentTarget.style.outline = '2px solid var(--spinny-orange)'} onMouseLeave={(e) => e.currentTarget.style.outline = ''}
     >
-      <img className="w-32 sm:w-48 h-full object-cover flex-shrink-0" src={getFirstValidImage(vehicle.images)} alt={`${vehicle.make} ${vehicle.model}`} />
+      <LazyImage
+        src={optimizeImageUrl(getFirstValidImage(vehicle.images), 400, 80)}
+        alt={`${vehicle.make} ${vehicle.model}`}
+        className="w-32 sm:w-48 h-full object-cover flex-shrink-0"
+      />
       
       <div className="p-4 flex flex-col flex-grow">
         <div className="flex justify-between items-start">

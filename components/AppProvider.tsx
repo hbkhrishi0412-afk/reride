@@ -375,6 +375,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, []);
 
   const navigate = useCallback((view: View, params?: { city?: string }) => {
+    // Prevent infinite redirect loops by checking if we're already on the target view
+    if (view === currentView && !params?.city) {
+      return; // Already on this view, no need to navigate
+    }
+
     const isNavigatingAwayFromSellerProfile = currentView === View.SELLER_PROFILE && view !== View.SELLER_PROFILE;
     if (isNavigatingAwayFromSellerProfile) { 
       window.history.pushState({}, '', window.location.pathname); 
@@ -396,11 +401,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     if (view === View.USED_CARS && params?.city) {
       updateSelectedCity(params.city);
     }
-    if (view === View.SELLER_DASHBOARD && currentUser?.role !== 'seller') setCurrentView(View.LOGIN_PORTAL);
-    else if (view === View.ADMIN_PANEL && currentUser?.role !== 'admin') setCurrentView(View.ADMIN_LOGIN);
-    else if (view === View.NEW_CARS_ADMIN_PANEL && currentUser?.role !== 'admin') setCurrentView(View.NEW_CARS_ADMIN_LOGIN);
-    else if ((view === View.PROFILE || view === View.INBOX) && !currentUser) setCurrentView(View.LOGIN_PORTAL);
-    else setCurrentView(view);
+    
+    // Prevent redirect loops: Only redirect if not already on login page
+    if (view === View.SELLER_DASHBOARD && currentUser?.role !== 'seller') {
+      if (currentView !== View.LOGIN_PORTAL && currentView !== View.SELLER_LOGIN) {
+        setCurrentView(View.LOGIN_PORTAL);
+      }
+    } else if (view === View.ADMIN_PANEL && currentUser?.role !== 'admin') {
+      if (currentView !== View.ADMIN_LOGIN) {
+        setCurrentView(View.ADMIN_LOGIN);
+      }
+    } else if (view === View.NEW_CARS_ADMIN_PANEL && currentUser?.role !== 'admin') {
+      if (currentView !== View.NEW_CARS_ADMIN_LOGIN) {
+        setCurrentView(View.NEW_CARS_ADMIN_LOGIN);
+      }
+    } else if ((view === View.PROFILE || view === View.INBOX) && !currentUser) {
+      if (currentView !== View.LOGIN_PORTAL) {
+        setCurrentView(View.LOGIN_PORTAL);
+      }
+    } else {
+      setCurrentView(view);
+    }
 
     // Update path for friendly URLs
     try {

@@ -99,7 +99,18 @@ async function connectToDatabase(): Promise<Mongoose> {
     const mongoUri = process.env.MONGODB_URL || process.env.MONGODB_URI;
     
     if (!mongoUri) {
-        throw new MongoConfigError('Please define the MONGODB_URL or MONGODB_URI environment variable.');
+        const errorMessage = [
+          '❌ MONGODB_URL or MONGODB_URI environment variable is not defined.',
+          '',
+          'To fix this:',
+          '1. Create a .env file in your project root (copy from .env.example)',
+          '2. Add: MONGODB_URL=mongodb://localhost:27017/reride?retryWrites=true&w=majority',
+          '   Or for MongoDB Atlas: MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/reride?retryWrites=true&w=majority',
+          '3. For Vercel deployment: Add MONGODB_URL in Vercel dashboard → Settings → Environment Variables',
+          '',
+          'See .env.example for all required environment variables.'
+        ].join('\n');
+        throw new MongoConfigError(errorMessage);
     }
 
     let normalizedUri = ensureDatabaseInUri(mongoUri);
