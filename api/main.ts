@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
-import connectToDatabase, { MongoConfigError, ensureDatabaseInUri } from '../lib/db.js';
+import connectToDatabase, { MongoConfigError } from '../lib/db.js';
 import User from '../models/User.js';
 import Vehicle from '../models/Vehicle.js';
 import VehicleDataModel from '../models/VehicleData.js';

@@ -35,7 +35,8 @@ export function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
     }
     
     // Check if database name is already 'reride' (case-insensitive)
-    const normalizedCurrentDbName = currentDbName.toLowerCase();
+    // TypeScript assertion: currentDbName cannot be null here due to early return above
+    const normalizedCurrentDbName = currentDbName!.toLowerCase();
     if (normalizedCurrentDbName !== dbName.toLowerCase()) {
       // Database name is different - force it to 'reride'
       console.warn(`⚠️ Database name in URI is "${currentDbName}", changing to "${dbName}" to ensure correct database access.`);
