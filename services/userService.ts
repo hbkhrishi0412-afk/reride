@@ -115,7 +115,7 @@ export const getUsersLocal = async (): Promise<User[]> => {
                 usersJson = JSON.stringify(usersToStore);
             } else {
                 // Ensure critical test users (seller, customer, admin) exist with correct plain text passwords
-                // This fixes cases where passwords might have been incorrectly hashed
+                // This fixes cases where passwords might have been incorrectly hashed or corrupted
                 const criticalUsers = FALLBACK_USERS.filter(fu => 
                     ['seller@test.com', 'customer@test.com', 'admin@test.com'].includes(fu.email.toLowerCase())
                 );
@@ -124,17 +124,26 @@ export const getUsersLocal = async (): Promise<User[]> => {
                 const updatedUsers = parsedUsers.map((u: User) => {
                     const criticalUser = criticalUsers.find(cu => cu.email.toLowerCase() === (u.email || '').toLowerCase());
                     if (criticalUser) {
-                        // If stored password is hashed but should be plain text (development mode), fix it
-                        if (u.password && u.password.startsWith('$2')) {
-                            console.warn(`⚠️ getUsersLocal: Found hashed password for ${u.email} in development mode - resetting to plain text`);
+                        // Fix corrupted or incorrectly stored passwords
+                        const storedPassword = (u.password || '').trim();
+                        const expectedPassword = criticalUser.password.trim();
+                        
+                        // Check if password needs to be fixed:
+                        // 1. Password is hashed (starts with $2) - should be plain text in development
+                        // 2. Password is empty or missing
+                        // 3. Password doesn't match expected plain text value
+                        // 4. Password is corrupted (contains invalid characters or wrong length)
+                        const isHashed = storedPassword.startsWith('$2');
+                        const isEmpty = !storedPassword || storedPassword.length === 0;
+                        const isMismatched = storedPassword !== expectedPassword;
+                        const isCorrupted = storedPassword.length > 100 || storedPassword.includes('\n') || storedPassword.includes('\r');
+                        
+                        if (isHashed || isEmpty || isMismatched || isCorrupted) {
+                            const reason = isHashed ? 'hashed' : isEmpty ? 'empty' : isCorrupted ? 'corrupted' : 'mismatched';
+                            console.warn(`⚠️ getUsersLocal: Fixing ${reason} password for ${u.email} - resetting to plain text`);
                             needsUpdate = true;
-                            return { ...u, password: criticalUser.password }; // Reset to plain text
-                        }
-                        // Ensure password matches fallback (plain text)
-                        if (u.password !== criticalUser.password) {
-                            console.warn(`⚠️ getUsersLocal: Password mismatch for ${u.email} - resetting to fallback`);
-                            needsUpdate = true;
-                            return { ...u, password: criticalUser.password };
+                            // Reset to fallback user data to ensure all fields are correct
+                            return { ...criticalUser, ...u, password: expectedPassword };
                         }
                     }
                     return u;

@@ -937,26 +937,10 @@ const AppContent: React.FC = React.memo(() => {
                   }
                   
                   // Current password is correct, now update to new password
-                  // Check if we're in production (using API) or development (localStorage)
-                  const isDevelopment = isDevelopmentEnvironment() || 
-                                       window.location.hostname === 'localhost' || 
-                                       window.location.hostname === '127.0.0.1' ||
-                                       window.location.hostname.includes('localhost') ||
-                                       window.location.hostname.includes('127.0.0.1');
-                  
-                  let passwordToStore: string;
-                  
-                  if (isDevelopment) {
-                    // Development: store plain text for localStorage
-                    passwordToStore = passwords.new;
-                  } else {
-                    // Production: send plain text password to API, let API hash it
-                    // This ensures consistent hashing and better security
-                    passwordToStore = passwords.new;
-                  }
-                  
-                  // Update password (API will hash it in production mode)
-                  await updateUser(currentUser.email, { password: passwordToStore });
+                  // In development (localStorage), store as plain text
+                  // In production (API), send plain text and let API hash it
+                  // Both cases use the same value, so no conditional needed
+                  await updateUser(currentUser.email, { password: passwords.new });
                   // Don't show success here - let updateUser handle the toast message
                   // This ensures we show the correct message based on MongoDB success/failure
                   return true;
