@@ -16,6 +16,11 @@ export default defineConfig({
   build: {
     // Optimize chunk size - lower threshold to catch bloat earlier
     chunkSizeWarningLimit: 500,
+    // Ensure proper module resolution and chunk ordering
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true
+    },
     rollupOptions: {
       // Exclude API files from client build
       external: (id) => {
@@ -29,16 +34,28 @@ export default defineConfig({
       output: {
         // More aggressive code splitting for better performance
         manualChunks: (id) => {
+          // CRITICAL: React and React-DOM must NEVER be split into separate chunks
+          // They must remain in the entry bundle to prevent "createContext is undefined" errors
+          // Check for React-related modules first, before any other node_modules checks
           if (id.includes('node_modules')) {
+            // Check for React first - must be in entry bundle
+            if (id.includes('/react/') || 
+                id.includes('/react-dom/') ||
+                id.includes('/react\\') ||
+                id.includes('/react-dom\\') ||
+                id.includes('react/index') ||
+                id.includes('react-dom/index') ||
+                id.includes('react/jsx-runtime') ||
+                id.includes('react/jsx-dev-runtime') ||
+                id.includes('scheduler')) {
+              // Return undefined to keep React in the entry bundle
+              // This prevents React from being in any vendor chunk
+              return undefined;
+            }
+            
             // Separate heavy libraries into their own chunks
             if (id.includes('firebase')) {
               return 'firebase';
-            }
-            // Keep React and React-DOM in the main bundle to prevent undefined errors
-            // React must be available when createContext and other React APIs are called
-            if (id.includes('react') || id.includes('react-dom')) {
-              // Don't split React - keep it in the main bundle for reliability
-              return undefined;
             }
             if (id.includes('chart.js') || id.includes('react-chartjs')) {
               return 'charts';
@@ -53,6 +70,7 @@ export default defineConfig({
             if (id.includes('bcryptjs') || id.includes('validator') || id.includes('dompurify')) {
               return 'utils-vendor';
             }
+            // All other node_modules go to vendor chunk
             return 'vendor';
           }
           
