@@ -7,16 +7,22 @@ interface PaymentStatusCardProps {
 }
 
 const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) => {
+  // Early return if currentUser or email is missing
+  if (!currentUser || !currentUser.email) {
+    return null;
+  }
+
   const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadPaymentStatus();
-  }, []);
 
   const loadPaymentStatus = async () => {
     try {
       setLoading(true);
+      // Add safety check for currentUser and email
+      if (!currentUser || !currentUser.email) {
+        console.warn('PaymentStatusCard: currentUser or email is missing');
+        return;
+      }
       const request = await getPaymentRequestStatus(currentUser.email);
       setPaymentRequest(request);
     } catch (error) {
@@ -25,6 +31,12 @@ const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) =>
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (currentUser?.email) {
+      loadPaymentStatus();
+    }
+  }, [currentUser?.email]);
 
   if (loading) {
     return (
