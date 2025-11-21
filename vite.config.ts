@@ -34,11 +34,11 @@ export default defineConfig({
       output: {
         // More aggressive code splitting for better performance
         manualChunks: (id) => {
-          // CRITICAL: React and React-DOM must NEVER be split into separate chunks
-          // They must remain in the entry bundle to prevent "createContext is undefined" errors
+          // FIX: React must be in the vendor chunk so other libraries (like framer-motion) 
+          // that depend on it can access React.createContext when they load
           // Check for React-related modules first, before any other node_modules checks
           if (id.includes('node_modules')) {
-            // Check for React first - must be in entry bundle
+            // Check for React first - put in vendor chunk so dependent libraries can access it
             if (id.includes('/react/') || 
                 id.includes('/react-dom/') ||
                 id.includes('/react\\') ||
@@ -48,9 +48,9 @@ export default defineConfig({
                 id.includes('react/jsx-runtime') ||
                 id.includes('react/jsx-dev-runtime') ||
                 id.includes('scheduler')) {
-              // Return undefined to keep React in the entry bundle
-              // This prevents React from being in any vendor chunk
-              return undefined;
+              // Return 'vendor' to ensure React is bundled with libraries that depend on it
+              // This prevents "createContext is undefined" errors in split chunks
+              return 'vendor';
             }
             
             // Separate heavy libraries into their own chunks
