@@ -697,6 +697,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     }
   }, [conversations]);
 
+  // Save audit log to localStorage whenever it changes
+  useEffect(() => {
+    if (auditLog.length > 0) {
+      saveAuditLog(auditLog);
+    }
+  }, [auditLog]);
+
   // Sync activeChat when conversations change
   useEffect(() => {
     if (activeChat) {
@@ -787,6 +794,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         fallbackMessage = 'Vehicle unfeatured successfully';
       }
 
+      // Log audit entry for vehicle update
+      const actor = currentUser?.name || currentUser?.email || 'System';
+      const updateFields = Object.keys(updates).join(', ');
+      const vehicleInfo = `${vehicleToUpdate.make} ${vehicleToUpdate.model} (ID: ${id})`;
+      const entry = logAction(actor, 'Update Vehicle', vehicleInfo, `Updated fields: ${updateFields}`);
+      setAuditLog(prev => [entry, ...prev]);
+
       if (!skipToast) {
         addToast(successMessage ?? fallbackMessage, 'success');
       }
@@ -799,7 +813,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
       addToast('Failed to update vehicle. Please try again.', 'error');
     }
-  }, [vehicles, addToast, setVehicles]);
+  }, [vehicles, addToast, setVehicles, currentUser, setAuditLog]);
 
   const contextValue: AppContextType = useMemo(() => ({
     // State
@@ -909,6 +923,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         console.warn('Failed to sync user update to MongoDB:', error);
       }
       
+      // Log audit entry for user update
+      const actor = currentUser?.name || currentUser?.email || 'System';
+      const updateFieldsList = Object.keys(updateFields).join(', ');
+      const entry = logAction(actor, 'Update User', email, `Updated fields: ${updateFieldsList}`);
+      setAuditLog(prev => [entry, ...prev]);
+      
       addToast(`User ${email} updated successfully`, 'success');
     },
     onCreateUser: async (userData: Omit<User, 'status'>): Promise<{ success: boolean, reason: string }> => {
@@ -968,6 +988,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           addToast(`User created locally. Failed to sync to MongoDB.`, 'warning');
         }
         
+        // Log audit entry for user creation
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const entry = logAction(actor, 'Create User', newUser.email, `Created user: ${newUser.name} (${newUser.role})`);
+        setAuditLog(prev => [entry, ...prev]);
+        
         return { success: true, reason: '' };
       } catch (error) {
         console.error('Error creating user:', error);
@@ -980,6 +1005,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           setUsers(prev => prev.map(user => 
             user.email === email ? { ...user, subscriptionPlan: plan } : user
           ));
+          
+          // Log audit entry for plan update
+          const actor = currentUser?.name || currentUser?.email || 'System';
+          const user = users.find(u => u.email === email);
+          const previousPlan = user?.subscriptionPlan || 'unknown';
+          const entry = logAction(actor, 'Update User Plan', email, `Changed plan from ${previousPlan} to ${plan}`);
+          setAuditLog(prev => [entry, ...prev]);
+          
           addToast(`Plan updated for ${email}`, 'success');
         } catch (error) {
           console.error('Failed to update user plan:', error);
@@ -996,6 +1029,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           setUsers(prev => prev.map(user => 
             user.email === email ? { ...user, status: newStatus } : user
           ));
+          
+          // Log audit entry for user status toggle
+          const actor = currentUser?.name || currentUser?.email || 'System';
+          const entry = logAction(actor, 'Toggle User Status', email, `Changed status from ${user.status} to ${newStatus}`);
+          setAuditLog(prev => [entry, ...prev]);
+          
           addToast(`User status toggled for ${email}`, 'success');
         } catch (error) {
           console.error('Failed to toggle user status:', error);
@@ -1009,6 +1048,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           
           const newStatus = vehicle.status === 'published' ? 'unpublished' : 'published';
           await updateVehicleHandler(vehicleId, { status: newStatus });
+          
+          // Log audit entry for vehicle status toggle
+          const actor = currentUser?.name || currentUser?.email || 'System';
+          const vehicleInfo = `${vehicle.make} ${vehicle.model} (ID: ${vehicleId})`;
+          const entry = logAction(actor, 'Toggle Vehicle Status', vehicleInfo, `Changed status from ${vehicle.status} to ${newStatus}`);
+          setAuditLog(prev => [entry, ...prev]);
         } catch (error) {
           console.error('Failed to toggle vehicle status:', error);
           addToast('Failed to update vehicle status', 'error');
@@ -1025,6 +1070,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           // Unfeature path: simple toggle off
           if (vehicle.isFeatured) {
             await updateVehicleHandler(vehicleId, { isFeatured: false });
+            
+            // Log audit entry for vehicle unfeature
+            const actor = currentUser?.name || currentUser?.email || 'System';
+            const vehicleInfo = `${vehicle.make} ${vehicle.model} (ID: ${vehicleId})`;
+            const entry = logAction(actor, 'Unfeature Vehicle', vehicleInfo, 'Vehicle unfeatured');
+            setAuditLog(prev => [entry, ...prev]);
+            
             return;
           }
 
@@ -1082,11 +1134,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                   : prev
               );
 
+              // Log audit entry for vehicle feature
+              const actor = currentUser?.name || currentUser?.email || 'System';
+              const vehicleInfo = `${result.vehicle.make} ${result.vehicle.model} (ID: ${vehicleId})`;
+              const entry = logAction(actor, 'Feature Vehicle', vehicleInfo, `Featured vehicle. Credits remaining: ${remainingCredits}`);
+              setAuditLog(prev => [entry, ...prev]);
+
               addToast(
                 `Vehicle featured successfully. Credits remaining: ${remainingCredits}`,
                 'success'
               );
             } else {
+              // Log audit entry for vehicle feature
+              const actor = currentUser?.name || currentUser?.email || 'System';
+              const vehicleInfo = vehicle ? `${vehicle.make} ${vehicle.model} (ID: ${vehicleId})` : `Vehicle #${vehicleId}`;
+              const entry = logAction(actor, 'Feature Vehicle', vehicleInfo, 'Vehicle featured successfully');
+              setAuditLog(prev => [entry, ...prev]);
+              
               addToast('Vehicle featured successfully', 'success');
             }
           } else {
@@ -1099,18 +1163,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       },
     onResolveFlag: (type: 'vehicle' | 'conversation', id: number | string) => {
       if (type === 'vehicle') {
+        const vehicle = vehicles.find(v => v.id === id);
         setVehicles(prev => prev.map(vehicle => 
           vehicle.id === id ? { ...vehicle, isFlagged: false } : vehicle
         ));
+        
+        // Log audit entry for flag resolution
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const targetInfo = vehicle ? `${vehicle.make} ${vehicle.model} (ID: ${id})` : `Vehicle #${id}`;
+        const entry = logAction(actor, 'Resolve Flag', targetInfo, `Resolved flag on ${type}`);
+        setAuditLog(prev => [entry, ...prev]);
       } else {
         setConversations(prev => prev.map(conv => 
           conv.id === id ? { ...conv, isFlagged: false } : conv
         ));
+        
+        // Log audit entry for flag resolution
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const entry = logAction(actor, 'Resolve Flag', `Conversation ${id}`, `Resolved flag on ${type}`);
+        setAuditLog(prev => [entry, ...prev]);
       }
       addToast(`Flag resolved for ${type}`, 'success');
     },
     onUpdateSettings: (settings: PlatformSettings) => {
       setPlatformSettings(settings);
+      
+      // Log audit entry for settings update
+      const actor = currentUser?.name || currentUser?.email || 'System';
+      const changedSettings = Object.keys(settings).join(', ');
+      const entry = logAction(actor, 'Update Platform Settings', 'Platform', `Updated settings: ${changedSettings}`);
+      setAuditLog(prev => [entry, ...prev]);
+      
       addToast('Platform settings updated', 'success');
     },
     onSendBroadcast: (message: string) => {
@@ -1123,6 +1206,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         timestamp: new Date().toISOString(),
         isRead: false
       }]);
+      
+      // Log audit entry for broadcast
+      const actor = currentUser?.name || currentUser?.email || 'System';
+      const messagePreview = message.length > 50 ? message.substring(0, 50) + '...' : message;
+      const entry = logAction(actor, 'Send Broadcast', 'All Users', `Message: ${messagePreview}`);
+      setAuditLog(prev => [entry, ...prev]);
+      
       addToast('Broadcast sent to all users', 'success');
     },
     onExportUsers: () => {
@@ -1141,6 +1231,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        
+        // Log audit entry for export
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const entry = logAction(actor, 'Export Users', 'Users Data', `Exported ${users.length} users to CSV`);
+        setAuditLog(prev => [entry, ...prev]);
+        
         addToast(`Exported ${users.length} users successfully`, 'success');
       } catch (error) {
         console.error('Export failed:', error);
@@ -1163,6 +1259,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        
+        // Log audit entry for export
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const entry = logAction(actor, 'Export Vehicles', 'Vehicles Data', `Exported ${vehicles.length} vehicles to CSV`);
+        setAuditLog(prev => [entry, ...prev]);
+        
         addToast(`Exported ${vehicles.length} vehicles successfully`, 'success');
       } catch (error) {
         console.error('Export failed:', error);
@@ -1186,6 +1288,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        
+        // Log audit entry for export
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const entry = logAction(actor, 'Export Sales', 'Sales Data', `Exported ${soldVehicles.length} sales records to CSV`);
+        setAuditLog(prev => [entry, ...prev]);
+        
         addToast(`Exported ${soldVehicles.length} sales records successfully`, 'success');
       } catch (error) {
         console.error('Export failed:', error);
@@ -1202,6 +1310,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         const success = await saveVehicleData(newData);
         
         if (success) {
+          // Log audit entry for vehicle data update
+          const actor = currentUser?.name || currentUser?.email || 'System';
+          const entry = logAction(actor, 'Update Vehicle Data', 'Vehicle Data', 'Updated vehicle data configuration');
+          setAuditLog(prev => [entry, ...prev]);
+          
           addToast('Vehicle data updated and synced successfully', 'success');
           console.log('✅ Vehicle data updated via API:', newData);
         } else {
@@ -1210,6 +1323,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             localStorage.setItem('reRideVehicleData', JSON.stringify(newData));
             addToast('Vehicle data updated (saved locally, will sync when online)', 'warning');
             console.warn('⚠️ API failed, saved to localStorage as fallback');
+            
+            // Log audit entry for vehicle data update (local only)
+            const actor = currentUser?.name || currentUser?.email || 'System';
+            const entry = logAction(actor, 'Update Vehicle Data', 'Vehicle Data', 'Updated vehicle data configuration (saved locally)');
+            setAuditLog(prev => [entry, ...prev]);
             
             // Import sync service to mark pending changes
             const { syncService } = await import('../services/syncService');
@@ -1349,12 +1467,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => {
+      const vehicle = vehicles.find(v => v.id === vehicleId);
+      
       setVehicles(prev => prev.map(vehicle => 
         vehicle.id === vehicleId ? { 
           ...vehicle, 
           certificationStatus: decision === 'approved' ? 'certified' : 'rejected' 
         } : vehicle
       ));
+      
+      // Log audit entry for certification approval/rejection
+      const actor = currentUser?.name || currentUser?.email || 'System';
+      const vehicleInfo = vehicle ? `${vehicle.make} ${vehicle.model} (ID: ${vehicleId})` : `Vehicle #${vehicleId}`;
+      const entry = logAction(actor, `Certification ${decision === 'approved' ? 'Approve' : 'Reject'}`, vehicleInfo, `Certification ${decision} for vehicle`);
+      setAuditLog(prev => [entry, ...prev]);
+      
       addToast(`Certification ${decision} for vehicle`, 'success');
     },
     
@@ -1708,6 +1835,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     deleteUser: (email: string) => {
+      const user = users.find(u => u.email === email);
+      
+      // Log audit entry for user deletion
+      const actor = currentUser?.name || currentUser?.email || 'System';
+      const userInfo = user ? `${user.name} (${user.email})` : email;
+      const entry = logAction(actor, 'Delete User', email, `Deleted user: ${userInfo}`);
+      setAuditLog(prev => [entry, ...prev]);
+      
       setUsers(prev => prev.filter(user => user.email !== email));
       addToast('User deleted successfully', 'success');
     },
@@ -1716,11 +1851,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     },
     deleteVehicle: async (id: number) => {
       try {
+        const vehicle = vehicles.find(v => v.id === id);
+        
         // Call API to delete vehicle
         const { deleteVehicle: deleteVehicleApi } = await import('../services/vehicleService');
         const result = await deleteVehicleApi(id);
         
         if (result.success) {
+          // Log audit entry for vehicle deletion
+          const actor = currentUser?.name || currentUser?.email || 'System';
+          const vehicleInfo = vehicle ? `${vehicle.make} ${vehicle.model} (ID: ${id})` : `Vehicle #${id}`;
+          const entry = logAction(actor, 'Delete Vehicle', vehicleInfo, `Deleted vehicle: ${vehicleInfo}`);
+          setAuditLog(prev => [entry, ...prev]);
+          
           // Update local state
           setVehicles(prev => prev.filter(vehicle => vehicle.id !== id));
           addToast('Vehicle deleted successfully', 'success');

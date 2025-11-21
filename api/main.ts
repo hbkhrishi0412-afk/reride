@@ -15,7 +15,8 @@ import {
   validateUserInput,
   getSecurityHeaders,
   sanitizeObject,
-  validateEmail
+  validateEmail,
+  verifyToken
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { ObjectId } from 'mongodb';
@@ -656,16 +657,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     
     try {
       // Ensure database connection before querying
-      if (mongoose.connection.readyState !== 1 && mongoAvailable) {
+      let isMongoAvailable = mongoAvailable;
+      if (mongoose.connection.readyState !== 1 && isMongoAvailable) {
         try {
           await connectToDatabase();
         } catch (connError) {
           console.warn('⚠️ Database connection failed during GET /users, using fallback');
-          mongoAvailable = false;
+          isMongoAvailable = false;
         }
       }
       
-      if (!mongoAvailable) {
+      if (!isMongoAvailable) {
         const fallbackUsers = await getFallbackUsers();
         res.setHeader('X-Data-Fallback', 'true');
         return res.status(200).json(fallbackUsers);
@@ -675,8 +677,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       return res.status(200).json(users);
     } catch (error) {
       console.error('❌ Error fetching users:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
       // Always return fallback instead of 500 to prevent crashes
       try {
         const fallbackUsers = await getFallbackUsers();
@@ -2064,6 +2064,44 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
 async function handleAdmin(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   const { action } = req.query;
   const { mongoAvailable, mongoFailureReason } = options;
+
+  // SECURITY: Require authentication for all admin endpoints
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ 
+      success: false, 
+      reason: 'Unauthorized. Admin endpoints require authentication.',
+      message: 'Please provide a valid JWT token in the Authorization header (Bearer token)'
+    });
+  }
+
+  // Verify JWT token
+  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  let decoded: any;
+  try {
+    decoded = verifyToken(token);
+  } catch (error) {
+    return res.status(401).json({ 
+      success: false, 
+      reason: 'Invalid or expired token.',
+      message: 'The provided authentication token is invalid or has expired. Please login again.'
+    });
+  }
+
+  // SECURITY: Verify user has admin role
+  if (decoded.role !== 'admin') {
+    return res.status(403).json({ 
+      success: false, 
+      reason: 'Forbidden. Admin access required.',
+      message: 'This endpoint requires administrator privileges. Your current role does not have access.',
+      userRole: decoded.role
+    });
+  }
+
+  // Log admin action for security auditing (in production, consider proper logging service)
+  if (process.env.NODE_ENV === 'production') {
+    console.log(`🔐 Admin action '${action}' accessed by user: ${decoded.email} (${decoded.userId})`);
+  }
 
   if (action === 'health') {
     try {
