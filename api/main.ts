@@ -103,7 +103,8 @@ export default async function handler(
   // Always set JSON content type to prevent HTML responses
   res.setHeader('Content-Type', 'application/json');
 
-  if (req.method === 'OPTIONS') {
+  // Handle CORS preflight (OPTIONS) and browser checks (HEAD)
+  if (req.method === 'OPTIONS' || req.method === 'HEAD') {
     return res.status(200).end();
   }
 
@@ -934,6 +935,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
       fallback: true
     });
+
+  // HEAD - Handle browser pre-flight checks
+  if (req.method === 'HEAD') {
+    return res.status(200).end();
+  }
 
   // VEHICLE DATA ENDPOINTS (brands, models, variants)
   if (type === 'data') {
