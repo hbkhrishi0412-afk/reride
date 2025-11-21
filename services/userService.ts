@@ -557,11 +557,11 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
       body: JSON.stringify({ action: 'refresh-token', refreshToken }),
     });
 
-    // Handle 401 Unauthorized - clear tokens immediately to stop retry loop
-    if (response.status === 401) {
-      console.warn('401 Unauthorized during token refresh, clearing tokens');
-      clearTokens();
-      return { success: false, reason: 'Token refresh failed - please login again' };
+    // FIX: Immediately clear bad tokens to stop the infinite loop
+    if (response.status === 401 || response.status === 400) {
+      console.warn('⚠️ Session expired. Clearing tokens to prevent loop.');
+      clearTokens(); 
+      return { success: false, reason: 'Session expired' };
     }
 
     if (!response.ok) {
@@ -578,8 +578,8 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
     return { success: false, reason: 'Invalid refresh response' };
   } catch (error) {
     console.warn('Token refresh failed:', error);
-    // Clear tokens on any error to prevent infinite loops
-    clearTokens();
+    // Optional: Clear tokens on network error to be safe
+    // clearTokens(); 
     return { success: false, reason: 'Token refresh failed' };
   }
 };

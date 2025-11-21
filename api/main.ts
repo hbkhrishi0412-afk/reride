@@ -307,6 +307,11 @@ export default async function handler(
 // Users handler - preserves exact functionality from users.ts
 async function handleUsers(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   try {
+    // FIX: Handle HEAD requests immediately to prevent 405 errors
+    if (req.method === 'HEAD') {
+      return res.status(200).end();
+    }
+
     const { mongoAvailable, mongoFailureReason } = options;
     const unavailableResponse = () => res.status(503).json({
       success: false,
@@ -861,6 +866,81 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         await updatedUser.save();
         console.log('✅ User updated successfully:', updatedUser.email);
 
+        // SYNC VEHICLE EXPIRY DATES when planExpiryDate is updated
+        if (updateFields.planExpiryDate !== undefined || unsetFields.planExpiryDate !== undefined) {
+          try {
+            const normalizedEmail = email.toLowerCase().trim();
+            const newPlanExpiryDate = updateFields.planExpiryDate || null;
+            
+            // Find all published vehicles for this seller
+            const sellerVehicles = await Vehicle.find({ 
+              sellerEmail: normalizedEmail,
+              status: 'published'
+            });
+            
+            if (sellerVehicles.length > 0) {
+              const now = new Date();
+              const bulkUpdates: any[] = [];
+              
+              sellerVehicles.forEach(vehicle => {
+                const vehicleUpdateFields: any = {};
+                
+                if (updatedUser.subscriptionPlan === 'premium') {
+                  if (newPlanExpiryDate) {
+                    // Premium plan with expiry: set vehicle expiry to plan expiry
+                    vehicleUpdateFields.listingExpiresAt = new Date(newPlanExpiryDate);
+                    
+                    // If vehicle was expired but plan is now extended, reactivate it
+                    if (vehicle.listingExpiresAt && new Date(vehicle.listingExpiresAt) < now && new Date(newPlanExpiryDate) >= now) {
+                      vehicleUpdateFields.listingStatus = 'active';
+                      vehicleUpdateFields.status = 'published';
+                    }
+                  } else {
+                    // Premium plan without expiry: remove vehicle expiry
+                    vehicleUpdateFields.listingExpiresAt = undefined;
+                    vehicleUpdateFields.listingStatus = 'active';
+                    // Ensure status is published
+                    if (vehicle.status !== 'published') {
+                      vehicleUpdateFields.status = 'published';
+                    }
+                  }
+                } else {
+                  // Free/Pro plans: set 30-day expiry from today
+                  const expiryDate = new Date();
+                  expiryDate.setDate(expiryDate.getDate() + 30);
+                  vehicleUpdateFields.listingExpiresAt = expiryDate.toISOString();
+                  
+                  // Reactivate if was expired
+                  if (vehicle.listingExpiresAt && new Date(vehicle.listingExpiresAt) < now) {
+                    vehicleUpdateFields.listingStatus = 'active';
+                    vehicleUpdateFields.status = 'published';
+                  }
+                }
+                
+                if (Object.keys(vehicleUpdateFields).length > 0) {
+                  bulkUpdates.push({
+                    updateOne: {
+                      filter: { _id: vehicle._id },
+                      update: { 
+                        $set: vehicleUpdateFields,
+                        ...(vehicleUpdateFields.listingExpiresAt === undefined ? { $unset: { listingExpiresAt: '' } } : {})
+                      }
+                    }
+                  });
+                }
+              });
+              
+              if (bulkUpdates.length > 0) {
+                await Vehicle.bulkWrite(bulkUpdates, { ordered: false });
+                console.log(`✅ Synced ${bulkUpdates.length} vehicle expiry dates for seller ${normalizedEmail}`);
+              }
+            }
+          } catch (syncError) {
+            console.error('⚠️ Error syncing vehicle expiry dates:', syncError);
+            // Don't fail the user update if vehicle sync fails
+          }
+        }
+
         // Verify the update by querying again
         const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
         if (!verifyUser) {
@@ -1233,6 +1313,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
               }
             }
             
+            // Set listing expiry based on plan
             if (seller.subscriptionPlan === 'premium' && seller.planExpiryDate) {
               updateFields.listingExpiresAt = seller.planExpiryDate;
             } else if (seller.subscriptionPlan !== 'premium') {
@@ -1240,14 +1321,31 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
               expiryDate.setDate(expiryDate.getDate() + 30);
               updateFields.listingExpiresAt = expiryDate.toISOString();
             }
+            // Premium without expiry: leave listingExpiresAt undefined (no expiry)
           }
         }
         
         if (vehicle.listingExpiresAt && vehicle.status === 'published') {
           const expiryDate = new Date(vehicle.listingExpiresAt);
-          // Check if seller has Premium plan - Premium plans with no expiry shouldn't expire
-          const seller = sellerMap.get(vehicle.sellerEmail.toLowerCase());
+          const seller = sellerMap.get(vehicle.sellerEmail?.toLowerCase());
           const isPremiumNoExpiry = seller?.subscriptionPlan === 'premium' && !seller?.planExpiryDate;
+          
+          // Sync expiry date with plan expiry if they don't match (for Premium plans)
+          if (seller?.subscriptionPlan === 'premium' && seller?.planExpiryDate) {
+            const planExpiry = new Date(seller.planExpiryDate);
+            const vehicleExpiry = new Date(vehicle.listingExpiresAt);
+            
+            // If plan expiry is different from vehicle expiry, sync them
+            if (Math.abs(planExpiry.getTime() - vehicleExpiry.getTime()) > 1000) { // More than 1 second difference
+              updateFields.listingExpiresAt = seller.planExpiryDate;
+              
+              // If vehicle was expired but plan is now valid, reactivate it
+              if (vehicleExpiry < now && planExpiry >= now) {
+                updateFields.listingStatus = 'active';
+                updateFields.status = 'published';
+              }
+            }
+          }
           
           // Only auto-unpublish if listing has expired AND it's not a Premium plan without expiry
           if (expiryDate < now && !isPremiumNoExpiry) {
