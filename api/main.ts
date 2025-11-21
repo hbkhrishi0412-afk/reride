@@ -104,7 +104,12 @@ export default async function handler(
   res.setHeader('Content-Type', 'application/json');
 
   // Handle CORS preflight (OPTIONS) and browser checks (HEAD)
+  // This MUST be checked before any routing to prevent 405 errors
   if (req.method === 'OPTIONS' || req.method === 'HEAD') {
+    // Set proper headers for HEAD requests
+    if (req.method === 'HEAD') {
+      res.setHeader('Content-Length', '0');
+    }
     return res.status(200).end();
   }
 
@@ -645,14 +650,39 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     }
     
     try {
+      // Ensure database connection before querying
+      if (mongoose.connection.readyState !== 1 && mongoAvailable) {
+        try {
+          await connectToDatabase();
+        } catch (connError) {
+          console.warn('⚠️ Database connection failed during GET /users, using fallback');
+          mongoAvailable = false;
+        }
+      }
+      
+      if (!mongoAvailable) {
+        const fallbackUsers = await getFallbackUsers();
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json(fallbackUsers);
+      }
+      
       const users = await User.find({}).sort({ createdAt: -1 });
       return res.status(200).json(users);
     } catch (error) {
-      console.error('Error fetching users:', error);
-      // Fallback to local users if database query fails
-      const fallbackUsers = await getFallbackUsers();
-      res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json(fallbackUsers);
+      console.error('❌ Error fetching users:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Always return fallback instead of 500 to prevent crashes
+      try {
+        const fallbackUsers = await getFallbackUsers();
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json(fallbackUsers);
+      } catch (fallbackError) {
+        // Even fallback failed, return empty array instead of 500
+        console.error('❌ Fallback users also failed:', fallbackError);
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json([]);
+      }
     }
   }
 
@@ -902,9 +932,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
   return res.status(405).json({ success: false, reason: 'Method not allowed.' });
   } catch (error) {
-    console.error('Error in handleUsers:', error);
+    console.error('❌ Error in handleUsers:', error);
     // Ensure we always return JSON
     res.setHeader('Content-Type', 'application/json');
+    
+    // For GET requests, always use fallback instead of 500 to prevent crashes
+    if (req.method === 'GET') {
+      try {
+        const fallbackUsers = await getFallbackUsers();
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json(fallbackUsers);
+      } catch (fallbackError) {
+        console.error('❌ Fallback users also failed:', fallbackError);
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json([]);
+      }
+    }
     
     // If it's a database connection error, return 503
     if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect'))) {
@@ -915,7 +958,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       });
     }
     
-    // For other errors, return 500 with error details
+    // For other errors on non-GET requests, return 500 with error details
     return res.status(500).json({
       success: false,
       reason: 'An error occurred while processing the request',
@@ -936,8 +979,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       fallback: true
     });
 
-  // HEAD - Handle browser pre-flight checks
+  // HEAD - Handle browser pre-flight checks (backup handler in case global handler misses it)
   if (req.method === 'HEAD') {
+    res.setHeader('Content-Length', '0');
     return res.status(200).end();
   }
 
