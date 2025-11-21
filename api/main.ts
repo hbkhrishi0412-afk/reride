@@ -2491,10 +2491,19 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, collection
 
     const faqs = await collection.find(query).toArray();
     
+    // Transform MongoDB documents to include id field
+    const transformedFaqs = faqs.map((faq: any, index: number) => ({
+      id: faq.id || (faq._id ? parseInt(faq._id.toString().slice(-8), 16) : index + 1),
+      question: faq.question || '',
+      answer: faq.answer || '',
+      category: faq.category || 'General',
+      _id: faq._id // Keep _id for MongoDB operations
+    }));
+    
     return res.status(200).json({
       success: true,
-      faqs: faqs,
-      count: faqs.length
+      faqs: transformedFaqs,
+      count: transformedFaqs.length
     });
   } catch (error) {
     console.error('Error fetching FAQs:', error);
@@ -2521,10 +2530,19 @@ async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, collecti
       createdAt: new Date().toISOString()
     });
 
+    // Transform to include id field
+    const createdFaq = {
+      id: faqData.id || parseInt(result.insertedId.toString().slice(-8), 16),
+      question: faqData.question,
+      answer: faqData.answer,
+      category: faqData.category,
+      _id: result.insertedId
+    };
+
     return res.status(201).json({
       success: true,
       message: 'FAQ created successfully',
-      faq: { ...faqData, _id: result.insertedId }
+      faq: createdFaq
     });
   } catch (error) {
     console.error('Error creating FAQ:', error);

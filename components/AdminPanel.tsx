@@ -1750,13 +1750,262 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         );
     };
 
-    const FAQManagementView = () => (
-        <div className="space-y-6">
-            <div className="text-center py-8 text-gray-500">
-                FAQ management functionality would be implemented here
+    const FAQManagementView = () => {
+        const [categoryFilter, setCategoryFilter] = useState<string>('All');
+        const [editingFaq, setEditingFaq] = useState<FAQItem | null>(null);
+        const [showAddModal, setShowAddModal] = useState(false);
+        const [newFaq, setNewFaq] = useState<Omit<FAQItem, 'id'>>({
+            question: '',
+            answer: '',
+            category: 'General'
+        });
+
+        // Get unique categories from FAQs
+        const categories = useMemo(() => {
+            const cats = new Set<string>();
+            (faqItems || []).forEach(faq => cats.add(faq.category));
+            return Array.from(cats).sort();
+        }, [faqItems]);
+
+        const filteredFaqs = useMemo(() => {
+            if (categoryFilter === 'All') return faqItems || [];
+            return (faqItems || []).filter(faq => faq.category === categoryFilter);
+        }, [faqItems, categoryFilter]);
+
+        const handleSaveFaq = () => {
+            if (editingFaq) {
+                onUpdateFaq(editingFaq);
+                setEditingFaq(null);
+            } else {
+                if (!newFaq.question || !newFaq.answer || !newFaq.category) {
+                    alert('Please fill in all fields');
+                    return;
+                }
+                onAddFaq(newFaq);
+                setNewFaq({ question: '', answer: '', category: 'General' });
+                setShowAddModal(false);
+            }
+        };
+
+        const handleDeleteFaq = (id: number) => {
+            if (window.confirm('Are you sure you want to delete this FAQ?')) {
+                onDeleteFaq(id);
+            }
+        };
+
+        return (
+            <div className="space-y-6">
+                {/* Header with Add Button */}
+                <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">FAQ Management</h2>
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    >
+                        + Add FAQ
+                    </button>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex gap-2 flex-wrap">
+                    <button
+                        onClick={() => setCategoryFilter('All')}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            categoryFilter === 'All' 
+                                ? 'bg-blue-500 text-white' 
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                    >
+                        All ({faqItems?.length || 0})
+                    </button>
+                    {categories.map(category => (
+                        <button
+                            key={category}
+                            onClick={() => setCategoryFilter(category)}
+                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                                categoryFilter === category 
+                                    ? 'bg-blue-500 text-white' 
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                        >
+                            {category} ({(faqItems || []).filter(f => f.category === category).length})
+                        </button>
+                    ))}
+                </div>
+
+                {/* FAQs Table */}
+                <TableContainer title={`FAQs (${filteredFaqs.length})`}>
+                    {filteredFaqs.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                            {faqItems?.length === 0 
+                                ? 'No FAQs found. Click "Add FAQ" to create your first FAQ.'
+                                : 'No FAQs found for the selected category.'}
+                        </div>
+                    ) : (
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead className="bg-white dark:bg-white">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">ID</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Question</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Answer</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Category</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
+                                {filteredFaqs.map(faq => (
+                                    <tr key={faq.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            #{faq.id}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
+                                            <div className="truncate" title={faq.question}>
+                                                {faq.question}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-900 max-w-md">
+                                            <div className="truncate" title={faq.answer}>
+                                                {faq.answer}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                                {faq.category}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                            <button
+                                                onClick={() => setEditingFaq(faq)}
+                                                className="text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteFaq(faq.id)}
+                                                className="text-red-600 hover:text-red-800 font-medium cursor-pointer"
+                                            >
+                                                Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </TableContainer>
+
+                {/* Add FAQ Modal */}
+                {showAddModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                            <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Add New FAQ</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Question</label>
+                                    <input
+                                        type="text"
+                                        value={newFaq.question}
+                                        onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        placeholder="Enter question"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Answer</label>
+                                    <textarea
+                                        value={newFaq.answer}
+                                        onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        placeholder="Enter answer"
+                                        rows={4}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Category</label>
+                                    <input
+                                        type="text"
+                                        value={newFaq.category}
+                                        onChange={(e) => setNewFaq({ ...newFaq, category: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        placeholder="e.g., General, Selling, Buying"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 mt-6">
+                                <button
+                                    onClick={() => {
+                                        setShowAddModal(false);
+                                        setNewFaq({ question: '', answer: '', category: 'General' });
+                                    }}
+                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveFaq}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                                >
+                                    Save FAQ
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Edit FAQ Modal */}
+                {editingFaq && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                            <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Edit FAQ</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Question</label>
+                                    <input
+                                        type="text"
+                                        value={editingFaq.question}
+                                        onChange={(e) => setEditingFaq({ ...editingFaq, question: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Answer</label>
+                                    <textarea
+                                        value={editingFaq.answer}
+                                        onChange={(e) => setEditingFaq({ ...editingFaq, answer: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        rows={4}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Category</label>
+                                    <input
+                                        type="text"
+                                        value={editingFaq.category}
+                                        onChange={(e) => setEditingFaq({ ...editingFaq, category: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 mt-6">
+                                <button
+                                    onClick={() => setEditingFaq(null)}
+                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveFaq}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                                >
+                                    Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
-    );
+        );
+    };
 
     const PlanManagementView = () => {
         const [editingPlan, setEditingPlan] = useState<PlanDetails | null>(null);

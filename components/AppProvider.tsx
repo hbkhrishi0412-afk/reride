@@ -228,7 +228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     }
     return VEHICLE_DATA;
   });
-  const [faqItems, setFaqItems] = useState<FAQItem[]>(() => getFaqs() || []);
+  const [faqItems, setFaqItems] = useState<FAQItem[]>([]);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(() => getSupportTickets() || []);
   const [notifications, setNotifications] = useState<Notification[]>(() => {
     try {
@@ -477,27 +477,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     } catch {}
   }, []);
 
-  // Load initial data with optimized loading
+  // CRITICAL: Listen for force loading completion event (safety mechanism)
   useEffect(() => {
+    const handleForceLoadingComplete = () => {
+      console.warn('⚠️ Force loading complete event received, clearing loading state');
+      setIsLoading(false);
+      addToast('Loading completed. Some data may still be loading in the background.', 'info');
+    };
+
+    window.addEventListener('forceLoadingComplete', handleForceLoadingComplete);
+    
+    return () => {
+      window.removeEventListener('forceLoadingComplete', handleForceLoadingComplete);
+    };
+  }, [addToast]);
+
+  // Load initial data with optimized loading and timeout protection
+  useEffect(() => {
+    let isMounted = true;
+    let loadingTimeout: NodeJS.Timeout | null = null;
+    
     const loadInitialData = async () => {
       try {
         setIsLoading(true);
         
-        // Load critical data first (vehicles and users) with race condition handling
+        // CRITICAL: Set a maximum timeout to prevent infinite loading
+        // If loading takes more than 15 seconds, force completion
+        loadingTimeout = setTimeout(() => {
+          if (isMounted) {
+            console.warn('⚠️ Initial data loading exceeded 15s timeout, forcing completion');
+            setIsLoading(false);
+            addToast('Loading is taking longer than expected. Some data may be unavailable.', 'warning');
+          }
+        }, 15000);
+        
+        // Load critical data first (vehicles and users) with individual timeouts
+        const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+          return Promise.race([
+            promise,
+            new Promise<T>((resolve) => {
+              setTimeout(() => {
+                console.warn(`Request timeout after ${timeoutMs}ms, using fallback`);
+                resolve(fallback);
+              }, timeoutMs);
+            })
+          ]);
+        };
+        
         const [vehiclesData, usersData] = await Promise.all([
-          dataService.getVehicles().catch(err => {
-            if (process.env.NODE_ENV === 'development') {
+          loadWithTimeout(
+            dataService.getVehicles().catch(err => {
               console.warn('Failed to load vehicles, using empty array:', err);
-            }
-            return [];
-          }),
-          dataService.getUsers().catch(err => {
-            if (process.env.NODE_ENV === 'development') {
+              return [];
+            }),
+            8000, // 8 second timeout for vehicles
+            []
+          ),
+          loadWithTimeout(
+            dataService.getUsers().catch(err => {
               console.warn('Failed to load users, using empty array:', err);
-            }
-            return [];
-          })
+              return [];
+            }),
+            8000, // 8 second timeout for users
+            []
+          )
         ]);
+        
+        if (!isMounted) return;
         
         setVehicles(vehiclesData);
         setUsers(usersData);
@@ -507,31 +553,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           setRecommendations(vehiclesData.slice(0, 6));
         }
         
-        // Load non-critical data in background (fire and forget)
-        Promise.all([
-          dataService.getVehicleData().catch(() => {
-            // Silently fail - we already have fallback data
-          }),
-          Promise.resolve(getConversations()).catch(() => {
-            // Silently fail - empty conversations is fine
+        // Load FAQs from MongoDB (non-blocking, with timeout)
+        Promise.race([
+          (async () => {
+            try {
+              const { fetchFaqsFromMongoDB } = await import('../services/faqService');
+              const faqsData = await fetchFaqsFromMongoDB();
+              if (isMounted) {
+                setFaqItems(faqsData);
+              }
+            } catch (faqError) {
+              console.warn('⚠️ Failed to load FAQs from MongoDB, using localStorage fallback:', faqError);
+              if (isMounted) {
+                const localFaqs = getFaqs();
+                if (localFaqs) {
+                  setFaqItems(localFaqs);
+                } else {
+                  setFaqItems([]);
+                }
+              }
+            }
+          })(),
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              console.warn('FAQ loading timeout, using localStorage fallback');
+              if (isMounted) {
+                const localFaqs = getFaqs();
+                if (localFaqs) {
+                  setFaqItems(localFaqs);
+                } else {
+                  setFaqItems([]);
+                }
+              }
+              resolve();
+            }, 5000);
           })
-        ]).then(([vehicleDataData, conversationsData]) => {
-          setVehicleData(vehicleDataData);
-          // Store all conversations, but filter will be applied in App.tsx when displaying
-          setConversations(conversationsData);
-        }).catch(error => {
+        ]).catch(() => {
+          // Silently handle any errors
+        });
+        
+        // Load non-critical data in background (fire and forget, with timeout)
+        Promise.race([
+          Promise.all([
+            dataService.getVehicleData().catch(() => {
+              // Silently fail - we already have fallback data
+              return null;
+            }),
+            Promise.resolve(getConversations()).catch(() => {
+              // Silently fail - empty conversations is fine
+              return [];
+            })
+          ]).then(([vehicleDataData, conversationsData]) => {
+            if (isMounted && vehicleDataData) {
+              setVehicleData(vehicleDataData);
+            }
+            if (isMounted) {
+              setConversations(conversationsData || []);
+            }
+          }),
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              console.warn('Background data loading timeout');
+              resolve();
+            }, 10000);
+          })
+        ]).catch(error => {
           console.warn('Background data loading failed:', error);
         });
         
       } catch (error) {
         console.error('AppProvider: Error loading initial data:', error);
-        addToast('Failed to load vehicle data. Please refresh the page.', 'error');
+        if (isMounted) {
+          addToast('Some data failed to load. The app will continue with available data.', 'warning');
+        }
       } finally {
-        setIsLoading(false);
+        if (loadingTimeout) {
+          clearTimeout(loadingTimeout);
+        }
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadInitialData();
+    
+    return () => {
+      isMounted = false;
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+      }
+    };
   }, [addToast]);
 
   // Refresh server-sourced data whenever the authenticated user changes
@@ -1124,18 +1236,117 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       ));
       addToast('Support ticket updated', 'success');
     },
-    onAddFaq: (faq: Omit<FAQItem, 'id'>) => {
-      const newFaq: FAQItem = { ...faq, id: Date.now() };
-      setFaqItems(prev => [...prev, newFaq]);
-      addToast('FAQ added successfully', 'success');
+    onAddFaq: async (faq: Omit<FAQItem, 'id'>) => {
+      try {
+        // Save to MongoDB first
+        const { saveFaqToMongoDB } = await import('../services/faqService');
+        const savedFaq = await saveFaqToMongoDB(faq);
+        
+        // Update local state
+        const newFaq: FAQItem = savedFaq || { ...faq, id: Date.now() };
+        
+        // If MongoDB returned _id, store it
+        if (savedFaq && (savedFaq as any)._id) {
+          (newFaq as any)._id = (savedFaq as any)._id;
+        }
+        
+        setFaqItems(prev => {
+          const updated = [...prev, newFaq];
+          saveFaqs(updated);
+          return updated;
+        });
+        
+        addToast('FAQ added successfully', 'success');
+      } catch (error) {
+        console.error('Failed to add FAQ:', error);
+        // Still add locally even if MongoDB fails
+        const newFaq: FAQItem = { ...faq, id: Date.now() };
+        setFaqItems(prev => {
+          const updated = [...prev, newFaq];
+          saveFaqs(updated);
+          return updated;
+        });
+        addToast('FAQ added locally (MongoDB sync failed)', 'warning');
+      }
     },
-    onUpdateFaq: (faq: FAQItem) => {
-      setFaqItems(prev => prev.map(f => f.id === faq.id ? faq : f));
-      addToast('FAQ updated successfully', 'success');
+    onUpdateFaq: async (faq: FAQItem) => {
+      try {
+        // Find the FAQ to get its MongoDB _id
+        const existingFaq = faqItems.find(f => f.id === faq.id);
+        const mongoId = (existingFaq as any)?._id;
+        
+        // Try to update in MongoDB if we have _id
+        if (mongoId) {
+          const { updateFaqInMongoDB } = await import('../services/faqService');
+          await updateFaqInMongoDB(faq, mongoId);
+        }
+        
+        // Update local state
+        setFaqItems(prev => {
+          const updated = prev.map(f => {
+            if (f.id === faq.id) {
+              const updatedFaq = { ...faq };
+              // Preserve _id if it exists
+              if ((f as any)._id) {
+                (updatedFaq as any)._id = (f as any)._id;
+              }
+              return updatedFaq;
+            }
+            return f;
+          });
+          saveFaqs(updated);
+          return updated;
+        });
+        addToast('FAQ updated successfully', 'success');
+      } catch (error) {
+        console.error('Failed to update FAQ:', error);
+        // Still update locally
+        setFaqItems(prev => {
+          const updated = prev.map(f => {
+            if (f.id === faq.id) {
+              const updatedFaq = { ...faq };
+              if ((f as any)._id) {
+                (updatedFaq as any)._id = (f as any)._id;
+              }
+              return updatedFaq;
+            }
+            return f;
+          });
+          saveFaqs(updated);
+          return updated;
+        });
+        addToast('FAQ updated locally (MongoDB sync failed)', 'warning');
+      }
     },
-    onDeleteFaq: (id: number) => {
-      setFaqItems(prev => prev.filter(f => f.id !== id));
-      addToast('FAQ deleted successfully', 'success');
+    onDeleteFaq: async (id: number) => {
+      try {
+        // Find the FAQ to get its MongoDB _id
+        const existingFaq = faqItems.find(f => f.id === id);
+        const mongoId = (existingFaq as any)?._id;
+        
+        // Try to delete from MongoDB if we have _id
+        if (mongoId) {
+          const { deleteFaqFromMongoDB } = await import('../services/faqService');
+          await deleteFaqFromMongoDB(mongoId);
+        }
+        
+        // Delete from local state
+        setFaqItems(prev => {
+          const updated = prev.filter(f => f.id !== id);
+          saveFaqs(updated);
+          return updated;
+        });
+        addToast('FAQ deleted successfully', 'success');
+      } catch (error) {
+        console.error('Failed to delete FAQ:', error);
+        // Still delete locally
+        setFaqItems(prev => {
+          const updated = prev.filter(f => f.id !== id);
+          saveFaqs(updated);
+          return updated;
+        });
+        addToast('FAQ deleted locally (MongoDB sync failed)', 'warning');
+      }
     },
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => {
       setVehicles(prev => prev.map(vehicle => 

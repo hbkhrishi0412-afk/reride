@@ -11,6 +11,11 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [openItem, setOpenItem] = useState<number | null>(null);
 
+  // Debug: Log FAQs on mount
+  React.useEffect(() => {
+    console.log('📋 FAQPage - Received FAQs:', faqItems?.length || 0, faqItems);
+  }, [faqItems]);
+
   const filteredAndGroupedFAQs = useMemo(() => {
     const filtered = faqItems.filter(
       (item) =>
@@ -92,7 +97,16 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
           </div>
         ))}
         {Object.keys(filteredAndGroupedFAQs).length === 0 && (
-            <p className="text-center text-lg text-spinny-text py-10">No questions found matching your search.</p>
+          <div className="text-center py-10">
+            {faqItems.length === 0 ? (
+              <div>
+                <p className="text-lg text-spinny-text mb-2">No FAQs available yet.</p>
+                <p className="text-sm text-gray-500">FAQs will appear here once they are added to the system.</p>
+              </div>
+            ) : (
+              <p className="text-lg text-spinny-text">No questions found matching your search.</p>
+            )}
+          </div>
         )}
       </div>
     </div>

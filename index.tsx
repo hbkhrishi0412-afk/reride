@@ -81,3 +81,53 @@ reportWebVitals((metric) => {
   }
   // In production, you could send to analytics service here
 });
+
+// CRITICAL: Global safety mechanism to prevent infinite loading states
+// This ensures the app never gets stuck in a loading state
+if (typeof window !== 'undefined') {
+  let loadingSafetyCheck: NodeJS.Timeout | null = null;
+  
+  const checkLoadingState = () => {
+    // Check if there's a loading indicator visible for too long
+    const loadingElements = document.querySelectorAll('[class*="loading"], [class*="spinner"], [class*="Loading"]');
+    const hasLongLoading = Array.from(loadingElements).some(el => {
+      const style = window.getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+    
+    // If loading elements are visible for more than 20 seconds, force hide them
+    if (hasLongLoading) {
+      const startTime = parseInt(sessionStorage.getItem('appLoadStartTime') || '0', 10);
+      const currentTime = Date.now();
+      const loadDuration = currentTime - startTime;
+      
+      if (loadDuration > 20000) { // 20 seconds
+        console.warn('⚠️ Loading state exceeded 20s, forcing completion');
+        // Try to dispatch a custom event that components can listen to
+        window.dispatchEvent(new CustomEvent('forceLoadingComplete'));
+        sessionStorage.removeItem('appLoadStartTime');
+      }
+    }
+  };
+  
+  // Set start time when page loads
+  sessionStorage.setItem('appLoadStartTime', Date.now().toString());
+  
+  // Check every 5 seconds
+  loadingSafetyCheck = setInterval(checkLoadingState, 5000);
+  
+  // Clear the check when page unloads
+  window.addEventListener('beforeunload', () => {
+    if (loadingSafetyCheck) {
+      clearInterval(loadingSafetyCheck);
+    }
+    sessionStorage.removeItem('appLoadStartTime');
+  });
+  
+  // Also clear after successful load
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      sessionStorage.removeItem('appLoadStartTime');
+    }, 1000);
+  });
+}

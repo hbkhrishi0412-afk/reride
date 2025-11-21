@@ -71,20 +71,32 @@ class DataService {
     }
 
     let response: Response;
+    let timeoutId: NodeJS.Timeout | null = null;
     try {
-      // Add timeout for fetch requests
+      // Add timeout for fetch requests - reduced to 7 seconds for faster fallback
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 7000); // 7 second timeout for faster fallback
       
       response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
         ...fetchOptions,
         signal: controller.signal
       });
       
-      clearTimeout(timeoutId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     } catch (fetchError) {
+      // Clean up timeout if still active
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      
       // Network error or timeout - throw error to trigger fallback
-      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+      if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
         throw new Error('API request timeout');
       }
       throw new Error('Network error: Unable to reach API server');
@@ -196,11 +208,16 @@ class DataService {
 
     try {
       const vehicles = await this.makeApiRequest<Vehicle[]>('/vehicles');
+      // Validate response is an array
+      if (!Array.isArray(vehicles)) {
+        throw new Error('Invalid response format: expected array');
+      }
       // Cache the API data locally for offline use
       this.setLocalStorageData('reRideVehicles', vehicles);
       return vehicles;
     } catch (error) {
       console.warn('API failed, falling back to local storage:', error);
+      // Always return local data as fallback, even if empty
       return this.getVehiclesLocal();
     }
   }
@@ -365,10 +382,15 @@ class DataService {
 
     try {
       const users = await this.makeApiRequest<User[]>('/users');
+      // Validate response is an array
+      if (!Array.isArray(users)) {
+        throw new Error('Invalid response format: expected array');
+      }
       this.setLocalStorageData('reRideUsers', users);
       return users;
     } catch (error) {
       console.warn('API failed, falling back to local storage:', error);
+      // Always return local data as fallback, even if empty
       return this.getUsersLocal();
     }
   }
@@ -518,10 +540,15 @@ class DataService {
     try {
       // Try the correct API endpoint for vehicle data
       const vehicleData = await this.makeApiRequest<VehicleData>('/vehicle-data');
+      // Validate response structure
+      if (!vehicleData || typeof vehicleData !== 'object') {
+        throw new Error('Invalid response format: expected object');
+      }
       this.setLocalStorageData('reRideVehicleData', vehicleData);
       return vehicleData;
     } catch (error) {
       console.warn('API failed, falling back to local storage:', error);
+      // Always return local data as fallback
       return this.getVehicleDataLocal();
     }
   }
