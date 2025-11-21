@@ -34,8 +34,11 @@ export default defineConfig({
             if (id.includes('firebase')) {
               return 'firebase';
             }
+            // Keep React and React-DOM in the main bundle to prevent undefined errors
+            // React must be available when createContext and other React APIs are called
             if (id.includes('react') || id.includes('react-dom')) {
-              return 'react-vendor';
+              // Don't split React - keep it in the main bundle for reliability
+              return undefined;
             }
             if (id.includes('chart.js') || id.includes('react-chartjs')) {
               return 'charts';
