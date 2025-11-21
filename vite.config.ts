@@ -142,29 +142,40 @@ export default defineConfig({
       compress: {
         drop_console: true,
         drop_debugger: true,
-        pure_funcs: ['console.log', 'console.info', 'console.debug'],
+        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.warn'],
+        passes: 3, // Multiple passes for better compression
+        dead_code: true,
+        unused: true,
+        collapse_vars: true,
+        reduce_vars: true,
+      },
+      format: {
+        comments: false,
+      },
+      mangle: {
+        safari10: true,
       },
     },
     // Remove console logs and debugger in production for smaller bundle
     esbuild: {
-      drop: ['console', 'debugger'],
+      drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
       legalComments: 'none',
-      // Optimize for better performance
-      treeShaking: true,
-      target: 'es2020'
     },
     // Optimize CSS
     cssMinify: true,
-    // Disable source maps for production
-    sourcemap: false,
+    cssCodeSplit: true,
+    // Disable source maps for production (faster builds, smaller bundles)
+    sourcemap: process.env.NODE_ENV === 'development',
     // Better browser support
     target: 'es2020',
-    // Reduce chunk size
-    cssCodeSplit: true,
-    // Enable asset inlining for small files
-    assetsInlineLimit: 4096,
+    // Enable asset inlining for small files (reduces HTTP requests)
+    assetsInlineLimit: 8192,
     // Optimize for faster loading
-    reportCompressedSize: false
+    reportCompressedSize: false,
+    // Improve build performance
+    modulePreload: {
+      polyfill: false, // Modern browsers don't need polyfill
+    },
   },
   server: {
     port: 5174,
@@ -180,7 +191,7 @@ export default defineConfig({
     },
     // Optimize development server performance
     warmup: {
-      clientFiles: ['./src/App.tsx', './src/components/Header.tsx', './src/components/Home.tsx']
+      clientFiles: ['./App.tsx', './components/Header.tsx', './components/Home.tsx']
     },
     // Proxy API requests to development server
     proxy: {

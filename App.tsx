@@ -59,14 +59,39 @@ const AdminLogin = React.lazy(() => import('./AdminLogin'));
 const NewCarsAdmin = React.lazy(() => import('./components/NewCarsAdmin'));
 const NewCarsAdminLogin = React.lazy(() => import('./NewCarsAdminLogin'));
 
-// Preload critical components
+// Preload critical components - optimized for faster loading
 const preloadCriticalComponents = () => {
   // Preload components that are likely to be visited next
   if (typeof window !== 'undefined') {
-    setTimeout(() => {
-      import('./components/VehicleList');
-      import('./components/VehicleDetail');
-    }, 1000);
+    // Use requestIdleCallback for better performance, fallback to setTimeout
+    const schedulePreload = (callback: () => void, delay: number) => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(callback, { timeout: delay });
+      } else {
+        setTimeout(callback, delay);
+      }
+    };
+    
+    // Preload critical components after initial render
+    schedulePreload(() => {
+      Promise.all([
+        import('./components/VehicleList'),
+        import('./components/VehicleDetail'),
+        import('./components/Home')
+      ]).catch(() => {
+        // Silently fail if preloading fails
+      });
+    }, 500);
+    
+    // Preload secondary components when idle
+    schedulePreload(() => {
+      Promise.all([
+        import('./components/Dashboard'),
+        import('./components/Profile')
+      ]).catch(() => {
+        // Silently fail if preloading fails
+      });
+    }, 2000);
   }
 };
 
@@ -161,15 +186,17 @@ const AppContent: React.FC = React.memo(() => {
     onOfferResponse,
   } = useApp();
 
-  // Debug logging (after destructuring)
-  console.log('🔧 AppContent Debug:', {
-    isMobileApp,
-    isMobile,
-    currentView,
-    userAgent: navigator.userAgent,
-    windowWidth: window.innerWidth,
-    displayMode: window.matchMedia('(display-mode: standalone)').matches
-  });
+  // Debug logging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔧 AppContent Debug:', {
+      isMobileApp,
+      isMobile,
+      currentView,
+      userAgent: navigator.userAgent,
+      windowWidth: window.innerWidth,
+      displayMode: window.matchMedia('(display-mode: standalone)').matches
+    });
+  }
   
   // Restore persisted session on first load
   useEffect(() => {
@@ -191,7 +218,9 @@ const AppContent: React.FC = React.memo(() => {
         return;
       }
 
-      console.log('🔄 Restoring persisted session for:', parsedUser.email);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔄 Restoring persisted session for:', parsedUser.email);
+      }
       setCurrentUser(parsedUser);
 
       const loginViews: ViewEnum[] = [
@@ -216,14 +245,18 @@ const AppContent: React.FC = React.memo(() => {
         }
       }
     } catch (error) {
-      console.warn('⚠️ Failed to restore persisted session:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Failed to restore persisted session:', error);
+      }
     }
   }, [currentUser, currentView, setCurrentUser, setCurrentView]);
 
   // Redirect logged-in users to their appropriate dashboard
   useEffect(() => {
     if (currentUser && currentView === ViewEnum.HOME) {
-      console.log('🔄 User is logged in, redirecting to appropriate dashboard:', currentUser.role);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔄 User is logged in, redirecting to appropriate dashboard:', currentUser.role);
+      }
       switch (currentUser.role) {
         case 'customer':
           navigate(ViewEnum.BUYER_DASHBOARD);
@@ -248,11 +281,15 @@ const AppContent: React.FC = React.memo(() => {
         const storedVehicle = sessionStorage.getItem('selectedVehicle');
         if (storedVehicle) {
           const vehicleToShow = JSON.parse(storedVehicle);
-          console.log('🔧 Recovered vehicle from sessionStorage:', vehicleToShow?.id, vehicleToShow?.make, vehicleToShow?.model);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 Recovered vehicle from sessionStorage:', vehicleToShow?.id, vehicleToShow?.make, vehicleToShow?.model);
+          }
           setSelectedVehicle(vehicleToShow);
         }
       } catch (error) {
-        console.warn('🔧 Failed to recover vehicle from sessionStorage:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('🔧 Failed to recover vehicle from sessionStorage:', error);
+        }
       }
     }
   }, [currentView, selectedVehicle]);
@@ -275,6 +312,7 @@ const AppContent: React.FC = React.memo(() => {
   }, [users]);
 
 
+  // Memoize renderView to prevent unnecessary re-renders
   const renderView = React.useCallback(() => {
     switch (currentView) {
       case ViewEnum.HOME:
@@ -1191,7 +1229,9 @@ const AppContent: React.FC = React.memo(() => {
           <ForgotPassword 
             onResetRequest={(email) => {
               // Handle password reset request
-              console.log('Password reset requested for:', email);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Password reset requested for:', email);
+              }
             }}
             onBack={() => navigate(ViewEnum.LOGIN_PORTAL)}
           />
@@ -1245,7 +1285,9 @@ const AppContent: React.FC = React.memo(() => {
   ]);
 
   const handleNotificationClick = React.useCallback((notification: any) => {
-    console.log('Notification clicked:', notification);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Notification clicked:', notification);
+    }
     
     // Navigate based on notification type
     if (notification.targetType === 'conversation') {
@@ -1360,7 +1402,9 @@ const AppContent: React.FC = React.memo(() => {
 
   // Render Mobile App Layout
   if (isMobileApp) {
-    console.log('📱 Rendering Mobile App UI for view:', currentView);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📱 Rendering Mobile App UI for view:', currentView);
+    }
     
     // Check if we're on a dashboard view
     const isDashboardView = [
@@ -1460,7 +1504,9 @@ const AppContent: React.FC = React.memo(() => {
             onViewVehicle={selectVehicle}
             onAddVehicle={async (vehicleData, isFeaturing = false) => {
               try {
+                if (process.env.NODE_ENV === 'development') {
                 console.log('🚀 Mobile Add Vehicle called with:', vehicleData);
+              }
                 
                 // Set listingExpiresAt based on subscription plan expiry date
                 let listingExpiresAt: string | undefined;
@@ -1486,7 +1532,9 @@ const AppContent: React.FC = React.memo(() => {
                 } as Vehicle;
                 
                 const newVehicle = await addVehicle(vehicleToAdd);
-                console.log('✅ Vehicle added successfully:', newVehicle);
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('✅ Vehicle added successfully:', newVehicle);
+                }
                 
                 // Update local state
                 setVehicles(prev => [...prev, newVehicle]);
@@ -1498,12 +1546,16 @@ const AppContent: React.FC = React.memo(() => {
             }}
             onUpdateVehicle={async (vehicleData) => {
               try {
-                console.log('🚀 Mobile Update Vehicle called with:', vehicleData);
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🚀 Mobile Update Vehicle called with:', vehicleData);
+                }
                 
                 // Use the updateVehicle from useApp hook which automatically updates state
                 await updateVehicle(vehicleData.id, vehicleData);
                 
-                console.log('✅ Vehicle updated successfully');
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('✅ Vehicle updated successfully');
+                }
                 // Toast is shown by updateVehicle function
               } catch (error) {
                 console.error('❌ Failed to update vehicle:', error);

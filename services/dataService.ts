@@ -70,9 +70,32 @@ class DataService {
       }
     }
 
-    const response = await fetch(`${this.apiBaseUrl}${endpoint}`, fetchOptions);
+    let response: Response;
+    try {
+      // Add timeout for fetch requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
+        ...fetchOptions,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      // Network error or timeout - throw error to trigger fallback
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        throw new Error('API request timeout');
+      }
+      throw new Error('Network error: Unable to reach API server');
+    }
 
     if (!response.ok) {
+      // For 404 errors in development, fail silently and let fallback handle it
+      if (response.status === 404 && this.isDevelopment) {
+        throw new Error('API endpoint not found (expected in development)');
+      }
+      
       const errorText = await response.text();
       let errorMessage = `API Error: ${response.status} - ${response.statusText}`;
       

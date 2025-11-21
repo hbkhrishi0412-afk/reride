@@ -75,6 +75,9 @@ window.addEventListener('load', () => {
 
 // Report Web Vitals
 reportWebVitals((metric) => {
-  // Send to analytics or log
-  console.log(metric);
+  // Send to analytics or log (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log(metric);
+  }
+  // In production, you could send to analytics service here
 });

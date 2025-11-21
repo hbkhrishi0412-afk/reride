@@ -34,6 +34,54 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@600;700;800&display=swap"></noscript>
     
+    <!-- Prefetch API endpoints only in production or when API server is confirmed available -->
+    <script>
+      // Only prefetch if we're in production mode (not localhost)
+      (function() {
+        const isLocalhost = window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1' ||
+                           window.location.hostname.includes('localhost');
+        
+        // Skip prefetch in development to avoid 404 errors when API server isn't running
+        if (isLocalhost) {
+          return;
+        }
+        
+        // In production, prefetch after page load
+        window.addEventListener('load', () => {
+          setTimeout(() => {
+            // Check if API server is available before prefetching
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+            
+            fetch('/api/vehicles', { 
+              method: 'HEAD', 
+              cache: 'no-store',
+              signal: controller.signal
+            })
+              .then(response => {
+                clearTimeout(timeoutId);
+                if (response.ok) {
+                  const link1 = document.createElement('link');
+                  link1.rel = 'prefetch';
+                  link1.href = '/api/vehicles';
+                  document.head.appendChild(link1);
+                  
+                  const link2 = document.createElement('link');
+                  link2.rel = 'prefetch';
+                  link2.href = '/api/users';
+                  document.head.appendChild(link2);
+                }
+              })
+              .catch(() => {
+                clearTimeout(timeoutId);
+                // Silently fail if API server is not available
+              });
+          }, 2000);
+        });
+      })();
+    </script>
+    
     <title>ReRide - Buy & Sell Quality Used Vehicles</title>
   </head>
   <body class="antialiased transition-colors duration-300" style="background-color: #FFFFFF; color: #2C2C2C;">

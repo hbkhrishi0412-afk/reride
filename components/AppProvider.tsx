@@ -154,11 +154,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       const savedUser = localStorage.getItem('reRideCurrentUser');
       if (savedUser) {
         const user = JSON.parse(savedUser);
-        console.log('🔄 Restoring logged-in user:', user.name, user.role);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔄 Restoring logged-in user:', user.name, user.role);
+        }
         return user;
       }
     } catch (error) {
-      console.warn('Failed to load user from localStorage:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to load user from localStorage:', error);
+      }
     }
     return null;
   });
@@ -184,7 +188,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         return storedLocation;
       }
     } catch (error) {
-      console.warn('Failed to load user location from localStorage:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to load user location from localStorage:', error);
+      }
     }
     return 'Mumbai';
   });
@@ -199,7 +205,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         return storedLocation;
       }
     } catch (error) {
-      console.warn('Failed to load selected city from localStorage:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to load selected city from localStorage:', error);
+      }
     }
     return '';
   });
@@ -214,7 +222,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         return JSON.parse(savedVehicleData);
       }
     } catch (error) {
-      console.warn('Failed to load vehicle data from localStorage:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to load vehicle data from localStorage:', error);
+      }
     }
     return VEHICLE_DATA;
   });
@@ -259,12 +269,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     try {
       // Validate inputs
       if (!message || typeof message !== 'string' || message.trim() === '') {
-        console.warn('Invalid toast message provided');
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Invalid toast message provided');
+        }
         return;
       }
       
       if (!['success', 'error', 'warning', 'info'].includes(type)) {
-        console.warn('Invalid toast type provided:', type);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Invalid toast type provided:', type);
+        }
         return;
       }
 
@@ -277,7 +291,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         removeToast(id);
       }, 5000);
     } catch (error) {
-      console.error('Error adding toast:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error adding toast:', error);
+      }
     }
   }, []);
 
@@ -335,7 +351,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         localStorage.removeItem('reRideUserLocation');
         localStorage.removeItem('reRideSelectedCity');
       } catch (error) {
-        console.warn('Failed to clear stored location:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Failed to clear stored location:', error);
+        }
       }
       return;
     }
@@ -346,13 +364,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     try {
       localStorage.setItem('reRideUserLocation', nextLocation);
     } catch (error) {
-      console.warn('Failed to persist location selection:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to persist location selection:', error);
+      }
     }
 
     try {
       localStorage.setItem('reRideSelectedCity', nextLocation);
     } catch (error) {
-      console.warn('Failed to persist selected city:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to persist selected city:', error);
+      }
     }
   }, []);
 
@@ -370,7 +392,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         localStorage.removeItem('reRideSelectedCity');
       }
     } catch (error) {
-      console.warn('Failed to persist selected city:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to persist selected city:', error);
+      }
     }
   }, []);
 
@@ -459,22 +483,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       try {
         setIsLoading(true);
         
-        // Load critical data first (vehicles and users)
+        // Load critical data first (vehicles and users) with race condition handling
         const [vehiclesData, usersData] = await Promise.all([
-          dataService.getVehicles(),
-          dataService.getUsers()
+          dataService.getVehicles().catch(err => {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Failed to load vehicles, using empty array:', err);
+            }
+            return [];
+          }),
+          dataService.getUsers().catch(err => {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Failed to load users, using empty array:', err);
+            }
+            return [];
+          })
         ]);
         
         setVehicles(vehiclesData);
         setUsers(usersData);
         
-        // Set some recommendations (first 6 vehicles)
-        setRecommendations(vehiclesData.slice(0, 6));
+        // Set some recommendations (first 6 vehicles) - only if we have vehicles
+        if (vehiclesData.length > 0) {
+          setRecommendations(vehiclesData.slice(0, 6));
+        }
         
-        // Load non-critical data in background
+        // Load non-critical data in background (fire and forget)
         Promise.all([
-          dataService.getVehicleData(),
-          Promise.resolve(getConversations()) // Will be filtered by currentUser when displayed
+          dataService.getVehicleData().catch(() => {
+            // Silently fail - we already have fallback data
+          }),
+          Promise.resolve(getConversations()).catch(() => {
+            // Silently fail - empty conversations is fine
+          })
         ]).then(([vehicleDataData, conversationsData]) => {
           setVehicleData(vehicleDataData);
           // Store all conversations, but filter will be applied in App.tsx when displaying
@@ -638,9 +678,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       if (!skipToast) {
         addToast(successMessage ?? fallbackMessage, 'success');
       }
-      console.log('✅ Vehicle updated via API:', result);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Vehicle updated via API:', result);
+      }
     } catch (error) {
-      console.error('❌ Failed to update vehicle:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Failed to update vehicle:', error);
+      }
       addToast('Failed to update vehicle. Please try again.', 'error');
     }
   }, [vehicles, addToast, setVehicles]);
@@ -1143,7 +1187,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             } : conv
           );
           
-          console.log('🔧 Updated conversations:', updated);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 Updated conversations:', updated);
+          }
           return updated;
         });
 
