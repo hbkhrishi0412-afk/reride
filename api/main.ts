@@ -432,6 +432,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         await newUser.save();
         console.log('✅ New user registered and saved to MongoDB:', normalizedEmail);
       
+        // Verify the user was saved by querying it back
+        const verifyUser = await User.findOne({ email: normalizedEmail });
+        if (!verifyUser) {
+          console.error('❌ User registration verification failed - user not found after save');
+          return res.status(500).json({ 
+            success: false, 
+            reason: 'User registration failed - user was not saved to database. Please try again.' 
+          });
+        } else {
+          console.log('✅ User registration verified in database. User ID:', verifyUser._id);
+        }
+      
         // Generate JWT tokens for new user
         const accessToken = generateAccessToken(newUser);
         const refreshToken = generateRefreshToken(newUser);
@@ -496,6 +508,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
       let user = await User.findOne({ email: sanitizedData.email });
       if (!user) {
+        console.log('🔄 OAuth registration - Creating new user:', sanitizedData.email);
         user = new User({
           id: Date.now(),
           email: sanitizedData.email,
@@ -506,11 +519,31 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           avatarUrl: sanitizedData.avatarUrl,
           status: 'active',
           isVerified: true,
-          plan: 'basic',
+          subscriptionPlan: 'free', // Fixed: should be subscriptionPlan not plan
           featuredCredits: 0,
+          usedCertifications: 0,
           createdAt: new Date().toISOString()
         });
+        
+        console.log('💾 Saving OAuth user to MongoDB...');
         await user.save();
+        console.log('✅ OAuth user saved to MongoDB:', sanitizedData.email);
+        
+        // Verify the user was saved by querying it back
+        const verifyUser = await User.findOne({ email: sanitizedData.email });
+        if (!verifyUser) {
+          console.error('❌ OAuth user registration verification failed - user not found after save');
+          return res.status(500).json({ 
+            success: false, 
+            reason: 'OAuth registration failed - user was not saved to database. Please try again.' 
+          });
+        } else {
+          console.log('✅ OAuth user registration verified in database. User ID:', verifyUser._id);
+          // Use the verified user to ensure we have the latest data
+          user = verifyUser;
+        }
+      } else {
+        console.log('✅ OAuth login - Existing user found:', sanitizedData.email);
       }
 
       // Generate JWT tokens for OAuth users
@@ -555,6 +588,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     }
 
     return res.status(400).json({ success: false, reason: 'Invalid action.' });
+  }
+
+  // HEAD - Handle browser pre-flight checks
+  if (req.method === 'HEAD') {
+    // Return 200 OK with no body, same headers as GET would have
+    return res.status(200).end();
   }
 
   // GET - Get all users
@@ -733,29 +772,31 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
       console.log('📝 Found user, applying update operation...');
       
-      const updatedUser = await User.findOneAndUpdate(
-        { email: email.toLowerCase().trim() }, // Ensure email is normalized
-        updateOperation,
-        { new: true, runValidators: true }
-      );
-
-      if (!updatedUser) {
-        console.error('❌ Failed to update user after findOneAndUpdate');
-        return res.status(500).json({ success: false, reason: 'Failed to update user.' });
-      }
-
-      // Explicitly save the document to ensure password is persisted
+      // For password updates, ensure it's properly marked as modified
       if (updateFields.password) {
+        // Use findOneAndUpdate with explicit password update
+        const updatedUser = await User.findOneAndUpdate(
+          { email: email.toLowerCase().trim() }, // Ensure email is normalized
+          updateOperation,
+          { new: true, runValidators: true }
+        );
+
+        if (!updatedUser) {
+          console.error('❌ Failed to update user after findOneAndUpdate');
+          return res.status(500).json({ success: false, reason: 'Failed to update user.' });
+        }
+
+        // Mark password as modified and explicitly save to ensure persistence
+        updatedUser.password = updateFields.password;
+        updatedUser.markModified('password');
         console.log('💾 Explicitly saving user document to ensure password persistence...');
-        await updatedUser.save();
+        await updatedUser.save({ validateBeforeSave: true });
         console.log('✅ User document saved successfully');
-      }
 
-      console.log('✅ User updated successfully:', updatedUser.email);
-      console.log('✅ Password updated:', !!updateFields.password);
+        console.log('✅ User updated successfully:', updatedUser.email);
+        console.log('✅ Password updated:', !!updateFields.password);
 
-      // Verify the update actually saved by checking the user again
-      if (updateFields.password) {
+        // Verify the update actually saved by checking the user again
         const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
         if (verifyUser && verifyUser.password) {
           console.log('✅ Password update verified in database');
@@ -768,11 +809,39 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         } else {
           console.error('❌ Password update verification failed - password not found in database');
         }
-      }
 
-      // Remove password from response for security
-      const { password: _, ...userWithoutPassword } = updatedUser.toObject();
-      return res.status(200).json({ success: true, user: userWithoutPassword });
+        // Remove password from response for security
+        const { password: _, ...userWithoutPassword } = updatedUser.toObject();
+        return res.status(200).json({ success: true, user: userWithoutPassword });
+      } else {
+        // For non-password updates, use standard findOneAndUpdate
+        const updatedUser = await User.findOneAndUpdate(
+          { email: email.toLowerCase().trim() }, // Ensure email is normalized
+          updateOperation,
+          { new: true, runValidators: true }
+        );
+
+        if (!updatedUser) {
+          console.error('❌ Failed to update user after findOneAndUpdate');
+          return res.status(500).json({ success: false, reason: 'Failed to update user.' });
+        }
+
+        // Explicitly save to ensure persistence
+        await updatedUser.save();
+        console.log('✅ User updated successfully:', updatedUser.email);
+
+        // Verify the update by querying again
+        const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
+        if (!verifyUser) {
+          console.warn('⚠️ User update verification failed - user not found after update');
+        } else {
+          console.log('✅ User update verified in database');
+        }
+
+        // Remove password from response for security
+        const { password: _, ...userWithoutPassword } = updatedUser.toObject();
+        return res.status(200).json({ success: true, user: userWithoutPassword });
+      }
     } catch (dbError) {
       console.error('❌ Database error during user update:', dbError);
       const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';
@@ -800,14 +869,28 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(400).json({ success: false, reason: 'Email is required for deletion.' });
       }
 
-      const deletedUser = await User.findOneAndDelete({ email });
+      const normalizedEmail = email.toLowerCase().trim();
+      console.log('🔄 DELETE /users - Deleting user:', normalizedEmail);
+
+      const deletedUser = await User.findOneAndDelete({ email: normalizedEmail });
       if (!deletedUser) {
+        console.warn('⚠️ User not found for deletion:', normalizedEmail);
         return res.status(404).json({ success: false, reason: 'User not found.' });
+      }
+
+      console.log('✅ User deleted successfully from MongoDB:', normalizedEmail);
+
+      // Verify the user was deleted by querying it
+      const verifyUser = await User.findOne({ email: normalizedEmail });
+      if (verifyUser) {
+        console.error('❌ User deletion verification failed - user still exists in database');
+      } else {
+        console.log('✅ User deletion verified in database');
       }
 
       return res.status(200).json({ success: true, message: 'User deleted successfully.' });
     } catch (error) {
-      console.error('Error deleting user:', error);
+      console.error('❌ Error deleting user:', error);
       return res.status(500).json({
         success: false,
         reason: 'Failed to delete user',
@@ -1667,8 +1750,22 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       listingExpiresAt
     });
     
+    console.log('💾 Saving new vehicle to database...');
     await newVehicle.save();
-    return res.status(201).json(newVehicle);
+    console.log('✅ Vehicle saved successfully to MongoDB:', newVehicle.id);
+    
+    // Verify the vehicle was saved by querying it back
+    const verifyVehicle = await Vehicle.findOne({ id: newVehicle.id });
+    if (!verifyVehicle) {
+      console.error('❌ Vehicle creation verification failed - vehicle not found after save');
+    } else {
+      console.log('✅ Vehicle creation verified in database');
+    }
+    
+    // Convert Mongoose document to plain object for JSON serialization
+    const vehicleObj = newVehicle.toObject();
+    
+    return res.status(201).json(vehicleObj);
   }
 
   if (req.method === 'PUT') {
@@ -1684,14 +1781,36 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(400).json({ success: false, reason: 'Vehicle ID is required for update.' });
       }
       
+      console.log('🔄 PUT /vehicles - Updating vehicle:', { id, fields: Object.keys(updateData) });
+      
+      // Find the vehicle first to ensure it exists
+      const existingVehicle = await Vehicle.findOne({ id });
+      if (!existingVehicle) {
+        return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+      }
+      
+      // Use findOneAndUpdate with $set to ensure proper update
       const updatedVehicle = await Vehicle.findOneAndUpdate(
         { id },
-        updateData,
-        { new: true }
+        { $set: updateData },
+        { new: true, runValidators: true }
       );
       
       if (!updatedVehicle) {
-        return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+        console.error('❌ Failed to update vehicle after findOneAndUpdate');
+        return res.status(500).json({ success: false, reason: 'Failed to update vehicle.' });
+      }
+      
+      // Explicitly save to ensure persistence (especially for nested fields)
+      await updatedVehicle.save();
+      console.log('✅ Vehicle updated and saved successfully:', id);
+      
+      // Verify the update by querying again
+      const verifyVehicle = await Vehicle.findOne({ id });
+      if (!verifyVehicle) {
+        console.warn('⚠️ Vehicle update verification failed - vehicle not found after update');
+      } else {
+        console.log('✅ Vehicle update verified in database');
       }
       
       // Convert Mongoose document to plain object for JSON serialization
@@ -1720,9 +1839,22 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(400).json({ success: false, reason: 'Vehicle ID is required for deletion.' });
       }
       
+      console.log('🔄 DELETE /vehicles - Deleting vehicle:', id);
+      
       const deletedVehicle = await Vehicle.findOneAndDelete({ id });
       if (!deletedVehicle) {
+        console.warn('⚠️ Vehicle not found for deletion:', id);
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+      }
+      
+      console.log('✅ Vehicle deleted successfully from MongoDB:', id);
+      
+      // Verify the vehicle was deleted by querying it
+      const verifyVehicle = await Vehicle.findOne({ id });
+      if (verifyVehicle) {
+        console.error('❌ Vehicle deletion verification failed - vehicle still exists in database');
+      } else {
+        console.log('✅ Vehicle deletion verified in database');
       }
       
       return res.status(200).json({ success: true, message: 'Vehicle deleted successfully.' });

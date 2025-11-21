@@ -79,6 +79,17 @@ const clearTokens = () => {
 
 const handleResponse = async (response: Response) => {
     if (!response.ok) {
+        // Handle 401 Unauthorized - clear tokens and stop retry loop
+        if (response.status === 401) {
+            console.warn('401 Unauthorized detected, clearing tokens');
+            clearTokens();
+            // Optionally redirect to login page
+            if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+            const error = await response.json().catch(() => ({ error: 'Unauthorized. Please login again.' }));
+            throw new Error(error.error || 'Unauthorized. Please login again.');
+        }
         // For 500 errors, don't throw - let the fallback mechanism handle it
         if (response.status >= 500) {
             console.warn(`API returned ${response.status}: ${response.statusText}, will use fallback data`);
@@ -447,6 +458,14 @@ export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
 export const login = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
   console.log('🚀 Login attempt:', { email: credentials.email, role: credentials.role, isDevelopment, hostname: window.location.hostname, port: window.location.port });
   
+  // Validate required fields before making API request
+  if (!credentials.email || (typeof credentials.email === 'string' && credentials.email.trim() === '')) {
+    return { success: false, reason: 'Email is required.' };
+  }
+  if (!credentials.password || (typeof credentials.password === 'string' && credentials.password.trim() === '')) {
+    return { success: false, reason: 'Password is required.' };
+  }
+  
   // Always use local storage in development or on localhost
   // Only try API in true production environments
   if (!isDevelopment) {
@@ -475,6 +494,23 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
 };
 export const register = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
   console.log('🚀 Register attempt:', { email: credentials.email, role: credentials.role, isDevelopment });
+  
+  // Validate required fields before making API request
+  if (!credentials.email || (typeof credentials.email === 'string' && credentials.email.trim() === '')) {
+    return { success: false, reason: 'Email is required.' };
+  }
+  if (!credentials.password || (typeof credentials.password === 'string' && credentials.password.trim() === '')) {
+    return { success: false, reason: 'Password is required.' };
+  }
+  if (!credentials.name || (typeof credentials.name === 'string' && credentials.name.trim() === '')) {
+    return { success: false, reason: 'Name is required.' };
+  }
+  if (!credentials.mobile || (typeof credentials.mobile === 'string' && credentials.mobile.trim() === '')) {
+    return { success: false, reason: 'Mobile number is required.' };
+  }
+  if (!credentials.role || (typeof credentials.role === 'string' && credentials.role.trim() === '')) {
+    return { success: false, reason: 'Role is required.' };
+  }
   
   // Always try API first for production, with fallback to local
   if (!isDevelopment) {
@@ -521,6 +557,13 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
       body: JSON.stringify({ action: 'refresh-token', refreshToken }),
     });
 
+    // Handle 401 Unauthorized - clear tokens immediately to stop retry loop
+    if (response.status === 401) {
+      console.warn('401 Unauthorized during token refresh, clearing tokens');
+      clearTokens();
+      return { success: false, reason: 'Token refresh failed - please login again' };
+    }
+
     if (!response.ok) {
       throw new Error('Token refresh failed');
     }
@@ -535,6 +578,8 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
     return { success: false, reason: 'Invalid refresh response' };
   } catch (error) {
     console.warn('Token refresh failed:', error);
+    // Clear tokens on any error to prevent infinite loops
+    clearTokens();
     return { success: false, reason: 'Token refresh failed' };
   }
 };
