@@ -13,6 +13,7 @@ import MobileHeader from './components/MobileHeader';
 import MobileBottomNav from './components/MobileBottomNav';
 import MobileDashboard from './components/MobileDashboard';
 import MobileSearch from './components/MobileSearch';
+import MobileLayout from './components/MobileLayout';
 import Footer from './components/Footer';
 import ToastContainer from './components/ToastContainer';
 import CommandPalette from './components/CommandPalette';
@@ -270,17 +271,21 @@ const AppContent: React.FC = React.memo(() => {
   }, [currentUser, currentView, setCurrentUser, setCurrentView]);
 
   // Redirect logged-in users to their appropriate dashboard (except customers who can access home)
+  // In mobile app, sellers can also access home page
   useEffect(() => {
     if (currentUser && currentView === ViewEnum.HOME) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔄 User is logged in, checking dashboard redirect:', currentUser.role);
+        console.log('🔄 User is logged in, checking dashboard redirect:', currentUser.role, 'isMobileApp:', isMobileApp);
       }
       switch (currentUser.role) {
         case 'customer':
           // Customers can access home page - no redirect
           break;
         case 'seller':
-          navigate(ViewEnum.SELLER_DASHBOARD);
+          // In mobile app, sellers can access home page
+          if (!isMobileApp) {
+            navigate(ViewEnum.SELLER_DASHBOARD);
+          }
           break;
         case 'admin':
           navigate(ViewEnum.ADMIN_PANEL);
@@ -290,7 +295,7 @@ const AppContent: React.FC = React.memo(() => {
           break;
       }
     }
-  }, [currentUser, currentView, navigate]);
+  }, [currentUser, currentView, navigate, isMobileApp]);
 
   // Recover vehicle from sessionStorage on mount
   useEffect(() => {
@@ -1492,15 +1497,19 @@ const AppContent: React.FC = React.memo(() => {
       
       // For seller/customer users, show MobileDashboard
       return (
-        <div className="native-app fixed inset-0 bg-white">
-          <div 
-            className="overflow-y-auto native-scroll h-full w-full"
-            style={{
-              paddingTop: '56px',
-              paddingBottom: '64px'
-            }}
-          >
-            <MobileDashboard
+        <>
+        <MobileLayout
+          showHeader={false}
+          showBottomNav={true}
+          headerTitle={getPageTitle()}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          onNavigate={navigate}
+          currentView={currentView}
+          wishlistCount={wishlist.length}
+          inboxCount={conversations.filter(c => c.customerId === currentUser?.email && !c.isReadByCustomer).length}
+        >
+          <MobileDashboard
             currentUser={currentUser}
             userVehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => v.sellerEmail === currentUser.email), users)}
             conversations={conversations}
@@ -1616,46 +1625,75 @@ const AppContent: React.FC = React.memo(() => {
             onNotificationClick={handleNotificationClick}
             onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
           />
-          </div>
-        </div>
+        </MobileLayout>
+        
+        {/* Mobile Global Components */}
+        <MobileSearch 
+            onNavigate={navigate}
+            onSearch={(query) => {
+              setInitialSearchQuery(query);
+              navigate(ViewEnum.USED_CARS);
+            }}
+          />
+          <ToastContainer 
+            toasts={toasts} 
+            onRemove={removeToast} 
+          />
+          {currentUser && activeChat && (
+            <ChatErrorBoundary>
+              <ChatWidget
+                conversation={activeChat}
+                currentUserRole={currentUser.role as 'customer' | 'seller'}
+                otherUserName={currentUser?.role === 'customer' ? activeChat.sellerId : activeChat.customerName}
+                onClose={() => setActiveChat(null)}
+                onSendMessage={(messageText, _type, _payload) => {
+                  sendMessage(activeChat.id, messageText);
+                }}
+                typingStatus={typingStatus}
+                onUserTyping={(conversationId, _userRole) => {
+                  toggleTyping(conversationId, true);
+                }}
+                onMarkMessagesAsRead={(conversationId, _readerRole) => {
+                  markAsRead(conversationId);
+                }}
+                onFlagContent={(type, id, _reason) => {
+                  flagContent(type, id);
+                }}
+                onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                  console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                  onOfferResponse(conversationId, messageId, response, counterPrice);
+                  addToast(`Offer ${response}`, 'success');
+                }}
+              />
+            </ChatErrorBoundary>
+          )}
+        </>
       );
     }
 
-    // For ALL other views (Home, Browse, Detail, etc.), show mobile UI
+    // For ALL other views (Home, Browse, Detail, etc.), show mobile UI using MobileLayout
     return (
-      <div className="native-app fixed inset-0 bg-white">
-        <MobileHeader
-          onNavigate={navigate}
-          currentUser={currentUser}
-          onLogout={handleLogout}
-          title={getPageTitle()}
-          showBack={currentView === ViewEnum.DETAIL}
-          onBack={() => navigate(ViewEnum.USED_CARS)}
-        />
-        
-        <main 
-          className="overflow-y-auto native-scroll h-full w-full bg-white"
-          style={{
-            paddingTop: '56px',
-            paddingBottom: '64px'
-          }}
-        >
-          <ErrorBoundary>
-            <Suspense fallback={<LoadingSpinner />}>
-              <PageTransition currentView={currentView}>
-                {renderView()}
-              </PageTransition>
-            </Suspense>
-          </ErrorBoundary>
-        </main>
-        
-        <MobileBottomNav
-          currentView={currentView}
-          onNavigate={navigate}
-          currentUser={currentUser}
-          wishlistCount={wishlist.length}
-          inboxCount={conversations.filter(c => c.customerId === currentUser?.email && !c.isReadByCustomer).length}
-        />
+      <MobileLayout
+        showHeader={true}
+        showBottomNav={true}
+        headerTitle={getPageTitle()}
+        showBack={currentView === ViewEnum.DETAIL}
+        onBack={() => navigate(ViewEnum.USED_CARS)}
+        currentView={currentView}
+        onNavigate={navigate}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        wishlistCount={wishlist.length}
+        inboxCount={conversations.filter(c => c.customerId === currentUser?.email && !c.isReadByCustomer).length}
+        headerCurrentView={currentView}
+      >
+        <ErrorBoundary>
+          <Suspense fallback={<LoadingSpinner />}>
+            <PageTransition currentView={currentView}>
+              {renderView()}
+            </PageTransition>
+          </Suspense>
+        </ErrorBoundary>
         
         {/* Mobile Global Components */}
         <MobileSearch 
@@ -1697,7 +1735,7 @@ const AppContent: React.FC = React.memo(() => {
             />
           </ChatErrorBoundary>
         )}
-      </div>
+      </MobileLayout>
     );
   }
   

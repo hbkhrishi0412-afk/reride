@@ -40,21 +40,21 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   userVehicles,
   conversations,
   onNavigate,
-  onEditVehicle,
+  onEditVehicle: _onEditVehicle, // Kept for interface compatibility
   onDeleteVehicle,
-  onMarkAsSold,
-  onFeatureListing,
-  onSendMessage,
-  onMarkConversationAsRead,
-  onOfferResponse,
-  typingStatus,
-  onUserTyping,
-  onMarkMessagesAsRead,
-  onFlagContent,
+  onMarkAsSold: _onMarkAsSold, // Kept for interface compatibility
+  onFeatureListing: _onFeatureListing, // Kept for interface compatibility
+  onSendMessage: _onSendMessage, // Kept for interface compatibility
+  onMarkConversationAsRead: _onMarkConversationAsRead, // Kept for interface compatibility
+  onOfferResponse: _onOfferResponse, // Kept for interface compatibility
+  typingStatus: _typingStatus, // Kept for interface compatibility
+  onUserTyping: _onUserTyping, // Kept for interface compatibility
+  onMarkMessagesAsRead: _onMarkMessagesAsRead, // Kept for interface compatibility
+  onFlagContent: _onFlagContent, // Kept for interface compatibility
   onLogout,
   onAddVehicle,
   onUpdateVehicle,
-  vehicleData,
+  vehicleData: _vehicleData, // Kept for interface compatibility
   onViewVehicle,
   onUpdateProfile,
   notifications = [],
@@ -160,11 +160,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   const isSeller = currentUser.role === 'seller';
   const isAdmin = currentUser.role === 'admin';
-  const isCustomer = currentUser.role === 'customer';
+  // Removed unused isCustomer variable
 
   // Calculate stats
   const totalListings = userVehicles.length;
-  const activeListings = userVehicles.filter(v => v.status === 'active').length;
+  const activeListings = userVehicles.filter(v => v.status === 'published').length;
   const soldListings = userVehicles.filter(v => v.status === 'sold').length;
   const unreadMessages = conversations.filter(c => !c.isReadByCustomer).length;
   const totalViews = userVehicles.reduce((sum, v) => sum + (v.views || 0), 0);
@@ -180,22 +180,40 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   const renderOverview = () => (
     <div className="space-y-5 pb-4">
-      {/* Welcome Card - Enhanced with better spacing */}
-      <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg">
+      {/* Premium Welcome Card */}
+      <div 
+        className="rounded-2xl p-5 text-white"
+        style={{
+          background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 50%, #FF9F6B 100%)',
+          boxShadow: '0 8px 24px rgba(255, 107, 53, 0.3), 0 4px 8px rgba(255, 107, 53, 0.2)',
+          border: '0.5px solid rgba(255, 255, 255, 0.2)'
+        }}
+      >
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h2 className="text-xl font-bold mb-1">Welcome back, {currentUser.name?.split(' ')[0]}!</h2>
-            <p className="text-orange-50 text-sm leading-relaxed">
-          {isSeller ? 'Manage your vehicle listings' : 
-           isAdmin ? 'Monitor platform activity' : 
-           'Track your car search journey'}
-        </p>
-      </div>
-          <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+            <h2 className="text-xl font-bold mb-1 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+              Welcome back, {currentUser.name?.split(' ')[0]}!
+            </h2>
+            <p className="text-white/90 text-sm leading-relaxed font-medium">
+              {isSeller ? 'Manage your vehicle listings' : 
+               isAdmin ? 'Monitor platform activity' : 
+               'Track your car search journey'}
+            </p>
+          </div>
+          <div 
+            className="w-12 h-12 rounded-full flex items-center justify-center"
+            style={{
+              background: 'rgba(255, 255, 255, 0.25)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              border: '1.5px solid rgba(255, 255, 255, 0.3)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+            }}
+          >
             <span className="text-2xl">👋</span>
-            </div>
           </div>
         </div>
+      </div>
 
       {/* Stats Grid - Native Style */}
       <div className="grid grid-cols-2 gap-4">
@@ -213,8 +231,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </span>
             )}
             </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Listings</p>
-          <p className="text-2xl font-bold text-gray-900">{totalListings}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Listings</p>
+          <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalListings}</p>
           {activeListings > 0 && (
             <p className="text-xs text-gray-500 mt-1">{activeListings} active</p>
           )}
@@ -234,8 +252,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </span>
             )}
             </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Messages</p>
-          <p className="text-2xl font-bold text-gray-900">{unreadMessages}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Messages</p>
+          <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{unreadMessages}</p>
           {conversations.length > 0 && (
             <p className="text-xs text-gray-500 mt-1">{conversations.length} total</p>
           )}
@@ -247,8 +265,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <span className="text-xl">👁️</span>
             </div>
             </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Total Views</p>
-          <p className="text-2xl font-bold text-gray-900">{totalViews}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Total Views</p>
+          <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalViews}</p>
           {totalViews > 0 && (
             <p className="text-xs text-gray-500 mt-1">Across all listings</p>
           )}
@@ -260,17 +278,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <span className="text-xl">✅</span>
             </div>
           </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Sold</p>
-          <p className="text-2xl font-bold text-gray-900">{soldListings}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Sold</p>
+          <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{soldListings}</p>
           {soldListings > 0 && (
             <p className="text-xs text-gray-500 mt-1">{Math.round((soldListings / totalListings) * 100)}% success</p>
           )}
         </div>
       </div>
 
-      {/* Quick Actions - Native Style */}
+      {/* Premium Quick Actions */}
       <div className="native-card p-5">
-        <h3 className="font-semibold text-gray-900 mb-4 text-base">Quick Actions</h3>
+        <h3 className="font-bold text-gray-900 mb-4 text-base tracking-tight" style={{ letterSpacing: '-0.01em' }}>Quick Actions</h3>
         <div className="grid grid-cols-2 gap-3">
           {isSeller && (
             <>
@@ -279,14 +297,40 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   setEditingVehicle(null);
                   setActiveTab('addVehicle');
                 }}
-                className="flex flex-col items-center justify-center gap-2 p-4 bg-orange-50 rounded-xl text-orange-700 font-semibold native-button active:opacity-70 min-h-[80px]"
+                className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl font-bold native-button min-h-[80px]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.1) 0%, rgba(255, 132, 86, 0.15) 100%)',
+                  border: '0.5px solid rgba(255, 107, 53, 0.2)',
+                  color: '#FF6B35',
+                  boxShadow: '0 2px 8px rgba(255, 107, 53, 0.15)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                }}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.transform = 'scale(0.96)';
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
               >
                 <span className="text-2xl">➕</span>
                 <span className="text-sm">Add Vehicle</span>
               </button>
               <button 
                 onClick={() => setActiveTab('listings')}
-                className="flex flex-col items-center justify-center gap-2 p-4 bg-blue-50 rounded-xl text-blue-700 font-semibold native-button active:opacity-70 min-h-[80px]"
+                className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl font-bold native-button min-h-[80px]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(59, 130, 246, 0.15) 100%)',
+                  border: '0.5px solid rgba(37, 99, 235, 0.2)',
+                  color: '#2563EB',
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.15)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                }}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.transform = 'scale(0.96)';
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
               >
                 <span className="text-2xl">📝</span>
                 <span className="text-sm">Manage Listings</span>
@@ -325,7 +369,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               setEditingVehicle(null);
               setActiveTab('addVehicle');
             }}
-            className="native-button native-button-primary px-5 py-2.5 text-sm font-semibold flex items-center gap-2"
+            className="native-button native-button-primary px-5 py-2.5 text-sm font-bold flex items-center gap-2"
+            style={{ letterSpacing: '-0.01em' }}
           >
             <span className="text-base">➕</span>
             <span>Add Vehicle</span>
@@ -356,7 +401,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         </div>
       ) : (
         <div className="space-y-3">
-          {userVehicles.slice(0, 5).map((vehicle) => (
+          {userVehicles.map((vehicle) => (
             <div 
               key={vehicle.id} 
               className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
@@ -380,11 +425,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   <p className="text-lg font-bold text-orange-600 mb-2">₹{vehicle.price.toLocaleString('en-IN')}</p>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                      vehicle.status === 'active' ? 'bg-green-100 text-green-800' :
+                      vehicle.status === 'published' ? 'bg-green-100 text-green-800' :
                       vehicle.status === 'sold' ? 'bg-gray-100 text-gray-800' :
                       'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {vehicle.status === 'active' ? '✅ Active' : vehicle.status === 'sold' ? '✅ Sold' : '⏳ Pending'}
+                      {vehicle.status === 'published' ? '✅ Active' : vehicle.status === 'sold' ? '✅ Sold' : '⏳ Pending'}
                     </span>
                     {vehicle.mileage && (
                       <span className="text-xs text-gray-500">📏 {vehicle.mileage.toLocaleString('en-IN')} km</span>
@@ -407,9 +452,36 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                       }}
                       className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
                       aria-label="Edit vehicle"
+                      title="Edit vehicle"
                     >
                       <span className="text-lg">✏️</span>
                     </button>
+                    {vehicle.status === 'published' && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          _onMarkAsSold(vehicle.id);
+                        }}
+                        className="p-2.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        aria-label="Mark as sold"
+                        title="Mark as sold"
+                      >
+                        <span className="text-lg">✅</span>
+                      </button>
+                    )}
+                    {!vehicle.isFeatured && vehicle.status === 'published' && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          _onFeatureListing(vehicle.id);
+                        }}
+                        className="p-2.5 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        aria-label="Feature listing"
+                        title="Feature listing"
+                      >
+                        <span className="text-lg">⭐</span>
+                      </button>
+                    )}
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -417,6 +489,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                       }}
                       className="p-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
                       aria-label="Delete vehicle"
+                      title="Delete vehicle"
                     >
                       <span className="text-lg">🗑️</span>
                     </button>
@@ -425,14 +498,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </div>
             </div>
           ))}
-          {userVehicles.length > 5 && (
-            <button 
-              onClick={() => onNavigate(ViewEnum.SELLER_DASHBOARD)}
-              className="w-full py-3.5 text-orange-600 font-semibold native-button native-button-secondary"
-            >
-              View All Listings ({userVehicles.length})
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -481,7 +546,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     )}
                   </div>
                   <p className="text-sm text-gray-600 truncate mb-1">
-                    {conversation.vehicleTitle || 'Vehicle inquiry'}
+                    {conversation.vehicleName || 'Vehicle inquiry'}
                   </p>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500">
@@ -493,10 +558,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                         })
                       })}
                     </span>
-                    {conversation.lastMessage && (
+                    {conversation.messages && conversation.messages.length > 0 && (
                       <>
                         <span className="text-gray-300">•</span>
-                        <span className="text-xs text-gray-500 truncate">{conversation.lastMessage}</span>
+                        <span className="text-xs text-gray-500 truncate">
+                          {conversation.messages[conversation.messages.length - 1]?.text || ''}
+                        </span>
                       </>
                     )}
                   </div>
@@ -1708,38 +1775,85 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Mobile Dashboard Header - Native Style */}
-      <div className="native-header px-5 py-4 sticky top-0 z-10 safe-top">
+    <div className="w-full bg-white">
+      {/* Premium Dashboard Header */}
+      <div 
+        className="px-5 py-4 sticky top-0 z-20 safe-top" 
+        style={{ 
+          top: '0px', 
+          paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))',
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          borderBottom: '0.5px solid rgba(0, 0, 0, 0.08)',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
+        }}
+      >
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 mb-0.5">Dashboard</h1>
-            <p className="text-xs text-gray-600">
+            <h1 className="text-xl font-bold text-gray-900 mb-0.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Dashboard</h1>
+            <p className="text-xs text-gray-600 font-medium">
               {isSeller ? 'Manage your listings' : 
                isAdmin ? 'Platform overview' : 
                'Your car journey'}
             </p>
           </div>
-          <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center shadow-md border-2 border-orange-300">
-            <span className="text-orange-700 font-bold text-lg">
+          <div 
+            className="w-12 h-12 rounded-full flex items-center justify-center"
+            style={{
+              background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
+              boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3), 0 2px 4px rgba(255, 107, 53, 0.2)',
+              border: '2px solid rgba(255, 255, 255, 0.3)'
+            }}
+          >
+            <span className="text-white font-bold text-lg">
               {currentUser.name?.charAt(0).toUpperCase() || 'U'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Tab Navigation - Native Style */}
-      <div className="native-header px-4 py-3 sticky top-[73px] z-10 border-b-0">
+      {/* Premium Tab Navigation */}
+      <div 
+        className="px-4 py-3 sticky z-20" 
+        style={{ 
+          top: '73px',
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          borderBottom: '0.5px solid rgba(0, 0, 0, 0.08)',
+          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)'
+        }}
+      >
         <div className="flex space-x-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as DashboardTab)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all active:scale-95 min-h-[44px] ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all min-h-[44px] ${
                 activeTab === tab.id
-                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-md'
-                  : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+                  ? 'text-white'
+                  : 'text-gray-700'
               }`}
+              style={{
+                background: activeTab === tab.id 
+                  ? 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)'
+                  : 'linear-gradient(180deg, #F9FAFB 0%, #F3F4F6 100%)',
+                boxShadow: activeTab === tab.id 
+                  ? '0 4px 12px rgba(255, 107, 53, 0.3), 0 2px 4px rgba(255, 107, 53, 0.2)'
+                  : '0 1px 2px rgba(0, 0, 0, 0.04)',
+                border: activeTab === tab.id ? 'none' : '0.5px solid rgba(0, 0, 0, 0.06)',
+                transform: activeTab === tab.id ? 'scale(1.02)' : 'scale(1)',
+                letterSpacing: '-0.01em'
+              }}
+              onMouseDown={(e) => {
+                if (activeTab !== tab.id) {
+                  e.currentTarget.style.transform = 'scale(0.97)';
+                }
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.transform = activeTab === tab.id ? 'scale(1.02)' : 'scale(1)';
+              }}
             >
               <span className="text-base">{tab.icon}</span>
               <span>{tab.label}</span>
@@ -1758,7 +1872,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       </div>
 
       {/* Content - Enhanced with better spacing */}
-      <div className="px-4 pt-5 pb-6 max-w-4xl mx-auto">
+      <div className="px-4 pt-5 pb-24 max-w-4xl mx-auto">
         {renderContent()}
       </div>
     </div>

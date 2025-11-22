@@ -1,8 +1,7 @@
 import React, { memo } from 'react';
 import type { Vehicle } from '../types.js';
 import StarRating from './StarRating.js';
-import BadgeDisplay from './BadgeDisplay.js';
-import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils.js';
+import { getFirstValidImage } from '../utils/imageUtils.js';
 import LazyImage from './LazyImage.js';
 
 interface VehicleCardProps {
@@ -20,17 +19,6 @@ interface VehicleCardProps {
 // Removed SpecIcon component as we're using inline specs now
 
 const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, onSelect, onToggleCompare, isSelectedForCompare, onToggleWishlist, isInWishlist, isCompareDisabled, onViewSellerProfile, onQuickView }) => {
-  
-  // Abbreviate transmission for better display
-  const getTransmissionDisplay = (transmission: string | undefined): string => {
-    if (!transmission) return 'N/A';
-    const lower = transmission.toLowerCase();
-    if (lower.includes('automatic') || lower === 'auto') return 'Auto';
-    if (lower.includes('manual')) return 'Manual';
-    if (lower.includes('cvt')) return 'CVT';
-    if (lower.includes('amt')) return 'AMT';
-    return transmission.length > 6 ? transmission.substring(0, 6) : transmission;
-  };
   
   const handleCompareClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -67,9 +55,11 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, onSelect, onToggleCo
     >
       <div className="relative overflow-hidden flex-shrink-0" style={{ height: '50%' }}>
         <LazyImage
-          src={optimizeImageUrl(getFirstValidImage(vehicle.images), 800, 80)}
+          src={getFirstValidImage(vehicle.images)}
           alt={`${vehicle.make} ${vehicle.model}`}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+          width={800}
+          quality={80}
           data-testid="vehicle-image"
         />
         

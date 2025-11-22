@@ -11,6 +11,7 @@ interface MobileHeaderProps {
   showBack?: boolean;
   onBack?: () => void;
   rightAction?: React.ReactNode;
+  currentView?: ViewEnum;
 }
 
 /**
@@ -24,14 +25,37 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   title,
   showBack = false,
   onBack,
-  rightAction
+  rightAction,
+  currentView
 }) => {
   const [showMenu, setShowMenu] = useState(false);
+  
+  // Check if current view should have transparent header
+  const isGradientView = currentView && (
+    currentView === ViewEnum.HOME ||
+    currentView === ViewEnum.LOGIN_PORTAL ||
+    currentView === ViewEnum.CUSTOMER_LOGIN ||
+    currentView === ViewEnum.SELLER_LOGIN ||
+    currentView === ViewEnum.ADMIN_LOGIN
+  );
 
   return (
     <>
-      {/* Native Mobile Header - 56px height */}
-      <header className="fixed top-0 left-0 right-0 native-header z-50 h-14 safe-top" data-testid="mobile-header">
+      {/* Premium Mobile Header with Glassmorphism */}
+      <header className="fixed top-0 left-0 right-0 z-50 h-14 safe-top" data-testid="mobile-header" style={{ 
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        background: isGradientView
+          ? 'linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.1) 100%)'
+          : 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderBottom: isGradientView
+          ? '0.5px solid rgba(255, 255, 255, 0.2)'
+          : '0.5px solid rgba(0, 0, 0, 0.08)',
+        boxShadow: isGradientView
+          ? '0 1px 3px rgba(0, 0, 0, 0.1)'
+          : '0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06)'
+      }}>
         <div className="flex items-center justify-between h-full px-4">
           {/* Left Section */}
           <div className="flex items-center gap-3">
@@ -49,19 +73,39 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
             ) : (
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="p-2 -ml-2 active:opacity-50 native-transition"
-                style={{ minWidth: '44px', minHeight: '44px' }}
+                className="p-2 -ml-2 rounded-full active:scale-95 native-transition"
+                style={{ 
+                  minWidth: '44px', 
+                  minHeight: '44px',
+                  background: 'rgba(0, 0, 0, 0.04)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                }}
                 aria-label="Menu"
                 data-testid="mobile-menu-button"
               >
-                <svg className="w-6 h-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <svg 
+                  className="w-6 h-6" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24" 
+                  strokeWidth={2.5}
+                  style={{ 
+                    color: isGradientView ? '#FFFFFF' : '#1A1A1A'
+                  }}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
             )}
             
-            {/* Center Title */}
-            <h1 className="text-base font-semibold text-gray-900 absolute left-1/2 transform -translate-x-1/2 max-w-[200px] truncate">
+            {/* Center Title - Premium Typography */}
+            <h1 
+              className="text-base font-bold absolute left-1/2 transform -translate-x-1/2 max-w-[200px] truncate tracking-tight" 
+              style={{ 
+                letterSpacing: '-0.01em',
+                color: isGradientView ? '#FFFFFF' : '#1A1A1A'
+              }}
+            >
               {title}
             </h1>
           </div>
@@ -73,13 +117,27 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 {/* Search Icon */}
                 <button
                   onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                  className="p-2 active:opacity-50 native-transition"
-                  style={{ minWidth: '44px', minHeight: '44px' }}
+                  className="p-2 rounded-full active:scale-95 native-transition"
+                  style={{ 
+                    minWidth: '44px', 
+                    minHeight: '44px',
+                    background: 'rgba(0, 0, 0, 0.04)',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                  }}
                   aria-label="Search"
                   data-testid="mobile-search-button"
                 >
-                  <svg className="w-6 h-6 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  <svg 
+                    className="w-6 h-6" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24" 
+                    strokeWidth={2.5}
+                    style={{ 
+                    color: isGradientView ? '#FFFFFF' : '#1A1A1A'
+                  }}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </button>
 
@@ -147,9 +205,34 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 />
                 <MenuItem
                   icon={<CarIcon />}
-                  label="Browse Cars"
+                  label="Buy Car"
                   onClick={() => { onNavigate(ViewEnum.USED_CARS); setShowMenu(false); }}
                 />
+                <MenuItem
+                  icon={<SellCarIcon />}
+                  label="Sell Car"
+                  onClick={() => { 
+                    if (currentUser?.role === 'seller') {
+                      onNavigate(ViewEnum.SELLER_DASHBOARD);
+                    } else {
+                      onNavigate(ViewEnum.SELLER_LOGIN);
+                    }
+                    setShowMenu(false); 
+                  }}
+                />
+                <MenuItem
+                  icon={<NewCarIcon />}
+                  label="New Cars"
+                  onClick={() => { onNavigate(ViewEnum.NEW_CARS); setShowMenu(false); }}
+                />
+                <MenuItem
+                  icon={<DealerIcon />}
+                  label="Dealers"
+                  onClick={() => { onNavigate(ViewEnum.DEALER_PROFILES); setShowMenu(false); }}
+                />
+                
+                <div className="border-t border-gray-200 my-2"></div>
+                
                 {currentUser && (
                   <>
                     <MenuItem
@@ -178,6 +261,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                     )}
                   </>
                 )}
+                
                 <div className="border-t border-gray-200 my-2"></div>
                 <MenuItem
                   icon={<InfoIcon />}
@@ -218,9 +302,6 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
           </div>
         </>
       )}
-
-      {/* Spacer for fixed header */}
-      <div className="h-14"></div>
     </>
   );
 };
@@ -250,6 +331,24 @@ const HomeIcon = () => (
 const CarIcon = () => (
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+  </svg>
+);
+
+const SellCarIcon = () => (
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+  </svg>
+);
+
+const NewCarIcon = () => (
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+  </svg>
+);
+
+const DealerIcon = () => (
+  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
   </svg>
 );
 

@@ -11,7 +11,7 @@
     "location": "Mumbai",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/MahindraXUV3001/800/600"
+      "https://images.pexels.com/photos/3802507/pexels-photo-3802507.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Mahindra XUV300 in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -52,7 +52,7 @@
     "location": "Bangalore",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/Maruti SuzukiAlto2/800/600"
+      "https://images.pexels.com/photos/3802509/pexels-photo-3802509.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Maruti Suzuki Alto in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -93,7 +93,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/HondaCity3/800/600"
+      "https://images.pexels.com/photos/1166757/pexels-photo-1166757.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Honda City in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -134,7 +134,7 @@
     "location": "Kolkata",
     "sellerEmail": "seller5@test.com",
     "images": [
-      "https://picsum.photos/seed/HyundaiVerna4/800/600"
+      "https://images.pexels.com/photos/3802514/pexels-photo-3802514.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Hyundai Verna in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -175,7 +175,7 @@
     "location": "Kolkata",
     "sellerEmail": "seller5@test.com",
     "images": [
-      "https://picsum.photos/seed/TataSafari5/800/600"
+      "https://images.pexels.com/photos/3802508/pexels-photo-3802508.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Tata Safari in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -216,7 +216,7 @@
     "location": "Mumbai",
     "sellerEmail": "seller5@test.com",
     "images": [
-      "https://picsum.photos/seed/MahindraBolero6/800/600"
+      "https://images.pexels.com/photos/3802508/pexels-photo-3802508.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Mahindra Bolero in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -257,7 +257,7 @@
     "location": "Hyderabad",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/TataTigor7/800/600"
+      "https://images.pexels.com/photos/1166758/pexels-photo-1166758.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Tata Tigor in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -298,7 +298,7 @@
     "location": "Mumbai",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/HondaCity8/800/600"
+      "https://images.pexels.com/photos/1166759/pexels-photo-1166759.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Honda City in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -339,7 +339,7 @@
     "location": "Kolkata",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanKicks9/800/600"
+      "https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Kicks in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -380,7 +380,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/TataHarrier10/800/600"
+      "https://images.pexels.com/photos/3802507/pexels-photo-3802507.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Tata Harrier in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -421,7 +421,7 @@
     "location": "Bangalore",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/KiaEV611/800/600"
+      "https://images.pexels.com/photos/3802511/pexels-photo-3802511.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Kia EV6 in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -462,7 +462,7 @@
     "location": "Pune",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/HondaWR-V12/800/600"
+      "https://images.pexels.com/photos/3802511/pexels-photo-3802511.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Honda WR-V in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -503,7 +503,7 @@
     "location": "Pune",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/ToyotaUrban Cruiser13/800/600"
+      "https://images.pexels.com/photos/1166753/pexels-photo-1166753.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Toyota Urban Cruiser in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -544,7 +544,7 @@
     "location": "Chennai",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/HyundaiVenue14/800/600"
+      "https://images.pexels.com/photos/1166757/pexels-photo-1166757.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Hyundai Venue in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -585,7 +585,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/TataAltroz15/800/600"
+      "https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Tata Altroz in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -626,7 +626,7 @@
     "location": "Chennai",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/TataTiago16/800/600"
+      "https://images.pexels.com/photos/1166750/pexels-photo-1166750.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Tata Tiago in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -667,7 +667,7 @@
     "location": "Chennai",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/ToyotaFortuner17/800/600"
+      "https://images.pexels.com/photos/1166752/pexels-photo-1166752.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Toyota Fortuner in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -708,7 +708,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanKicks18/800/600"
+      "https://images.pexels.com/photos/3802510/pexels-photo-3802510.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Kicks in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -749,7 +749,7 @@
     "location": "Delhi",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/HondaCity19/800/600"
+      "https://images.pexels.com/photos/1166754/pexels-photo-1166754.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Honda City in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -790,7 +790,7 @@
     "location": "Kolkata",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanMicra20/800/600"
+      "https://images.pexels.com/photos/1166757/pexels-photo-1166757.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Micra in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -831,7 +831,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/ToyotaUrban Cruiser21/800/600"
+      "https://images.pexels.com/photos/1166753/pexels-photo-1166753.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Toyota Urban Cruiser in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -872,7 +872,7 @@
     "location": "Mumbai",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/HyundaiCreta22/800/600"
+      "https://images.pexels.com/photos/1166758/pexels-photo-1166758.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Hyundai Creta in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -913,7 +913,7 @@
     "location": "Bangalore",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/ToyotaInnova23/800/600"
+      "https://images.pexels.com/photos/1166754/pexels-photo-1166754.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Toyota Innova in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -954,7 +954,7 @@
     "location": "Delhi",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/KiaCarnival24/800/600"
+      "https://images.pexels.com/photos/1166751/pexels-photo-1166751.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Kia Carnival in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -995,7 +995,7 @@
     "location": "Bangalore",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanMicra25/800/600"
+      "https://images.pexels.com/photos/1166759/pexels-photo-1166759.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Micra in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1036,7 +1036,7 @@
     "location": "Pune",
     "sellerEmail": "seller5@test.com",
     "images": [
-      "https://picsum.photos/seed/HondaWR-V26/800/600"
+      "https://images.pexels.com/photos/3802514/pexels-photo-3802514.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Honda WR-V in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1077,7 +1077,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/ToyotaInnova27/800/600"
+      "https://images.pexels.com/photos/3802514/pexels-photo-3802514.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Toyota Innova in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1118,7 +1118,7 @@
     "location": "Kolkata",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/TataNexon28/800/600"
+      "https://images.pexels.com/photos/3802507/pexels-photo-3802507.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Tata Nexon in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1159,7 +1159,7 @@
     "location": "Mumbai",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/ToyotaFortuner29/800/600"
+      "https://images.pexels.com/photos/1166750/pexels-photo-1166750.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Toyota Fortuner in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1200,7 +1200,7 @@
     "location": "Pune",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanKicks30/800/600"
+      "https://images.pexels.com/photos/3802512/pexels-photo-3802512.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Kicks in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1241,7 +1241,7 @@
     "location": "Hyderabad",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/TataTiago31/800/600"
+      "https://images.pexels.com/photos/3802511/pexels-photo-3802511.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Tata Tiago in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1282,7 +1282,7 @@
     "location": "Chennai",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/KiaSeltos32/800/600"
+      "https://images.pexels.com/photos/1166754/pexels-photo-1166754.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Kia Seltos in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1323,7 +1323,7 @@
     "location": "Pune",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/HondaCivic33/800/600"
+      "https://images.pexels.com/photos/3802515/pexels-photo-3802515.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Honda Civic in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1364,7 +1364,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/Maruti SuzukiErtiga34/800/600"
+      "https://images.pexels.com/photos/3802511/pexels-photo-3802511.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Maruti Suzuki Ertiga in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1405,7 +1405,7 @@
     "location": "Mumbai",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/KiaCarnival35/800/600"
+      "https://images.pexels.com/photos/1166750/pexels-photo-1166750.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Kia Carnival in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1446,7 +1446,7 @@
     "location": "Delhi",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/KiaEV636/800/600"
+      "https://images.pexels.com/photos/3802511/pexels-photo-3802511.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Kia EV6 in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1487,7 +1487,7 @@
     "location": "Pune",
     "sellerEmail": "seller1@test.com",
     "images": [
-      "https://picsum.photos/seed/MahindraXUV30037/800/600"
+      "https://images.pexels.com/photos/3802509/pexels-photo-3802509.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Mahindra XUV300 in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1528,7 +1528,7 @@
     "location": "Hyderabad",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanKicks38/800/600"
+      "https://images.pexels.com/photos/3802515/pexels-photo-3802515.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Kicks in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1569,7 +1569,7 @@
     "location": "Mumbai",
     "sellerEmail": "seller5@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanKicks39/800/600"
+      "https://images.pexels.com/photos/3802512/pexels-photo-3802512.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Kicks in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1610,7 +1610,7 @@
     "location": "Chennai",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/MahindraThar40/800/600"
+      "https://images.pexels.com/photos/1166757/pexels-photo-1166757.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Mahindra Thar in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1651,7 +1651,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/KiaSeltos41/800/600"
+      "https://images.pexels.com/photos/1166753/pexels-photo-1166753.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Kia Seltos in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1692,7 +1692,7 @@
     "location": "Delhi",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/ToyotaGlanza42/800/600"
+      "https://images.pexels.com/photos/3802515/pexels-photo-3802515.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Toyota Glanza in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1733,7 +1733,7 @@
     "location": "Delhi",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/KiaSonet43/800/600"
+      "https://images.pexels.com/photos/3802515/pexels-photo-3802515.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Kia Sonet in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1774,7 +1774,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/MahindraXUV30044/800/600"
+      "https://images.pexels.com/photos/3802508/pexels-photo-3802508.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Mahindra XUV300 in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1815,7 +1815,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller2@test.com",
     "images": [
-      "https://picsum.photos/seed/Hyundaii2045/800/600"
+      "https://images.pexels.com/photos/1166758/pexels-photo-1166758.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Hyundai i20 in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1856,7 +1856,7 @@
     "location": "Ahmedabad",
     "sellerEmail": "seller3@test.com",
     "images": [
-      "https://picsum.photos/seed/HondaJazz46/800/600"
+      "https://images.pexels.com/photos/1166753/pexels-photo-1166753.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Honda Jazz in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1897,7 +1897,7 @@
     "location": "Kolkata",
     "sellerEmail": "seller5@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanMicra47/800/600"
+      "https://images.pexels.com/photos/1166757/pexels-photo-1166757.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Micra in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1938,7 +1938,7 @@
     "location": "Hyderabad",
     "sellerEmail": "seller5@test.com",
     "images": [
-      "https://picsum.photos/seed/HyundaiVerna48/800/600"
+      "https://images.pexels.com/photos/3802514/pexels-photo-3802514.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Hyundai Verna in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -1979,7 +1979,7 @@
     "location": "Pune",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/NissanMagnite49/800/600"
+      "https://images.pexels.com/photos/3802508/pexels-photo-3802508.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Nissan Magnite in excellent condition. Single owner, no accidents.",
     "status": "published",
@@ -2020,7 +2020,7 @@
     "location": "Hyderabad",
     "sellerEmail": "seller4@test.com",
     "images": [
-      "https://picsum.photos/seed/Maruti SuzukiBrezza50/800/600"
+      "https://images.pexels.com/photos/170811/pexels-photo-170811.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
     "description": "Well maintained Maruti Suzuki Brezza in excellent condition. Single owner, no accidents.",
     "status": "published",

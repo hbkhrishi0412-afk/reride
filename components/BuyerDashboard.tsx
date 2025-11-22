@@ -3,6 +3,8 @@ import type { User, Vehicle, SavedSearch, Conversation } from '../types';
 import { View } from '../types';
 import * as buyerService from '../services/buyerService';
 import VehicleCard from './VehicleCard';
+import LazyImage from './LazyImage';
+import { getFirstValidImage } from '../utils/imageUtils';
 
 interface BuyerDashboardProps {
   currentUser: User;
@@ -532,10 +534,12 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                                 onClick={() => onSelectVehicle(vehicle)}
                               >
                                 <div className="flex items-center gap-4">
-                                  <img
-                                    src={vehicle.images[0]}
+                                  <LazyImage
+                                    src={getFirstValidImage(vehicle.images)}
                                     alt={`${vehicle.make} ${vehicle.model}`}
                                     className="w-24 h-20 object-cover rounded-lg"
+                                    width={200}
+                                    quality={80}
                                   />
                                   <div className="flex-1">
                                     <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">

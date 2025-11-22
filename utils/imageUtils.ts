@@ -2,7 +2,7 @@
  * Image utility functions for handling image sources and validation
  */
 
-const DEFAULT_PLACEHOLDER = 'https://picsum.photos/800/600?random=1';
+const DEFAULT_PLACEHOLDER = 'https://via.placeholder.com/800x600?text=Car+Image';
 
 /**
  * Optimizes image URL for better performance

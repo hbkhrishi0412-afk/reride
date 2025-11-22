@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import VehicleCard from './VehicleCard.js';
+import MobileVehicleCard from './MobileVehicleCard.js';
+import MobileFilterSheet from './MobileFilterSheet.js';
+import useIsMobileApp from '../hooks/useIsMobileApp.js';
 import type { Vehicle, VehicleCategory, SavedSearch, SearchFilters } from '../types.js';
 import { VehicleCategory as CategoryEnum } from '../types.js';
 import { parseSearchQuery, getSearchSuggestions } from '../services/geminiService.js';
@@ -29,7 +32,8 @@ interface VehicleListProps {
   onSaveSearch?: (search: SavedSearch) => void;
 }
 
-const ITEMS_PER_PAGE = 12;
+// Base items per page - increased from 12 for better browsing experience
+const BASE_ITEMS_PER_PAGE = 24;
 
 const VehicleCardSkeleton: React.FC = () => (
     <div className="bg-white rounded-xl shadow-soft-lg overflow-hidden">
@@ -163,6 +167,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [yearFilter, setYearFilter] = useState('0');
   const [colorFilter, setColorFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
+  const [isStateFilterUserSet, setIsStateFilterUserSet] = useState(false); // Track if state filter was explicitly set by user
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [featureSearch, setFeatureSearch] = useState('');
   const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
@@ -173,6 +178,26 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [isDesktopFilterVisible, setIsDesktopFilterVisible] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'tile'>('grid');
   const [isAiSearchCollapsed, setIsAiSearchCollapsed] = useState(true); // Start collapsed on mobile for better UX
+  
+  // Responsive items per page based on screen size
+  const [itemsPerPage, setItemsPerPage] = useState(BASE_ITEMS_PER_PAGE);
+  
+  useEffect(() => {
+    const updateItemsPerPage = () => {
+      const width = window.innerWidth;
+      if (width < 768) {
+        setItemsPerPage(12);  // Mobile: 12 items
+      } else if (width < 1024) {
+        setItemsPerPage(24);  // Tablet: 24 items
+      } else {
+        setItemsPerPage(48);  // Desktop: 48 items
+      }
+    };
+    
+    updateItemsPerPage();
+    window.addEventListener('resize', updateItemsPerPage);
+    return () => window.removeEventListener('resize', updateItemsPerPage);
+  }, []);
 
   // Mobile modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -190,6 +215,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     featureSearch: ''
   });
   const [isMobileFeaturesOpen, setIsMobileFeaturesOpen] = useState(false);
+
+  // Mobile app detection
+  const { isMobileApp } = useIsMobileApp();
 
   const aiSearchRef = useRef<HTMLDivElement>(null);
   const featuresFilterRef = useRef<HTMLDivElement>(null);
@@ -333,7 +361,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         setIndianStates(INDIAN_STATES);
         setFuelTypes(FUEL_TYPES);
         
-        // Set initial state filter based on user location
+        // Set initial state filter based on user location (but don't count it as user-set)
         if (userLocation) {
           const state = INDIAN_STATES.find(s => 
             s.name.toLowerCase().includes(userLocation.toLowerCase()) || 
@@ -341,6 +369,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           );
           if (state) {
             setStateFilter(state.code);
+            setIsStateFilterUserSet(false); // Mark as auto-set, not user-set
           }
         }
       } catch (error) {
@@ -352,18 +381,19 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     loadLocationData();
   }, [userLocation]);
 
-  // Update state filter when user location changes
+  // Update state filter when user location changes (but don't count it as user-set)
   useEffect(() => {
     if (userLocation && indianStates.length > 0) {
       const state = indianStates.find(s => 
         s.name.toLowerCase().includes(userLocation.toLowerCase()) || 
         userLocation.toLowerCase().includes(s.name.toLowerCase())
       );
-      if (state) {
+      if (state && !isStateFilterUserSet) {
+        // Only auto-set if user hasn't explicitly set it
         setStateFilter(state.code);
       }
     }
-  }, [userLocation, indianStates]);
+  }, [userLocation, indianStates, isStateFilterUserSet]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -425,6 +455,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     setYearFilter(tempFilters.yearFilter);
     setColorFilter(tempFilters.colorFilter);
     setStateFilter(tempFilters.stateFilter);
+    // Mark state filter as user-set if it has a value (user explicitly set it in the modal)
+    setIsStateFilterUserSet(!!(tempFilters.stateFilter && tempFilters.stateFilter.trim() !== ''));
     setSelectedFeatures(tempFilters.selectedFeatures);
     setFeatureSearch(tempFilters.featureSearch);
     setCurrentPage(1); // Reset to first page when filters are applied
@@ -433,7 +465,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   
   const handleResetTempFilters = () => {
       setTempFilters({
-          categoryFilter: 'ALL',
+          categoryFilter: initialCategory || 'ALL', // Reset to initial category, not always 'ALL'
           makeFilter: '',
           modelFilter: '',
           priceRange: { min: MIN_PRICE, max: MAX_PRICE },
@@ -476,13 +508,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   
   const handleResetFilters = () => {
     setAiSearchQuery(''); 
-    setCategoryFilter('ALL'); 
+    setCategoryFilter(initialCategory || 'ALL'); // Reset to initial category, not always 'ALL'
     setMakeFilter(''); 
     setModelFilter('');
     setPriceRange({ min: MIN_PRICE, max: MAX_PRICE }); 
     setYearFilter('0'); 
     setColorFilter(''); 
     setStateFilter('');
+    setIsStateFilterUserSet(false); // Reset user-set flag
     setSelectedFeatures([]); 
     setFeatureSearch(''); 
     setSortOrder('YEAR_DESC'); 
@@ -517,8 +550,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       fuelType: fuelTypeFilter || undefined,
       year: yearFilter !== '0' ? parseInt(yearFilter) : undefined,
       location: stateFilter || undefined,
-      features: selectedFeatures.length > 0 ? selectedFeatures : undefined,
-      query: aiSearchQuery || undefined
+      features: selectedFeatures.length > 0 ? selectedFeatures : undefined
+      // Note: query is stored separately in SavedSearch, not in SearchFilters
     };
 
     try {
@@ -621,26 +654,37 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     });
   }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, selectedFeatures, sortOrder, isWishlistMode, wishlist, colorFilter, stateFilter]);
   
-  const totalPages = Math.ceil(processedVehicles.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(processedVehicles.length / itemsPerPage);
   const paginatedVehicles = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return processedVehicles.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [processedVehicles, currentPage]);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return processedVehicles.slice(startIndex, startIndex + itemsPerPage);
+  }, [processedVehicles, currentPage, itemsPerPage]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (categoryFilter !== 'ALL' && !isWishlistMode) count++;
-    if (makeFilter) count++;
-    if (modelFilter) count++;
+    // Only count category filter if it's explicitly changed from the initial/default
+    // For wishlist mode, don't count category filter as it's implicit
+    if (!isWishlistMode) {
+      const defaultCategory = initialCategory || 'ALL';
+      if (categoryFilter !== 'ALL' && categoryFilter !== defaultCategory) {
+        count++; // Only count if changed from default
+      }
+    }
+    // Only count non-empty string filters
+    if (makeFilter && makeFilter.trim() !== '') count++;
+    if (modelFilter && modelFilter.trim() !== '') count++;
+    // Only count price range if it's been explicitly changed from defaults
     if (priceRange.min !== MIN_PRICE || priceRange.max !== MAX_PRICE) count++;
+    // Only count mileage range if it's been explicitly changed from defaults
     if (mileageRange.min !== MIN_MILEAGE || mileageRange.max !== MAX_MILEAGE) count++;
-    if (fuelTypeFilter) count++;
-    if (yearFilter !== '0') count++;
-    if (colorFilter) count++;
-    if (stateFilter) count++;
+    if (fuelTypeFilter && fuelTypeFilter.trim() !== '') count++;
+    if (yearFilter && yearFilter !== '0' && yearFilter.trim() !== '') count++;
+    if (colorFilter && colorFilter.trim() !== '') count++;
+    // Only count state filter if it was explicitly set by the user (not auto-set from location)
+    if (stateFilter && stateFilter.trim() !== '' && isStateFilterUserSet) count++;
     count += selectedFeatures.length;
     return count;
-  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, isWishlistMode]);
+  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, isWishlistMode, isStateFilterUserSet, initialCategory]);
 
   if (isWishlistMode) {
      return (
@@ -740,7 +784,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 case 'fuelTypeFilter': setFuelTypeFilter(value); break;
                 case 'yearFilter': setYearFilter(value); break;
                 case 'colorFilter': setColorFilter(value); break;
-                case 'stateFilter': setStateFilter(value); break;
+                case 'stateFilter': 
+                  setStateFilter(value);
+                  setIsStateFilterUserSet(true); // Mark as user-set
+                  break;
             }
         }
     };
@@ -867,6 +914,237 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     );
   };
 
+  // Mobile App UI
+  if (isMobileApp) {
+    return (
+      <div 
+        className="w-full min-h-screen"
+        style={{
+          background: 'linear-gradient(180deg, #FAFAFA 0%, #FFFFFF 100%)',
+          minHeight: '100vh'
+        }}
+      >
+        {/* Premium Search Bar */}
+        <div className="px-4 pt-4 pb-3">
+          <div 
+            className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 p-4"
+            style={{
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)'
+            }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex-1 relative">
+                <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search by brand, model, budget..."
+                  value={aiSearchQuery}
+                  onChange={handleAiQueryChange}
+                  onFocus={() => setShowSuggestions(suggestions.length > 0)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAiSearch(); }}
+                  className="w-full pl-12 pr-4 py-3.5 text-base bg-gray-50 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:bg-white transition-all"
+                  style={{ fontSize: '16px' }}
+                />
+              </div>
+              <button
+                onClick={() => handleAiSearch()}
+                disabled={isAiSearching}
+                className="px-5 py-3.5 rounded-xl font-bold text-sm text-white transition-all disabled:opacity-50 active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
+                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
+                  minWidth: '80px'
+                }}
+              >
+                {isAiSearching ? '...' : 'Search'}
+              </button>
+            </div>
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="mt-2 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                <ul className="divide-y divide-gray-100">
+                  {suggestions.map((suggestion, index) => (
+                    <li key={index}>
+                      <button
+                        onClick={() => handleSuggestionClick(suggestion)}
+                        className="w-full text-left px-4 py-3 text-gray-900 hover:bg-gray-50 transition-colors font-medium"
+                      >
+                        {suggestion}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Premium Filter & Sort Bar */}
+        <div 
+          className="sticky top-[56px] z-20 px-4 py-3 mb-2"
+          style={{
+            background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            borderBottom: '0.5px solid rgba(0, 0, 0, 0.08)',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <button
+                onClick={handleOpenFilterModal}
+                className="relative p-3 rounded-xl transition-all active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
+                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
+                  minWidth: '48px',
+                  minHeight: '48px'
+                }}
+              >
+                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
+                </svg>
+                {activeFilterCount > 0 && (
+                  <span 
+                    className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold text-white rounded-full"
+                    style={{
+                      background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                      boxShadow: '0 2px 4px rgba(239, 68, 68, 0.4)',
+                      minWidth: '20px'
+                    }}
+                  >
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+              <div className="flex-1">
+                <p className="text-xs text-gray-500 font-medium">Showing</p>
+                <p className="text-sm font-bold text-gray-900">
+                  {paginatedVehicles.length} of {processedVehicles.length}
+                </p>
+              </div>
+            </div>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
+              style={{
+                fontSize: '14px',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
+              }}
+            >
+              {Object.entries(sortOptions).map(([key, value]) => (
+                <option key={key} value={key}>{value}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Vehicle List */}
+        <div className="px-4 pb-24">
+          <div className="flex flex-col gap-4">
+            {isLoading || isAiSearching ? (
+              Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="bg-white rounded-2xl shadow-lg overflow-hidden animate-pulse"
+                  style={{
+                    height: '200px',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
+                  }}
+                >
+                  <div className="w-full h-32 bg-gray-200"></div>
+                  <div className="p-4 space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  </div>
+                </div>
+              ))
+            ) : paginatedVehicles.length > 0 ? (
+              paginatedVehicles.map(vehicle => (
+                <MobileVehicleCard
+                  key={vehicle.id}
+                  vehicle={vehicle}
+                  onSelect={onSelectVehicle}
+                  onToggleWishlist={onToggleWishlist}
+                  onToggleCompare={onToggleCompare}
+                  isInWishlist={wishlist.includes(vehicle.id)}
+                  isInCompare={comparisonList.includes(vehicle.id)}
+                  showActions={true}
+                />
+              ))
+            ) : (
+              <div 
+                className="text-center py-16 px-4 bg-white rounded-2xl shadow-lg"
+                style={{
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
+                }}
+              >
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No Vehicles Found</h3>
+                <p className="text-gray-600 text-sm">Try adjusting your filters or search query</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Filter Sheet */}
+        <MobileFilterSheet
+          isOpen={isFilterModalOpen}
+          onClose={handleCloseFilterModal}
+          title="Filters"
+          footer={
+            <div className="flex gap-3 px-4 pb-4">
+              <button 
+                onClick={handleResetTempFilters} 
+                className="flex-1 py-4 px-4 rounded-2xl font-bold text-base text-gray-700 bg-white border-2 border-gray-200 transition-all active:scale-95"
+                style={{
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
+                }}
+              >
+                Reset
+              </button>
+              <button 
+                onClick={handleApplyFilters} 
+                className="flex-1 py-4 px-4 rounded-2xl font-bold text-base text-white transition-all active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
+                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)'
+                }}
+              >
+                Apply Filters
+                {activeFilterCount > 0 && (
+                  <span className="ml-2 bg-white/30 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          }
+        >
+          {renderFilterControls(true)}
+        </MobileFilterSheet>
+
+        <QuickViewModal
+          vehicle={quickViewVehicle}
+          onClose={() => setQuickViewVehicle(null)}
+          onSelectVehicle={onSelectVehicle}
+          onToggleCompare={onToggleCompare}
+          onToggleWishlist={onToggleWishlist}
+          comparisonList={comparisonList}
+          wishlist={wishlist}
+        />
+      </div>
+    );
+  }
+
+  // Desktop UI (existing)
   return (
     <>
       <div className="min-h-screen bg-white lg:bg-gradient-to-br lg:from-slate-50 lg:via-white lg:to-blue-50 relative overflow-hidden">
@@ -927,14 +1205,26 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 <button onClick={() => setIsDesktopFilterVisible(prev => !prev)} className="hidden lg:block p-2 rounded-md bg-white dark:bg-brand-gray-700 hover:bg-spinny-off-white dark:hover:bg-brand-gray-600 transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
                 </button>
-                <button onClick={handleOpenFilterModal} className="lg:hidden relative p-2.5 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors native-button active:opacity-80 min-h-[44px] min-w-[44px] flex items-center justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="white" viewBox="0 0 20 20"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
+                <button 
+                  onClick={handleOpenFilterModal} 
+                  className="lg:hidden relative p-3 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-colors native-button active:opacity-80 min-h-[48px] min-w-[48px] flex items-center justify-center shadow-md"
+                  style={{ backgroundColor: '#FF6B35' }}
+                  aria-label={`Open filters${activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
+                    </svg>
                     {activeFilterCount > 0 && (
-                        <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-500 rounded-full">{activeFilterCount}</span>
+                        <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold leading-none text-white bg-red-500 rounded-full border-2 border-white shadow-md">
+                          {activeFilterCount}
+                        </span>
                     )}
                 </button>
-                <p className="text-xs lg:text-sm text-brand-gray-600 dark:text-spinny-text flex-shrink-0">
-                  <span className="font-bold">{paginatedVehicles.length}</span> of <span className="font-bold">{processedVehicles.length}</span>
+                <p className="text-xs lg:text-sm text-gray-600 dark:text-gray-400 flex-shrink-0 ml-2">
+                  <span className="text-gray-500 dark:text-gray-400">Showing</span>{' '}
+                  <span className="font-bold text-gray-900 dark:text-white">{paginatedVehicles.length}</span>{' '}
+                  <span className="text-gray-500 dark:text-gray-400">of</span>{' '}
+                  <span className="font-bold text-gray-900 dark:text-white">{processedVehicles.length}</span>
                 </p>
               </div>
               <div className="flex items-center gap-3 lg:gap-4 w-full sm:w-auto justify-between sm:justify-end">
@@ -953,12 +1243,32 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             </div>
           </div>
 
-          <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6" : "flex flex-col gap-3 lg:gap-4"}>
+          <div className={isMobileApp ? "flex flex-col gap-3" : viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6" : "flex flex-col gap-3 lg:gap-4"}>
             {isLoading || isAiSearching ? (
-              Array.from({ length: 8 }).map((_, index) => viewMode === 'grid' ? <VehicleCardSkeleton key={index} /> : <VehicleTileSkeleton key={index} />)
+              Array.from({ length: 8 }).map((_, index) => 
+                isMobileApp ? <VehicleCardSkeleton key={index} /> :
+                viewMode === 'grid' ? <VehicleCardSkeleton key={index} /> : <VehicleTileSkeleton key={index} />
+              )
             ) : paginatedVehicles.length > 0 ? (
-              paginatedVehicles.map(vehicle => (
-                viewMode === 'grid' ? (
+              paginatedVehicles.map(vehicle => {
+                // Use MobileVehicleCard in mobile app mode
+                if (isMobileApp) {
+                  return (
+                    <MobileVehicleCard
+                      key={vehicle.id}
+                      vehicle={vehicle}
+                      onSelect={onSelectVehicle}
+                      onToggleWishlist={onToggleWishlist}
+                      onToggleCompare={onToggleCompare}
+                      isInWishlist={wishlist.includes(vehicle.id)}
+                      isInCompare={comparisonList.includes(vehicle.id)}
+                      showActions={true}
+                    />
+                  );
+                }
+                
+                // Desktop mode
+                return viewMode === 'grid' ? (
                   <VehicleCard 
                     key={vehicle.id} 
                     vehicle={vehicle} 
@@ -983,8 +1293,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} 
                     onViewSellerProfile={onViewSellerProfile}
                   />
-                )
-              ))
+                );
+              })
             ) : (
               <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
                 <h3 className="text-xl font-semibold text-spinny-text-dark dark:text-brand-gray-200">No Vehicles Found</h3>
@@ -996,8 +1306,40 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         </main>
       </div>
 
-      {/* Mobile Filter Modal - Native Style */}
-      {isFilterModalOpen && (
+      {/* Mobile Filter Sheet - Using MobileFilterSheet Component */}
+      {isMobileApp && (
+        <MobileFilterSheet
+          isOpen={isFilterModalOpen}
+          onClose={handleCloseFilterModal}
+          title="Filters"
+          footer={
+            <div className="flex gap-3">
+              <button 
+                onClick={handleResetTempFilters} 
+                className="flex-1 native-button native-button-secondary font-semibold py-3"
+              >
+                Reset
+              </button>
+              <button 
+                onClick={handleApplyFilters} 
+                className="flex-1 native-button native-button-primary font-semibold py-3"
+              >
+                Apply Filters
+                {activeFilterCount > 0 && (
+                  <span className="ml-2 bg-white/30 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          }
+        >
+          {renderFilterControls(true)}
+        </MobileFilterSheet>
+      )}
+
+      {/* Desktop Filter Modal - Keep existing for desktop */}
+      {!isMobileApp && isFilterModalOpen && (
         <div className="lg:hidden fixed inset-0 bg-black/50 z-50 animate-fade-in" onClick={handleCloseFilterModal} style={{ backdropFilter: 'blur(4px)' }}>
             <div 
               className="bg-white rounded-t-3xl h-[90vh] flex flex-col absolute bottom-0 left-0 right-0 safe-bottom shadow-2xl" 

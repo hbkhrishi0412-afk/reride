@@ -1,16 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan } from '../types';
 import { View, VehicleCategory as CategoryEnum } from '../types';
-import { getRatings, addRating, getSellerRatings, addSellerRating } from '../services/ratingService';
 import { getConversations, saveConversations } from '../services/chatService';
-import { getSettings, saveSettings } from '../services/settingsService';
+import { getSettings } from '../services/settingsService';
 import { getAuditLog, logAction, saveAuditLog } from '../services/auditLogService';
-import { showNotification } from '../services/notificationService';
 import { getFaqs, saveFaqs } from '../services/faqService';
-import { getSupportTickets, saveSupportTickets } from '../services/supportTicketService';
+import { getSupportTickets } from '../services/supportTicketService';
 import { dataService } from '../services/dataService';
-import { loadingManager, LOADING_OPERATIONS, withLoadingTimeout } from '../utils/loadingManager';
-import { useTimeout } from '../hooks/useCleanup';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 
@@ -471,17 +467,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       return; // Already on this view, no need to navigate
     }
 
+    // Fixed: Preserve selectedVehicle when navigating TO DETAIL view or between DETAIL and SELLER_PROFILE
+    // Calculate this early to avoid TypeScript type narrowing issues
+    // Preserve if: navigating TO detail (covers both initial navigation and from seller profile),
+    // or navigating FROM detail TO seller profile
+    const preserveSelectedVehicle = view === View.DETAIL || 
+      (view === View.SELLER_PROFILE && currentView === View.DETAIL);
+
     const isNavigatingAwayFromSellerProfile = currentView === View.SELLER_PROFILE && view !== View.SELLER_PROFILE;
     if (isNavigatingAwayFromSellerProfile) { 
       window.history.pushState({}, '', window.location.pathname); 
       setPublicSellerProfile(null); 
     }
     setInitialSearchQuery('');
-    
-    // Fixed: Preserve selectedVehicle when navigating TO DETAIL view or between DETAIL and SELLER_PROFILE
-    const preserveSelectedVehicle = view === View.DETAIL || 
-      (view === View.SELLER_PROFILE && currentView === View.DETAIL) || 
-      (view === View.DETAIL && currentView === View.SELLER_PROFILE);
     
     if (!preserveSelectedVehicle) setSelectedVehicle(null);
     
@@ -1014,7 +1012,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         if (value === null) {
           fieldsToRemove.push(key);
         } else if (value !== undefined) {
-          updateFields[key as keyof User] = value;
+          (updateFields as any)[key] = value;
         }
       });
 

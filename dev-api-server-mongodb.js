@@ -112,9 +112,75 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
+// FAQ schema
+const faqSchema = new mongoose.Schema({
+    id: { type: Number, required: true, unique: true, index: true },
+    question: { type: String, required: true },
+    answer: { type: String, required: true },
+    category: { type: String, default: 'General' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+}, {
+    timestamps: true
+});
+
+const FAQ = mongoose.models.FAQ || mongoose.model('FAQ', faqSchema);
+
+// Support Ticket schema
+const supportTicketSchema = new mongoose.Schema({
+    id: { type: Number, required: true, unique: true, index: true },
+    userEmail: { type: String, required: true, index: true },
+    userName: { type: String, required: true },
+    subject: { type: String, required: true },
+    message: { type: String, required: true },
+    status: { type: String, enum: ['Open', 'In Progress', 'Closed'], default: 'Open', index: true },
+    replies: [{
+        author: { type: String, required: true },
+        message: { type: String, required: true },
+        timestamp: { type: String, required: true }
+    }],
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+}, {
+    timestamps: true
+});
+
+const SupportTicket = mongoose.models.SupportTicket || mongoose.model('SupportTicket', supportTicketSchema);
+
+// Audit Log schema
+const auditLogSchema = new mongoose.Schema({
+    id: { type: Number, required: true, unique: true, index: true },
+    timestamp: { type: String, required: true, index: true },
+    actor: { type: String, required: true, index: true }, // email of the admin
+    action: { type: String, required: true },
+    target: { type: String, required: true }, // e.g., user email or vehicle ID
+    details: String,
+    createdAt: { type: Date, default: Date.now }
+}, {
+    timestamps: false // We use timestamp field instead
+});
+
+const AuditLog = mongoose.models.AuditLog || mongoose.model('AuditLog', auditLogSchema);
+
 // Vehicles API endpoint
 app.get('/api/vehicles', async (req, res) => {
     try {
+        const { id } = req.query;
+        
+        // Get single vehicle by ID
+        if (id) {
+            console.log(`🚗 GET /api/vehicles?id=${id} - Fetching single vehicle from MongoDB`);
+            const vehicle = await Vehicle.findOne({ id: Number(id) });
+            
+            if (!vehicle) {
+                return res.status(404).json({ error: 'Vehicle not found' });
+            }
+            
+            console.log('✅ Found vehicle:', id);
+            return res.json(vehicle);
+        }
+        
+        // Get all vehicles
         console.log('🚗 GET /api/vehicles - Fetching vehicles from MongoDB');
         const vehicles = await Vehicle.find({}).sort({ createdAt: -1 });
         
@@ -343,7 +409,12 @@ app.put('/api/vehicles', async (req, res) => {
     try {
         console.log('🚗 PUT /api/vehicles - Updating vehicle');
         const { id } = req.query;
-        const vehicle = await Vehicle.findOneAndUpdate({ id }, req.body, { new: true });
+        
+        if (!id) {
+            return res.status(400).json({ error: 'Vehicle ID is required' });
+        }
+        
+        const vehicle = await Vehicle.findOneAndUpdate({ id: Number(id) }, req.body, { new: true });
         
         if (!vehicle) {
             return res.status(404).json({ error: 'Vehicle not found' });
@@ -365,7 +436,7 @@ app.delete('/api/vehicles', async (req, res) => {
             return res.status(400).json({ error: 'Vehicle ID is required' });
         }
         
-        const deletedVehicle = await Vehicle.findOneAndDelete({ id });
+        const deletedVehicle = await Vehicle.findOneAndDelete({ id: Number(id) });
         
         if (!deletedVehicle) {
             return res.status(404).json({ error: 'Vehicle not found' });
@@ -381,10 +452,59 @@ app.delete('/api/vehicles', async (req, res) => {
 // Users API endpoint
 app.get('/api/users', async (req, res) => {
     try {
+        const { email, id } = req.query;
+        
+        // Get single user by email
+        if (email) {
+            console.log(`👥 GET /api/users?email=${email} - Fetching single user from MongoDB`);
+            const normalizedEmail = email.toLowerCase().trim();
+            const user = await User.findOne({ email: normalizedEmail });
+            
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            
+            // Return user without password
+            const userObj = user.toObject();
+            delete userObj.password;
+            userObj.id = userObj._id?.toString() || userObj.id;
+            
+            console.log('✅ Found user:', normalizedEmail);
+            return res.json(userObj);
+        }
+        
+        // Get single user by MongoDB _id
+        if (id) {
+            console.log(`👥 GET /api/users?id=${id} - Fetching single user from MongoDB`);
+            const user = await User.findById(id);
+            
+            if (!user) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            
+            // Return user without password
+            const userObj = user.toObject();
+            delete userObj.password;
+            userObj.id = userObj._id?.toString() || userObj.id;
+            
+            console.log('✅ Found user:', id);
+            return res.json(userObj);
+        }
+        
+        // Get all users
         console.log('👥 GET /api/users - Fetching users from MongoDB');
         const users = await User.find({});
+        
+        // Remove passwords from all users
+        const usersWithoutPasswords = users.map(user => {
+            const userObj = user.toObject();
+            delete userObj.password;
+            userObj.id = userObj._id?.toString() || userObj.id;
+            return userObj;
+        });
+        
         console.log(`✅ Found ${users.length} users`);
-        res.json(users);
+        res.json(usersWithoutPasswords);
     } catch (error) {
         console.error('❌ Error fetching users:', error.message);
         res.status(500).json({ error: 'Failed to fetch users' });
@@ -693,6 +813,300 @@ app.delete('/api/users', async (req, res) => {
     }
 });
 
+// FAQ API endpoints
+app.get('/api/faqs', async (req, res) => {
+    try {
+        const { id } = req.query;
+        
+        // Get single FAQ by ID
+        if (id) {
+            console.log(`❓ GET /api/faqs?id=${id} - Fetching single FAQ from MongoDB`);
+            const faq = await FAQ.findOne({ id: Number(id) });
+            
+            if (!faq) {
+                return res.status(404).json({ error: 'FAQ not found' });
+            }
+            
+            console.log('✅ Found FAQ:', id);
+            return res.json({ faq });
+        }
+        
+        // Get all FAQs
+        console.log('❓ GET /api/faqs - Fetching FAQs from MongoDB');
+        const faqs = await FAQ.find({}).sort({ createdAt: -1 });
+        console.log(`✅ Found ${faqs.length} FAQs`);
+        res.json({ faqs });
+    } catch (error) {
+        console.error('❌ Error fetching FAQs:', error.message);
+        res.status(500).json({ error: 'Failed to fetch FAQs' });
+    }
+});
+
+app.post('/api/faqs', async (req, res) => {
+    try {
+        console.log('❓ POST /api/faqs - Creating new FAQ');
+        const { question, answer, category } = req.body;
+        
+        if (!question || !answer) {
+            return res.status(400).json({ error: 'Question and answer are required' });
+        }
+        
+        // Generate unique ID
+        const faqId = Date.now() + Math.floor(Math.random() * 1000);
+        
+        const faq = new FAQ({
+            id: faqId,
+            question,
+            answer,
+            category: category || 'General'
+        });
+        
+        await faq.save();
+        console.log('✅ FAQ created:', faqId);
+        res.status(201).json({ faq });
+    } catch (error) {
+        console.error('❌ Error creating FAQ:', error.message);
+        res.status(500).json({ error: 'Failed to create FAQ' });
+    }
+});
+
+app.put('/api/faqs', async (req, res) => {
+    try {
+        console.log('❓ PUT /api/faqs - Updating FAQ');
+        const { id } = req.query;
+        
+        if (!id) {
+            return res.status(400).json({ error: 'FAQ ID is required' });
+        }
+        
+        const faq = await FAQ.findOneAndUpdate(
+            { id: Number(id) },
+            { ...req.body, updatedAt: new Date() },
+            { new: true }
+        );
+        
+        if (!faq) {
+            return res.status(404).json({ error: 'FAQ not found' });
+        }
+        
+        console.log('✅ FAQ updated:', id);
+        res.json({ faq });
+    } catch (error) {
+        console.error('❌ Error updating FAQ:', error.message);
+        res.status(500).json({ error: 'Failed to update FAQ' });
+    }
+});
+
+app.delete('/api/faqs', async (req, res) => {
+    try {
+        console.log('❓ DELETE /api/faqs - Deleting FAQ');
+        const { id } = req.query;
+        
+        if (!id) {
+            return res.status(400).json({ error: 'FAQ ID is required' });
+        }
+        
+        const deletedFaq = await FAQ.findOneAndDelete({ id: Number(id) });
+        
+        if (!deletedFaq) {
+            return res.status(404).json({ error: 'FAQ not found' });
+        }
+        
+        console.log('✅ FAQ deleted:', id);
+        res.json({ success: true, message: 'FAQ deleted successfully' });
+    } catch (error) {
+        console.error('❌ Error deleting FAQ:', error.message);
+        res.status(500).json({ error: 'Failed to delete FAQ' });
+    }
+});
+
+// Support Tickets API endpoints
+app.get('/api/support-tickets', async (req, res) => {
+    try {
+        const { id, userEmail } = req.query;
+        
+        // Get single ticket by ID
+        if (id) {
+            console.log(`🎫 GET /api/support-tickets?id=${id} - Fetching single ticket from MongoDB`);
+            const ticket = await SupportTicket.findOne({ id: Number(id) });
+            
+            if (!ticket) {
+                return res.status(404).json({ error: 'Support ticket not found' });
+            }
+            
+            console.log('✅ Found ticket:', id);
+            return res.json({ ticket });
+        }
+        
+        // Get tickets by user email
+        if (userEmail) {
+            console.log(`🎫 GET /api/support-tickets?userEmail=${userEmail} - Fetching user tickets from MongoDB`);
+            const tickets = await SupportTicket.find({ userEmail: userEmail.toLowerCase().trim() }).sort({ createdAt: -1 });
+            console.log(`✅ Found ${tickets.length} tickets for user`);
+            return res.json({ tickets });
+        }
+        
+        // Get all tickets
+        console.log('🎫 GET /api/support-tickets - Fetching support tickets from MongoDB');
+        const tickets = await SupportTicket.find({}).sort({ createdAt: -1 });
+        console.log(`✅ Found ${tickets.length} support tickets`);
+        res.json({ tickets });
+    } catch (error) {
+        console.error('❌ Error fetching support tickets:', error.message);
+        res.status(500).json({ error: 'Failed to fetch support tickets' });
+    }
+});
+
+app.post('/api/support-tickets', async (req, res) => {
+    try {
+        console.log('🎫 POST /api/support-tickets - Creating new support ticket');
+        const { userEmail, userName, subject, message } = req.body;
+        
+        if (!userEmail || !userName || !subject || !message) {
+            return res.status(400).json({ error: 'All fields are required' });
+        }
+        
+        // Generate unique ID
+        const ticketId = Date.now() + Math.floor(Math.random() * 1000);
+        
+        const ticket = new SupportTicket({
+            id: ticketId,
+            userEmail: userEmail.toLowerCase().trim(),
+            userName,
+            subject,
+            message,
+            status: 'Open',
+            replies: []
+        });
+        
+        await ticket.save();
+        console.log('✅ Support ticket created:', ticketId);
+        res.status(201).json({ ticket });
+    } catch (error) {
+        console.error('❌ Error creating support ticket:', error.message);
+        res.status(500).json({ error: 'Failed to create support ticket' });
+    }
+});
+
+app.put('/api/support-tickets', async (req, res) => {
+    try {
+        console.log('🎫 PUT /api/support-tickets - Updating support ticket');
+        const { id } = req.query;
+        
+        if (!id) {
+            return res.status(400).json({ error: 'Ticket ID is required' });
+        }
+        
+        const ticket = await SupportTicket.findOneAndUpdate(
+            { id: Number(id) },
+            { ...req.body, updatedAt: new Date() },
+            { new: true }
+        );
+        
+        if (!ticket) {
+            return res.status(404).json({ error: 'Support ticket not found' });
+        }
+        
+        console.log('✅ Support ticket updated:', id);
+        res.json({ ticket });
+    } catch (error) {
+        console.error('❌ Error updating support ticket:', error.message);
+        res.status(500).json({ error: 'Failed to update support ticket' });
+    }
+});
+
+app.delete('/api/support-tickets', async (req, res) => {
+    try {
+        console.log('🎫 DELETE /api/support-tickets - Deleting support ticket');
+        const { id } = req.query;
+        
+        if (!id) {
+            return res.status(400).json({ error: 'Ticket ID is required' });
+        }
+        
+        const deletedTicket = await SupportTicket.findOneAndDelete({ id: Number(id) });
+        
+        if (!deletedTicket) {
+            return res.status(404).json({ error: 'Support ticket not found' });
+        }
+        
+        console.log('✅ Support ticket deleted:', id);
+        res.json({ success: true, message: 'Support ticket deleted successfully' });
+    } catch (error) {
+        console.error('❌ Error deleting support ticket:', error.message);
+        res.status(500).json({ error: 'Failed to delete support ticket' });
+    }
+});
+
+// Admin Logs (Audit Logs) API endpoints
+app.get('/api/admin-logs', async (req, res) => {
+    try {
+        const { id, actor, target, limit } = req.query;
+        
+        // Get single log by ID
+        if (id) {
+            console.log(`📋 GET /api/admin-logs?id=${id} - Fetching single log from MongoDB`);
+            const log = await AuditLog.findOne({ id: Number(id) });
+            
+            if (!log) {
+                return res.status(404).json({ error: 'Audit log not found' });
+            }
+            
+            console.log('✅ Found log:', id);
+            return res.json({ log });
+        }
+        
+        // Build query
+        const query = {};
+        if (actor) {
+            query.actor = actor.toLowerCase().trim();
+        }
+        if (target) {
+            query.target = target;
+        }
+        
+        // Get logs with optional limit
+        const limitNum = limit ? parseInt(limit) : 200;
+        console.log('📋 GET /api/admin-logs - Fetching audit logs from MongoDB');
+        const logs = await AuditLog.find(query).sort({ createdAt: -1 }).limit(limitNum);
+        console.log(`✅ Found ${logs.length} audit logs`);
+        res.json({ logs });
+    } catch (error) {
+        console.error('❌ Error fetching audit logs:', error.message);
+        res.status(500).json({ error: 'Failed to fetch audit logs' });
+    }
+});
+
+app.post('/api/admin-logs', async (req, res) => {
+    try {
+        console.log('📋 POST /api/admin-logs - Creating new audit log entry');
+        const { actor, action, target, details } = req.body;
+        
+        if (!actor || !action || !target) {
+            return res.status(400).json({ error: 'Actor, action, and target are required' });
+        }
+        
+        // Generate unique ID
+        const logId = Date.now() + Math.floor(Math.random() * 1000);
+        
+        const log = new AuditLog({
+            id: logId,
+            timestamp: new Date().toISOString(),
+            actor: actor.toLowerCase().trim(),
+            action,
+            target,
+            details: details || undefined
+        });
+        
+        await log.save();
+        console.log('✅ Audit log created:', logId);
+        res.status(201).json({ log });
+    } catch (error) {
+        console.error('❌ Error creating audit log:', error.message);
+        res.status(500).json({ error: 'Failed to create audit log' });
+    }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({
@@ -703,6 +1117,9 @@ app.get('/api/health', (req, res) => {
         endpoints: {
             vehicles: '/api/vehicles',
             users: '/api/users',
+            faqs: '/api/faqs',
+            supportTickets: '/api/support-tickets',
+            adminLogs: '/api/admin-logs',
             health: '/api/health'
         }
     });
@@ -714,15 +1131,30 @@ app.listen(PORT, async () => {
     console.log('🔄 Connecting to MongoDB...');
     await connectToDatabase();
     console.log(`\n📋 Available endpoints:`);
-    console.log(`   - GET  /api/vehicles - Get all vehicles from MongoDB`);
+    console.log(`   - GET  /api/vehicles - Get all vehicles (or ?id=123 for single vehicle)`);
     console.log(`   - POST /api/vehicles - Create new vehicle`);
-    console.log(`   - GET  /api/users - Get all users from MongoDB`);
+    console.log(`   - PUT  /api/vehicles - Update vehicle (?id=123)`);
+    console.log(`   - DELETE /api/vehicles - Delete vehicle (?id=123)`);
+    console.log(`   - GET  /api/users - Get all users (or ?email=... or ?id=... for single user)`);
     console.log(`   - POST /api/users - Login/Register (action: login|register|oauth-login)`);
     console.log(`   - PUT  /api/users - Update user`);
     console.log(`   - DELETE /api/users - Delete user`);
+    console.log(`   - GET  /api/faqs - Get all FAQs (or ?id=123 for single FAQ)`);
+    console.log(`   - POST /api/faqs - Create new FAQ`);
+    console.log(`   - PUT  /api/faqs - Update FAQ (?id=123)`);
+    console.log(`   - DELETE /api/faqs - Delete FAQ (?id=123)`);
+    console.log(`   - GET  /api/support-tickets - Get all tickets (or ?id=123 or ?userEmail=... for filtered)`);
+    console.log(`   - POST /api/support-tickets - Create new support ticket`);
+    console.log(`   - PUT  /api/support-tickets - Update ticket (?id=123)`);
+    console.log(`   - DELETE /api/support-tickets - Delete ticket (?id=123)`);
+    console.log(`   - GET  /api/admin-logs - Get audit logs (or ?id=123, ?actor=..., ?target=..., ?limit=200)`);
+    console.log(`   - POST /api/admin-logs - Create new audit log entry`);
     console.log(`   - GET  /api/health - Server health check`);
     console.log(`\n🔗 Test the API:`);
     console.log(`   curl http://localhost:${PORT}/api/vehicles`);
     console.log(`   curl http://localhost:${PORT}/api/users`);
+    console.log(`   curl http://localhost:${PORT}/api/faqs`);
+    console.log(`   curl http://localhost:${PORT}/api/support-tickets`);
+    console.log(`   curl http://localhost:${PORT}/api/admin-logs`);
     console.log(`   curl http://localhost:${PORT}/api/health`);
 });

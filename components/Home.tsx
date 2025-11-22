@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { Vehicle, VehicleCategory, View } from '../types';
 import { View as ViewEnum, VehicleCategory as CategoryEnum } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
+import LazyImage from './LazyImage';
 import QuickViewModal from './QuickViewModal';
 
 interface HomeProps {
@@ -31,7 +32,7 @@ const categoryIcons: Record<VehicleCategory, React.ReactNode> = {
     [CategoryEnum.CONSTRUCTION]: <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M2 17L4 17M4 17L4.47143 16.1143C5.2381 14.6667 6.42857 14 8 14H12C14.6667 14 16.6667 12.3333 18 10L22 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M4 17L6 21H11L14 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /><path d="M9.5 14L7.5 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>,
 };
 
-const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggleWishlist' | 'wishlist'> & { vehicle: Vehicle; onQuickView: (vehicle: Vehicle) => void; }> = ({ vehicle, onSelectVehicle, onToggleWishlist, wishlist, onQuickView }) => {
+const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggleWishlist' | 'wishlist'> & { vehicle: Vehicle; }> = ({ vehicle, onSelectVehicle, onToggleWishlist, wishlist }) => {
     const isInWishlist = wishlist.includes(vehicle.id);
   
     // Abbreviate transmission for better display
@@ -49,15 +50,6 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
       e.stopPropagation();
       onToggleWishlist(vehicle.id);
     };
-
-    const handleQuickViewClick = (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      console.log('🔍 QuickView button clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
-      console.log('🔍 Event details:', e);
-      console.log('🔍 onQuickView function:', onQuickView);
-      onQuickView(vehicle);
-    }
   
     return (
       <div 
@@ -66,11 +58,12 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
       >
         {/* Image Container */}
         <div className="relative overflow-hidden flex-shrink-0" style={{ height: '50%' }}>
-          <img 
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
-            src={getFirstValidImage(vehicle.images)} 
-            alt={`${vehicle.make} ${vehicle.model}`} 
-            loading="lazy" 
+          <LazyImage
+            src={getFirstValidImage(vehicle.images)}
+            alt={`${vehicle.make} ${vehicle.model}`}
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+            width={800}
+            quality={80}
           />
           
           {/* Verified Badge - Top Left (Green) */}
@@ -166,11 +159,6 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
     const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
     const cityScrollRef = useRef<HTMLDivElement>(null);
     const categoryScrollRef = useRef<HTMLDivElement>(null);
-    
-    const handleQuickView = (vehicle: Vehicle) => {
-      console.log('🔍 handleQuickView called with vehicle:', vehicle.id, vehicle.make, vehicle.model);
-      setQuickViewVehicle(vehicle);
-    };
     const [recentlyViewed, setRecentlyViewed] = useState<Vehicle[]>([]);
 
     // Analytics tracking functions
@@ -253,11 +241,28 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
     };
 
     return (
-        <>
-            {/* Premium Hero Section */}
-            <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+        <div 
+            className="relative w-full"
+            style={{
+                background: 'linear-gradient(180deg, #6366F1 0%, #8B5CF6 40%, #A855F7 70%, #EC4899 100%)',
+                minHeight: '100vh'
+            }}
+        >
+            {/* Premium Hero Section with Full-Screen Gradient */}
+            <section 
+                className="relative min-h-screen flex items-center justify-center overflow-hidden"
+                style={{
+                    minHeight: '100vh',
+                    position: 'relative'
+                }}
+            >
                 {/* Premium Background with Multiple Layers */}
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900"></div>
+                <div 
+                    className="absolute inset-0"
+                    style={{
+                        background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.95) 0%, rgba(139, 92, 246, 0.95) 30%, rgba(168, 85, 247, 0.95) 60%, rgba(236, 72, 153, 0.95) 100%)'
+                    }}
+                ></div>
                 <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/20 via-transparent to-orange-500/20"></div>
                 
                 {/* Animated Background Elements */}
@@ -419,10 +424,12 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                                     {(spotlightVehicles || []).slice(0, 2).map((vehicle) => (
                                         <div key={vehicle.id} className="bg-white rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
                                             <div className="relative">
-                                                <img 
-                                                    src={vehicle.images[0]} 
+                                                <LazyImage
+                                                    src={getFirstValidImage(vehicle.images)}
                                                     alt={`${vehicle.make} ${vehicle.model}`}
                                                     className="w-full h-64 object-cover"
+                                                    width={800}
+                                                    quality={80}
                                                 />
                                                 <div className="absolute top-4 left-4">
                                                     <div className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2">
@@ -524,7 +531,6 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                                     onSelectVehicle={onSelectVehicle}
                                     onToggleWishlist={onToggleWishlist}
                                     wishlist={wishlist}
-                                    onQuickView={handleQuickView}
                                 />
                             </div>
                         ))}
@@ -819,7 +825,6 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                                         onSelectVehicle={onSelectVehicle} 
                                         onToggleWishlist={onToggleWishlist} 
                                         wishlist={wishlist} 
-                                        onQuickView={handleQuickView}
                                     />
                                 </div>
                             ))}
@@ -872,7 +877,6 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                                     onSelectVehicle={onSelectVehicle} 
                                     onToggleWishlist={onToggleWishlist} 
                                     wishlist={wishlist} 
-                                    onQuickView={handleQuickView}
                                 />
                             </div>
                         ))}
@@ -928,7 +932,6 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                                         onSelectVehicle={onSelectVehicle} 
                                         onToggleWishlist={onToggleWishlist} 
                                         wishlist={wishlist} 
-                                        onQuickView={handleQuickView}
                                     />
                                 </div>
                             ))}
@@ -1034,7 +1037,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                 comparisonList={comparisonList}
                 wishlist={wishlist}
             />
-        </>
+        </div>
     );
 };
 

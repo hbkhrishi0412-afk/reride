@@ -82,9 +82,17 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <>
-      {/* Native Bottom Navigation Bar with Glassmorphism */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 safe-bottom" data-testid="mobile-bottom-nav" style={{ height: '64px', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div className="bg-white/80 backdrop-blur-lg border-t border-white/20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] flex items-center justify-around h-full px-2">
+      {/* Premium Bottom Navigation with Enhanced Glassmorphism */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 safe-bottom" data-testid="mobile-bottom-nav" style={{ 
+        height: '64px', 
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderTop: '0.5px solid rgba(0, 0, 0, 0.08)',
+        boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.04), 0 -1px 3px rgba(0, 0, 0, 0.06)'
+      }}>
+        <div className="flex items-center justify-around h-full px-2" style={{ height: 'calc(64px - env(safe-area-inset-bottom, 0px))' }}>
           {navItems.map((item) => {
             // Skip auth-required items if not logged in
             if (item.requiresAuth && !currentUser) return null;
@@ -95,39 +103,68 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.view)}
-                className="flex flex-col items-center justify-center flex-1 h-full relative active:opacity-70 native-transition"
-                style={{ minHeight: '44px' }}
+                className="flex flex-col items-center justify-center flex-1 h-full relative"
+                style={{ 
+                  minHeight: '44px',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
+                  transform: isActive ? 'scale(1.05)' : 'scale(1)'
+                }}
               >
-                {/* Icon */}
+                {/* Icon with Premium Styling */}
                 <div className="relative mb-1">
-                  <div className={isActive ? 'text-orange-600' : 'text-gray-500'}>
+                  <div 
+                    className="transition-all duration-300"
+                    style={{ 
+                      color: isActive ? '#FF6B35' : '#6B7280',
+                      transform: isActive ? 'scale(1.1)' : 'scale(1)'
+                    }}
+                  >
                     {item.icon(isActive)}
                   </div>
-                  {/* Badge */}
+                  {/* Premium Badge */}
                   {item.badge && item.badge > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 flex items-center justify-center bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5">
+                    <span 
+                      className="absolute -top-1 -right-1 min-w-[18px] h-4.5 flex items-center justify-center text-white text-[10px] font-bold rounded-full px-1.5"
+                      style={{
+                        background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
+                        boxShadow: '0 2px 4px rgba(255, 107, 53, 0.3)',
+                        animation: item.badge > 0 ? 'pulse 2s infinite' : 'none'
+                      }}
+                    >
                       {item.badge > 9 ? '9+' : item.badge}
                     </span>
                   )}
                 </div>
                 
-                {/* Label */}
-                <span className={`text-[11px] font-medium ${isActive ? 'text-orange-600' : 'text-gray-500'}`}>
+                {/* Label with Premium Typography */}
+                <span 
+                  className="text-[11px] font-semibold transition-all duration-300"
+                  style={{ 
+                    color: isActive ? '#FF6B35' : '#6B7280',
+                    letterSpacing: '-0.01em'
+                  }}
+                >
                   {item.label}
                 </span>
                 
-                {/* Active Indicator */}
+                {/* Premium Active Indicator */}
                 {isActive && (
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-orange-600 rounded-full"></div>
+                  <div 
+                    className="absolute bottom-0 left-1/2 transform -translate-x-1/2 rounded-full"
+                    style={{
+                      width: '32px',
+                      height: '3px',
+                      background: 'linear-gradient(90deg, #FF6B35 0%, #FF8456 100%)',
+                      boxShadow: '0 2px 4px rgba(255, 107, 53, 0.4)',
+                      animation: 'slideUp 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                    }}
+                  ></div>
                 )}
               </button>
             );
           })}
         </div>
       </nav>
-
-      {/* Spacer for fixed bottom nav */}
-      <div className="h-16 safe-bottom"></div>
     </>
   );
 };

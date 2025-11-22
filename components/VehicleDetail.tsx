@@ -9,6 +9,8 @@ import Benefits from './Benefits';
 import QuickViewModal from './QuickViewModal';
 import BadgeDisplay from './BadgeDisplay';
 import VehicleHistory from './VehicleHistory';
+import MobileImageGallery from './MobileImageGallery';
+import useIsMobileApp from '../hooks/useIsMobileApp';
 import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
 
@@ -188,6 +190,12 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   console.log('🎯 VehicleDetail component rendering with vehicle:', vehicle);
   console.log('🎯 Vehicle data:', { id: vehicle?.id, make: vehicle?.make, model: vehicle?.model, price: vehicle?.price });
   
+  // Mobile app detection
+  const { isMobileApp } = useIsMobileApp();
+  
+  // Get updateVehicle from context at top level (hooks must be called at top level)
+  const { updateVehicle } = useApp();
+  
   // Lightweight safety check - only essential properties
   const safeVehicle = {
     ...vehicle,
@@ -303,7 +311,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
           } catch {}
           // Update global vehicles state via context so dashboards reflect the change
           try {
-            const { updateVehicle } = useApp();
             // Call asynchronously; ignore errors
             updateVehicle(safeVehicle.id, { views: data.views }).catch(() => {});
           } catch {}
@@ -315,36 +322,40 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     if (safeVehicle?.id) {
       trackView();
     }
-  }, [safeVehicle?.id]);
+  }, [safeVehicle?.id, updateVehicle]);
 
   console.log('🎯 VehicleDetail about to render JSX');
   return (
     <>
-      <div className="bg-white dark:bg-white animate-fade-in">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-              <button onClick={onBackToHome} className="mb-6 bg-white text-spinny-text-dark dark:text-brand-gray-200 font-bold py-2 px-4 rounded-lg hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors shadow-soft">
-                &larr; Back to Listings
-              </button>
+      <div className={`bg-white dark:bg-white animate-fade-in ${isMobileApp ? 'pb-24' : ''}`}>
+          <div className={`${isMobileApp ? 'px-0' : 'container mx-auto px-4 sm:px-6 lg:px-8'} py-8`}>
+              {!isMobileApp && (
+                <button onClick={onBackToHome} className="mb-6 bg-white text-spinny-text-dark dark:text-brand-gray-200 font-bold py-2 px-4 rounded-lg hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors shadow-soft">
+                  &larr; Back to Listings
+                </button>
+              )}
               
-              <h1 className="text-4xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-2">{safeVehicle.year} {safeVehicle.make} {safeVehicle.model} {safeVehicle.variant || ''}</h1>
-              <div className="flex items-center gap-4 mb-6">
-                  <div className="flex items-center gap-2">
-                    <StarRating rating={safeVehicle.averageRating || 0} readOnly />
-                    <span className="text-brand-gray-600 dark:text-spinny-text">
-                        {safeVehicle.averageRating?.toFixed(1) || 'No rating'} ({safeVehicle.ratingCount || 0} reviews)
-                    </span>
-                  </div>
-                  {safeVehicle.certifiedInspection && (
-                      <span className="bg-spinny-orange-light text-spinny-orange text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44-1.22a.75.75 0 00-1.06 0L8.172 6.172a.75.75 0 00-1.06 1.06L8.94 9.332a.75.75 0 001.191.04l3.22-4.294a.75.75 0 00-.04-1.19z" clipRule="evenodd" /></svg>
-                          Certified
+              <div className={isMobileApp ? 'px-4' : ''}>
+                <h1 className={`${isMobileApp ? 'text-2xl' : 'text-4xl'} font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-2`}>{safeVehicle.year} {safeVehicle.make} {safeVehicle.model} {safeVehicle.variant || ''}</h1>
+                <div className="flex items-center gap-4 mb-6">
+                    <div className="flex items-center gap-2">
+                      <StarRating rating={safeVehicle.averageRating || 0} readOnly />
+                      <span className="text-brand-gray-600 dark:text-spinny-text">
+                          {safeVehicle.averageRating?.toFixed(1) || 'No rating'} ({safeVehicle.ratingCount || 0} reviews)
                       </span>
-                  )}
+                    </div>
+                    {safeVehicle.certifiedInspection && (
+                        <span className="bg-spinny-orange-light text-spinny-orange text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44-1.22a.75.75 0 00-1.06 0L8.172 6.172a.75.75 0 00-1.06 1.06L8.94 9.332a.75.75 0 001.191.04l3.22-4.294a.75.75 0 00-.04-1.19z" clipRule="evenodd" /></svg>
+                            Certified
+                        </span>
+                    )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className={`${isMobileApp ? 'flex flex-col' : 'grid grid-cols-1 lg:grid-cols-3'} gap-8`}>
                   {/* Left Column: Media */}
-                  <div className="lg:col-span-2 space-y-4">
+                  <div className={`${isMobileApp ? 'w-full' : 'lg:col-span-2'} space-y-4`}>
                     {safeVehicle.videoUrl && (
                       <div className="flex space-x-2 border-b-2 border-gray-200-200 dark:border-gray-200-200">
                         <button onClick={() => setActiveMediaTab('images')} className={`py-2 px-4 font-semibold ${activeMediaTab === 'images' ? 'border-b-2' : 'text-spinny-text'}`} style={activeMediaTab === 'images' ? { borderColor: '#FF6B35', color: '#FF6B35' } : undefined}>Images</button>
@@ -353,21 +364,31 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     )}
                     {activeMediaTab === 'images' ? (
                       <>
-                        <div className="relative group">
-                            <img key={currentIndex} className="w-full h-auto object-cover rounded-xl shadow-soft-xl animate-fade-in" src={getValidImages(safeVehicle.images)[currentIndex] || getFirstValidImage(safeVehicle.images)} alt={`${safeVehicle.make} ${safeVehicle.model} image ${currentIndex + 1}`} />
-                            {safeVehicle.images.length > 1 && (
-                                <>
-                                    <button onClick={handlePrevImage} className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/40 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Previous image"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
-                                    <button onClick={handleNextImage} className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/40 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Next image"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
-                                </>
-                            )}
-                        </div>
-                        {safeVehicle.images.length > 1 && (
-                            <div className="flex space-x-2 overflow-x-auto pb-2 -mt-2">
-                                {getValidImages(safeVehicle.images).map((img, index) => (
-                                    <img key={index} src={getSafeImageSrc(img)} alt={`Thumbnail ${index + 1}`} className={`cursor-pointer rounded-md border-2 h-20 w-28 object-cover flex-shrink-0 ${currentIndex === index ? '' : 'border-transparent'} transition`} style={currentIndex === index ? { borderColor: '#FF6B35' } : undefined} onMouseEnter={(e) => currentIndex !== index && (e.currentTarget.style.borderColor = 'var(--spinny-blue)')} onMouseLeave={(e) => currentIndex !== index && (e.currentTarget.style.borderColor = '')} onClick={() => setCurrentIndex(index)} />
-                                ))}
+                        {/* Use MobileImageGallery in mobile app mode */}
+                        {isMobileApp ? (
+                          <MobileImageGallery
+                            images={getValidImages(safeVehicle.images)}
+                            alt={`${safeVehicle.make} ${safeVehicle.model}`}
+                          />
+                        ) : (
+                          <>
+                            <div className="relative group">
+                                <img key={currentIndex} className="w-full h-auto object-cover rounded-xl shadow-soft-xl animate-fade-in" src={getValidImages(safeVehicle.images)[currentIndex] || getFirstValidImage(safeVehicle.images)} alt={`${safeVehicle.make} ${safeVehicle.model} image ${currentIndex + 1}`} />
+                                {safeVehicle.images.length > 1 && (
+                                    <>
+                                        <button onClick={handlePrevImage} className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/40 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Previous image"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
+                                        <button onClick={handleNextImage} className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/40 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Next image"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
+                                    </>
+                                )}
                             </div>
+                            {safeVehicle.images.length > 1 && (
+                                <div className="flex space-x-2 overflow-x-auto pb-2 -mt-2">
+                                    {getValidImages(safeVehicle.images).map((img, index) => (
+                                        <img key={index} src={getSafeImageSrc(img)} alt={`Thumbnail ${index + 1}`} className={`cursor-pointer rounded-md border-2 h-20 w-28 object-cover flex-shrink-0 ${currentIndex === index ? '' : 'border-transparent'} transition`} style={currentIndex === index ? { borderColor: '#FF6B35' } : undefined} onMouseEnter={(e) => currentIndex !== index && (e.currentTarget.style.borderColor = 'var(--spinny-blue)')} onMouseLeave={(e) => currentIndex !== index && (e.currentTarget.style.borderColor = '')} onClick={() => setCurrentIndex(index)} />
+                                    ))}
+                                </div>
+                            )}
+                          </>
                         )}
                       </>
                     ) : (
@@ -378,30 +399,57 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                   </div>
                   
                   {/* Right Column: Price and Actions */}
-                  <div className="space-y-6 self-start lg:sticky top-24">
-                      <div className="p-6 bg-white rounded-xl shadow-soft-lg space-y-4">
-                           <p className="text-4xl font-extrabold" style={{ color: '#FF6B35' }}>₹{safeVehicle.price.toLocaleString('en-IN')}</p>
-                           <button onClick={() => onStartChat(safeVehicle)} className="w-full btn-brand-primary text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
+                  <div className={`space-y-6 ${isMobileApp ? 'w-full' : 'self-start lg:sticky top-24'}`}>
+                      <div className={`${isMobileApp ? 'p-4' : 'p-6'} bg-white rounded-xl shadow-soft-lg space-y-4`}>
+                           <p className={`${isMobileApp ? 'text-3xl' : 'text-4xl'} font-extrabold`} style={{ color: '#FF6B35' }}>₹{safeVehicle.price.toLocaleString('en-IN')}</p>
+                           <button onClick={() => onStartChat(safeVehicle)} className={`w-full btn-brand-primary text-white font-bold ${isMobileApp ? 'py-3 px-4 text-base mobile-tap-target' : 'py-3 px-6 rounded-lg text-lg'} transition-all transform hover:scale-105 active:scale-95`}>
                                 Chat with Seller
                             </button>
-                            <div className="flex gap-4">
+                            <div className={`flex ${isMobileApp ? 'gap-2' : 'gap-4'}`}>
                                <button
                                   onClick={() => onToggleCompare(safeVehicle.id)}
                                   disabled={isCompareDisabled}
-                                  className={`w-full font-bold py-3 px-4 rounded-lg text-lg transition-all flex items-center justify-center gap-2 ${isComparing ? 'bg-spinny-orange text-spinny-orange' : 'bg-spinny-light-gray dark:bg-brand-gray-700'} ${isCompareDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  className={`w-full font-bold ${isMobileApp ? 'py-3 px-3 text-base mobile-tap-target' : 'py-3 px-4 rounded-lg text-lg'} transition-all flex items-center justify-center gap-2 ${isComparing ? 'bg-spinny-orange text-white' : 'bg-spinny-light-gray dark:bg-brand-gray-700'} ${isCompareDisabled ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}`}
                                 >
                                   {isComparing ? 'Comparing' : 'Compare'}
                               </button>
                                <button
                                   onClick={() => onToggleWishlist(safeVehicle.id)}
-                                  className={`w-full font-bold py-3 px-4 rounded-lg text-lg transition-all flex items-center justify-center gap-2 ${isInWishlist ? 'bg-spinny-blue text-spinny-orange' : 'bg-spinny-light-gray dark:bg-brand-gray-700'}`}
+                                  className={`w-full font-bold ${isMobileApp ? 'py-3 px-3 text-base mobile-tap-target' : 'py-3 px-4 rounded-lg text-lg'} transition-all flex items-center justify-center gap-2 ${isInWishlist ? 'bg-orange-500 text-white' : 'bg-spinny-light-gray dark:bg-brand-gray-700'} active:scale-95`}
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" /></svg>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill={isInWishlist ? 'currentColor' : 'none'} stroke="currentColor"><path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" /></svg>
                                   {isInWishlist ? 'Saved' : 'Save'}
                               </button>
                             </div>
-                            <SocialShareButtons vehicle={safeVehicle} />
+                            {!isMobileApp && <SocialShareButtons vehicle={safeVehicle} />}
                       </div>
+                      
+                      {/* Mobile Sticky Action Bar */}
+                      {isMobileApp && (
+                        <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 safe-bottom">
+                          <div className="flex items-center gap-2 p-3">
+                            <div className="flex-1">
+                              <p className="text-xs text-gray-500">Price</p>
+                              <p className="text-xl font-bold" style={{ color: '#FF6B35' }}>₹{safeVehicle.price.toLocaleString('en-IN')}</p>
+                            </div>
+                            <button 
+                              onClick={() => onStartChat(safeVehicle)} 
+                              className="flex-1 native-button native-button-primary font-semibold py-3"
+                            >
+                              Chat Now
+                            </button>
+                            <button
+                              onClick={() => onToggleWishlist(safeVehicle.id)}
+                              className={`p-3 rounded-lg ${isInWishlist ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'} mobile-tap-target`}
+                              aria-label={isInWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                            >
+                              <svg className="w-6 h-6" fill={isInWishlist ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       
                       {seller && <div className="p-6 bg-white rounded-xl shadow-soft">
                             <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-3">Seller Information</h3>
@@ -530,14 +578,16 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                   <button onClick={handleFlagClick} className="text-xs text-spinny-text hover:text-spinny-orange">Report this listing</button>
               </div>
 
-              {filteredRecommendations.length > 0 && <div className="mt-12">
+              {filteredRecommendations.length > 0 && (
+                <div className="mt-12">
                   <h2 className="text-3xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Similar Vehicles</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                       {filteredRecommendations.map(v => (
                           <VehicleCard key={v.id} vehicle={v} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(v.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(v.id)} isCompareDisabled={!comparisonList.includes(v.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} onQuickView={setQuickViewVehicle}/>
                       ))}
                   </div>
-              </div>}
+                </div>
+              )}
 
           </div>
       </div>

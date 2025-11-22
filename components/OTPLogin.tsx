@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { sendOTP, verifyOTP, syncWithBackend, initializeRecaptcha, cleanupRecaptcha } from '../services/authService';
 import { ConfirmationResult } from 'firebase/auth';
 import { User } from '../types';
+import useIsMobileApp from '../hooks/useIsMobileApp';
 
 interface OTPLoginProps {
   onLogin: (user: User) => void;
@@ -10,6 +11,7 @@ interface OTPLoginProps {
 }
 
 const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
+  const { isMobileApp } = useIsMobileApp();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
@@ -100,6 +102,133 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
     await handleSendOTP(new Event('submit') as any);
   };
 
+  // Mobile App UI
+  if (isMobileApp) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <h3 className="text-2xl font-bold text-white mb-2 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+            Login with Mobile OTP
+          </h3>
+          <p className="text-sm text-white/90 font-medium">
+            We'll send you a one-time password
+          </p>
+        </div>
+
+        {!otpSent ? (
+          <form onSubmit={handleSendOTP} className="space-y-5">
+            <div>
+              <div className="flex">
+                <span className="inline-flex items-center px-4 py-4 rounded-l-2xl bg-white/20 backdrop-blur-sm text-white text-base font-semibold border border-white/30">
+                  +91
+                </span>
+                <input
+                  id="phone-number"
+                  type="tel"
+                  maxLength={10}
+                  placeholder="Enter 10-digit number"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                  className="flex-1 px-5 py-4 text-base bg-white/95 backdrop-blur-sm border-0.5 border-white/30 rounded-r-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-red-600 text-sm text-center font-medium">{error}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex-1 py-4 px-4 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl text-white font-semibold transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="flex-1 py-4 px-4 rounded-2xl font-bold text-base text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
+                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
+                }}
+                onMouseDown={(e) => {
+                  if (!isLoading) e.currentTarget.style.transform = 'scale(0.97)';
+                }}
+                onMouseUp={(e) => {
+                  if (!isLoading) e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                {isLoading ? 'Sending...' : 'Send OTP'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleVerifyOTP} className="space-y-5">
+            <div>
+              <input
+                id="otp"
+                type="text"
+                maxLength={6}
+                placeholder="Enter 6-digit OTP"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-5 py-4 text-3xl text-center tracking-[0.5em] bg-white/95 backdrop-blur-sm border-0.5 border-white/30 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white transition-all font-bold"
+                required
+              />
+              <p className="text-xs text-white/80 mt-3 text-center font-medium">
+                Sent to +91 {phoneNumber}
+              </p>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <p className="text-red-600 text-sm text-center font-medium">{error}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleResendOTP}
+                disabled={isLoading}
+                className="flex-1 py-4 px-4 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl text-white font-semibold transition-all active:scale-95 disabled:opacity-50"
+              >
+                Resend OTP
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="flex-1 py-4 px-4 rounded-2xl font-bold text-base text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
+                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
+                }}
+                onMouseDown={(e) => {
+                  if (!isLoading) e.currentTarget.style.transform = 'scale(0.97)';
+                }}
+                onMouseUp={(e) => {
+                  if (!isLoading) e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                {isLoading ? 'Verifying...' : 'Verify OTP'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Invisible reCAPTCHA container */}
+        <div id="recaptcha-container"></div>
+      </div>
+    );
+  }
+
+  // Desktop UI
   return (
     <div className="space-y-6">
       <div className="text-center">

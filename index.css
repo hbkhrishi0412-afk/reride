@@ -388,23 +388,45 @@ input:invalid::-webkit-validation-bubble {
 /* NATIVE MOBILE APP STYLES */
 /* ============================================ */
 
-/* Native App Container */
+/* Premium Native App Container */
 .native-app {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   height: 100vh;
   height: 100dvh; /* Dynamic viewport height */
   overflow: hidden;
-  background: #FFFFFF;
+  background: linear-gradient(180deg, #FAFAFA 0%, #FFFFFF 100%);
+  position: relative;
 }
 
-/* Native Card Styles */
+.native-app::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(255, 107, 53, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(37, 99, 235, 0.03) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Premium Card Styles - Spinny Inspired */
 .native-card {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 12px;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08);
+  margin-bottom: 16px;
   overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  border: 0.5px solid rgba(0, 0, 0, 0.04);
+}
+
+.native-card:active {
+  transform: scale(0.98);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* Native Button Styles */
@@ -418,25 +440,32 @@ input:invalid::-webkit-validation-bubble {
 }
 
 .native-button-primary {
-  background: #FF6B35;
+  background: linear-gradient(135deg, #FF6B35 0%, #FF8456 100%);
   color: white;
   border: none;
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.25), 0 2px 4px rgba(255, 107, 53, 0.15);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .native-button-primary:active {
-  opacity: 0.8;
-  transform: scale(0.98);
+  transform: scale(0.97);
+  box-shadow: 0 2px 6px rgba(255, 107, 53, 0.2), 0 1px 2px rgba(255, 107, 53, 0.1);
 }
 
 .native-button-secondary {
-  background: #F5F5F5;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F9FAFB 100%);
   color: #1A1A1A;
-  border: none;
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .native-button-secondary:active {
-  opacity: 0.7;
-  transform: scale(0.98);
+  transform: scale(0.97);
+  background: linear-gradient(180deg, #F9FAFB 0%, #F3F4F6 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 /* Remove tap highlight globally */
@@ -455,16 +484,21 @@ input, textarea, select {
 .native-input {
   width: 100%;
   padding: 14px 16px;
-  background: #F5F5F5;
-  border: none;
-  border-radius: 12px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
   font-size: 16px;
   color: #1A1A1A;
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .native-input:focus {
   outline: none;
-  background: #EEEEEE;
+  background: #FFFFFF;
+  border-color: #FF6B35;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
 /* Native Transitions */
@@ -477,6 +511,8 @@ input, textarea, select {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  overscroll-behavior: contain;
+  will-change: scroll-position;
 }
 
 .native-scroll::-webkit-scrollbar {
@@ -522,19 +558,82 @@ input, textarea, select {
   padding-right: env(safe-area-inset-right);
 }
 
-/* Native Header Styles */
+/* Premium Header Styles - Enhanced Glassmorphism */
 .native-header {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 0.5px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-/* Native Bottom Nav Styles */
+/* Premium Animations - Spinny Inspired */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Premium Loading States */
+.premium-skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Premium Bottom Nav Styles */
 .native-bottom-nav {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px);
   border-top: 0.5px solid rgba(0, 0, 0, 0.1);
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.05);
