@@ -215,12 +215,29 @@ const AppContent: React.FC = React.memo(() => {
       }
 
       const parsedUser: User = JSON.parse(storedUser);
+      
+      // CRITICAL: Enhanced validation - ensure role is valid
       if (!parsedUser?.email || !parsedUser?.role) {
+        console.warn('⚠️ Invalid user object in session restore - missing required fields:', { 
+          hasEmail: !!parsedUser?.email, 
+          hasRole: !!parsedUser?.role 
+        });
+        // Clear invalid data
+        localStorage.removeItem('reRideCurrentUser');
+        sessionStorage.removeItem('currentUser');
+        return;
+      }
+      
+      // Validate role is a valid value
+      if (!['customer', 'seller', 'admin'].includes(parsedUser.role)) {
+        console.warn('⚠️ Invalid role in session restore:', parsedUser.role);
+        localStorage.removeItem('reRideCurrentUser');
+        sessionStorage.removeItem('currentUser');
         return;
       }
 
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔄 Restoring persisted session for:', parsedUser.email);
+        console.log('🔄 Restoring persisted session for:', parsedUser.email, parsedUser.role);
       }
       setCurrentUser(parsedUser);
 
@@ -549,7 +566,29 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.SELLER_DASHBOARD:
-        return currentUser?.role === 'seller' && currentUser?.email ? (
+        // CRITICAL: Enhanced validation for seller dashboard access
+        if (!currentUser) {
+          console.warn('⚠️ Attempted to render seller dashboard without logged-in user');
+          navigate(ViewEnum.LOGIN_PORTAL);
+          return null;
+        }
+        
+        if (!currentUser.email || !currentUser.role) {
+          console.error('❌ Invalid user object - missing email or role:', { 
+            hasEmail: !!currentUser.email, 
+            hasRole: !!currentUser.role 
+          });
+          navigate(ViewEnum.LOGIN_PORTAL);
+          return null;
+        }
+        
+        if (currentUser.role !== 'seller') {
+          console.warn('⚠️ Attempted to render seller dashboard with role:', currentUser.role);
+          navigate(ViewEnum.LOGIN_PORTAL);
+          return null;
+        }
+        
+        return (
           <DashboardErrorBoundary>
             <Dashboard
               seller={currentUser}

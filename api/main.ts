@@ -34,6 +34,39 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
+// Helper: Normalize MongoDB user object for frontend consumption
+// Converts _id to id, ensures role is present, and removes password
+function normalizeUser(user: any): any {
+  if (!user) return null;
+  
+  const normalized: any = { ...user };
+  
+  // Convert _id to id if _id exists and id doesn't
+  if (normalized._id && !normalized.id) {
+    normalized.id = normalized._id.toString();
+  }
+  
+  // Ensure role is present (critical for seller dashboard access)
+  if (!normalized.role) {
+    console.warn('⚠️ User object missing role field:', normalized.email);
+    // Try to infer from email or default to 'customer'
+    normalized.role = 'customer';
+  }
+  
+  // Ensure email is present and normalized
+  if (normalized.email) {
+    normalized.email = normalized.email.toLowerCase().trim();
+  }
+  
+  // Remove password field (security)
+  delete normalized.password;
+  
+  // Remove _id to avoid confusion (keep only id)
+  delete normalized._id;
+  
+  return normalized;
+}
+
 // Authentication middleware (currently unused but kept for future use)
 // const authenticateRequest = (req: VercelRequest): { isValid: boolean; user?: any; error?: string } => {
 //   const authHeader = req.headers.authorization;
@@ -373,10 +406,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const accessToken = generateAccessToken(user);
       const refreshToken = generateRefreshToken(user);
 
-      const { password: _, ...userWithoutPassword } = user;
+      // Normalize user object for frontend (convert _id to id, ensure role is present)
+      const normalizedUser = normalizeUser(user);
+      
+      if (!normalizedUser || !normalizedUser.role) {
+        console.error('❌ Failed to normalize user object:', { email: user.email, hasRole: !!user.role });
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Failed to process user data. Please try again.' 
+        });
+      }
+      
       return res.status(200).json({ 
         success: true, 
-        user: userWithoutPassword,
+        user: normalizedUser,
         accessToken,
         refreshToken
       });
@@ -468,12 +511,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         const accessToken = generateAccessToken(newUser);
         const refreshToken = generateRefreshToken(newUser);
         
-        const { password: _, ...userWithoutPassword } = newUser.toObject();
+        // Normalize user object for frontend (convert _id to id, ensure role is present)
+        const normalizedUser = normalizeUser(newUser.toObject());
+        
+        if (!normalizedUser || !normalizedUser.role) {
+          console.error('❌ Failed to normalize new user object:', { email: newUser.email, hasRole: !!newUser.role });
+          return res.status(500).json({ 
+            success: false, 
+            reason: 'Failed to process user data. Please try again.' 
+          });
+        }
         
         console.log('✅ Registration complete. User ID:', newUser._id);
         return res.status(201).json({ 
           success: true, 
-          user: userWithoutPassword,
+          user: normalizedUser,
           accessToken,
           refreshToken
         });
@@ -570,10 +622,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const accessToken = generateAccessToken(user);
       const refreshToken = generateRefreshToken(user);
 
-      const { password: _, ...userWithoutPassword } = user.toObject();
+      // Normalize user object for frontend (convert _id to id, ensure role is present)
+      const normalizedUser = normalizeUser(user.toObject());
+      
+      if (!normalizedUser || !normalizedUser.role) {
+        console.error('❌ Failed to normalize OAuth user object:', { email: user.email, hasRole: !!user.role });
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Failed to process user data. Please try again.' 
+        });
+      }
+      
       return res.status(200).json({ 
         success: true, 
-        user: userWithoutPassword,
+        user: normalizedUser,
         accessToken,
         refreshToken
       });

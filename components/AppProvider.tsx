@@ -154,8 +154,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       const savedUser = localStorage.getItem('reRideCurrentUser');
       if (savedUser) {
         const user = JSON.parse(savedUser);
+        
+        // CRITICAL: Validate user object has required fields (especially role)
+        if (!user || !user.email || !user.role) {
+          console.warn('⚠️ Invalid user object in localStorage - missing required fields:', { 
+            hasEmail: !!user?.email, 
+            hasRole: !!user?.role 
+          });
+          // Clear invalid user data
+          localStorage.removeItem('reRideCurrentUser');
+          return null;
+        }
+        
+        // Ensure role is a valid value
+        if (!['customer', 'seller', 'admin'].includes(user.role)) {
+          console.warn('⚠️ Invalid role in user object:', user.role);
+          localStorage.removeItem('reRideCurrentUser');
+          return null;
+        }
+        
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔄 Restoring logged-in user:', user.name, user.role);
+          console.log('🔄 Restoring logged-in user:', user.name, user.role, user.email);
         }
         return user;
       }
@@ -163,6 +182,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       if (process.env.NODE_ENV === 'development') {
         console.warn('Failed to load user from localStorage:', error);
       }
+      // Clear corrupted data
+      try {
+        localStorage.removeItem('reRideCurrentUser');
+      } catch {}
     }
     return null;
   });
@@ -311,6 +334,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, [addToast]);
 
   const handleLogin = useCallback((user: User) => {
+    // CRITICAL: Validate user object before setting
+    if (!user || !user.email || !user.role) {
+      console.error('❌ Invalid user object in handleLogin:', { 
+        hasUser: !!user, 
+        hasEmail: !!user?.email, 
+        hasRole: !!user?.role 
+      });
+      addToast('Login failed: Invalid user data. Please try again.', 'error');
+      return;
+    }
+    
+    // Ensure role is valid
+    if (!['customer', 'seller', 'admin'].includes(user.role)) {
+      console.error('❌ Invalid role in handleLogin:', user.role);
+      addToast('Login failed: Invalid user role. Please try again.', 'error');
+      return;
+    }
+    
     setCurrentUser(user);
     sessionStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
@@ -327,6 +368,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, [addToast]);
 
   const handleRegister = useCallback((user: User) => {
+    // CRITICAL: Validate user object before setting
+    if (!user || !user.email || !user.role) {
+      console.error('❌ Invalid user object in handleRegister:', { 
+        hasUser: !!user, 
+        hasEmail: !!user?.email, 
+        hasRole: !!user?.role 
+      });
+      addToast('Registration failed: Invalid user data. Please try again.', 'error');
+      return;
+    }
+    
+    // Ensure role is valid
+    if (!['customer', 'seller', 'admin'].includes(user.role)) {
+      console.error('❌ Invalid role in handleRegister:', user.role);
+      addToast('Registration failed: Invalid user role. Please try again.', 'error');
+      return;
+    }
+    
     setCurrentUser(user);
     sessionStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
@@ -427,9 +486,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     }
     
     // Prevent redirect loops: Only redirect if not already on login page
-    if (view === View.SELLER_DASHBOARD && currentUser?.role !== 'seller') {
-      if (currentView !== View.LOGIN_PORTAL && currentView !== View.SELLER_LOGIN) {
-        setCurrentView(View.LOGIN_PORTAL);
+    // CRITICAL: Enhanced validation for seller dashboard access
+    if (view === View.SELLER_DASHBOARD) {
+      if (!currentUser) {
+        console.warn('⚠️ Attempted to access seller dashboard without logged-in user');
+        if (currentView !== View.LOGIN_PORTAL && currentView !== View.SELLER_LOGIN) {
+          setCurrentView(View.LOGIN_PORTAL);
+        }
+        return;
+      }
+      
+      // Validate user has required fields
+      if (!currentUser.email || !currentUser.role) {
+        console.error('❌ Invalid user object - missing email or role:', { 
+          hasEmail: !!currentUser.email, 
+          hasRole: !!currentUser.role 
+        });
+        if (currentView !== View.LOGIN_PORTAL && currentView !== View.SELLER_LOGIN) {
+          setCurrentView(View.LOGIN_PORTAL);
+        }
+        return;
+      }
+      
+      // Check role specifically
+      if (currentUser.role !== 'seller') {
+        console.warn('⚠️ Attempted to access seller dashboard with role:', currentUser.role);
+        if (currentView !== View.LOGIN_PORTAL && currentView !== View.SELLER_LOGIN) {
+          setCurrentView(View.LOGIN_PORTAL);
+        }
+        return;
       }
     } else if (view === View.ADMIN_PANEL && currentUser?.role !== 'admin') {
       if (currentView !== View.ADMIN_LOGIN) {
@@ -918,7 +1003,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       
       // Also update in MongoDB - pass both updates and nulls
       try {
-        await updateUser(email, details); // Pass original details to preserve null values
+        const { updateUser: updateUserService } = await import('../services/userService');
+        await updateUserService({ email, ...details }); // Pass original details to preserve null values
       } catch (error) {
         console.warn('Failed to sync user update to MongoDB:', error);
       }
@@ -1001,7 +1087,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     },
           onUpdateUserPlan: async (email: string, plan: SubscriptionPlan) => {
         try {
-          await updateUser(email, { subscriptionPlan: plan });
+          // Use the updateUser function defined later in contextValue
+          const { updateUser: updateUserService } = await import('../services/userService');
+          await updateUserService({ email, subscriptionPlan: plan });
           setUsers(prev => prev.map(user => 
             user.email === email ? { ...user, subscriptionPlan: plan } : user
           ));
@@ -1025,7 +1113,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           if (!user) return;
           
           const newStatus = user.status === 'active' ? 'inactive' : 'active';
-          await updateUser(email, { status: newStatus });
+          // Use the updateUser function defined later in contextValue
+          const { updateUser: updateUserService } = await import('../services/userService');
+          await updateUserService({ email, status: newStatus });
           setUsers(prev => prev.map(user => 
             user.email === email ? { ...user, status: newStatus } : user
           ));

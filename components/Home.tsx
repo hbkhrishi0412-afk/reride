@@ -62,10 +62,10 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
     return (
       <div 
         onClick={() => onSelectVehicle(vehicle)}
-        className="group cursor-pointer bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 aspect-square flex flex-col"
+        className="group cursor-pointer bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 aspect-[3/4] flex flex-col min-h-[380px]"
       >
         {/* Image Container with Premium Effects */}
-        <div className="relative overflow-hidden flex-shrink-0" style={{ height: '55%' }}>
+        <div className="relative overflow-hidden flex-shrink-0" style={{ height: '50%' }}>
           <img 
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
             src={getFirstValidImage(vehicle.images)} 
@@ -113,7 +113,7 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
         </div>
         
         {/* Premium Content */}
-        <div className="p-3 sm:p-4 flex-grow flex flex-col min-h-0">
+        <div className="p-4 sm:p-5 flex-grow flex flex-col min-h-0">
           {/* Vehicle Title */}
           <div className="mb-2">
             <h3 className="text-sm sm:text-base font-bold text-gray-900 mb-0.5 group-hover:text-blue-600 transition-colors duration-300 line-clamp-1 leading-tight">
@@ -147,17 +147,17 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
           </div>
           
           {/* Premium Location Section - Prominently displayed */}
-          <div className="mt-auto pt-2 border-t border-gray-200">
-            <div className="flex items-baseline justify-between gap-2 mb-1">
-              <div className="text-lg sm:text-xl font-extrabold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-1.5">
-                <svg className="h-5 w-5 flex-shrink-0" style={{ color: '#2563EB' }} viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
-                </svg>
+          <div className="mt-auto pt-3 border-t border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="h-6 w-6 flex-shrink-0" style={{ color: '#2563EB' }} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+              </svg>
+              <div className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 <span>{vehicle.city || vehicle.location || 'Location N/A'}</span>
               </div>
             </div>
             {vehicle.state && (
-              <p className="text-xs text-gray-600 font-medium mb-2">{vehicle.state}</p>
+              <p className="text-sm text-gray-600 font-medium mb-3">{vehicle.state}</p>
             )}
             
             {/* Premium Quick View Button */}
