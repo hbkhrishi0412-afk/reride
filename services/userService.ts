@@ -482,9 +482,40 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       console.log('✅ API login successful');
       return result;
     } catch (error) {
-      console.warn('⚠️  API login failed, falling back to local storage:', error);
-      // Fallback to local storage if API fails
-      return await loginLocal({ ...credentials, skipRoleCheck: true });
+      // Check if it's a network/server error (should fallback) vs invalid credentials
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isNetworkError = errorMessage.includes('fetch') || 
+                             errorMessage.includes('network') || 
+                             errorMessage.includes('Failed to fetch') ||
+                             errorMessage.includes('CORS') ||
+                             errorMessage.includes('500') ||
+                             errorMessage.includes('503') ||
+                             errorMessage.includes('502') ||
+                             errorMessage.includes('504');
+      
+      // If it's a network/server error, fallback to local storage
+      // If it's "Invalid credentials" from API, also try local storage as fallback
+      // (in case password was updated locally but server sync failed)
+      if (isNetworkError || errorMessage.includes('Invalid credentials')) {
+        console.warn('⚠️  API login failed, falling back to local storage:', errorMessage);
+        try {
+          const localResult = await loginLocal({ ...credentials, skipRoleCheck: true });
+          if (localResult.success) {
+            console.log('✅ Local storage login successful (fallback)');
+            return localResult;
+          } else {
+            // Local storage also failed - return the original API error
+            console.warn('⚠️  Local storage login also failed');
+            return { success: false, reason: errorMessage.includes('Invalid credentials') ? 'Invalid credentials.' : 'Login failed. Please check your connection and try again.' };
+          }
+        } catch (localError) {
+          console.error('❌ Local storage login error:', localError);
+          return { success: false, reason: errorMessage.includes('Invalid credentials') ? 'Invalid credentials.' : 'Login failed. Please check your connection and try again.' };
+        }
+      } else {
+        // Other errors - return the error message
+        return { success: false, reason: errorMessage };
+      }
     }
   } else {
     // Development mode - use local storage directly

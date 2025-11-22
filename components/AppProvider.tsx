@@ -1769,29 +1769,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           }
         }
         
-        // In development mode, also update the localStorage users array
-        // This is critical for password updates to persist
-        if (isDevelopment) {
+        // Always update the localStorage users array (both dev and production)
+        // This is critical for password updates to persist, especially when API fails
+        try {
+          const { updateUser: updateUserService } = await import('../services/userService');
+          await updateUserService({ email, ...updates });
+          console.log('✅ User updated in localStorage users array');
+        } catch (localError) {
+          console.warn('⚠️ Failed to update user in localStorage users array:', localError);
+          // Try manual update as fallback
           try {
-            const { updateUser: updateUserService } = await import('../services/userService');
-            await updateUserService({ email, ...updates });
-            console.log('✅ User updated in localStorage users array');
-          } catch (localError) {
-            console.warn('⚠️ Failed to update user in localStorage users array:', localError);
-            // Try manual update as fallback
-            try {
-              const usersJson = localStorage.getItem('reRideUsers');
-              if (usersJson) {
-                const users = JSON.parse(usersJson);
-                const updatedUsers = users.map((user: User) => 
-                  user.email === email ? { ...user, ...updates } : user
-                );
-                localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
-                console.log('✅ User updated in localStorage (manual fallback)');
-              }
-            } catch (fallbackError) {
-              console.error('❌ Failed to update user in localStorage (fallback):', fallbackError);
+            const usersJson = localStorage.getItem('reRideUsers');
+            if (usersJson) {
+              const users = JSON.parse(usersJson);
+              const updatedUsers = users.map((user: User) => 
+                user.email === email ? { ...user, ...updates } : user
+              );
+              localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
+              console.log('✅ User updated in localStorage (manual fallback)');
             }
+          } catch (fallbackError) {
+            console.error('❌ Failed to update user in localStorage (fallback):', fallbackError);
           }
         }
         
@@ -1944,21 +1942,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             } else if (errorMsg.includes('500') || errorMsg.includes('Database error') || errorMsg.includes('Internal server')) {
               console.error('❌ Server/Database error updating user:', apiError);
               // For password updates, provide specific feedback
+              // Password was already saved locally above, so show appropriate message
               if (updates.password) {
-                // Check if password was saved locally (development mode)
-                if (isDevelopment) {
-                  addToast('Password updated successfully (saved locally)', 'success');
-                } else {
-                  // Production: Database error - likely MongoDB issue
-                  console.error('MongoDB update failed - check MONGODB_URI environment variable and MongoDB Atlas connection in Vercel');
-                  // Try to extract more specific error from the response
-                  const specificError = errorMsg.replace(/^\d+:\s*/, '').replace(/^Failed to update password\.\s*/, '');
-                  if (specificError && specificError !== errorMsg) {
-                    addToast(`Password update failed: ${specificError}`, 'error');
-                  } else {
-                    addToast('Password update failed. Please check server logs or try again.', 'error');
-                  }
-                }
+                // Password is saved locally - show warning that it will sync when server is available
+                addToast('Password updated locally. Server error - changes will sync when server is available.', 'warning');
               } else {
                 addToast('Server error. Profile updated locally, will retry later.', 'warning');
               }

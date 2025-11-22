@@ -416,19 +416,49 @@ export default async function handler(
       });
     }
     
-    if (error instanceof Error && (error.message.includes('MONGODB_URI') || error.message.includes('MONGODB_URL'))) {
-      return res.status(500).json({ 
-        success: false, 
-        reason: 'Database configuration error. Please check MONGODB_URL or MONGODB_URI environment variable.',
-        details: 'The application is configured to use MongoDB but the connection string is not properly configured.'
-      });
-    }
+    // Check for MongoDB/database errors first (including authentication errors from MongoDB)
+    const isDbError = error instanceof Error && (
+      error.message.includes('MONGODB_URI') || 
+      error.message.includes('MONGODB_URL') ||
+      error.message.includes('MongoServerError') ||
+      error.message.includes('MongoNetworkError') ||
+      error.message.includes('MongoTimeoutError') ||
+      error.name === 'MongoServerError' ||
+      error.name === 'MongoNetworkError' ||
+      error.name === 'MongoTimeoutError' ||
+      // MongoDB authentication errors (database connection auth, not user auth)
+      (error.message.includes('authentication') && (
+        error.message.includes('Mongo') ||
+        error.message.includes('connection') ||
+        error.message.includes('database') ||
+        error.message.includes('credentials') ||
+        error.message.includes('username') ||
+        error.message.includes('password')
+      )) ||
+      // Connection-related errors
+      ((error.message.includes('connect') || error.message.includes('timeout')) && (
+        error.message.includes('Mongo') ||
+        error.message.includes('database') ||
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ENOTFOUND')
+      ))
+    );
     
-    if (error instanceof Error && (error.message.includes('connect') || error.message.includes('timeout'))) {
-      return res.status(500).json({ 
+    if (isDbError) {
+      console.error('❌ Database error in main handler:', error instanceof Error ? error.message : 'Unknown error');
+      // Check if it's a configuration error vs connection error
+      if (error instanceof Error && (error.message.includes('MONGODB_URI') || error.message.includes('MONGODB_URL'))) {
+        return res.status(503).json({ 
+          success: false, 
+          reason: 'Database configuration error. Please check MONGODB_URL or MONGODB_URI environment variable.',
+          details: 'The application is configured to use MongoDB but the connection string is not properly configured.'
+        });
+      }
+      // General database connection/auth error
+      return res.status(503).json({ 
         success: false, 
         reason: 'Database connection failed. Please ensure the database is running and accessible.',
-        details: 'Unable to connect to MongoDB database. Please check your database configuration and network connectivity.'
+        details: 'Unable to connect to MongoDB database. Please check your database configuration, credentials, and network connectivity.'
       });
     }
     
@@ -1277,22 +1307,80 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
     }
     
-    // If it's a database connection error, return 503
-    if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect') || error.message.includes('MongoConfigError'))) {
+    // CRITICAL: Check for database connection errors FIRST before checking user authentication errors
+    // MongoDB connection/auth errors (e.g., "Authentication failed" from wrong MongoDB credentials)
+    // should return 503 (Service Unavailable), NOT 401 (Unauthorized)
+    // Only user authentication errors (JWT tokens, login sessions) should return 401
+    // Check for MongoDB-specific errors first (including authentication errors from MongoDB)
+    const isDbError = error instanceof Error && (
+      error.message.includes('MONGODB') || 
+      error.message.includes('MongoConfigError') ||
+      error.message.includes('MongoServerError') ||
+      error.message.includes('MongoNetworkError') ||
+      error.message.includes('MongoTimeoutError') ||
+      error.message.includes('MongoParseError') ||
+      error.name === 'MongoServerError' ||
+      error.name === 'MongoNetworkError' ||
+      error.name === 'MongoTimeoutError' ||
+      // MongoDB authentication errors (database connection auth, not user auth)
+      (error.message.includes('authentication') && (
+        error.message.includes('Mongo') ||
+        error.message.includes('connection') ||
+        error.message.includes('database') ||
+        error.message.includes('credentials') ||
+        error.message.includes('username') ||
+        error.message.includes('password')
+      )) ||
+      // Connection-related errors
+      (error.message.includes('connect') && (
+        error.message.includes('Mongo') ||
+        error.message.includes('database') ||
+        error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ENOTFOUND')
+      ))
+    );
+    
+    if (isDbError) {
+      console.error('❌ Database connection error detected:', error instanceof Error ? error.message : 'Unknown error');
       return res.status(503).json({
         success: false,
         reason: 'Database is currently unavailable. Please try again later.',
-        fallback: true
+        fallback: true,
+        error: error instanceof Error ? error.message : 'Database connection error'
       });
     }
     
-    // For authentication/authorization errors, return 401 instead of 500
-    if (error instanceof Error && (error.message.includes('Unauthorized') || error.message.includes('token') || error.message.includes('authentication'))) {
-      return res.status(401).json({
-        success: false,
-        reason: 'Authentication failed. Please log in again.',
-        error: error.message
-      });
+    // For authentication/authorization errors (user auth, NOT database auth), return 401 instead of 500
+    // Only check for user authentication errors if it's NOT a database error
+    // IMPORTANT: Only return 401 if it's clearly a USER authentication error (JWT tokens, login sessions)
+    // NOT database authentication errors (those are already handled above as 503)
+    if (error instanceof Error) {
+      const errorMsg = error.message.toLowerCase();
+      
+      // Check for user authentication errors (JWT tokens, login sessions, Bearer tokens)
+      // These are distinct from database authentication errors
+      const isUserAuthError = 
+        errorMsg.includes('jwt') || 
+        errorMsg.includes('token') || 
+        errorMsg.includes('bearer') ||
+        errorMsg.includes('login') ||
+        errorMsg.includes('session') ||
+        errorMsg.includes('unauthorized') ||
+        (errorMsg.includes('authentication') && (
+          errorMsg.includes('user') ||
+          errorMsg.includes('invalid') ||
+          errorMsg.includes('expired')
+        ));
+      
+      // Only return 401 if it's clearly a user auth error
+      // If it contains "authentication" but doesn't match user auth patterns, treat as 500 (safer)
+      if (isUserAuthError && !errorMsg.includes('mongo') && !errorMsg.includes('database') && !errorMsg.includes('connection')) {
+        return res.status(401).json({
+          success: false,
+          reason: 'Authentication failed. Please log in again.',
+          error: error.message
+        });
+      }
     }
     
     // For other errors on non-GET requests, return 500 with error details
