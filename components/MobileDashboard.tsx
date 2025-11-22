@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
-import type { User, Vehicle, Conversation, Notification } from '../types.js';
-import { View as ViewEnum } from '../types.js';
+import type { User, Vehicle, Conversation, Notification } from '../types';
+import { View as ViewEnum } from '../types';
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -163,12 +163,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   // Removed unused isCustomer variable
 
   // Calculate stats
-  const totalListings = userVehicles.length;
-  const activeListings = userVehicles.filter(v => v.status === 'published').length;
-  const soldListings = userVehicles.filter(v => v.status === 'sold').length;
-  const unreadMessages = conversations.filter(c => !c.isReadByCustomer).length;
-  const totalViews = userVehicles.reduce((sum, v) => sum + (v.views || 0), 0);
-  const totalInquiries = conversations.length;
+  // Safety checks
+  const safeUserVehicles = userVehicles || [];
+  const safeConversations = conversations || [];
+  
+  const totalListings = safeUserVehicles.length;
+  const activeListings = safeUserVehicles.filter(v => v && v.status === 'published').length;
+  const soldListings = safeUserVehicles.filter(v => v && v.status === 'sold').length;
+  const unreadMessages = safeConversations.filter(c => c && !c.isReadByCustomer).length;
+  const totalViews = safeUserVehicles.reduce((sum, v) => sum + (v?.views || 0), 0);
+  const totalInquiries = safeConversations.length;
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '📊', count: null },
@@ -254,8 +258,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             </div>
           <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Messages</p>
           <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{unreadMessages}</p>
-          {conversations.length > 0 && (
-            <p className="text-xs text-gray-500 mt-1">{conversations.length} total</p>
+          {safeConversations.length > 0 && (
+            <p className="text-xs text-gray-500 mt-1">{safeConversations.length} total</p>
           )}
         </div>
 
@@ -378,7 +382,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         )}
       </div>
 
-      {userVehicles.length === 0 ? (
+      {safeUserVehicles.length === 0 ? (
         <div className="text-center py-12 px-4">
           <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">🚗</span>
@@ -401,7 +405,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         </div>
       ) : (
         <div className="space-y-3">
-          {userVehicles.map((vehicle) => (
+          {safeUserVehicles.map((vehicle) => (
             <div 
               key={vehicle.id} 
               className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
@@ -508,11 +512,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-bold text-gray-900">Messages</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{conversations.length} total • {unreadMessages} unread</p>
+          <p className="text-xs text-gray-500 mt-0.5">{safeConversations.length} total • {unreadMessages} unread</p>
         </div>
       </div>
 
-      {conversations.length === 0 ? (
+      {safeConversations.length === 0 ? (
         <div className="text-center py-12 px-4">
           <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">💬</span>
@@ -524,7 +528,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         </div>
       ) : (
         <div className="space-y-3">
-          {conversations.slice(0, 5).map((conversation) => (
+          {safeConversations.slice(0, 5).map((conversation) => (
             <div 
               key={conversation.id} 
               className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
@@ -571,12 +575,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </div>
             </div>
           ))}
-          {conversations.length > 5 && (
+          {safeConversations.length > 5 && (
             <button 
               onClick={() => onNavigate(ViewEnum.INBOX)}
               className="w-full py-3.5 text-orange-600 font-semibold native-button native-button-secondary"
             >
-              View All Messages ({conversations.length})
+              View All Messages ({safeConversations.length})
             </button>
           )}
         </div>

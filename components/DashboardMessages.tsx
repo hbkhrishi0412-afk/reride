@@ -25,14 +25,18 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
-  const filteredConversations = conversations.filter(conv => {
+  // Safety check
+  const safeConversations = conversations || [];
+
+  const filteredConversations = safeConversations.filter(conv => {
+    if (!conv) return false;
     if (filter === 'unread') {
       return !conv.isReadBySeller;
     }
     return true;
   });
 
-  const unreadCount = conversations.filter(conv => !conv.isReadBySeller).length;
+  const unreadCount = safeConversations.filter(conv => conv && !conv.isReadBySeller).length;
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -47,9 +51,9 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
   };
 
   const getLastMessage = (conversation: Conversation) => {
-    if (conversation.messages.length === 0) return 'No messages';
+    if (!conversation || !conversation.messages || conversation.messages.length === 0) return 'No messages';
     const lastMessage = conversation.messages[conversation.messages.length - 1];
-    return lastMessage.text || 'Media message';
+    return lastMessage?.text || 'Media message';
   };
 
   return (
@@ -57,7 +61,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
       {/* Header */}
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">
-          Messages ({conversations.length})
+          Messages ({safeConversations.length})
         </h2>
         <div className="flex gap-2">
           <button

@@ -1086,30 +1086,44 @@ const InquiriesView: React.FC<{
 
     const sortedConversations = useMemo(() => {
         // Filter conversations to only show those for the current seller
-        const sellerConversations = conversations.filter(conv => conv.sellerId === sellerEmail);
-        return [...sellerConversations].sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+        if (!conversations || !Array.isArray(conversations)) return [];
+        const sellerConversations = conversations.filter(conv => conv && conv.sellerId === sellerEmail);
+        return [...sellerConversations].sort((a, b) => {
+          const dateA = a?.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+          const dateB = b?.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+          return dateB - dateA;
+        });
     }, [conversations, sellerEmail]);
 
     return (
        <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
          <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Customer Inquiries</h2>
          <div className="space-y-2">
-            {sortedConversations.length > 0 ? sortedConversations.map(conv => (
+            {sortedConversations.length > 0 ? sortedConversations.map(conv => {
+              if (!conv) return null;
+              const lastMessage = conv.messages && Array.isArray(conv.messages) && conv.messages.length > 0 
+                ? conv.messages[conv.messages.length - 1] 
+                : null;
+              const lastMessageTime = conv.lastMessageAt 
+                ? new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                : 'N/A';
+              return (
               <div key={conv.id} onClick={() => handleSelectConversation(conv)} className="p-4 rounded-lg cursor-pointer hover:bg-brand-gray-light dark:hover:bg-white border-b dark:border-gray-200-200 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     {!conv.isReadBySeller && <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF6B35' }}></div>}
                     <div>
-                      <p className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{conv.customerName} - <span className="font-normal text-spinny-text-dark dark:text-spinny-text-dark">{conv.vehicleName}</span></p>
+                      <p className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">
+                        {conv.customerName || 'Unknown'} - <span className="font-normal text-spinny-text-dark dark:text-spinny-text-dark">{conv.vehicleName || 'Unknown Vehicle'}</span>
+                      </p>
                       <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark truncate max-w-md">
-                        {conv.messages && conv.messages.length > 0
-                          ? conv.messages[conv.messages.length - 1].text || 'New conversation'
-                          : 'No messages yet'}
+                        {lastMessage?.text || 'New conversation'}
                       </p>
                     </div>
                 </div>
-                <span className="text-xs text-spinny-text-dark dark:text-spinny-text-dark">{new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                <span className="text-xs text-spinny-text-dark dark:text-spinny-text-dark">{lastMessageTime}</span>
               </div>
-            )) : (
+            );
+            }) : (
                 <div className="text-center py-16 px-6">
                     <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-spinny-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -1161,9 +1175,9 @@ const ReportsView: React.FC<{
 }> = memo(({ reportedVehicles, onEditVehicle, onDeleteVehicle }) => (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
         <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Reported Listings</h2>
-        {reportedVehicles.length > 0 ? (
+        {safeReportedVehicles.length > 0 ? (
             <div className="space-y-4">
-                {reportedVehicles.map(v => (
+                {safeReportedVehicles.map(v => (
                     <div key={v.id} className="border border-gray-200 dark:border-gray-200 bg-spinny-blue-light dark:bg-spinny-blue/20 p-4 rounded-lg">
                         <h3 className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{v.year} {v.make} {v.model}</h3>
                         <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark mt-1">Reported on: {v.flaggedAt ? new Date(v.flaggedAt).toLocaleString() : 'N/A'}</p>
@@ -1230,6 +1244,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     );
   }
 
+  // Safety checks: Ensure arrays are initialized
+  const safeSellerVehicles = sellerVehicles || [];
+  const safeConversations = conversations || [];
+  const safeVehicleData = vehicleData || {};
+  const safeAllVehicles = allVehicles || [];
+  const safeReportedVehicles = reportedVehicles || [];
+
   const [activeView, setActiveView] = useState<DashboardView>('overview');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
@@ -1288,8 +1309,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   }, []);
 
   useEffect(() => {
-    if (selectedConv) {
-        const updatedConversation = conversations.find(c => c.id === selectedConv.id);
+    if (selectedConv && safeConversations) {
+        const updatedConversation = safeConversations.find(c => c && c.id === selectedConv.id);
         if (updatedConversation) {
             // Using stringify is a simple way to deep-compare for changes.
             if (JSON.stringify(updatedConversation) !== JSON.stringify(selectedConv)) {
@@ -1300,7 +1321,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             setSelectedConv(null);
         }
     }
-  }, [conversations, selectedConv]);
+  }, [safeConversations, selectedConv]);
 
   const handleNavigate = (view: DashboardView) => {
     if (view !== 'inquiries') {
@@ -1462,24 +1483,24 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   }
 
   const handleNavigateToVehicle = (vehicleId: number) => {
-    const vehicle = sellerVehicles.find(v => v.id === vehicleId);
+    const vehicle = safeSellerVehicles.find(v => v && v.id === vehicleId);
     if (vehicle) {
         handleEditClick(vehicle);
     }
   };
 
   const handleNavigateToInquiry = (conversationId: string) => {
-    const conv = conversations.find(c => c.id === conversationId);
+    const conv = safeConversations.find(c => c && c.id === conversationId);
     if (conv) {
         setSelectedConv(conv);
         handleNavigate('inquiries');
     }
   };
 
-  const unreadCount = useMemo(() => conversations.filter(c => !c.isReadBySeller && c.sellerId === seller?.email).length, [conversations, seller?.email]);
-  const activeListings = useMemo(() => sellerVehicles.filter(v => v.status !== 'sold'), [sellerVehicles]);
-  const soldListings = useMemo(() => sellerVehicles.filter(v => v.status === 'sold'), [sellerVehicles]);
-  const reportedCount = useMemo(() => reportedVehicles.length, [reportedVehicles]);
+  const unreadCount = useMemo(() => safeConversations.filter(c => c && !c.isReadBySeller && c.sellerId === seller?.email).length, [safeConversations, seller?.email]);
+  const activeListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status !== 'sold'), [safeSellerVehicles]);
+  const soldListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'sold'), [safeSellerVehicles]);
+  const reportedCount = useMemo(() => safeReportedVehicles.length, [safeReportedVehicles]);
   
   // Pagination for sold listings (Sales History)
   const [soldPage, setSoldPage] = useState(1);
@@ -1592,13 +1613,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             <PlanStatusCard
               seller={seller}
               activeListingsCount={activeListings.length}
-              featuredListingsCount={sellerVehicles.filter(v => v.isFeatured).length}
+              featuredListingsCount={safeSellerVehicles.filter(v => v && v.isFeatured).length}
               onNavigate={onNavigate}
             />
             <PaymentStatusCard currentUser={seller} />
             <AiAssistant
               vehicles={activeListings}
-              conversations={conversations.filter(c => c.sellerId === seller.email)}
+              conversations={safeConversations.filter(c => c && c.sellerId === seller.email)}
               onNavigateToVehicle={handleNavigateToVehicle}
               onNavigateToInquiry={handleNavigateToInquiry}
             />
@@ -1636,8 +1657,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 
                 {/* Boost Analytics */}
                 {(() => {
-                  const activeBoosts = sellerVehicles.flatMap(v => 
-                    v.activeBoosts?.filter(boost => boost.isActive && new Date(boost.expiresAt) > new Date()) || []
+                  const activeBoosts = safeSellerVehicles.flatMap(v => 
+                    v && v.activeBoosts ? v.activeBoosts.filter(boost => boost.isActive && new Date(boost.expiresAt) > new Date()) : []
                   );
                   
                   if (activeBoosts.length > 0) {
@@ -1655,7 +1676,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                           {activeBoosts.map(boost => {
-                            const vehicle = sellerVehicles.find(v => v.activeBoosts?.some(b => b.id === boost.id));
+                            const vehicle = safeSellerVehicles.find(v => v && v.activeBoosts?.some(b => b.id === boost.id));
                             const daysLeft = Math.ceil((new Date(boost.expiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                             
                             return (
@@ -2200,7 +2221,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         return (
           <div className="space-y-6">
             <InquiriesView 
-              conversations={conversations} 
+              conversations={safeConversations} 
               sellerEmail={seller.email}
               onMarkConversationAsReadBySeller={onMarkConversationAsReadBySeller} 
               onMarkMessagesAsRead={onMarkMessagesAsRead}
@@ -2228,7 +2249,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         );
       case 'reports':
         return <ReportsView
-                    reportedVehicles={reportedVehicles}
+                    reportedVehicles={safeReportedVehicles}
                     onEditVehicle={handleEditClick}
                     onDeleteVehicle={onDeleteVehicle}
                 />;

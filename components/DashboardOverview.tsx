@@ -22,10 +22,14 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
 ));
 
 const DashboardOverview: React.FC<DashboardOverviewProps> = memo(({ seller, sellerVehicles, conversations }) => {
-  const activeListings = sellerVehicles.filter(v => v.status === 'published').length;
-  const totalViews = sellerVehicles.reduce((sum, v) => sum + (v.views || 0), 0);
-  const totalInquiries = sellerVehicles.reduce((sum, v) => sum + (v.inquiriesCount || 0), 0);
-  const unreadMessages = conversations.filter(c => !c.isReadBySeller).length;
+  // Safety checks
+  const safeSellerVehicles = sellerVehicles || [];
+  const safeConversations = conversations || [];
+  
+  const activeListings = safeSellerVehicles.filter(v => v && v.status === 'published').length;
+  const totalViews = safeSellerVehicles.reduce((sum, v) => sum + (v?.views || 0), 0);
+  const totalInquiries = safeSellerVehicles.reduce((sum, v) => sum + (v?.inquiriesCount || 0), 0);
+  const unreadMessages = safeConversations.filter(c => c && !c.isReadBySeller).length;
 
   // Chart data
   const viewsData = {

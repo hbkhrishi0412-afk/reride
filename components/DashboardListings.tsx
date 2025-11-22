@@ -42,8 +42,10 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
   onViewVehicle
 }) => {
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
-  const activeVehicles = sellerVehicles.filter(v => v.status === 'published');
-  const soldVehicles = sellerVehicles.filter(v => v.status === 'sold');
+  // Safety check
+  const safeSellerVehicles = sellerVehicles || [];
+  const activeVehicles = safeSellerVehicles.filter(v => v && v.status === 'published');
+  const soldVehicles = safeSellerVehicles.filter(v => v && v.status === 'sold');
 
   // Export to CSV functionality
   const handleExportData = () => {
@@ -56,7 +58,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
       ];
       
       // Convert vehicles to CSV rows
-      const csvRows = sellerVehicles.map(vehicle => [
+      const csvRows = safeSellerVehicles.map(vehicle => [
         vehicle.make || '',
         vehicle.model || '',
         vehicle.variant || '',
@@ -94,7 +96,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
       URL.revokeObjectURL(url);
       
       // Show success message (you can use a toast here if available)
-      console.log(`✅ Exported ${sellerVehicles.length} vehicles successfully`);
+      console.log(`✅ Exported ${safeSellerVehicles.length} vehicles successfully`);
     } catch (error) {
       console.error('Failed to export data:', error);
       alert('Failed to export data. Please try again.');
