@@ -1,25 +1,25 @@
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
-import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types.js';
-import { View, VehicleCategory } from '../types.js';
-import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService.js';
-import { getSafeImageSrc } from '../utils/imageUtils.js';
-import { formatSalesValue } from '../utils/numberUtils.js';
-import VehicleCard from './VehicleCard.js';
+import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types';
+import { View, VehicleCategory } from '../types';
+import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
+import { getSafeImageSrc } from '../utils/imageUtils';
+import { formatSalesValue } from '../utils/numberUtils';
+import VehicleCard from './VehicleCard';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
-import AiAssistant from './AiAssistant.js';
+import AiAssistant from './AiAssistant';
 // FIX: ChatWidget is a named export, not a default. Corrected the import syntax.
-import { ChatWidget } from './ChatWidget.js';
+import { ChatWidget } from './ChatWidget';
 // Removed blocking import - will lazy load location data when needed
-import { planService } from '../services/planService.js';
-import BulkUploadModal from './BulkUploadModal.js';
-import { getPlaceholderImage } from './vehicleData.js';
-import PricingGuidance from './PricingGuidance.js';
+import { planService } from '../services/planService';
+import BulkUploadModal from './BulkUploadModal';
+import { getPlaceholderImage } from './vehicleData';
+import PricingGuidance from './PricingGuidance';
 // Removed unused OfferModal import
 // NEW FEATURES
-import BoostListingModal from './BoostListingModal.js';
-import ListingLifecycleIndicator from './ListingLifecycleIndicator.js';
-import PaymentStatusCard from './PaymentStatusCard.js';
+import BoostListingModal from './BoostListingModal';
+import ListingLifecycleIndicator from './ListingLifecycleIndicator';
+import PaymentStatusCard from './PaymentStatusCard';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController);
 
@@ -371,6 +371,17 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     const [fixInput, setFixInput] = useState('');
     const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
     const [errors, setErrors] = useState<Partial<Record<keyof Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, string>>>({});
+    // Real-time update state for expiry dates
+    const [currentTime, setCurrentTime] = useState(new Date());
+    
+    // Real-time expiry date updates - update every minute
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 60000); // Update every minute (60000ms)
+        
+        return () => clearInterval(interval);
+    }, []);
     const [isUploading, setIsUploading] = useState(false);
     const [isFeaturing, setIsFeaturing] = useState(false);
     
