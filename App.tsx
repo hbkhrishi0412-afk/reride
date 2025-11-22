@@ -877,19 +877,6 @@ const AppContent: React.FC = React.memo(() => {
               onViewVehicle={selectVehicle}
             />
           </DashboardErrorBoundary>
-        ) : (
-          <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-600 mb-4">Access Denied</h2>
-              <p className="text-gray-500 mb-4">You need to be logged in as a seller to access this page.</p>
-              <button 
-                onClick={() => navigate(ViewEnum.SELLER_LOGIN)}
-                className="btn-brand-primary"
-              >
-                Login as Seller
-              </button>
-            </div>
-          </div>
         );
 
       case ViewEnum.BUYER_DASHBOARD:
