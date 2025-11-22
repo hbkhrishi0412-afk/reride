@@ -541,7 +541,7 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.SELLER_DASHBOARD:
-        return currentUser?.role === 'seller' ? (
+        return currentUser?.role === 'seller' && currentUser?.email ? (
           <DashboardErrorBoundary>
             <Dashboard
               seller={currentUser}

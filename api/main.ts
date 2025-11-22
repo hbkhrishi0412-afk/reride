@@ -810,45 +810,55 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       
       // For password updates, ensure it's properly marked as modified
       if (updateFields.password) {
-        // Use findOneAndUpdate with explicit password update
-        const updatedUser = await User.findOneAndUpdate(
-          { email: email.toLowerCase().trim() }, // Ensure email is normalized
-          updateOperation,
-          { new: true, runValidators: true }
-        );
+        try {
+          // Use findOneAndUpdate with explicit password update
+          const updatedUser = await User.findOneAndUpdate(
+            { email: email.toLowerCase().trim() }, // Ensure email is normalized
+            updateOperation,
+            { new: true, runValidators: true }
+          );
 
-        if (!updatedUser) {
-          console.error('❌ Failed to update user after findOneAndUpdate');
-          return res.status(500).json({ success: false, reason: 'Failed to update user.' });
-        }
-
-        // Mark password as modified and explicitly save to ensure persistence
-        updatedUser.password = updateFields.password;
-        updatedUser.markModified('password');
-        console.log('💾 Explicitly saving user document to ensure password persistence...');
-        await updatedUser.save({ validateBeforeSave: true });
-        console.log('✅ User document saved successfully');
-
-        console.log('✅ User updated successfully:', updatedUser.email);
-        console.log('✅ Password updated:', !!updateFields.password);
-
-        // Verify the update actually saved by checking the user again
-        const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
-        if (verifyUser && verifyUser.password) {
-          console.log('✅ Password update verified in database');
-          // Verify it's different from the old password (if we can check)
-          if (verifyUser.password !== existingUser.password) {
-            console.log('✅ Password hash changed, update confirmed');
-          } else {
-            console.warn('⚠️ Password hash unchanged - update may not have worked');
+          if (!updatedUser) {
+            console.error('❌ Failed to update user after findOneAndUpdate');
+            return res.status(500).json({ success: false, reason: 'Failed to update user. User not found.' });
           }
-        } else {
-          console.error('❌ Password update verification failed - password not found in database');
-        }
 
-        // Remove password from response for security
-        const { password: _, ...userWithoutPassword } = updatedUser.toObject();
-        return res.status(200).json({ success: true, user: userWithoutPassword });
+          // Mark password as modified and explicitly save to ensure persistence
+          updatedUser.password = updateFields.password;
+          updatedUser.markModified('password');
+          console.log('💾 Explicitly saving user document to ensure password persistence...');
+          await updatedUser.save({ validateBeforeSave: true });
+          console.log('✅ User document saved successfully');
+
+          console.log('✅ User updated successfully:', updatedUser.email);
+          console.log('✅ Password updated:', !!updateFields.password);
+
+          // Verify the update actually saved by checking the user again
+          const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
+          if (verifyUser && verifyUser.password) {
+            console.log('✅ Password update verified in database');
+            // Verify it's different from the old password (if we can check)
+            if (verifyUser.password !== existingUser.password) {
+              console.log('✅ Password hash changed, update confirmed');
+            } else {
+              console.warn('⚠️ Password hash unchanged - update may not have worked');
+            }
+          } else {
+            console.error('❌ Password update verification failed - password not found in database');
+          }
+
+          // Remove password from response for security
+          const { password: _, ...userWithoutPassword } = updatedUser.toObject();
+          return res.status(200).json({ success: true, user: userWithoutPassword });
+        } catch (passwordUpdateError) {
+          console.error('❌ Error during password update:', passwordUpdateError);
+          const errorMessage = passwordUpdateError instanceof Error ? passwordUpdateError.message : 'Unknown error';
+          return res.status(500).json({ 
+            success: false, 
+            reason: 'Failed to update password. Please try again.',
+            error: errorMessage
+          });
+        }
       } else {
         // For non-password updates, use standard findOneAndUpdate
         const updatedUser = await User.findOneAndUpdate(

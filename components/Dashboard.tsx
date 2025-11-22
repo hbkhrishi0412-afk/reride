@@ -1188,6 +1188,24 @@ const ReportsView: React.FC<{
 
 // Main Dashboard Component
 const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
+  // Guard against missing seller
+  if (!seller || !seller.email) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Seller Information Missing</h2>
+          <p className="text-gray-600 mb-6">Unable to load dashboard. Please try logging in again.</p>
+          <button
+            onClick={() => onNavigate(View.SELLER_LOGIN)}
+            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const [activeView, setActiveView] = useState<DashboardView>('overview');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
@@ -1264,7 +1282,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           action: 'refresh',
           vehicleId, 
           refreshAction: 'refresh', 
-          sellerEmail: seller.email 
+          sellerEmail: seller?.email 
         })
       });
       
@@ -1292,7 +1310,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           action: 'refresh',
           vehicleId, 
           refreshAction: 'renew', 
-          sellerEmail: seller.email 
+          sellerEmail: seller?.email 
         })
       });
       
@@ -1422,7 +1440,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
   };
 
-  const unreadCount = useMemo(() => conversations.filter(c => !c.isReadBySeller && c.sellerId === seller.email).length, [conversations, seller.email]);
+  const unreadCount = useMemo(() => conversations.filter(c => !c.isReadBySeller && c.sellerId === seller?.email).length, [conversations, seller?.email]);
   const activeListings = useMemo(() => sellerVehicles.filter(v => v.status !== 'sold'), [sellerVehicles]);
   const soldListings = useMemo(() => sellerVehicles.filter(v => v.status === 'sold'), [sellerVehicles]);
   const reportedCount = useMemo(() => reportedVehicles.length, [reportedVehicles]);
