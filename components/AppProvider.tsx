@@ -1047,9 +1047,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // Save to MongoDB via API
         try {
-          const response = await fetch('/api/main', {
+          const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+          const response = await authenticatedFetch('/api/main', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            skipAuth: true, // Registration doesn't require auth
             body: JSON.stringify({
               action: 'register',
               email: newUser.email,
@@ -1171,9 +1172,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           }
 
           // Feature path: use API to enforce credits
-          const response = await fetch('/api/vehicles?action=feature', {
+          const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+          const response = await authenticatedFetch('/api/vehicles?action=feature', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ vehicleId })
           });
 
@@ -1753,11 +1754,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         try {
           console.log('📡 Sending user update request to API...', { email, hasPassword: !!updates.password });
           
-          const response = await fetch('/api/users', {
+          // Use authenticated fetch with automatic token refresh
+          const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+          const response = await authenticatedFetch('/api/users', {
             method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
             body: JSON.stringify({
               email: email,
               ...updates
@@ -1766,67 +1766,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           
           console.log('📥 API response received:', { status: response.status, ok: response.ok });
           
-          if (!response.ok) {
-            const errorText = await response.text();
-            let errorMessage = `API call failed: ${response.status}`;
-            let errorData: any = {};
-            
-            try {
-              errorData = JSON.parse(errorText);
-              if (errorData.reason) {
-                errorMessage = errorData.reason;
-              } else if (errorData.error) {
-                errorMessage = errorData.error;
-              } else if (errorData.message) {
-                errorMessage = errorData.message;
-              }
-            } catch {
-              // If we can't parse the error, use the status text
-              errorMessage = response.statusText || errorMessage;
-            }
-            
-            console.error('❌ API error response:', { status: response.status, errorText, errorData });
-            throw new Error(`${response.status}: ${errorMessage}`);
+          // Use the response handler for consistent error handling
+          const { handleApiResponse } = await import('../utils/authenticatedFetch');
+          const apiResult = await handleApiResponse(response);
+          
+          if (!apiResult.success) {
+            console.error('❌ API error response:', { status: response.status, error: apiResult.error, reason: apiResult.reason });
+            throw new Error(apiResult.reason || apiResult.error || `API call failed: ${response.status}`);
           }
           
-          // Check content type before parsing
-          const contentType = response.headers.get('content-type');
-          if (!contentType || !contentType.includes('application/json')) {
-            const text = await response.text();
-            console.error('❌ Non-JSON response received:', { status: response.status, contentType, text: text.substring(0, 200) });
-            throw new Error(`Server returned non-JSON response: ${response.status}`);
-          }
+          const result = apiResult.data || {};
+          console.log('✅ User updated in MongoDB:', { success: result?.success, hasUser: !!result?.user });
           
-          const result = await response.json();
-          console.log('✅ User updated in MongoDB:', { success: result.success, hasUser: !!result.user });
-          
-          if (result.success) {
-            // Update local state with the returned user data if available
-            if (result.user) {
-              setUsers(prev => prev.map(user => 
-                user.email === email ? { ...user, ...result.user } : user
-              ));
-              
-              if (currentUser && currentUser.email === email) {
-                setCurrentUser(prev => prev ? { ...prev, ...result.user } : null);
-                // Update localStorage
-                try {
-                  const updatedUser = { ...currentUser, ...result.user };
-                  localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedUser));
-                  sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
-                } catch (error) {
-                  console.warn('Failed to update localStorage with API response:', error);
-                }
+          // Update local state with the returned user data if available
+          if (result?.user) {
+            setUsers(prev => prev.map(user => 
+              user.email === email ? { ...user, ...result.user } : user
+            ));
+            
+            if (currentUser && currentUser.email === email) {
+              setCurrentUser(prev => prev ? { ...prev, ...result.user } : null);
+              // Update localStorage
+              try {
+                const updatedUser = { ...currentUser, ...result.user };
+                localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedUser));
+                sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
+              } catch (error) {
+                console.warn('Failed to update localStorage with API response:', error);
               }
             }
-            
-            if (updates.password) {
-              addToast('Password updated successfully!', 'success');
-            } else {
-              addToast('Profile updated successfully!', 'success');
-            }
+          }
+          
+          if (updates.password) {
+            addToast('Password updated successfully!', 'success');
           } else {
-            throw new Error(result.reason || result.error || 'Update failed');
+            addToast('Profile updated successfully!', 'success');
           }
           
         } catch (apiError) {

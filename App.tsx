@@ -713,9 +713,9 @@ const AppContent: React.FC = React.memo(() => {
               vehicleData={vehicleData}
               onFeatureListing={async (vehicleId) => {
                 try {
-                  const response = await fetch('/api/vehicles?action=feature', {
+                  const { authenticatedFetch } = await import('./utils/authenticatedFetch');
+                  const response = await authenticatedFetch('/api/vehicles?action=feature', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ vehicleId })
                   });
 
@@ -800,9 +800,9 @@ const AppContent: React.FC = React.memo(() => {
                     return;
                   }
 
-                  const response = await fetch('/api/vehicles?action=certify', {
+                  const { authenticatedFetch } = await import('./utils/authenticatedFetch');
+                  const response = await authenticatedFetch('/api/vehicles?action=certify', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ vehicleId })
                   });
 
