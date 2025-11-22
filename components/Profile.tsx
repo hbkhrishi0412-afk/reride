@@ -127,6 +127,7 @@ const calculatePasswordStrength = (password: string): PasswordStrength => {
 const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdatePassword }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   
@@ -416,6 +417,16 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     setIsEditing(!isEditing);
   };
 
+  const handlePasswordEditToggle = () => {
+    if (isEditingPassword) {
+      // Reset password fields when canceling
+      setPasswordData({ current: '', new: '', confirm: '' });
+      setPasswordError('');
+      setPasswordStrength({ score: 0, feedback: '', meetsRequirements: false });
+    }
+    setIsEditingPassword(!isEditingPassword);
+  };
+
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -507,6 +518,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       if (success) {
         setPasswordData({ current: '', new: '', confirm: '' });
         setPasswordStrength({ score: 0, feedback: '', meetsRequirements: false });
+        setIsEditingPassword(false); // Exit edit mode after successful update
       } else {
         setPasswordError('Current password is incorrect');
       }
@@ -527,50 +539,56 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     return 'bg-green-600';
   };
 
+  const [expandedSection, setExpandedSection] = useState<string | null>('personal');
+
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="space-y-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto">
+        <div className="space-y-6">
           {/* Header */}
-          <div className="text-center space-y-1">
-            <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
+          <div className="text-center space-y-2 mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
             <p className="text-sm text-gray-600">Manage your account settings and preferences</p>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Account Details Card */}
-            <div className="bg-white rounded-xl shadow border border-gray-100 overflow-hidden">
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">Account Details</h2>
-                    <p className="text-xs text-gray-500 mt-1">Your personal information</p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Content - Account Details */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Personal Information Card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">Personal Information</h2>
+                      <p className="text-sm text-gray-600 mt-1">Your basic account details</p>
+                    </div>
+                    {!isEditing && (
+                      <button 
+                        onClick={handleEditToggle}
+                        className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-sm hover:shadow-md"
+                        aria-label="Edit profile"
+                      >
+                        <span className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit Profile
+                        </span>
+                      </button>
+                    )}
                   </div>
-                  {!isEditing && (
-                    <button 
-                      onClick={handleEditToggle}
-                      className="px-3 py-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 border border-blue-600 rounded-lg hover:bg-blue-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                      aria-label="Edit profile"
-                    >
-                      <span className="flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        Edit
-                      </span>
-                    </button>
-                  )}
                 </div>
+                <div className="p-6">
 
-                <form onSubmit={handleProfileSave}>
+                <form id="profile-form" onSubmit={handleProfileSave}>
                   {/* Enhanced Profile Picture */}
-                  <div className="flex items-center space-x-3 mb-6 pb-5 border-b border-gray-200">
+                  <div className="flex items-center space-x-4 mb-8 pb-6 border-b border-gray-200">
                     <div className="relative group">
                       <div className="relative">
                         <img
                           src={formData.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&size=96&background=3b82f6&color=fff&bold=true`}
                           alt="Profile"
-                          className="w-16 h-16 rounded-full object-cover border-2 border-gray-100 shadow-sm transition-transform duration-200 group-hover:scale-105"
+                          className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg transition-transform duration-200 group-hover:scale-105"
                         />
                         {uploadProgress.avatar && (
                           <div className="absolute inset-0 bg-blue-500/20 rounded-full flex items-center justify-center">
@@ -616,7 +634,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                   </div>
 
                   {/* Form Fields */}
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
                     <ProfileInput
                       label="Full Name"
                       name="name"
@@ -656,7 +674,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                     {currentUser.role === 'seller' && (
                       <>
                         {/* Seller Share Link & QR Code */}
-                        <div className="p-4 mb-2 rounded-lg border border-gray-200 bg-gray-50">
+                        <div className="md:col-span-2 p-5 rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50">
                           <div className="flex items-center justify-between mb-2">
                             <h3 className="text-sm font-semibold text-gray-900">Seller Share Link & QR</h3>
                           </div>
@@ -700,21 +718,23 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                           })()}
                         </div>
 
-                        <ProfileInput
-                          label="Dealership Name"
-                          name="dealershipName"
-                          value={formData.dealershipName}
-                          onChange={handleInputChange}
-                          disabled={!isEditing}
-                          placeholder="Enter dealership name"
-                          error={formErrors.dealershipName}
-                          maxLength={50}
-                          required
-                        />
+                        <div className="md:col-span-2">
+                          <ProfileInput
+                            label="Dealership Name"
+                            name="dealershipName"
+                            value={formData.dealershipName}
+                            onChange={handleInputChange}
+                            disabled={!isEditing}
+                            placeholder="Enter dealership name"
+                            error={formErrors.dealershipName}
+                            maxLength={50}
+                            required
+                          />
+                        </div>
                         
                         {/* Dealership Logo - Use same as profile picture for sellers */}
                         {isEditing && (
-                        <div className="space-y-2">
+                        <div className="md:col-span-2 space-y-3 p-4 rounded-lg bg-gray-50 border border-gray-200">
                             <label className="text-sm font-semibold text-gray-700">Dealership Logo (Optional)</label>
                             <div className="flex items-center space-x-4">
                               <div className="relative">
@@ -760,7 +780,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                         )}
 
                         {/* Enhanced Bio */}
-                        <div className="space-y-1.5">
+                        <div className="md:col-span-2 space-y-1.5">
                           <div className="flex items-center justify-between">
                             <label className="text-sm font-semibold text-gray-700">About Your Dealership</label>
                             <span className={`text-xs ${(formData.bio?.length || 0) > 450 ? 'text-orange-500' : 'text-gray-400'}`}>
@@ -796,12 +816,36 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                     )}
 
                     {/* Document Verification Section */}
-                    <div className="pt-5 mt-5 border-t border-gray-200">
-                      <h3 className="text-base font-semibold text-gray-900 mb-3">Document Verification</h3>
-                      <p className="text-xs text-gray-500 mb-4">Upload your Aadhar Card and PAN Card for verification.</p>
+                    <div className="md:col-span-2 pt-6 mt-6 border-t border-gray-200">
+                      <div 
+                        className="flex items-center justify-between cursor-pointer mb-4"
+                        onClick={() => setExpandedSection(expandedSection === 'documents' ? null : 'documents')}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-green-100 rounded-lg">
+                            <svg className="w-5 h-5 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900">Document Verification</h3>
+                            <p className="text-sm text-gray-600">Upload Aadhar Card and PAN Card</p>
+                          </div>
+                        </div>
+                        <svg 
+                          className={`w-5 h-5 text-gray-600 transition-transform ${expandedSection === 'documents' ? 'rotate-180' : ''}`}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
                       
-                      {/* Aadhar Card */}
-                      <div className="space-y-3 mb-6">
+                      {expandedSection === 'documents' && (
+                        <div className="space-y-6">
+                          {/* Aadhar Card */}
+                          <div className="space-y-4 p-5 rounded-xl border border-gray-200 bg-gray-50">
                         <div className="flex items-center justify-between">
                           <label className="text-sm font-semibold text-gray-700">Aadhar Card</label>
                           {(currentUser as any).aadharCard?.isVerified && (
@@ -891,7 +935,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                       </div>
 
                       {/* PAN Card */}
-                      <div className="space-y-3">
+                      <div className="space-y-4 p-5 rounded-xl border border-gray-200 bg-gray-50">
                         <div className="flex items-center justify-between">
                           <label className="text-sm font-semibold text-gray-700">PAN Card</label>
                           {(currentUser as any).panCard?.isVerified && (
@@ -986,6 +1030,8 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                         </div>
                       </div>
                     </div>
+                      )}
+                    </div>
                   </div>
 
                   {formErrors.general && (
@@ -993,22 +1039,197 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                       <p className="text-sm text-red-600">{formErrors.general}</p>
                     </div>
                   )}
+                </form>
+                </div>
+              </div>
+            </div>
 
-                  {/* Enhanced Action Buttons */}
-                  {isEditing && (
-                    <div className="flex justify-end space-x-2 mt-6 pt-5 border-t border-gray-200">
+            {/* Right Sidebar - Password & Actions */}
+            <div className="space-y-6">
+              {/* Change Password Card */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-5 bg-gradient-to-r from-purple-50 to-pink-50 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">Change Password</h2>
+                      <p className="text-sm text-gray-600 mt-1">Update your account password</p>
+                    </div>
+                    {!isEditingPassword && (
+                      <button 
+                        onClick={handlePasswordEditToggle}
+                        className="px-4 py-2 text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 shadow-sm hover:shadow-md"
+                        aria-label="Edit password"
+                      >
+                        <span className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="p-6">
+                  {isEditingPassword ? (
+                    <form onSubmit={handlePasswordSave}>
+                      <div className="space-y-5">
+                        <PasswordInput
+                          label="Current Password"
+                          name="current"
+                          value={passwordData.current}
+                          onChange={handlePasswordChange}
+                          placeholder="Enter current password"
+                          disabled={!isEditingPassword}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
+                        />
+                      
+                      <div className="space-y-2">
+                        <PasswordInput
+                          label="New Password"
+                          name="new"
+                          value={passwordData.new}
+                          onChange={handlePasswordChange}
+                          placeholder="Enter new password"
+                          disabled={!isEditingPassword}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
+                        />
+                        
+                        {/* Password Strength Indicator */}
+                        {passwordData.new && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              {[1, 2, 3, 4, 5].map((level) => (
+                                <div
+                                  key={level}
+                                  className={`h-2 flex-1 rounded-full transition-all duration-300 ${
+                                    passwordStrength.score >= level
+                                      ? getPasswordStrengthColor(passwordStrength.score)
+                                      : 'bg-gray-200'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <p className={`text-xs font-medium ${
+                              passwordStrength.score >= 4 
+                                ? 'text-green-600' 
+                                : passwordStrength.score >= 2 
+                                  ? 'text-yellow-600' 
+                                  : 'text-red-600'
+                            }`}>
+                              {passwordStrength.feedback}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
+                        <PasswordInput
+                          label="Confirm New Password"
+                          name="confirm"
+                          value={passwordData.confirm}
+                          onChange={handlePasswordChange}
+                          placeholder="Confirm new password"
+                          disabled={!isEditingPassword}
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
+                        />
+                      
+                      {passwordData.confirm && passwordData.new && passwordData.confirm !== passwordData.new && (
+                        <p className="text-xs text-red-600 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          Passwords do not match
+                        </p>
+                      )}
+                      
+                      {passwordError && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <p className="text-sm text-red-600 flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                            {passwordError}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    
+                        <div className="mt-6 pt-6 border-t border-gray-200 flex gap-3">
+                          <button 
+                            type="button"
+                            onClick={handlePasswordEditToggle}
+                            disabled={isChangingPassword}
+                            className="flex-1 px-4 py-3 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+                          >
+                            Cancel
+                          </button>
+                          <button 
+                            type="submit" 
+                            disabled={
+                              !passwordData.current || 
+                              !passwordData.new || 
+                              !passwordData.confirm || 
+                              !passwordStrength.meetsRequirements ||
+                              passwordData.new !== passwordData.confirm ||
+                              isChangingPassword
+                            }
+                            className="flex-1 px-6 py-3 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm hover:shadow-md" 
+                          >
+                            {isChangingPassword ? (
+                              <>
+                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Updating...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                                </svg>
+                                Update Password
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-100 mb-4">
+                          <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-gray-600">Click "Edit" to change your password</p>
+                      </div>
+                    )}
+                </div>
+              </div>
+
+              {/* Action Buttons Card */}
+              {isEditing && (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="p-6 space-y-3">
+                    {formErrors.general && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-sm text-red-600">{formErrors.general}</p>
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-3">
                       <button 
                         type="button" 
                         onClick={handleEditToggle}
                         disabled={isSaving}
-                        className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-4 py-3 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
                       >
                         Cancel
                       </button>
                       <button 
                         type="submit"
+                        form="profile-form"
                         disabled={isSaving || !hasChanges}
-                        className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="w-full px-4 py-3 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
                       >
                         {isSaving ? (
                           <>
@@ -1028,131 +1249,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                         )}
                       </button>
                     </div>
-                  )}
-                </form>
-              </div>
-            </div>
-
-            {/* Enhanced Change Password Card */}
-            <div className="bg-white rounded-xl shadow border border-gray-100 overflow-hidden">
-              <div className="p-5">
-                <div className="mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
-                  <p className="text-xs text-gray-500 mt-1">Update your account password</p>
+                  </div>
                 </div>
-                
-                <form onSubmit={handlePasswordSave}>
-                  <div className="space-y-5">
-                    <PasswordInput
-                      label="Current Password"
-                      name="current"
-                      value={passwordData.current}
-                      onChange={handlePasswordChange}
-                      placeholder="Enter current password"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    
-                    <div className="space-y-2">
-                      <PasswordInput
-                        label="New Password"
-                        name="new"
-                        value={passwordData.new}
-                        onChange={handlePasswordChange}
-                        placeholder="Enter new password"
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      
-                      {/* Password Strength Indicator */}
-                      {passwordData.new && (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            {[1, 2, 3, 4, 5].map((level) => (
-                              <div
-                                key={level}
-                                className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-                                  passwordStrength.score >= level
-                                    ? getPasswordStrengthColor(passwordStrength.score)
-                                    : 'bg-gray-200'
-                                }`}
-                              />
-                            ))}
-                          </div>
-                          <p className={`text-xs ${
-                            passwordStrength.score >= 4 
-                              ? 'text-green-600' 
-                              : passwordStrength.score >= 2 
-                                ? 'text-yellow-600' 
-                                : 'text-red-600'
-                          }`}>
-                            {passwordStrength.feedback}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <PasswordInput
-                      label="Confirm New Password"
-                      name="confirm"
-                      value={passwordData.confirm}
-                      onChange={handlePasswordChange}
-                      placeholder="Confirm new password"
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    
-                    {passwordData.confirm && passwordData.new && passwordData.confirm !== passwordData.new && (
-                      <p className="text-xs text-red-600 flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        Passwords do not match
-                      </p>
-                    )}
-                    
-                    {passwordError && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-sm text-red-600 flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                          </svg>
-                          {passwordError}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="mt-6 pt-6 border-t border-gray-200">
-                    <button 
-                      type="submit" 
-                      disabled={
-                        !passwordData.current || 
-                        !passwordData.new || 
-                        !passwordData.confirm || 
-                        !passwordStrength.meetsRequirements ||
-                        passwordData.new !== passwordData.confirm ||
-                        isChangingPassword
-                      }
-                      className="w-full px-6 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" 
-                    >
-                      {isChangingPassword ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Updating...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                          </svg>
-                          Update Password
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              </div>
+              )}
             </div>
           </div>
         </div>

@@ -140,6 +140,7 @@ const AppContent: React.FC = React.memo(() => {
     selectedCategory: currentCategory,
     initialSearchQuery,
     selectedCity,
+    setSelectedCity,
     publicSellerProfile,
     typingStatus,
     removeToast,
@@ -251,15 +252,15 @@ const AppContent: React.FC = React.memo(() => {
     }
   }, [currentUser, currentView, setCurrentUser, setCurrentView]);
 
-  // Redirect logged-in users to their appropriate dashboard
+  // Redirect logged-in users to their appropriate dashboard (except customers who can access home)
   useEffect(() => {
     if (currentUser && currentView === ViewEnum.HOME) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔄 User is logged in, redirecting to appropriate dashboard:', currentUser.role);
+        console.log('🔄 User is logged in, checking dashboard redirect:', currentUser.role);
       }
       switch (currentUser.role) {
         case 'customer':
-          navigate(ViewEnum.BUYER_DASHBOARD);
+          // Customers can access home page - no redirect
           break;
         case 'seller':
           navigate(ViewEnum.SELLER_DASHBOARD);
@@ -322,7 +323,10 @@ const AppContent: React.FC = React.memo(() => {
               setInitialSearchQuery(query);
               navigate(ViewEnum.USED_CARS);
             }}
-            onSelectCategory={setSelectedCategory}
+            onSelectCategory={(category) => {
+              setSelectedCategory(category);
+              navigate(ViewEnum.USED_CARS);
+            }}
             featuredVehicles={vehicles.slice(0, 6)}
             onSelectVehicle={selectVehicle}
             onToggleCompare={(id) => {
@@ -351,6 +355,10 @@ const AppContent: React.FC = React.memo(() => {
             recommendations={recommendations}
             allVehicles={vehicles}
             onNavigate={navigate}
+            onSelectCity={(city) => {
+              setSelectedCity(city);
+              navigate(ViewEnum.USED_CARS);
+            }}
           />
         );
 
@@ -826,7 +834,7 @@ const AppContent: React.FC = React.memo(() => {
               onNavigate={navigate}
               onTestDriveResponse={() => {}}
               allVehicles={vehicles}
-              onOfferResponse={() => {}}
+              onOfferResponse={onOfferResponse}
               onViewVehicle={selectVehicle}
             />
           </DashboardErrorBoundary>

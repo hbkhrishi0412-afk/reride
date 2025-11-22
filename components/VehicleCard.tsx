@@ -17,14 +17,20 @@ interface VehicleCardProps {
   onQuickView: (vehicle: Vehicle) => void;
 }
 
-const SpecIcon: React.FC<{ icon: React.ReactNode, text: string }> = ({ icon, text }) => (
-    <div className="flex items-center gap-1.5 text-xs sm:text-sm text-brand-gray-600 dark:text-spinny-text">
-        {icon}
-        <span>{text}</span>
-    </div>
-);
+// Removed SpecIcon component as we're using inline specs now
 
 const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, onSelect, onToggleCompare, isSelectedForCompare, onToggleWishlist, isInWishlist, isCompareDisabled, onViewSellerProfile, onQuickView }) => {
+  
+  // Abbreviate transmission for better display
+  const getTransmissionDisplay = (transmission: string | undefined): string => {
+    if (!transmission) return 'N/A';
+    const lower = transmission.toLowerCase();
+    if (lower.includes('automatic') || lower === 'auto') return 'Auto';
+    if (lower.includes('manual')) return 'Manual';
+    if (lower.includes('cvt')) return 'CVT';
+    if (lower.includes('amt')) return 'AMT';
+    return transmission.length > 6 ? transmission.substring(0, 6) : transmission;
+  };
   
   const handleCompareClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,10 +62,10 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, onSelect, onToggleCo
   return (
     <div 
       onClick={handleCardClick}
-      className="group cursor-pointer bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2"
+      className="group cursor-pointer bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 aspect-[3/4] flex flex-col"
       data-testid="vehicle-card"
     >
-      <div className="relative overflow-hidden h-56">
+      <div className="relative overflow-hidden flex-shrink-0" style={{ height: '50%' }}>
         <LazyImage
           src={optimizeImageUrl(getFirstValidImage(vehicle.images), 800, 80)}
           alt={`${vehicle.make} ${vehicle.model}`}
@@ -137,35 +143,65 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, onSelect, onToggleCo
             </button>
         </div>
       </div>
-      <div className="p-3 sm:p-5 flex-grow flex flex-col">
-        <div className="flex justify-between items-start">
-            <h3 className="text-base leading-tight sm:text-xl sm:leading-normal font-bold text-spinny-text-dark dark:text-spinny-text-dark">{vehicle.make} {vehicle.model} {vehicle.variant || ''}</h3>
-            <span className="text-sm sm:text-lg font-semibold text-spinny-text dark:text-spinny-text bg-spinny-off-white dark:bg-brand-gray-700 px-2 py-0.5 rounded">{vehicle.year}</span>
+      <div className="p-4 sm:p-5 flex-grow flex flex-col min-h-0">
+        {/* Title: Make Model with Year badge */}
+        <div className="flex justify-between items-start mb-1">
+            <h3 className="text-sm sm:text-base font-bold text-gray-900 leading-tight line-clamp-1 flex-1 pr-2">
+                {vehicle.make} {vehicle.model}
+            </h3>
+            <span className="text-xs sm:text-sm font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded flex-shrink-0">{vehicle.year}</span>
         </div>
         
-        <div className="mt-2 text-xs text-spinny-text dark:text-spinny-text truncate">
-           By: <button onClick={handleSellerClick} className="font-semibold hover:underline focus:outline-none transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>{vehicle.sellerName || 'Seller'}</button>
-        </div>
-
-        {vehicle.sellerBadges && vehicle.sellerBadges.length > 0 && (
-            <div className="mt-2">
-                <BadgeDisplay badges={vehicle.sellerBadges} size="sm" />
-            </div>
-        )}
+        {/* Seller */}
+        <p className="text-xs text-gray-600 mb-2">
+            By: <button 
+                onClick={handleSellerClick}
+                className="font-semibold hover:underline focus:outline-none transition-colors cursor-pointer"
+                style={{ color: '#FF6B35' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#FF6B35'}
+            >
+                {vehicle.sellerName || 'Seller'}
+            </button>
+        </p>
         
-        <div className="mt-3 pt-3 sm:mt-4 sm:pt-4 border-t border-gray-200-100 dark:border-gray-200-200 grid grid-cols-2 gap-x-2 gap-y-1.5 sm:gap-x-4 sm:gap-y-2">
-            <SpecIcon icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: '#1E88E5' }} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.414-1.414L11 10.586V6z" clipRule="evenodd" /></svg>} text={`${vehicle.mileage.toLocaleString('en-IN')} kms`} />
-            <SpecIcon icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: '#1E88E5' }} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" /></svg>} text={vehicle.fuelType} />
-            <SpecIcon icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: '#1E88E5' }} viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" /></svg>} text={vehicle.transmission} />
-            <SpecIcon icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" style={{ color: '#1E88E5' }} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>} text={`${vehicle.city}, ${vehicle.state}`} />
+        {/* Specs Grid - 2 columns with icons */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 my-2 flex-shrink-0 text-xs text-gray-600">
+            <div className="flex items-center gap-1">
+              <svg className="h-4 w-4 flex-shrink-0" style={{ color: '#2563EB' }} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.414-1.414L11 10.586V6z" clipRule="evenodd" />
+              </svg>
+              <span>{vehicle.mileage.toLocaleString('en-IN')} kms</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <svg className="h-4 w-4 flex-shrink-0" style={{ color: '#2563EB' }} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" />
+              </svg>
+              <span>{vehicle.fuelType}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <svg className="h-4 w-4 flex-shrink-0" style={{ color: '#2563EB' }} viewBox="0 0 20 20" fill="currentColor">
+                <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
+              </svg>
+              <span>{vehicle.transmission}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <svg className="h-4 w-4 flex-shrink-0" style={{ color: '#2563EB' }} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+              </svg>
+              <span>{vehicle.city}, {vehicle.state}</span>
+            </div>
         </div>
 
-        <div className="mt-auto pt-3 sm:pt-4 flex justify-between items-center">
-             <p className="text-xl sm:text-2xl font-extrabold" style={{ color: '#FF6B35' }}>₹{vehicle.price.toLocaleString('en-IN')}</p>
-             <div className="flex items-center gap-2">
-                <StarRating rating={vehicle?.averageRating || 0} readOnly size="sm"/>
-                <span className="text-xs text-spinny-text dark:text-spinny-text">({vehicle?.ratingCount || 0})</span>
+        {/* Price and Rating */}
+        <div className="mt-auto pt-3 border-t border-gray-200">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-xl sm:text-2xl font-extrabold" style={{ color: '#FF6B35' }}>₹{vehicle.price.toLocaleString('en-IN')}</p>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <StarRating rating={vehicle?.averageRating || 0} readOnly size="sm"/>
+              <span className="text-xs text-gray-500">({vehicle?.ratingCount || 0})</span>
             </div>
+          </div>
         </div>
       </div>
     </div>

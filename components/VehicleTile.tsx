@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import type { Vehicle } from '../types';
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import LazyImage from './LazyImage';
+import StarRating from './StarRating';
 
 interface VehicleTileProps {
   vehicle: Vehicle;
@@ -44,26 +45,30 @@ const VehicleTile: React.FC<VehicleTileProps> = ({ vehicle, onSelect, onToggleCo
       />
       
       <div className="p-4 flex flex-col flex-grow">
-        <div className="flex justify-between items-start">
-            <h3 className="text-base sm:text-lg font-bold text-spinny-text-dark dark:text-spinny-text-dark">{vehicle.make} {vehicle.model} {vehicle.variant || ''}</h3>
-            <span className="text-sm font-semibold text-spinny-text dark:text-spinny-text bg-spinny-off-white dark:bg-brand-gray-700 px-2 py-0.5 rounded flex-shrink-0 ml-2">{vehicle.year}</span>
-        </div>
+        {/* Title: Year Make Model Variant */}
+        <h3 className="text-base sm:text-lg font-bold text-spinny-text-dark dark:text-spinny-text-dark">
+            {vehicle.year} {vehicle.make} {vehicle.model} {vehicle.variant || ''}
+        </h3>
         
-        <div className="mt-1 text-xs text-spinny-text dark:text-spinny-text truncate">
-           By: <button onClick={handleSellerClick} className="font-semibold hover:underline focus:outline-none transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>{vehicle.sellerName || 'Seller'}</button>
-        </div>
-        
-        <div className="mt-2 flex-grow grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-xs text-brand-gray-600 dark:text-spinny-text">
-            <span>{`${vehicle.mileage.toLocaleString('en-IN')} kms`}</span>
+        {/* Specifications */}
+        <div className="mt-2 flex-grow grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs text-brand-gray-600 dark:text-spinny-text">
+            <span>{`${Math.round(vehicle.mileage / 1000)}K km`}</span>
             <span>{vehicle.fuelType}</span>
             <span>{vehicle.transmission}</span>
-            <span>{vehicle.noOfOwners}{vehicle.noOfOwners === 1 ? 'st' : 'nd'} Owner</span>
             <span>{vehicle.rto}</span>
-            <span>{`${vehicle.city}, ${vehicle.state}`}</span>
+        </div>
+        
+        {/* Location/HUB */}
+        <div className="mt-2 text-xs text-brand-gray-600 dark:text-spinny-text">
+            {vehicle.location ? `HUB - ${vehicle.location}` : `HUB - ${vehicle.city}`}
         </div>
 
-        <div className="mt-auto pt-2 flex justify-between items-end">
-             <p className="text-lg sm:text-xl font-extrabold" style={{ color: '#FF6B35' }}>₹{vehicle.price.toLocaleString('en-IN')}</p>
+        <div className="mt-auto pt-2 border-t border-gray-200">
+          <div className="flex items-baseline justify-between gap-2 mb-1">
+            <p className="text-lg sm:text-xl font-extrabold" style={{ color: '#FF6B35' }}>₹{(vehicle.price / 100000).toFixed(2)} Lakh</p>
+          </div>
+          <div className="flex justify-between items-center mt-1">
+             <p className="text-xs text-gray-600 font-medium">EMI ₹{Math.round(vehicle.price / 60).toLocaleString('en-IN')}/m*</p>
              <div className="flex items-center gap-2">
                 <button
                   onClick={handleWishlistClick}
@@ -83,6 +88,7 @@ const VehicleTile: React.FC<VehicleTileProps> = ({ vehicle, onSelect, onToggleCo
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: isSelectedForCompare ? 'var(--spinny-orange)' : undefined }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                 </button>
             </div>
+          </div>
         </div>
       </div>
     </div>

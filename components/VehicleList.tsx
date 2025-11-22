@@ -953,7 +953,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             </div>
           </div>
 
-          <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 lg:gap-6" : "flex flex-col gap-3 lg:gap-4"}>
+          <div className={viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6" : "flex flex-col gap-3 lg:gap-4"}>
             {isLoading || isAiSearching ? (
               Array.from({ length: 8 }).map((_, index) => viewMode === 'grid' ? <VehicleCardSkeleton key={index} /> : <VehicleTileSkeleton key={index} />)
             ) : paginatedVehicles.length > 0 ? (

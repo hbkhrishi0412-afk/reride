@@ -665,7 +665,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     
     try {
       // Ensure database connection before querying
-      let isMongoAvailable = mongoAvailable;
+      let isMongoAvailable: boolean = mongoAvailable;
       if (mongoose.connection.readyState !== 1 && isMongoAvailable) {
         try {
           await connectToDatabase();
@@ -831,12 +831,56 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
             return res.status(500).json({ success: false, reason: 'Failed to update user. User not found.' });
           }
 
+          // Ensure MongoDB connection is active before save
+          if (mongoose.connection.readyState !== 1) {
+            console.warn('⚠️ MongoDB connection lost before save, attempting to reconnect...');
+            try {
+              await connectToDatabase();
+            } catch (reconnectError) {
+              console.error('❌ Failed to reconnect to MongoDB:', reconnectError);
+              return res.status(503).json({ 
+                success: false, 
+                reason: 'Database connection lost. Please try again later.',
+                error: 'MongoDB connection unavailable'
+              });
+            }
+          }
+
           // Mark password as modified and explicitly save to ensure persistence
           updatedUser.password = updateFields.password;
           updatedUser.markModified('password');
           console.log('💾 Explicitly saving user document to ensure password persistence...');
-          await updatedUser.save({ validateBeforeSave: true });
-          console.log('✅ User document saved successfully');
+          
+          try {
+            await updatedUser.save({ validateBeforeSave: true });
+            console.log('✅ User document saved successfully');
+          } catch (saveError) {
+            console.error('❌ Error saving user document:', saveError);
+            const saveErrorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
+            const saveErrorName = saveError instanceof Error ? saveError.name : 'Unknown';
+            
+            // Check if it's a validation error
+            if (saveErrorName === 'ValidationError') {
+              console.error('❌ Validation error details:', saveError);
+              return res.status(400).json({ 
+                success: false, 
+                reason: 'Password validation failed. Please ensure your password meets all requirements.',
+                error: saveErrorMessage
+              });
+            }
+            
+            // Check for MongoDB connection errors
+            if (saveErrorMessage.includes('MongoServerError') || saveErrorMessage.includes('MongoNetworkError') || saveErrorMessage.includes('connection')) {
+              return res.status(503).json({ 
+                success: false, 
+                reason: 'Database connection error. Please try again later.',
+                error: saveErrorMessage
+              });
+            }
+            
+            // Re-throw to be caught by outer catch block
+            throw saveError;
+          }
 
           console.log('✅ User updated successfully:', updatedUser.email);
           console.log('✅ Password updated:', !!updateFields.password);
@@ -860,7 +904,37 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           return res.status(200).json({ success: true, user: userWithoutPassword });
         } catch (passwordUpdateError) {
           console.error('❌ Error during password update:', passwordUpdateError);
+          console.error('❌ Error stack:', passwordUpdateError instanceof Error ? passwordUpdateError.stack : 'No stack trace');
+          console.error('❌ Error name:', passwordUpdateError instanceof Error ? passwordUpdateError.name : 'Unknown');
+          
           const errorMessage = passwordUpdateError instanceof Error ? passwordUpdateError.message : 'Unknown error';
+          const errorName = passwordUpdateError instanceof Error ? passwordUpdateError.name : 'Unknown';
+          
+          // Provide more specific error messages based on error type
+          if (errorName === 'ValidationError') {
+            return res.status(400).json({ 
+              success: false, 
+              reason: 'Password validation failed. Please check password requirements.',
+              error: errorMessage
+            });
+          }
+          
+          if (errorMessage.includes('MongoServerError') || errorMessage.includes('MongoNetworkError') || errorMessage.includes('connection')) {
+            return res.status(503).json({ 
+              success: false, 
+              reason: 'Database connection error. Please try again later.',
+              error: errorMessage
+            });
+          }
+          
+          if (errorMessage.includes('CastError') || errorMessage.includes('Cast to')) {
+            return res.status(400).json({ 
+              success: false, 
+              reason: 'Invalid data format. Please try again.',
+              error: errorMessage
+            });
+          }
+          
           return res.status(500).json({ 
             success: false, 
             reason: 'Failed to update password. Please try again.',

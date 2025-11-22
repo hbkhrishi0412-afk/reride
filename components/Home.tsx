@@ -1,6 +1,6 @@
 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Vehicle, VehicleCategory, View } from '../types';
 import { View as ViewEnum, VehicleCategory as CategoryEnum } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
@@ -19,6 +19,7 @@ interface HomeProps {
     recommendations: Vehicle[];
     allVehicles: Vehicle[];
     onNavigate: (view: View) => void;
+    onSelectCity: (city: string) => void;
 }
 
 const categoryIcons: Record<VehicleCategory, React.ReactNode> = {
@@ -32,6 +33,17 @@ const categoryIcons: Record<VehicleCategory, React.ReactNode> = {
 
 const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggleWishlist' | 'wishlist'> & { vehicle: Vehicle; onQuickView: (vehicle: Vehicle) => void; }> = ({ vehicle, onSelectVehicle, onToggleWishlist, wishlist, onQuickView }) => {
     const isInWishlist = wishlist.includes(vehicle.id);
+  
+    // Abbreviate transmission for better display
+    const getTransmissionDisplay = (transmission: string | undefined): string => {
+      if (!transmission) return 'N/A';
+      const lower = transmission.toLowerCase();
+      if (lower.includes('automatic') || lower === 'auto') return 'Auto';
+      if (lower.includes('manual')) return 'Manual';
+      if (lower.includes('cvt')) return 'CVT';
+      if (lower.includes('amt')) return 'AMT';
+      return transmission.length > 6 ? transmission.substring(0, 6) : transmission;
+    };
   
     const handleWishlistClick = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -50,10 +62,10 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
     return (
       <div 
         onClick={() => onSelectVehicle(vehicle)}
-        className="group cursor-pointer bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2"
+        className="group cursor-pointer bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 aspect-square flex flex-col"
       >
         {/* Image Container with Premium Effects */}
-        <div className="relative overflow-hidden h-56">
+        <div className="relative overflow-hidden flex-shrink-0" style={{ height: '55%' }}>
           <img 
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
             src={getFirstValidImage(vehicle.images)} 
@@ -65,35 +77,35 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
           <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           
           {/* Premium Verified Badge */}
-          <div className="absolute top-4 left-4">
-            <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-sm">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <div className="absolute top-2 left-2 sm:top-3 sm:left-3">
+            <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white px-2 py-1 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shadow-lg backdrop-blur-sm">
+              <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
               </svg>
-              Verified
+              <span className="hidden sm:inline">Verified</span>
             </div>
           </div>
           
           {/* Premium Wishlist Button */}
-          <div className="absolute top-4 right-4">
+          <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
             <button
               onClick={handleWishlistClick}
-              className={`p-2.5 rounded-full transition-all duration-300 shadow-lg backdrop-blur-sm ${
+              className={`p-1.5 sm:p-2 rounded-full transition-all duration-300 shadow-lg backdrop-blur-sm ${
                 isInWishlist 
                   ? 'bg-gradient-to-r from-pink-500 to-red-500 text-white' 
                   : 'bg-white/90 text-gray-600 hover:bg-white hover:text-pink-500'
               }`}
             >
-              <svg className="h-5 w-5" fill={isInWishlist ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-4 w-4 sm:h-5 sm:w-5" fill={isInWishlist ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
               </svg>
             </button>
           </div>
           
           {/* Premium Price Badge */}
-          <div className="absolute bottom-4 right-4">
-            <div className="bg-white/95 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-lg">
-              <span className="text-lg font-bold text-gray-900">
+          <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3">
+            <div className="bg-white/95 backdrop-blur-sm px-2 py-1 rounded-full shadow-lg">
+              <span className="text-sm sm:text-base font-bold text-gray-900">
                 ₹{(vehicle.price / 100000).toFixed(2)}L
               </span>
             </div>
@@ -101,63 +113,55 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
         </div>
         
         {/* Premium Content */}
-        <div className="p-6">
+        <div className="p-3 sm:p-4 flex-grow flex flex-col min-h-0">
           {/* Vehicle Title */}
-          <div className="mb-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors duration-300">
+          <div className="mb-2">
+            <h3 className="text-sm sm:text-base font-bold text-gray-900 mb-0.5 group-hover:text-blue-600 transition-colors duration-300 line-clamp-1 leading-tight">
               {vehicle.year} {vehicle.make} {vehicle.model}
             </h3>
-            <p className="text-sm text-gray-600 font-medium">{vehicle.variant}</p>
+            {vehicle.variant && (
+              <p className="text-xs text-gray-600 line-clamp-1">{vehicle.variant}</p>
+            )}
           </div>
           
-          {/* Premium Specs */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center mx-auto mb-2">
-                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="text-xs font-semibold text-gray-700">{vehicle.year}</div>
+          {/* Premium Specs - Compact with Kilometers, Fuel Type, and Transmission */}
+          <div className="grid grid-cols-3 gap-1.5 my-2 flex-shrink-0">
+            <div className="flex items-center gap-1 text-xs font-medium text-gray-700 bg-blue-50 px-1.5 py-1.5 rounded-lg min-w-0">
+              <svg className="h-3 w-3 flex-shrink-0" style={{ color: '#1E88E5' }} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.414-1.414L11 10.586V6z" clipRule="evenodd" />
+              </svg>
+              <span className="font-semibold truncate min-w-0">{vehicle.mileage.toLocaleString()} km</span>
             </div>
-            
-            <div className="text-center p-3 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl">
-              <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg flex items-center justify-center mx-auto mb-2">
-                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <div className="text-xs font-semibold text-gray-700">{vehicle.fuelType}</div>
+            <div className="flex items-center gap-1 text-xs font-medium text-gray-700 bg-green-50 px-1.5 py-1.5 rounded-lg min-w-0">
+              <svg className="h-3 w-3 flex-shrink-0" style={{ color: '#10B981' }} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" />
+              </svg>
+              <span className="font-semibold truncate min-w-0">{vehicle.fuelType}</span>
             </div>
-            
-            <div className="text-center p-3 bg-gradient-to-br from-orange-50 to-red-50 rounded-xl">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center mx-auto mb-2">
-                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                </svg>
-              </div>
-              <div className="text-xs font-semibold text-gray-700">{vehicle.mileage.toLocaleString()} km</div>
+            <div className="flex items-center gap-1 text-xs font-medium text-gray-700 bg-orange-50 px-1.5 py-1.5 rounded-lg min-w-0">
+              <svg className="h-3 w-3 flex-shrink-0" style={{ color: '#F97316' }} viewBox="0 0 20 20" fill="currentColor">
+                <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
+              </svg>
+              <span className="font-semibold whitespace-nowrap">{getTransmissionDisplay(vehicle.transmission)}</span>
             </div>
           </div>
           
-          {/* Premium Price Section */}
-          <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-            <div>
-              <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                ₹{(vehicle.price / 100000).toFixed(2)} Lakh
-              </div>
-              <div className="text-xs text-gray-500 font-medium">
-                EMI from ₹{(vehicle.price / 60 / 1000).toFixed(1)}k/month
+          {/* Premium Price Section - Prominently displayed */}
+          <div className="mt-auto pt-2 border-t border-gray-200">
+            <div className="flex items-baseline justify-between gap-2 mb-1">
+              <div className="text-lg sm:text-xl font-extrabold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                ₹{(vehicle.price / 100000).toFixed(2)}L
               </div>
             </div>
+            <p className="text-xs text-gray-600 font-medium mb-2">EMI from ₹{(vehicle.price / 60 / 1000).toFixed(1)}k/month</p>
             
             {/* Premium Quick View Button */}
             <button 
               onClick={handleQuickViewClick}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 transform hover:scale-105 hover:shadow-lg flex items-center gap-2"
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 hover:shadow-lg flex items-center justify-center gap-1.5"
             >
               <span>View</span>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -167,10 +171,11 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
     );
 };
 
-const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicles, onSelectVehicle, onToggleCompare, comparisonList, onToggleWishlist, wishlist, recommendations, allVehicles, onNavigate }) => {
+const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicles, onSelectVehicle, onToggleCompare, comparisonList, onToggleWishlist, wishlist, recommendations, allVehicles, onNavigate, onSelectCity }) => {
     const [aiSearchQuery, setAiSearchQuery] = useState('');
     const [isAiSearching, setIsAiSearching] = useState(false);
     const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
+    const cityScrollRef = useRef<HTMLDivElement>(null);
     
     const handleQuickView = (vehicle: Vehicle) => {
       console.log('🔍 handleQuickView called with vehicle:', vehicle.id, vehicle.make, vehicle.model);
@@ -575,42 +580,110 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                         </p>
                     </div>
                     
-                    {/* Premium City Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                        {['Mumbai', 'New Delhi', 'Bengaluru', 'Hyderabad', 'Chennai', 'Pune', 'Ahmedabad', 'Kolkata'].map((city, index) => {
-                            const cityVehicles = (allVehicles || []).filter(v => v.city === city && v.status === 'published');
-                            return (
-                                <button
-                                    key={city}
-                                    onClick={() => {
-                                        // Navigate to city landing page
-                                        onNavigate(ViewEnum.CITY_LANDING);
-                                    }}
-                                    className="group relative p-6 bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 hover:scale-105 border border-gray-100 hover:border-blue-200"
-                                    style={{animationDelay: `${index * 100}ms`}}
-                                >
-                                    {/* Background Gradient */}
-                                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-purple-50/50 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    {/* Premium City Cards - Scrollable Carousel */}
+                    <div className="relative" style={{ minHeight: '288px' }}>
+                        {/* Fixed Scroll Buttons - Outside scrollable container */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (cityScrollRef.current) {
+                                    cityScrollRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+                                }
+                            }}
+                            className="absolute left-2 z-20 w-12 h-12 bg-white rounded-full shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-110 border border-gray-200"
+                            style={{ top: 'calc(50% - 2rem)' }}
+                            aria-label="Scroll left"
+                        >
+                            <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (cityScrollRef.current) {
+                                    cityScrollRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+                                }
+                            }}
+                            className="absolute right-2 z-20 w-12 h-12 bg-white rounded-full shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-110 border border-gray-200"
+                            style={{ top: 'calc(50% - 2rem)' }}
+                            aria-label="Scroll right"
+                        >
+                            <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                        
+                        <div ref={cityScrollRef} className="overflow-x-auto scrollbar-hide pb-4 -mx-4 px-12">
+                            <div className="flex gap-6 min-w-max">
+                                {[
+                                    { name: 'Delhi NCR', initials: 'DN', colorClass: 'bg-gradient-to-br from-yellow-400 to-yellow-500', textColor: 'text-purple-900', diamondColor: 'bg-amber-50', diamondBorder: 'border-gray-900', diamondText: 'text-gray-900' },
+                                    { name: 'Hyderabad', initials: 'HY', colorClass: 'bg-gradient-to-br from-purple-600 to-purple-700', textColor: 'text-white', diamondColor: 'bg-blue-500', diamondBorder: 'border-purple-300', diamondText: 'text-white' },
+                                    { name: 'Bangalore', initials: 'BA', colorClass: 'bg-gradient-to-br from-indigo-400 to-indigo-500', textColor: 'text-white', diamondColor: 'bg-purple-700', diamondBorder: 'border-indigo-300', diamondText: 'text-gray-900' },
+                                    { name: 'Pune', initials: 'PU', colorClass: 'bg-gradient-to-br from-teal-500 to-teal-600', textColor: 'text-white', diamondColor: 'bg-amber-50', diamondBorder: 'border-teal-300', diamondText: 'text-gray-900' },
+                                    { name: 'Mumbai', initials: 'MU', colorClass: 'bg-gradient-to-br from-pink-500 to-pink-600', textColor: 'text-white', diamondColor: 'bg-orange-500', diamondBorder: 'border-pink-300', diamondText: 'text-white' },
+                                    { name: 'Chennai', initials: 'CH', colorClass: 'bg-gradient-to-br from-blue-500 to-blue-600', textColor: 'text-white', diamondColor: 'bg-blue-100', diamondBorder: 'border-blue-300', diamondText: 'text-gray-900' },
+                                    { name: 'Ahmedabad', initials: 'AH', colorClass: 'bg-gradient-to-br from-orange-500 to-orange-600', textColor: 'text-white', diamondColor: 'bg-orange-100', diamondBorder: 'border-orange-300', diamondText: 'text-gray-900' },
+                                    { name: 'Kolkata', initials: 'KO', colorClass: 'bg-gradient-to-br from-cyan-500 to-cyan-600', textColor: 'text-white', diamondColor: 'bg-cyan-100', diamondBorder: 'border-cyan-300', diamondText: 'text-gray-900' },
+                                ].map((cityData, index) => {
+                                    const cityName = cityData.name === 'Delhi NCR' ? 'New Delhi' : cityData.name === 'Bangalore' ? 'Bengaluru' : cityData.name;
+                                    const cityVehicles = (allVehicles || []).filter(v => v.city === cityName && v.status === 'published');
+                                    // Calculate hubs based on vehicle count (stable calculation)
+                                    const carsCount = cityVehicles.length;
+                                    const hubsCount = Math.max(1, Math.floor(carsCount / 200) + (index % 3));
                                     
-                                    {/* Content */}
-                                    <div className="relative z-10 text-center">
-                                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                                            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
-                                            </svg>
-                                        </div>
-                                        <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors duration-300 text-lg mb-2">{city}</h3>
-                                        <p className="text-sm text-gray-600 mb-2 font-medium">{cityVehicles.length} vehicles</p>
-                                        <div className="flex items-center justify-center gap-1 text-blue-600 font-semibold text-sm group-hover:gap-2 transition-all duration-300">
-                                            <span>Explore</span>
-                                            <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                            </svg>
-                                        </div>
-                                    </div>
-                                </button>
-                            );
-                        })}
+                                    return (
+                                        <button
+                                            key={cityData.name}
+                                            onClick={() => {
+                                                onSelectCity(cityName);
+                                            }}
+                                            className={`group relative flex-shrink-0 w-56 h-72 ${cityData.colorClass} rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-105 overflow-hidden`}
+                                            style={{animationDelay: `${index * 100}ms`}}
+                                        >
+                                            {/* Background Pattern */}
+                                            <div className="absolute inset-0 opacity-10">
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-2xl"></div>
+                                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full blur-xl"></div>
+                                            </div>
+                                            
+                                            {/* Content */}
+                                            <div className="relative z-10 h-full flex flex-col p-5">
+                                                {/* City Name */}
+                                                <h3 className={`text-lg font-bold mb-4 text-center ${cityData.textColor} group-hover:scale-105 transition-transform duration-300`}>
+                                                    {cityData.name}
+                                                </h3>
+                                                
+                                                {/* Diamond-shaped Initials */}
+                                                <div className="flex-1 flex items-center justify-center mb-4">
+                                                    <div className={`relative w-24 h-24 transform rotate-45 ${cityData.diamondColor} rounded-xl shadow-lg border-2 ${cityData.diamondBorder} group-hover:scale-110 group-hover:rotate-[48deg] transition-all duration-500 flex items-center justify-center`}>
+                                                        <span className={`-rotate-45 text-2xl font-black ${cityData.diamondText}`}>
+                                                            {cityData.initials}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Metrics */}
+                                                <div className={`text-center ${cityData.textColor === 'text-white' ? 'text-gray-900' : cityData.textColor} mt-auto`}>
+                                                    <p className="text-sm font-semibold mb-0.5">{hubsCount} hubs</p>
+                                                    <p className="text-lg font-bold">{carsCount.toLocaleString()}+ cars</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        
+                        {/* View All Locations Button */}
+                        <div className="flex justify-center mt-8">
+                            <button
+                                onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                                className="px-8 py-3 bg-white border-2 border-purple-600 text-purple-600 rounded-full font-semibold text-sm hover:bg-purple-600 hover:text-white transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+                            >
+                                View all locations
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>

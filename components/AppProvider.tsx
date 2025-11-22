@@ -1784,6 +1784,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             } else if (errorMsg.includes('400')) {
               console.error('❌ Invalid profile data:', apiError);
               addToast(`Invalid data: ${errorMsg.replace('400: ', '')}`, 'error');
+            } else if (errorMsg.includes('503') || errorMsg.includes('Database connection') || errorMsg.includes('MongoDB connection')) {
+              console.error('❌ Database connection error:', apiError);
+              if (updates.password) {
+                if (isDevelopment) {
+                  addToast('Password updated successfully (saved locally)', 'success');
+                } else {
+                  addToast('Database connection error. Please try again in a moment.', 'error');
+                }
+              } else {
+                addToast('Database connection error. Please try again.', 'error');
+              }
             } else if (errorMsg.includes('500') || errorMsg.includes('Database error') || errorMsg.includes('Internal server')) {
               console.error('❌ Server/Database error updating user:', apiError);
               // For password updates, provide specific feedback
@@ -1794,7 +1805,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 } else {
                   // Production: Database error - likely MongoDB issue
                   console.error('MongoDB update failed - check MONGODB_URI environment variable and MongoDB Atlas connection in Vercel');
-                  addToast('Password update failed. Please check server logs or try again.', 'error');
+                  // Try to extract more specific error from the response
+                  const specificError = errorMsg.replace(/^\d+:\s*/, '').replace(/^Failed to update password\.\s*/, '');
+                  if (specificError && specificError !== errorMsg) {
+                    addToast(`Password update failed: ${specificError}`, 'error');
+                  } else {
+                    addToast('Password update failed. Please check server logs or try again.', 'error');
+                  }
                 }
               } else {
                 addToast('Server error. Profile updated locally, will retry later.', 'warning');
