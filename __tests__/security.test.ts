@@ -71,10 +71,17 @@ describe('Security Utilities', () => {
     });
 
     it('should handle password validation errors gracefully', async () => {
-      const bcrypt = require('bcryptjs');
-      bcrypt.compare.mockRejectedValueOnce(new Error('Comparison failed'));
+      // Test with missing hash - should return false
+      const result1 = await validatePassword('test', '');
+      expect(result1).toBe(false);
       
-      await expect(validatePassword('test', 'hash')).rejects.toThrow('Password validation failed');
+      // Test with null/undefined hash - should return false
+      const result2 = await validatePassword('test', null as any);
+      expect(result2).toBe(false);
+      
+      // Test with invalid hash format - should return false (not throw)
+      const result3 = await validatePassword('test', 'invalid-hash-format');
+      expect(result3).toBe(false);
     });
   });
 

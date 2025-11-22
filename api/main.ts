@@ -348,6 +348,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
       }
       
+      // Check if user has a password set (might be an OAuth user)
+      if (!user.password) {
+        return res.status(400).json({ 
+          success: false, 
+          reason: 'This account uses Google/Phone sign-in. Please use that method to login.' 
+        });
+      }
+      
       // Verify password using bcrypt
       const isPasswordValid = await validatePassword(sanitizedData.password, user.password);
       if (!isPasswordValid) {

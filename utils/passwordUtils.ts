@@ -28,11 +28,19 @@ export const hashPassword = async (password: string): Promise<string> => {
  */
 export const comparePassword = async (password: string, hash: string): Promise<boolean> => {
   try {
+    // Add check for missing hash
+    if (!hash) {
+      console.warn('Password comparison failed: hash is missing');
+      return false;
+    }
+    
     // Import bcryptjs dynamically to avoid SSR issues
     const bcrypt = await import('bcryptjs');
     return await bcrypt.compare(password, hash);
   } catch (error) {
-    console.error('Failed to compare password:', error);
+    // Log the error but return false to treat it as an authentication failure
+    // This handles cases where the hash is invalid (e.g., plain text password in DB)
+    console.warn('Password comparison error (likely invalid hash):', error);
     return false;
   }
 };

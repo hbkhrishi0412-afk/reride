@@ -52,9 +52,18 @@ export const hashPassword = async (password: string): Promise<string> => {
 
 export const validatePassword = async (password: string, hash: string): Promise<boolean> => {
   try {
+    // Add check for missing hash
+    if (!hash) {
+      console.warn('Password validation failed: hash is missing');
+      return false;
+    }
+    
     return await bcrypt.compare(password, hash);
   } catch (error) {
-    throw new Error('Password validation failed');
+    // Log the error but return false to treat it as an authentication failure
+    // This handles cases where the hash is invalid (e.g., plain text password in DB)
+    console.warn('Password validation error (likely invalid hash in DB):', error);
+    return false;
   }
 };
 
