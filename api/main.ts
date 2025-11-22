@@ -16,7 +16,8 @@ import {
   getSecurityHeaders,
   sanitizeObject,
   validateEmail,
-  verifyToken
+  verifyToken,
+  refreshAccessToken
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { ObjectId } from 'mongodb';
@@ -748,22 +749,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
 
       try {
-        const newAccessToken = generateAccessToken({ 
-          id: 'temp', 
-          email: 'temp@example.com', 
-          name: 'Temp User',
-          mobile: '0000000000',
-          role: 'customer',
-          location: 'Unknown',
-          status: 'active',
-          createdAt: new Date().toISOString()
-        });
+        // FIX: Use the utility to verify and refresh the token properly
+        // This recovers the original user data from the refresh token
+        const newAccessToken = refreshAccessToken(refreshToken);
+        
         return res.status(200).json({ 
           success: true, 
           accessToken: newAccessToken 
         });
       } catch (error) {
-        return res.status(401).json({ success: false, reason: 'Invalid refresh token.' });
+        console.warn('Refresh token failed:', error);
+        return res.status(401).json({ success: false, reason: 'Invalid or expired refresh token.' });
       }
     }
 
