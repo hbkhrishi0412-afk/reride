@@ -62,9 +62,9 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
     return (
       <div 
         onClick={() => onSelectVehicle(vehicle)}
-        className="group cursor-pointer bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 aspect-[3/4] flex flex-col min-h-[380px]"
+        className="group cursor-pointer bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 aspect-[3/4] flex flex-col"
       >
-        {/* Image Container with Premium Effects */}
+        {/* Image Container */}
         <div className="relative overflow-hidden flex-shrink-0" style={{ height: '50%' }}>
           <img 
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
@@ -73,103 +73,87 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
             loading="lazy" 
           />
           
-          {/* Premium Gradient Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          
-          {/* Premium Verified Badge */}
-          <div className="absolute top-2 left-2 sm:top-3 sm:left-3">
-            <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white px-2 py-1 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shadow-lg backdrop-blur-sm">
-              <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3" fill="currentColor" viewBox="0 0 20 20">
+          {/* Verified Badge - Top Left (Green) */}
+          <div className="absolute top-3 left-3">
+            <div className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-lg">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
               </svg>
-              <span className="hidden sm:inline">Verified</span>
+              <span>Verified</span>
             </div>
           </div>
           
-          {/* Premium Wishlist Button */}
-          <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
+          {/* Wishlist Button - Top Right (White Heart) */}
+          <div className="absolute top-3 right-3">
             <button
               onClick={handleWishlistClick}
-              className={`p-1.5 sm:p-2 rounded-full transition-all duration-300 shadow-lg backdrop-blur-sm ${
-                isInWishlist 
-                  ? 'bg-gradient-to-r from-pink-500 to-red-500 text-white' 
-                  : 'bg-white/90 text-gray-600 hover:bg-white hover:text-pink-500'
-              }`}
+              className="p-2 rounded-full bg-white/90 backdrop-blur-sm text-gray-600 hover:bg-white transition-colors shadow-lg"
             >
-              <svg className="h-4 w-4 sm:h-5 sm:w-5" fill={isInWishlist ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
+              <svg className="h-5 w-5" fill={isInWishlist ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
               </svg>
             </button>
           </div>
           
-          {/* Premium Price Badge */}
-          <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3">
-            <div className="bg-white/95 backdrop-blur-sm px-2 py-1 rounded-full shadow-lg">
-              <span className="text-sm sm:text-base font-bold text-gray-900">
+          {/* Price Badge - Bottom Right */}
+          <div className="absolute bottom-3 right-3">
+            <div className="bg-gray-900/80 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-lg">
+              <span className="text-sm font-bold text-white">
                 ₹{(vehicle.price / 100000).toFixed(2)}L
               </span>
             </div>
           </div>
         </div>
         
-        {/* Premium Content */}
-        <div className="p-4 sm:p-5 flex-grow flex flex-col min-h-0">
-          {/* Vehicle Title */}
+        {/* Content Section */}
+        <div className="p-4 flex-grow flex flex-col">
+          {/* Vehicle Title - Large and Bold */}
           <div className="mb-2">
-            <h3 className="text-sm sm:text-base font-bold text-gray-900 mb-0.5 group-hover:text-blue-600 transition-colors duration-300 line-clamp-1 leading-tight">
+            <h3 className="text-lg font-bold text-gray-900 leading-tight">
               {vehicle.year} {vehicle.make} {vehicle.model}
             </h3>
             {vehicle.variant && (
-              <p className="text-xs text-gray-600 line-clamp-1">{vehicle.variant}</p>
+              <p className="text-sm text-gray-600 mt-0.5">{vehicle.variant}</p>
             )}
           </div>
           
-          {/* Premium Specs - Compact with Kilometers, Fuel Type, and Transmission */}
-          <div className="grid grid-cols-3 gap-1.5 my-2 flex-shrink-0">
-            <div className="flex items-center gap-1 text-xs font-medium text-gray-700 bg-blue-50 px-1.5 py-1.5 rounded-lg min-w-0">
-              <svg className="h-3 w-3 flex-shrink-0" style={{ color: '#1E88E5' }} viewBox="0 0 20 20" fill="currentColor">
+          {/* Specs - Three icons with text */}
+          <div className="flex items-center gap-4 my-3 text-xs text-gray-600">
+            {/* Clock Icon - Mileage */}
+            <div className="flex items-center gap-1">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.414-1.414L11 10.586V6z" clipRule="evenodd" />
               </svg>
-              <span className="font-semibold truncate min-w-0">{vehicle.mileage.toLocaleString()} km</span>
+              <span>{vehicle.mileage.toLocaleString()}...</span>
             </div>
-            <div className="flex items-center gap-1 text-xs font-medium text-gray-700 bg-green-50 px-1.5 py-1.5 rounded-lg min-w-0">
-              <svg className="h-3 w-3 flex-shrink-0" style={{ color: '#10B981' }} viewBox="0 0 20 20" fill="currentColor">
+            
+            {/* Fuel Pump Icon */}
+            <div className="flex items-center gap-1">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" />
               </svg>
-              <span className="font-semibold truncate min-w-0">{vehicle.fuelType}</span>
+              <span>{vehicle.fuelType}</span>
             </div>
-            <div className="flex items-center gap-1 text-xs font-medium text-gray-700 bg-orange-50 px-1.5 py-1.5 rounded-lg min-w-0">
-              <svg className="h-3 w-3 flex-shrink-0" style={{ color: '#F97316' }} viewBox="0 0 20 20" fill="currentColor">
+            
+            {/* Gear Icon - Transmission */}
+            <div className="flex items-center gap-1">
+              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
               </svg>
-              <span className="font-semibold whitespace-nowrap">{getTransmissionDisplay(vehicle.transmission)}</span>
+              <span>{getTransmissionDisplay(vehicle.transmission)}</span>
             </div>
           </div>
           
-          {/* Premium Location Section - Prominently displayed */}
-          <div className="mt-auto pt-3 border-t border-gray-200">
-            <div className="flex items-center gap-2 mb-2">
-              <svg className="h-6 w-6 flex-shrink-0" style={{ color: '#2563EB' }} viewBox="0 0 20 20" fill="currentColor">
+          {/* Location - Bottom with purple bold text */}
+          <div className="mt-auto pt-3">
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
               </svg>
-              <div className="text-xl sm:text-2xl font-extrabold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                <span>{vehicle.city || vehicle.location || 'Location N/A'}</span>
-              </div>
+              <span className="text-base font-bold" style={{ color: '#9333EA' }}>
+                {vehicle.city || vehicle.location || 'Location N/A'}
+              </span>
             </div>
-            {vehicle.state && (
-              <p className="text-sm text-gray-600 font-medium mb-3">{vehicle.state}</p>
-            )}
-            
-            {/* Premium Quick View Button */}
-            <button 
-              onClick={handleQuickViewClick}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-3 py-1.5 rounded-lg font-semibold text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 hover:shadow-lg flex items-center justify-center gap-1.5"
-            >
-              <span>View</span>
-              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>
@@ -181,6 +165,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
     const [isAiSearching, setIsAiSearching] = useState(false);
     const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
     const cityScrollRef = useRef<HTMLDivElement>(null);
+    const categoryScrollRef = useRef<HTMLDivElement>(null);
     
     const handleQuickView = (vehicle: Vehicle) => {
       console.log('🔍 handleQuickView called with vehicle:', vehicle.id, vehicle.make, vehicle.model);
@@ -718,31 +703,94 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                         </p>
                     </div>
                     
-                    {/* Premium Category Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-                        {Object.values(CategoryEnum).map((category, index) => (
-                            <button
-                                key={category}
-                                onClick={() => onSelectCategory(category)}
-                                className="group relative p-8 bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-3 hover:scale-105 border border-gray-100 hover:border-purple-200"
-                                style={{animationDelay: `${index * 100}ms`}}
-                            >
-                                {/* Background Gradient */}
-                                <div className="absolute inset-0 bg-gradient-to-br from-purple-50/50 to-pink-50/50 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                                
-                                {/* Content */}
-                                <div className="relative z-10 flex flex-col items-center text-center">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg">
-                                        <div className="text-white">
-                                            {categoryIcons[category]}
-                                        </div>
-                                    </div>
-                                    <h3 className="font-bold text-gray-900 group-hover:text-purple-600 transition-colors duration-300 text-lg leading-tight">
-                                        {category.replace('_', ' ')}
-                                    </h3>
-                                </div>
-                            </button>
-                        ))}
+                    {/* Premium Category Cards - Scrollable Carousel */}
+                    <div className="relative" style={{ minHeight: '288px' }}>
+                        {/* Fixed Scroll Buttons - Outside scrollable container */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (categoryScrollRef.current) {
+                                    categoryScrollRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+                                }
+                            }}
+                            className="absolute left-2 z-20 w-12 h-12 bg-white rounded-full shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-110 border border-gray-200"
+                            style={{ top: 'calc(50% - 2rem)' }}
+                            aria-label="Scroll left"
+                        >
+                            <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (categoryScrollRef.current) {
+                                    categoryScrollRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+                                }
+                            }}
+                            className="absolute right-2 z-20 w-12 h-12 bg-white rounded-full shadow-lg hover:shadow-xl flex items-center justify-center transition-all duration-300 hover:scale-110 border border-gray-200"
+                            style={{ top: 'calc(50% - 2rem)' }}
+                            aria-label="Scroll right"
+                        >
+                            <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                        
+                        <div ref={categoryScrollRef} className="overflow-x-auto scrollbar-hide pb-4 -mx-4 px-12">
+                            <div className="flex gap-6 min-w-max">
+                                {[
+                                    { category: CategoryEnum.FOUR_WHEELER, name: 'Four Wheeler', initials: 'FW', colorClass: 'bg-gradient-to-br from-blue-500 to-blue-600', textColor: 'text-white', diamondColor: 'bg-blue-100', diamondBorder: 'border-blue-300', diamondText: 'text-gray-900' },
+                                    { category: CategoryEnum.TWO_WHEELER, name: 'Two Wheeler', initials: 'TW', colorClass: 'bg-gradient-to-br from-green-500 to-green-600', textColor: 'text-white', diamondColor: 'bg-green-100', diamondBorder: 'border-green-300', diamondText: 'text-gray-900' },
+                                    { category: CategoryEnum.THREE_WHEELER, name: 'Three Wheeler', initials: 'TH', colorClass: 'bg-gradient-to-br from-orange-500 to-orange-600', textColor: 'text-white', diamondColor: 'bg-orange-100', diamondBorder: 'border-orange-300', diamondText: 'text-gray-900' },
+                                    { category: CategoryEnum.COMMERCIAL, name: 'Commercial', initials: 'CM', colorClass: 'bg-gradient-to-br from-purple-600 to-purple-700', textColor: 'text-white', diamondColor: 'bg-purple-100', diamondBorder: 'border-purple-300', diamondText: 'text-gray-900' },
+                                    { category: CategoryEnum.FARM, name: 'Farm', initials: 'FM', colorClass: 'bg-gradient-to-br from-yellow-400 to-yellow-500', textColor: 'text-purple-900', diamondColor: 'bg-amber-50', diamondBorder: 'border-gray-900', diamondText: 'text-gray-900' },
+                                    { category: CategoryEnum.CONSTRUCTION, name: 'Construction', initials: 'CN', colorClass: 'bg-gradient-to-br from-red-500 to-red-600', textColor: 'text-white', diamondColor: 'bg-red-100', diamondBorder: 'border-red-300', diamondText: 'text-gray-900' },
+                                ].map((categoryData, index) => {
+                                    const categoryVehicles = (allVehicles || []).filter(v => v.category === categoryData.category && v.status === 'published');
+                                    const vehiclesCount = categoryVehicles.length;
+                                    const hubsCount = Math.max(1, Math.floor(vehiclesCount / 200) + (index % 3));
+                                    
+                                    return (
+                                        <button
+                                            key={categoryData.category}
+                                            onClick={() => onSelectCategory(categoryData.category)}
+                                            className={`group relative flex-shrink-0 w-56 h-72 ${categoryData.colorClass} rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-105 overflow-hidden`}
+                                            style={{animationDelay: `${index * 100}ms`}}
+                                        >
+                                            {/* Background Pattern */}
+                                            <div className="absolute inset-0 opacity-10">
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-2xl"></div>
+                                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full blur-xl"></div>
+                                            </div>
+                                            
+                                            {/* Content */}
+                                            <div className="relative z-10 h-full flex flex-col p-5">
+                                                {/* Category Name */}
+                                                <h3 className={`text-lg font-bold mb-4 text-center ${categoryData.textColor} group-hover:scale-105 transition-transform duration-300`}>
+                                                    {categoryData.name}
+                                                </h3>
+                                                
+                                                {/* Diamond-shaped Icon */}
+                                                <div className="flex-1 flex items-center justify-center mb-4">
+                                                    <div className={`relative w-24 h-24 transform rotate-45 ${categoryData.diamondColor} rounded-xl shadow-lg border-2 ${categoryData.diamondBorder} group-hover:scale-110 group-hover:rotate-[48deg] transition-all duration-500 flex items-center justify-center`}>
+                                                        <div className="-rotate-45" style={{ color: '#000000' }}>
+                                                            {categoryIcons[categoryData.category]}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Metrics */}
+                                                <div className={`text-center ${categoryData.textColor === 'text-white' ? 'text-gray-900' : categoryData.textColor} mt-auto`}>
+                                                    <p className="text-sm font-semibold mb-0.5">{hubsCount} hubs</p>
+                                                    <p className="text-lg font-bold">{vehiclesCount.toLocaleString()}+ vehicles</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

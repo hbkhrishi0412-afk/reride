@@ -16,31 +16,64 @@ export async function calculateExpiryDate(daysFromNow?: number): Promise<string>
 }
 
 // Check if listing is expired
-export function isListingExpired(vehicle: Vehicle): boolean {
+// For Premium plans, listings don't expire if the plan hasn't expired
+// Optional currentTime parameter for real-time updates (defaults to now)
+export function isListingExpired(vehicle: Vehicle, sellerPlan?: { subscriptionPlan?: string; planExpiryDate?: string }, currentTime?: Date): boolean {
+  // If no listing expiry date, it's not expired
   if (!vehicle.listingExpiresAt) return false;
-  return new Date(vehicle.listingExpiresAt) < new Date();
+  
+  const now = currentTime || new Date();
+  
+  // For Premium plans: if plan hasn't expired, listing doesn't expire
+  if (sellerPlan?.subscriptionPlan === 'premium' && sellerPlan?.planExpiryDate) {
+    const planExpiry = new Date(sellerPlan.planExpiryDate);
+    // If plan is still active, listing is not expired
+    if (planExpiry > now) {
+      return false;
+    }
+    // If plan expired, check listing expiry
+  }
+  
+  // For Free/Pro plans or Premium plans that expired, check listing expiry
+  return new Date(vehicle.listingExpiresAt) < now;
 }
 
 // Get days until expiry
-export function getDaysUntilExpiry(vehicle: Vehicle): number {
+// For Premium plans, returns days until plan expiry if plan is active
+// Optional currentTime parameter for real-time updates (defaults to now)
+export function getDaysUntilExpiry(vehicle: Vehicle, sellerPlan?: { subscriptionPlan?: string; planExpiryDate?: string }, currentTime?: Date): number {
+  const now = currentTime || new Date();
+  
+  // For Premium plans: if plan hasn't expired, use plan expiry date
+  if (sellerPlan?.subscriptionPlan === 'premium' && sellerPlan?.planExpiryDate) {
+    const planExpiry = new Date(sellerPlan.planExpiryDate);
+    // If plan is still active, return days until plan expiry
+    if (planExpiry > now) {
+      const diffTime = planExpiry.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    }
+    // If plan expired, check listing expiry
+  }
+  
+  // For Free/Pro plans or Premium plans that expired, check listing expiry
   if (!vehicle.listingExpiresAt) return -1;
   
   const expiryDate = new Date(vehicle.listingExpiresAt);
-  const today = new Date();
-  const diffTime = expiryDate.getTime() - today.getTime();
+  const diffTime = expiryDate.getTime() - now.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
   return diffDays;
 }
 
 // Filter expired listings
-export function filterExpiredListings(vehicles: Vehicle[]): Vehicle[] {
-  return vehicles.filter(v => isListingExpired(v));
+export function filterExpiredListings(vehicles: Vehicle[], sellerPlan?: { subscriptionPlan?: string; planExpiryDate?: string }): Vehicle[] {
+  return vehicles.filter(v => isListingExpired(v, sellerPlan));
 }
 
 // Filter active listings
-export function filterActiveListings(vehicles: Vehicle[]): Vehicle[] {
-  return vehicles.filter(v => !isListingExpired(v) && v.status === 'published');
+export function filterActiveListings(vehicles: Vehicle[], sellerPlan?: { subscriptionPlan?: string; planExpiryDate?: string }): Vehicle[] {
+  return vehicles.filter(v => !isListingExpired(v, sellerPlan) && v.status === 'published');
 }
 
 // ============================================
@@ -89,9 +122,9 @@ export async function renewListing(vehicle: Vehicle, autoRenew: boolean = false)
 }
 
 // Auto-renew listings that have auto-renew enabled
-export async function autoRenewListings(vehicles: Vehicle[]): Promise<Vehicle[]> {
+export async function autoRenewListings(vehicles: Vehicle[], sellerPlan?: { subscriptionPlan?: string; planExpiryDate?: string }): Promise<Vehicle[]> {
   const results = await Promise.all(vehicles.map(async vehicle => {
-    if (vehicle.listingAutoRenew && isListingExpired(vehicle)) {
+    if (vehicle.listingAutoRenew && isListingExpired(vehicle, sellerPlan)) {
       return await renewListing(vehicle, true);
     }
     return vehicle;
@@ -104,15 +137,25 @@ export async function autoRenewListings(vehicles: Vehicle[]): Promise<Vehicle[]>
 // ============================================
 
 // Get listing lifecycle info
-export async function getListingLifecycle(vehicle: Vehicle): Promise<ListingLifecycle> {
+export async function getListingLifecycle(vehicle: Vehicle, sellerPlan?: { subscriptionPlan?: string; planExpiryDate?: string }): Promise<ListingLifecycle> {
+  // For Premium plans, use plan expiry date if plan is active
+  let expiresAt = vehicle.listingExpiresAt || await calculateExpiryDate();
+  if (sellerPlan?.subscriptionPlan === 'premium' && sellerPlan?.planExpiryDate) {
+    const planExpiry = new Date(sellerPlan.planExpiryDate);
+    const now = new Date();
+    if (planExpiry > now) {
+      expiresAt = sellerPlan.planExpiryDate;
+    }
+  }
+  
   return {
     vehicleId: vehicle.id,
     createdAt: vehicle.createdAt || new Date().toISOString(),
-    expiresAt: vehicle.listingExpiresAt || await calculateExpiryDate(),
+    expiresAt: expiresAt,
     lastRefreshedAt: vehicle.listingLastRefreshed,
     autoRenew: vehicle.listingAutoRenew || false,
     renewalCount: vehicle.listingRenewalCount || 0,
-    status: isListingExpired(vehicle) ? 'expired' : 'active',
+    status: isListingExpired(vehicle, sellerPlan) ? 'expired' : 'active',
   };
 }
 

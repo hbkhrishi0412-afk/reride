@@ -47,9 +47,11 @@ function normalizeUser(user: any): any {
   }
   
   // Ensure role is present (critical for seller dashboard access)
-  if (!normalized.role) {
-    console.warn('⚠️ User object missing role field:', normalized.email);
-    // Try to infer from email or default to 'customer'
+  // Only set default if role is truly missing - don't overwrite existing roles
+  if (!normalized.role || typeof normalized.role !== 'string') {
+    console.warn('⚠️ User object missing or invalid role field:', normalized.email, 'role:', normalized.role);
+    // Default to 'customer' only if role is completely missing
+    // This should rarely happen as role is required in the schema
     normalized.role = 'customer';
   }
   
@@ -195,8 +197,19 @@ export default async function handler(
     // Handle Vercel rewrites - check original path if available
     let pathname = '/';
     try {
+      // Vercel sets multiple headers for the original path
+      // x-vercel-original-path contains the original request path before rewrite
+      // x-invoke-path is another header Vercel sometimes uses
       const originalPath = req.headers['x-vercel-original-path'] as string;
-      const requestUrl = originalPath || req.url || '';
+      const invokePath = req.headers['x-invoke-path'] as string;
+      
+      // Priority: originalPath > invokePath > req.url
+      // req.url might be /api/main after rewrite, so we prefer the headers
+      let requestUrl = originalPath || invokePath || req.url || '';
+      
+      // If we don't have a path from headers and req.url is /api/main, 
+      // we need to check if there's a way to get the original path
+      // For now, use what we have
       
       // If requestUrl doesn't start with /, it might be a full URL or relative
       if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
@@ -209,6 +222,9 @@ export default async function handler(
         const url = new URL(requestUrl, `http://${req.headers.host || 'localhost'}`);
         pathname = url.pathname;
       }
+      
+      // Log for debugging to help identify routing issues
+      console.log(`📍 Request routing - method: ${req.method}, originalPath: ${originalPath || 'none'}, invokePath: ${invokePath || 'none'}, req.url: ${req.url || 'none'}, final pathname: ${pathname}`);
     } catch (urlError) {
       console.warn('⚠️ Error parsing URL, using fallback:', urlError);
       // Fallback: try to extract pathname from req.url directly
@@ -218,11 +234,25 @@ export default async function handler(
           pathname = match[1];
         }
       }
+      console.log(`📍 Fallback pathname: ${pathname}, req.url: ${req.url}`);
     }
-    
-    // Log for debugging (only in development)
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`📍 Request pathname: ${pathname}, url: ${req.url}`);
+
+    // Early detection: If this is a PUT/POST request and we can't determine the route,
+    // check if it's likely a user operation based on URL patterns or headers
+    if ((req.method === 'PUT' || req.method === 'POST') && (pathname === '/' || pathname === '/api/main' || pathname === '/main')) {
+      const originalPath = req.headers['x-vercel-original-path'] as string;
+      const invokePath = req.headers['x-invoke-path'] as string;
+      const urlPath = req.url || '';
+      
+      // Check if any of these indicate a /users endpoint
+      if (originalPath?.includes('/users') || invokePath?.includes('/users') || urlPath.includes('/users')) {
+        console.log(`🔍 Early detection: Routing ${req.method} to handleUsers based on URL/header pattern`);
+        const handlerOptions: HandlerOptions = {
+          mongoAvailable,
+          mongoFailureReason
+        };
+        return await handleUsers(req, res, handlerOptions);
+      }
     }
 
     // Route to appropriate handler
@@ -231,7 +261,52 @@ export default async function handler(
       mongoFailureReason
     };
 
-    if (pathname.includes('/users') || pathname.endsWith('/users')) {
+    // Special handling: If pathname is /api/main (after Vercel rewrite), 
+    // check the original path header to determine the actual route
+    if (pathname === '/api/main' || pathname === '/main') {
+      const originalPath = req.headers['x-vercel-original-path'] as string;
+      const invokePath = req.headers['x-invoke-path'] as string;
+      const checkPath = originalPath || invokePath;
+      
+      if (checkPath) {
+        // Extract the actual path from the original path
+        if (checkPath.includes('/users') || checkPath.endsWith('/users')) {
+          console.log(`✅ Routing ${req.method} request from /api/main to handleUsers (original: ${checkPath})`);
+          return await handleUsers(req, res, handlerOptions);
+        } else if (checkPath.includes('/vehicles') || checkPath.endsWith('/vehicles')) {
+          console.log(`✅ Routing ${req.method} request from /api/main to handleVehicles (original: ${checkPath})`);
+          return await handleVehicles(req, res, handlerOptions);
+        } else if (checkPath.includes('/faqs') || checkPath.endsWith('/faqs')) {
+          console.log(`✅ Routing ${req.method} request from /api/main to handleContent/FAQs (original: ${checkPath})`);
+          req.query = req.query || {};
+          req.query.type = 'faqs';
+          return await handleContent(req, res, handlerOptions);
+        } else if (checkPath.includes('/support-tickets') || checkPath.endsWith('/support-tickets')) {
+          console.log(`✅ Routing ${req.method} request from /api/main to handleContent/SupportTickets (original: ${checkPath})`);
+          req.query = req.query || {};
+          req.query.type = 'support-tickets';
+          return await handleContent(req, res, handlerOptions);
+        } else if (checkPath.includes('/content') || checkPath.endsWith('/content')) {
+          console.log(`✅ Routing ${req.method} request from /api/main to handleContent (original: ${checkPath})`);
+          return await handleContent(req, res, handlerOptions);
+        }
+      }
+      
+      // Fallback: If we can't determine the route from headers, check the request body or method
+      // For PUT/POST requests, if we have a body with email, it's likely a user update
+      if ((req.method === 'PUT' || req.method === 'POST') && req.body && req.body.email) {
+        console.log(`✅ Routing ${req.method} request from /api/main to handleUsers (fallback: body contains email)`);
+        return await handleUsers(req, res, handlerOptions);
+      }
+      
+      // Last resort: default to users handler for /api/main
+      console.log(`⚠️ Routing ${req.method} request from /api/main to handleUsers (default fallback - no original path found)`);
+      return await handleUsers(req, res, handlerOptions);
+    }
+
+    // Enhanced routing check for /users endpoint - handles /api/users, /users, and variations
+    if (pathname.includes('/users') || pathname.endsWith('/users') || pathname === '/api/users' || pathname === '/users') {
+      console.log(`✅ Routing ${req.method} request to handleUsers handler`);
       return await handleUsers(req, res, handlerOptions);
     } else if (pathname.includes('/vehicles') || pathname.endsWith('/vehicles')) {
       try {
@@ -277,8 +352,9 @@ export default async function handler(
       return await handleUtils(req, res, handlerOptions);
     } else if (pathname.includes('/ai') || pathname.endsWith('/ai') || pathname.includes('/gemini')) {
       return await handleAI(req, res, handlerOptions);
-    } else if (pathname.includes('/faqs') || pathname.endsWith('/faqs')) {
+    } else if (pathname.includes('/faqs') || pathname.endsWith('/faqs') || pathname === '/api/faqs' || pathname === '/faqs') {
       // Set query type for handleContent to route to FAQs handler
+      console.log(`✅ Routing ${req.method} request to handleContent/FAQs handler`);
       req.query = req.query || {};
       req.query.type = 'faqs';
       return await handleContent(req, res, handlerOptions);
@@ -295,6 +371,9 @@ export default async function handler(
       return await handleBusiness(req, res, handlerOptions);
     } else {
       // Default to users for backward compatibility
+      // This catches any unmatched routes, especially important for PUT /api/users
+      // when pathname extraction fails or doesn't match expected patterns
+      console.log(`⚠️ Default route: Routing ${req.method} request (pathname: ${pathname}) to handleUsers handler`);
       return await handleUsers(req, res, handlerOptions);
     }
 
@@ -303,6 +382,25 @@ export default async function handler(
     
     // Ensure we always return JSON, never HTML
     res.setHeader('Content-Type', 'application/json');
+    
+    // Last resort: If this is a PUT request to /api/users and routing failed,
+    // try to route it to handleUsers directly
+    const urlPath = req.url || '';
+    const originalPath = req.headers['x-vercel-original-path'] as string;
+    if ((req.method === 'PUT' || req.method === 'POST') && 
+        (urlPath.includes('/users') || originalPath?.includes('/users'))) {
+      console.log(`🆘 Error handler: Attempting to route ${req.method} /users request to handleUsers as last resort`);
+      try {
+        const handlerOptions: HandlerOptions = {
+          mongoAvailable: true,
+          mongoFailureReason: undefined
+        };
+        return await handleUsers(req, res, handlerOptions);
+      } catch (handlerError) {
+        console.error('❌ Even handleUsers failed in error handler:', handlerError);
+        // Fall through to return error
+      }
+    }
     
     // Special handling for vehicle-data endpoints - NEVER return 500
     const pathname = req.url?.split('?')[0] || '';
@@ -1184,7 +1282,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     }
     
     // If it's a database connection error, return 503
-    if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect'))) {
+    if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect') || error.message.includes('MongoConfigError'))) {
       return res.status(503).json({
         success: false,
         reason: 'Database is currently unavailable. Please try again later.',
@@ -1192,7 +1290,24 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       });
     }
     
+    // For authentication/authorization errors, return 401 instead of 500
+    if (error instanceof Error && (error.message.includes('Unauthorized') || error.message.includes('token') || error.message.includes('authentication'))) {
+      return res.status(401).json({
+        success: false,
+        reason: 'Authentication failed. Please log in again.',
+        error: error.message
+      });
+    }
+    
     // For other errors on non-GET requests, return 500 with error details
+    // But log the full error for debugging
+    console.error('❌ Unexpected error in handleUsers:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      method: req.method,
+      url: req.url
+    });
+    
     return res.status(500).json({
       success: false,
       reason: 'An error occurred while processing the request',

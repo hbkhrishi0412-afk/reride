@@ -1,5 +1,5 @@
-import React from 'react';
-import type { Vehicle } from '../types';
+import React, { useState, useEffect } from 'react';
+import type { Vehicle, User } from '../types';
 import { getDaysUntilExpiry, getExpiryNotificationMessage } from '../services/listingLifecycleService';
 
 interface ListingLifecycleIndicatorProps {
@@ -7,6 +7,7 @@ interface ListingLifecycleIndicatorProps {
   onRefresh?: () => void;
   onRenew?: () => void;
   compact?: boolean;
+  seller?: User; // Add seller info to check plan expiry for Premium plans
 }
 
 const ListingLifecycleIndicator: React.FC<ListingLifecycleIndicatorProps> = ({
@@ -14,8 +15,28 @@ const ListingLifecycleIndicator: React.FC<ListingLifecycleIndicatorProps> = ({
   onRefresh,
   onRenew,
   compact = false,
+  seller,
 }) => {
-  const daysUntilExpiry = getDaysUntilExpiry(vehicle);
+  // Real-time update state for expiry dates
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
+  // Update current time every minute for real-time expiry calculations
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+    
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Pass seller plan info to consider Premium plan expiry
+  const sellerPlan = seller ? {
+    subscriptionPlan: seller.subscriptionPlan,
+    planExpiryDate: seller.planExpiryDate
+  } : undefined;
+  
+  // Recalculate expiry based on current time (for real-time updates)
+  const daysUntilExpiry = getDaysUntilExpiry(vehicle, sellerPlan, currentTime);
   const isExpired = daysUntilExpiry <= 0;
   const isExpiringSoon = daysUntilExpiry > 0 && daysUntilExpiry <= 7;
 
@@ -38,6 +59,13 @@ const ListingLifecycleIndicator: React.FC<ListingLifecycleIndicatorProps> = ({
   const getStatusText = () => {
     if (daysUntilExpiry === -1) return 'Active (No expiry)';
     if (isExpired) return 'Expired';
+    
+    // For Premium plans, show plan expiry info
+    if (seller?.subscriptionPlan === 'premium' && seller?.planExpiryDate && new Date(seller.planExpiryDate) > new Date()) {
+      if (isExpiringSoon) return `Active (Plan expires in ${daysUntilExpiry} days)`;
+      return `Active (Plan expires in ${daysUntilExpiry} days)`;
+    }
+    
     if (isExpiringSoon) return `Expires in ${daysUntilExpiry} days`;
     return `Active (${daysUntilExpiry} days left)`;
   };

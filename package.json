@@ -6,6 +6,7 @@
   "description": "A modern vehicle marketplace platform.",
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"vite\"",
+    "dev:vercel": "vercel dev",
     "dev:api": "node dev-api-server.js",
     "dev:mongodb": "concurrently \"node dev-api-server-mongodb.js\" \"vite\"",
     "dev:full": "concurrently \"npm run dev:api\" \"npm run dev\"",

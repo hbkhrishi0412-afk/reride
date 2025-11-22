@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { hashPassword, validatePassword, generateAccessToken, generateRefreshToken, sanitizeObject, validateUserInput } from './utils/security.js';
 
 dotenv.config();
 
@@ -392,13 +393,303 @@ app.get('/api/users', async (req, res) => {
 
 app.post('/api/users', async (req, res) => {
     try {
-        console.log('👥 POST /api/users - Creating new user');
-        const user = new User(req.body);
-        await user.save();
-        res.status(201).json(user);
+        const { action } = req.body;
+        
+        // LOGIN
+        if (action === 'login') {
+            const { email, password, role } = req.body;
+            
+            if (!email || !password) {
+                return res.status(400).json({ success: false, reason: 'Email and password are required.' });
+            }
+            
+            const normalizedEmail = email.toLowerCase().trim();
+            const user = await User.findOne({ email: normalizedEmail });
+            
+            if (!user) {
+                return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
+            }
+            
+            // Validate password
+            const isPasswordValid = await validatePassword(password, user.password || '');
+            if (!isPasswordValid) {
+                return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
+            }
+            
+            // Check role if provided
+            if (role && user.role !== role) {
+                return res.status(403).json({ success: false, reason: `User is not a registered ${role}.` });
+            }
+            
+            // Generate tokens
+            const accessToken = generateAccessToken(user.toObject());
+            const refreshToken = generateRefreshToken(user.toObject());
+            
+            // Return user without password
+            const userObj = user.toObject();
+            delete userObj.password;
+            userObj.id = userObj._id?.toString() || userObj.id;
+            
+            return res.json({
+                success: true,
+                user: userObj,
+                accessToken,
+                refreshToken
+            });
+        }
+        
+        // REGISTER
+        if (action === 'register') {
+            const { email, password, name, mobile, role } = req.body;
+            
+            if (!email || !password || !name || !mobile || !role) {
+                return res.status(400).json({ success: false, reason: 'All fields are required.' });
+            }
+            
+            // Sanitize and validate input
+            const sanitizedData = await sanitizeObject({ email, password, name, mobile, role });
+            const validation = await validateUserInput(sanitizedData);
+            
+            if (!validation.isValid) {
+                return res.status(400).json({
+                    success: false,
+                    reason: 'Validation failed',
+                    errors: validation.errors
+                });
+            }
+            
+            const normalizedEmail = sanitizedData.email.toLowerCase().trim();
+            
+            // Check if user already exists
+            const existingUser = await User.findOne({ email: normalizedEmail });
+            if (existingUser) {
+                return res.status(400).json({ success: false, reason: 'User already exists.' });
+            }
+            
+            // Hash password
+            const hashedPassword = await hashPassword(sanitizedData.password);
+            
+            // Generate unique ID
+            const userId = Date.now() + Math.floor(Math.random() * 1000);
+            
+            // Create new user
+            const newUser = new User({
+                id: userId,
+                email: normalizedEmail,
+                password: hashedPassword,
+                name: sanitizedData.name,
+                mobile: sanitizedData.mobile,
+                role: sanitizedData.role,
+                status: 'active',
+                isVerified: false,
+                subscriptionPlan: 'free',
+                featuredCredits: 0,
+                usedCertifications: 0,
+                createdAt: new Date().toISOString()
+            });
+            
+            console.log('💾 Attempting to save user to MongoDB...');
+            await newUser.save();
+            console.log('✅ New user registered and saved to MongoDB:', normalizedEmail);
+            
+            // Verify the user was saved
+            const verifyUser = await User.findOne({ email: normalizedEmail });
+            if (!verifyUser) {
+                console.error('❌ User registration verification failed - user not found after save');
+                return res.status(500).json({
+                    success: false,
+                    reason: 'User registration failed - user was not saved to database. Please try again.'
+                });
+            }
+            
+            // Generate tokens
+            const accessToken = generateAccessToken(newUser.toObject());
+            const refreshToken = generateRefreshToken(newUser.toObject());
+            
+            // Return user without password
+            const userObj = newUser.toObject();
+            delete userObj.password;
+            userObj.id = userObj._id?.toString() || userObj.id;
+            
+            console.log('✅ Registration complete. User ID:', newUser._id);
+            return res.status(201).json({
+                success: true,
+                user: userObj,
+                accessToken,
+                refreshToken
+            });
+        }
+        
+        // OAUTH LOGIN
+        if (action === 'oauth-login') {
+            const { firebaseUid, email, name, mobile, role, avatarUrl, authProvider } = req.body;
+            
+            if (!firebaseUid || !email || !role) {
+                return res.status(400).json({ success: false, reason: 'Firebase UID, email, and role are required.' });
+            }
+            
+            const normalizedEmail = email.toLowerCase().trim();
+            
+            // Check if user exists by firebaseUid or email
+            let user = await User.findOne({ 
+                $or: [
+                    { firebaseUid },
+                    { email: normalizedEmail }
+                ]
+            });
+            
+            if (user) {
+                // Update existing user if needed
+                if (!user.firebaseUid) {
+                    user.firebaseUid = firebaseUid;
+                }
+                if (avatarUrl && !user.avatarUrl) {
+                    user.avatarUrl = avatarUrl;
+                }
+                await user.save();
+            } else {
+                // Create new user
+                const userId = Date.now() + Math.floor(Math.random() * 1000);
+                user = new User({
+                    id: userId,
+                    email: normalizedEmail,
+                    firebaseUid,
+                    name: name || email.split('@')[0],
+                    mobile: mobile || '',
+                    role,
+                    authProvider: authProvider || 'google',
+                    status: 'active',
+                    isVerified: true, // OAuth users are considered verified
+                    subscriptionPlan: 'free',
+                    featuredCredits: 0,
+                    usedCertifications: 0,
+                    avatarUrl: avatarUrl || '',
+                    createdAt: new Date().toISOString()
+                });
+                await user.save();
+                console.log('✅ New OAuth user created:', normalizedEmail);
+            }
+            
+            // Generate tokens
+            const accessToken = generateAccessToken(user.toObject());
+            const refreshToken = generateRefreshToken(user.toObject());
+            
+            // Return user without password
+            const userObj = user.toObject();
+            delete userObj.password;
+            userObj.id = userObj._id?.toString() || userObj.id;
+            
+            return res.json({
+                success: true,
+                user: userObj,
+                accessToken,
+                refreshToken
+            });
+        }
+        
+        // Default: Invalid action
+        return res.status(400).json({ success: false, reason: 'Invalid action. Use action: login, register, or oauth-login' });
     } catch (error) {
-        console.error('❌ Error creating user:', error.message);
-        res.status(500).json({ error: 'Failed to create user' });
+        console.error('❌ Error in POST /api/users:', error);
+        
+        // Handle duplicate key error
+        if (error instanceof Error && 
+            (error.message.includes('E11000') || 
+             error.message.includes('duplicate key') ||
+             error.message.includes('email_1 dup key'))) {
+            return res.status(400).json({
+                success: false,
+                reason: 'User with this email already exists.'
+            });
+        }
+        
+        // Handle validation errors
+        if (error instanceof Error && error.name === 'ValidationError') {
+            return res.status(400).json({
+                success: false,
+                reason: 'Invalid user data provided.',
+                error: error.message
+            });
+        }
+        
+        return res.status(500).json({
+            success: false,
+            reason: 'Failed to process user request.',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+// PUT /api/users - Update user
+app.put('/api/users', async (req, res) => {
+    try {
+        const { email, ...updateData } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({ success: false, reason: 'Email is required for update.' });
+        }
+        
+        const normalizedEmail = email.toLowerCase().trim();
+        const user = await User.findOne({ email: normalizedEmail });
+        
+        if (!user) {
+            return res.status(404).json({ success: false, reason: 'User not found.' });
+        }
+        
+        // Update user fields (exclude password from direct updates)
+        if (updateData.password) {
+            updateData.password = await hashPassword(updateData.password);
+        }
+        
+        Object.assign(user, updateData);
+        user.updatedAt = new Date();
+        await user.save();
+        
+        // Return user without password
+        const userObj = user.toObject();
+        delete userObj.password;
+        userObj.id = userObj._id?.toString() || userObj.id;
+        
+        console.log('✅ Updated user:', normalizedEmail);
+        return res.json({
+            success: true,
+            user: userObj
+        });
+    } catch (error) {
+        console.error('❌ Error updating user:', error);
+        return res.status(500).json({
+            success: false,
+            reason: 'Failed to update user.',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+// DELETE /api/users - Delete user
+app.delete('/api/users', async (req, res) => {
+    try {
+        const { email } = req.body || req.query;
+        
+        if (!email) {
+            return res.status(400).json({ success: false, reason: 'Email is required.' });
+        }
+        
+        const normalizedEmail = email.toLowerCase().trim();
+        const user = await User.findOneAndDelete({ email: normalizedEmail });
+        
+        if (!user) {
+            return res.status(404).json({ success: false, reason: 'User not found.' });
+        }
+        
+        console.log('✅ Deleted user:', normalizedEmail);
+        return res.json({ success: true, email: normalizedEmail });
+    } catch (error) {
+        console.error('❌ Error deleting user:', error);
+        return res.status(500).json({
+            success: false,
+            reason: 'Failed to delete user.',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 });
 
@@ -426,7 +717,9 @@ app.listen(PORT, async () => {
     console.log(`   - GET  /api/vehicles - Get all vehicles from MongoDB`);
     console.log(`   - POST /api/vehicles - Create new vehicle`);
     console.log(`   - GET  /api/users - Get all users from MongoDB`);
-    console.log(`   - POST /api/users - Create new user`);
+    console.log(`   - POST /api/users - Login/Register (action: login|register|oauth-login)`);
+    console.log(`   - PUT  /api/users - Update user`);
+    console.log(`   - DELETE /api/users - Delete user`);
     console.log(`   - GET  /api/health - Server health check`);
     console.log(`\n🔗 Test the API:`);
     console.log(`   curl http://localhost:${PORT}/api/vehicles`);

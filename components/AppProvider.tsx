@@ -352,15 +352,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       return;
     }
     
+    // Set user first (this is critical - navigate checks currentUser)
     setCurrentUser(user);
     sessionStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
     addToast(`Welcome back, ${user.name}!`, 'success');
     
     // Navigate based on user role
+    // Directly set view since we've already validated the user
+    // The navigate function will validate again, but we know the user is valid
     if (user.role === 'admin') {
       setCurrentView(View.ADMIN_PANEL);
     } else if (user.role === 'seller') {
+      console.log('🔄 Setting seller dashboard view after login');
       setCurrentView(View.SELLER_DASHBOARD);
     } else {
       setCurrentView(View.HOME);
@@ -386,15 +390,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       return;
     }
     
+    // Set user first (this is critical - navigate checks currentUser)
     setCurrentUser(user);
     sessionStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
     addToast(`Welcome to ReRide, ${user.name}!`, 'success');
     
     // Navigate based on user role
+    // Directly set view since we've already validated the user
+    // The navigate function will validate again, but we know the user is valid
     if (user.role === 'admin') {
       setCurrentView(View.ADMIN_PANEL);
     } else if (user.role === 'seller') {
+      console.log('🔄 Setting seller dashboard view after registration');
       setCurrentView(View.SELLER_DASHBOARD);
     } else {
       setCurrentView(View.HOME);
@@ -516,6 +524,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         }
         return;
       }
+      
+      // All validation passed - navigate to seller dashboard
+      console.log('✅ Navigating to seller dashboard');
+      setCurrentView(View.SELLER_DASHBOARD);
     } else if (view === View.ADMIN_PANEL && currentUser?.role !== 'admin') {
       if (currentView !== View.ADMIN_LOGIN) {
         setCurrentView(View.ADMIN_LOGIN);
@@ -545,6 +557,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     } catch {}
   }, [currentView, currentUser]);
+
+  // Auto-navigate to appropriate dashboard after login/registration
+  // This ensures the view is set correctly even if state updates are async
+  useEffect(() => {
+    if (currentUser && currentUser.role) {
+      // Only auto-navigate if we're on a login/register page
+      const loginViews = [View.LOGIN_PORTAL, View.SELLER_LOGIN, View.CUSTOMER_LOGIN, View.ADMIN_LOGIN];
+      if (loginViews.includes(currentView)) {
+        if (currentUser.role === 'seller' && currentView !== View.SELLER_DASHBOARD) {
+          console.log('🔄 Auto-navigating seller to dashboard from login view');
+          setCurrentView(View.SELLER_DASHBOARD);
+        } else if (currentUser.role === 'admin' && currentView !== View.ADMIN_PANEL) {
+          setCurrentView(View.ADMIN_PANEL);
+        } else if (currentUser.role === 'customer' && currentView !== View.HOME) {
+          setCurrentView(View.HOME);
+        }
+      }
+    }
+  }, [currentUser, currentView]);
 
   // Map initial path on first load to views (/login, /admin/login)
   useEffect(() => {
@@ -1706,17 +1737,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                              window.location.hostname.includes('127.0.0.1');
         
         // First update local state for immediate UI response
+        // CRITICAL: Never allow role to be updated via this function (security)
+        const safeUpdates = { ...updates };
+        delete safeUpdates.role; // Prevent role changes through profile updates
+        
         setUsers(prev => prev.map(user => 
-          user.email === email ? { ...user, ...updates } : user
+          user.email === email ? { ...user, ...safeUpdates } : user
         ));
         
         // Also update currentUser if it's the same user
         if (currentUser && currentUser.email === email) {
-          setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
+          // CRITICAL: Always preserve role when updating currentUser
+          setCurrentUser(prev => {
+            if (!prev) return null;
+            const updated = { ...prev, ...safeUpdates };
+            // Ensure role is always preserved
+            updated.role = prev.role || 'customer';
+            return updated;
+          });
           
           // Update localStorage as well
           try {
-            const updatedUser = { ...currentUser, ...updates };
+            // CRITICAL: Preserve role in localStorage update
+            const updatedUser = { 
+              ...currentUser, 
+              ...safeUpdates,
+              role: currentUser.role || 'customer' // Always preserve role
+            };
             localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedUser));
             sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
           } catch (error) {
@@ -1772,6 +1819,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           
           if (!apiResult.success) {
             console.error('❌ API error response:', { status: response.status, error: apiResult.error, reason: apiResult.reason });
+            
+            // Handle 401 Unauthorized - token might be expired
+            if (response.status === 401) {
+              console.warn('⚠️ 401 Unauthorized - Token may be expired. Update saved locally only.');
+              // Don't throw - allow local update to proceed (already updated above)
+              if (updates.password) {
+                addToast('Password updated locally. Please log in again to sync with server.', 'warning');
+              } else {
+                addToast('Profile updated locally. Please log in again to sync with server.', 'warning');
+              }
+              return; // Local update already completed above
+            }
+            
+            // Handle 500 Internal Server Error - server issue
+            if (response.status === 500) {
+              console.warn('⚠️ 500 Server Error - Update saved locally only.');
+              if (updates.password) {
+                addToast('Password updated locally. Server error - changes will sync when server is available.', 'warning');
+              } else {
+                addToast('Profile updated locally. Server error - changes will sync when server is available.', 'warning');
+              }
+              return; // Local update already completed above
+            }
+            
+            // For other errors, still throw but with better message
             throw new Error(apiResult.reason || apiResult.error || `API call failed: ${response.status}`);
           }
           
@@ -1780,17 +1852,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           
           // Update local state with the returned user data if available
           if (result?.user) {
+            // CRITICAL: Preserve role if not in API response (shouldn't happen, but safety check)
+            const updatedUserData = {
+              ...result.user,
+              role: result.user.role || currentUser?.role || 'customer' // Preserve existing role
+            };
+            
             setUsers(prev => prev.map(user => 
-              user.email === email ? { ...user, ...result.user } : user
+              user.email === email ? { ...user, ...updatedUserData } : user
             ));
             
             if (currentUser && currentUser.email === email) {
-              setCurrentUser(prev => prev ? { ...prev, ...result.user } : null);
+              // CRITICAL: Always preserve role when updating currentUser
+              const mergedUser = { 
+                ...currentUser, 
+                ...updatedUserData,
+                role: updatedUserData.role || currentUser.role || 'customer' // Ensure role is never lost
+              };
+              
+              setCurrentUser(mergedUser);
               // Update localStorage
               try {
-                const updatedUser = { ...currentUser, ...result.user };
-                localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedUser));
-                sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
+                localStorage.setItem('reRideCurrentUser', JSON.stringify(mergedUser));
+                sessionStorage.setItem('currentUser', JSON.stringify(mergedUser));
               } catch (error) {
                 console.warn('Failed to update localStorage with API response:', error);
               }

@@ -742,6 +742,295 @@ app.delete('/api/vehicle-data-management', (req, res) => {
   });
 });
 
+// Users API endpoint - Proxy to Vercel serverless function or mock handler
+// For development, this provides a basic handler
+// In production, this would be handled by api/main.ts via Vercel rewrites
+
+// Mock users store for development
+let mockUsers = [];
+
+// GET /api/users
+app.get('/api/users', (req, res) => {
+  const { action, email } = req.query;
+  
+  if (action === 'trust-score' && email) {
+    const user = mockUsers.find(u => u.email === email);
+    if (!user) {
+      return res.status(404).json({ success: false, reason: 'User not found' });
+    }
+    // Simple trust score calculation
+    const trustScore = 85; // Mock score
+    return res.json({ success: true, trustScore, email: user.email, name: user.name });
+  }
+  
+  res.json(mockUsers);
+});
+
+// POST /api/users (login, register, etc.)
+app.post('/api/users', (req, res) => {
+  const { action } = req.body;
+  
+  if (action === 'login') {
+    const { email, password } = req.body;
+    const user = mockUsers.find(u => u.email === email && u.password === password);
+    if (!user) {
+      return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
+    }
+    return res.json({ 
+      success: true, 
+      user: { ...user, password: undefined }, 
+      accessToken: 'mock-token',
+      refreshToken: 'mock-refresh-token'
+    });
+  }
+  
+  if (action === 'register') {
+    const { email, password, name, mobile, role } = req.body;
+    if (mockUsers.find(u => u.email === email)) {
+      return res.status(400).json({ success: false, reason: 'User already exists.' });
+    }
+    const newUser = {
+      id: Date.now(),
+      email,
+      password, // In real app, this would be hashed
+      name,
+      mobile,
+      role: role || 'customer',
+      status: 'active',
+      isVerified: false,
+      subscriptionPlan: 'free',
+      createdAt: new Date().toISOString()
+    };
+    mockUsers.push(newUser);
+    return res.status(201).json({ 
+      success: true, 
+      user: { ...newUser, password: undefined },
+      accessToken: 'mock-token',
+      refreshToken: 'mock-refresh-token'
+    });
+  }
+  
+  res.status(400).json({ success: false, reason: 'Invalid action.' });
+});
+
+// PUT /api/users - Update user (THIS IS THE MISSING ENDPOINT!)
+app.put('/api/users', (req, res) => {
+  const { email, ...updateData } = req.body;
+  
+  if (!email) {
+    return res.status(400).json({ success: false, reason: 'Email is required for update.' });
+  }
+  
+  console.log('🔄 PUT /api/users - Updating user:', { email, fields: Object.keys(updateData) });
+  
+  const userIndex = mockUsers.findIndex(u => u.email === email);
+  
+  if (userIndex === -1) {
+    // If user doesn't exist in mock store, create it (for development)
+    const newUser = {
+      id: Date.now(),
+      email,
+      ...updateData,
+      createdAt: new Date().toISOString()
+    };
+    mockUsers.push(newUser);
+    console.log('✅ Created new mock user:', email);
+    return res.json({ 
+      success: true, 
+      user: { ...newUser, password: undefined } 
+    });
+  }
+  
+  // Update existing user
+  const updatedUser = {
+    ...mockUsers[userIndex],
+    ...updateData,
+    updatedAt: new Date().toISOString()
+  };
+  
+  // Don't update email
+  updatedUser.email = email;
+  
+  mockUsers[userIndex] = updatedUser;
+  
+  console.log('✅ Updated mock user:', email);
+  
+  // Return user without password
+  const { password, ...userWithoutPassword } = updatedUser;
+  
+  return res.json({ 
+    success: true, 
+    user: userWithoutPassword 
+  });
+});
+
+// DELETE /api/users
+app.delete('/api/users', (req, res) => {
+  const { email } = req.body || req.query;
+  if (!email) {
+    return res.status(400).json({ success: false, reason: 'Email is required.' });
+  }
+  
+  const before = mockUsers.length;
+  mockUsers = mockUsers.filter(u => u.email !== email);
+  
+  if (before === mockUsers.length) {
+    return res.status(404).json({ success: false, reason: 'User not found.' });
+  }
+  
+  res.json({ success: true, email });
+});
+
+// FAQs API endpoints (mock store)
+let mockFaqs = [];
+
+// GET /api/faqs
+app.get('/api/faqs', (req, res) => {
+  const { category } = req.query;
+  
+  let filteredFaqs = [...mockFaqs];
+  
+  if (category && category !== 'all') {
+    filteredFaqs = filteredFaqs.filter(faq => faq.category === category);
+  }
+  
+  // Transform to match expected format
+  const transformedFaqs = filteredFaqs.map((faq, index) => ({
+    id: faq.id || (faq._id ? parseInt(faq._id.toString().slice(-8), 16) : index + 1),
+    question: faq.question || '',
+    answer: faq.answer || '',
+    category: faq.category || 'General',
+    _id: faq._id || faq.id?.toString()
+  }));
+  
+  console.log('❓ GET /api/faqs - Returning FAQs:', transformedFaqs.length);
+  res.json({
+    success: true,
+    faqs: transformedFaqs,
+    count: transformedFaqs.length
+  });
+});
+
+// POST /api/faqs
+app.post('/api/faqs', (req, res) => {
+  const { question, answer, category } = req.body;
+  
+  if (!question || !answer || !category) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required fields: question, answer, category'
+    });
+  }
+  
+  const newFaq = {
+    _id: Date.now().toString(),
+    id: Date.now(),
+    question,
+    answer,
+    category: category || 'General',
+    createdAt: new Date().toISOString()
+  };
+  
+  mockFaqs.push(newFaq);
+  
+  const createdFaq = {
+    id: newFaq.id,
+    question: newFaq.question,
+    answer: newFaq.answer,
+    category: newFaq.category,
+    _id: newFaq._id
+  };
+  
+  console.log('➕ POST /api/faqs - Created new FAQ');
+  res.status(201).json({
+    success: true,
+    message: 'FAQ created successfully',
+    faq: createdFaq
+  });
+});
+
+// PUT /api/content?type=faqs&id=...
+app.put('/api/content', (req, res) => {
+  const { type, id } = req.query;
+  
+  if (type !== 'faqs') {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid content type. Use ?type=faqs'
+    });
+  }
+  
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      error: 'FAQ ID is required'
+    });
+  }
+  
+  const faqIndex = mockFaqs.findIndex(faq => faq._id === id || faq.id?.toString() === id);
+  
+  if (faqIndex === -1) {
+    return res.status(404).json({
+      success: false,
+      error: 'FAQ not found'
+    });
+  }
+  
+  const { question, answer, category } = req.body;
+  const updateData = {};
+  if (question) updateData.question = question;
+  if (answer) updateData.answer = answer;
+  if (category) updateData.category = category;
+  
+  mockFaqs[faqIndex] = {
+    ...mockFaqs[faqIndex],
+    ...updateData,
+    updatedAt: new Date().toISOString()
+  };
+  
+  console.log('✏️ PUT /api/content?type=faqs - Updated FAQ');
+  res.json({
+    success: true,
+    message: 'FAQ updated successfully',
+    faq: mockFaqs[faqIndex]
+  });
+});
+
+// DELETE /api/content?type=faqs&id=...
+app.delete('/api/content', (req, res) => {
+  const { type, id } = req.query;
+  
+  if (type !== 'faqs') {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid content type. Use ?type=faqs'
+    });
+  }
+  
+  if (!id) {
+    return res.status(400).json({
+      success: false,
+      error: 'FAQ ID is required'
+    });
+  }
+  
+  const before = mockFaqs.length;
+  mockFaqs = mockFaqs.filter(faq => faq._id !== id && faq.id?.toString() !== id);
+  
+  if (before === mockFaqs.length) {
+    return res.status(404).json({
+      success: false,
+      error: 'FAQ not found'
+    });
+  }
+  
+  console.log('🗑️ DELETE /api/content?type=faqs - Deleted FAQ');
+  res.json({
+    success: true,
+    message: 'FAQ deleted successfully'
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -754,6 +1043,8 @@ app.get('/api/health', (req, res) => {
       vehicles: '/api/vehicles',
       vehicleData: '/api/vehicle-data',
       vehicleDataManagement: '/api/vehicle-data-management',
+      users: '/api/users',
+      faqs: '/api/faqs',
       health: '/api/health'
     }
   });
@@ -775,6 +1066,14 @@ app.listen(PORT, () => {
   console.log(`   - POST /api/vehicle-data-management - Create vehicle data in admin database`);
   console.log(`   - PUT  /api/vehicle-data-management - Update vehicle data in admin database`);
   console.log(`   - DELETE /api/vehicle-data-management - Delete vehicle data from admin database`);
+  console.log(`   - GET  /api/users - Get all users`);
+  console.log(`   - POST /api/users - Login/Register (action: login|register)`);
+  console.log(`   - PUT  /api/users - Update user`);
+  console.log(`   - DELETE /api/users - Delete user`);
+  console.log(`   - GET  /api/faqs - Get all FAQs`);
+  console.log(`   - POST /api/faqs - Create new FAQ`);
+  console.log(`   - PUT  /api/content?type=faqs&id=... - Update FAQ`);
+  console.log(`   - DELETE /api/content?type=faqs&id=... - Delete FAQ`);
   console.log(`   - GET  /api/admin - Admin health check`);
   console.log(`   - GET  /api/health - Server health check`);
   console.log(`\n🔗 Test the API:`);

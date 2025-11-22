@@ -109,6 +109,17 @@ const PlanStatusCard: React.FC<{
 }> = memo(({ seller, activeListingsCount, featuredListingsCount, onNavigate }) => {
     const [plan, setPlan] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    // Real-time update state for expiry dates
+    const [currentTime, setCurrentTime] = useState(new Date());
+    
+    // Real-time expiry date updates - update every minute
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 60000); // Update every minute (60000ms)
+        
+        return () => clearInterval(interval);
+    }, []);
     
     useEffect(() => {
         const loadPlan = async () => {
@@ -150,7 +161,8 @@ const PlanStatusCard: React.FC<{
     const featuredCreditsAfterUsage = Math.max(planFeaturedCredits - featuredListingsCount, 0);
     const effectiveFeaturedCredits = Math.min(storedRemainingCredits, featuredCreditsAfterUsage);
     const usagePercentage = listingLimit === Infinity ? 0 : (activeListingsCount / listingLimit) * 100;
-    const planIsExpired = !!seller.planExpiryDate && new Date(seller.planExpiryDate) < new Date();
+    // Use currentTime for real-time updates
+    const planIsExpired = !!seller.planExpiryDate && new Date(seller.planExpiryDate) < currentTime;
 
     return (
         <div className="text-white p-6 rounded-lg shadow-lg flex flex-col h-full" style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}>
@@ -199,8 +211,8 @@ const PlanStatusCard: React.FC<{
                             <span className={`font-semibold ${
                                 (() => {
                                     const expiryDate = new Date(seller.planExpiryDate);
-                                    const isExpired = expiryDate < new Date();
-                                    const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                    const isExpired = expiryDate < currentTime;
+                                    const daysRemaining = Math.ceil((expiryDate.getTime() - currentTime.getTime()) / (1000 * 60 * 60 * 24));
                                     if (isExpired) return 'text-red-300';
                                     if (daysRemaining <= 7) return 'text-orange-300';
                                     return '';
@@ -213,8 +225,8 @@ const PlanStatusCard: React.FC<{
                                 })}
                                 {(() => {
                                     const expiryDate = new Date(seller.planExpiryDate);
-                                    const isExpired = expiryDate < new Date();
-                                    const daysRemaining = Math.ceil((expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                    const isExpired = expiryDate < currentTime;
+                                    const daysRemaining = Math.ceil((expiryDate.getTime() - currentTime.getTime()) / (1000 * 60 * 60 * 24));
                                     if (isExpired) {
                                         return <span className="ml-2 text-red-200 font-bold">(Expired)</span>;
                                     }
@@ -662,7 +674,8 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     };
 
     // Determine if seller's plan is expired (client-side UX guard; server still enforces)
-    const isPlanExpired = !!seller?.planExpiryDate && new Date(seller.planExpiryDate) < new Date();
+    // Use currentTime for real-time updates
+    const isPlanExpired = !!seller?.planExpiryDate && new Date(seller.planExpiryDate) < currentTime;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -1219,6 +1232,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // Month selector state for analytics
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   
+  // Real-time update state for expiry dates
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
   // Location data is now handled by individual components that need it
   
   // Helper function to filter vehicles by month
@@ -1249,6 +1265,15 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
     
     return months;
+  }, []);
+
+  // Real-time expiry date updates - update every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute (60000ms)
+    
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -1741,7 +1766,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
-                            <ListingLifecycleIndicator vehicle={v} compact={true} onRefresh={async () => { await fetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'refresh', sellerEmail: seller.email }) }); window.location.reload(); }} onRenew={async () => { await fetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'renew', sellerEmail: seller.email }) }); window.location.reload(); }} />
+                            <ListingLifecycleIndicator vehicle={v} seller={seller} compact={true} onRefresh={async () => { await fetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'refresh', sellerEmail: seller.email }) }); window.location.reload(); }} onRenew={async () => { await fetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'renew', sellerEmail: seller.email }) }); window.location.reload(); }} />
                             
                             {/* Boost Status Indicators */}
                             {v.activeBoosts?.filter(boost => boost.isActive && new Date(boost.expiresAt) > new Date()).map(boost => {

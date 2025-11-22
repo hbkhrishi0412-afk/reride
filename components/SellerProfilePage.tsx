@@ -9,7 +9,7 @@ import VerifiedBadge, { isUserVerified } from './VerifiedBadge.js';
 import { followSeller, unfollowSeller, isFollowingSeller, getFollowersCount, getFollowingCount, getFollowersOfSeller, getFollowedSellers } from '../services/buyerEngagementService.js';
 
 interface SellerProfilePageProps {
-    seller: User;
+    seller: User | null;
     vehicles: Vehicle[];
     onSelectVehicle: (vehicle: Vehicle) => void;
     comparisonList: number[];
@@ -21,6 +21,16 @@ interface SellerProfilePageProps {
 }
 
 const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles, onSelectVehicle, comparisonList, onToggleCompare, wishlist, onToggleWishlist, onBack, onViewSellerProfile }) => {
+    // 🔴 GUARD CLAUSE: Prevent crash when seller data hasn't loaded yet
+    if (!seller) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spinny-orange"></div>
+                <span className="ml-3 text-gray-600 dark:text-gray-300">Loading Seller Profile...</span>
+            </div>
+        );
+    }
+
     const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     // NEW: Follow seller feature

@@ -89,7 +89,15 @@ const Header: React.FC<HeaderProps> = memo(({
     };
 
     const DropdownLink: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
-        <button onClick={onClick} className="block w-full text-left px-4 py-2 text-sm text-spinny-text-dark dark:text-spinny-text-dark hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors">
+        <button 
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClick();
+                setIsUserMenuOpen(false); // Close dropdown after navigation
+            }} 
+            className="block w-full text-left px-4 py-2 text-sm text-spinny-text-dark dark:text-spinny-text-dark hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors"
+        >
             {children}
         </button>
     );
