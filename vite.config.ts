@@ -11,6 +11,7 @@ export default defineConfig({
   define: {
     // Prevent server-side code from being bundled in client
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+    'process.emitWarning': '((msg, type, code, ctor) => { if (typeof console !== "undefined" && console.warn) console.warn("[process.emitWarning]", msg); })',
     global: 'globalThis'
   },
   build: {
@@ -28,6 +29,10 @@ export default defineConfig({
         if (id.includes('node_modules')) return false;
         if (id.startsWith('/api/') || id.includes('/api/')) {
           return id.endsWith('.ts') || id.endsWith('.js');
+        }
+        // Exclude models directory from client bundle (server-side only)
+        if (id.includes('/models/') && (id.endsWith('.ts') || id.endsWith('.js'))) {
+          return true;
         }
         return false;
       },
@@ -178,7 +183,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5174,
+    port: 5173,  // FIXED: Changed from 5174 to standard Vite port 5173
     // Development server optimizations
     hmr: {
       overlay: true
@@ -199,15 +204,24 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
+        ws: true,  // FIXED: Enable WebSocket proxying
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
-            console.log('proxy error', err);
+            // FIXED: Better error handling - don't crash on proxy errors
+            console.error('API Proxy Error:', err.message);
+            // Allow frontend to work without API server in development
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            console.log('Sending Request to the Target:', req.method, req.url);
+            // FIXED: Only log in development
+            if (process.env.NODE_ENV === 'development') {
+              console.log('→ API Request:', req.method, req.url);
+            }
           });
           proxy.on('proxyRes', (proxyRes, req, _res) => {
-            console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+            // FIXED: Only log in development
+            if (process.env.NODE_ENV === 'development') {
+              console.log('← API Response:', proxyRes.statusCode, req.url);
+            }
           });
         },
       }
@@ -217,7 +231,7 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'framer-motion'],
     // Exclude heavy dependencies from pre-bundling
-    exclude: ['@google/genai', 'mongodb']
+    exclude: ['@google/genai', 'mongodb', 'mongoose']
   },
   // Enable esbuild optimizations in dev mode
   esbuild: {

@@ -1172,7 +1172,11 @@ const ReportsView: React.FC<{
     reportedVehicles: Vehicle[];
     onEditVehicle: (vehicle: Vehicle) => void;
     onDeleteVehicle: (vehicleId: number) => void;
-}> = memo(({ reportedVehicles, onEditVehicle, onDeleteVehicle }) => (
+}> = memo(({ reportedVehicles, onEditVehicle, onDeleteVehicle }) => {
+    // Create safe version locally within this component
+    const safeReportedVehicles = reportedVehicles || [];
+    
+    return (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
         <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Reported Listings</h2>
         {safeReportedVehicles.length > 0 ? (
@@ -1221,7 +1225,8 @@ const ReportsView: React.FC<{
             </div>
         )}
     </div>
-));
+    );
+});
 
 
 // Main Dashboard Component

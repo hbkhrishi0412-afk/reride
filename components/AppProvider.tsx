@@ -320,6 +320,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
 
+  // CRITICAL: Emergency fail-safe to prevent infinite loading
+  // If isLoading is still true after 5 seconds, force it to false
+  useEffect(() => {
+    const emergencyTimeout = setTimeout(() => {
+      setIsLoading(current => {
+        if (current) {
+          console.warn('⚠️ EMERGENCY: Forcing loading to complete after 5s timeout');
+          addToast('App loaded. Some features may still be loading in the background.', 'info');
+          return false;
+        }
+        return current;
+      });
+    }, 5000);
+    
+    return () => clearTimeout(emergencyTimeout);
+  }, [addToast]); // Now addToast is defined, so this is safe
+
   const handleLogout = useCallback(() => {
     setCurrentUser(null);
     sessionStorage.removeItem('currentUser');
@@ -616,14 +633,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         setIsLoading(true);
         
         // CRITICAL: Set a maximum timeout to prevent infinite loading
-        // If loading takes more than 15 seconds, force completion
+        // If loading takes more than 3 seconds, force completion (aggressive timeout for faster UX)
         loadingTimeout = setTimeout(() => {
           if (isMounted) {
-            console.warn('⚠️ Initial data loading exceeded 15s timeout, forcing completion');
+            console.warn('⚠️ Initial data loading exceeded 3s timeout, forcing completion');
             setIsLoading(false);
-            addToast('Loading is taking longer than expected. Some data may be unavailable.', 'warning');
+            // Don't show toast if this fires - loading should be fast
           }
-        }, 15000);
+        }, 3000); // 3 seconds max - very aggressive for fast initial render
         
         // Load critical data first (vehicles and users) with individual timeouts
         const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
@@ -644,7 +661,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               console.warn('Failed to load vehicles, using empty array:', err);
               return [];
             }),
-            8000, // 8 second timeout for vehicles
+            5000, // 5 second timeout for vehicles (reduced for faster loading)
             []
           ),
           loadWithTimeout(
@@ -652,7 +669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               console.warn('Failed to load users, using empty array:', err);
               return [];
             }),
-            8000, // 8 second timeout for users
+            5000, // 5 second timeout for users (reduced for faster loading)
             []
           )
         ]);
@@ -741,6 +758,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           addToast('Some data failed to load. The app will continue with available data.', 'warning');
         }
       } finally {
+        // CRITICAL: Always clear loading state, even on error
         if (loadingTimeout) {
           clearTimeout(loadingTimeout);
         }

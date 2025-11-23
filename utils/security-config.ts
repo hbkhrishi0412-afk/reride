@@ -46,6 +46,7 @@ export const SECURITY_CONFIG = {
       : [
           'http://localhost:3000',
           'http://localhost:5173',
+          'http://localhost:5174',  // FIXED: Added port 5174 for consistency
           'https://reride-app.vercel.app',
           'https://reride--2-.vercel.app'
         ],

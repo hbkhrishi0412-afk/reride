@@ -34,8 +34,33 @@
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@600;700;800&display=swap"></noscript>
     
+    <!-- CRITICAL: Polyfill process.emitWarning BEFORE any modules load -->
+    <script>
+      // Polyfill process.emitWarning for browser compatibility - must run FIRST
+      (function() {
+        if (typeof window !== 'undefined') {
+          if (typeof process === 'undefined') {
+            window.process = { env: {} };
+          }
+          if (!window.process.emitWarning) {
+            window.process.emitWarning = function(msg, type, code, ctor) {
+              // Silently handle warnings to prevent errors
+              if (typeof console !== 'undefined' && console.warn) {
+                console.warn('[process.emitWarning]', msg);
+              }
+            };
+          }
+          // Ensure process is available globally
+          if (typeof globalThis !== 'undefined') {
+            globalThis.process = window.process;
+          }
+        }
+      })();
+    </script>
+    
     <!-- Prefetch API endpoints only in production or when API server is confirmed available -->
     <script>
+      
       // Only prefetch if we're in production mode (not localhost)
       (function() {
         const isLocalhost = window.location.hostname === 'localhost' || 

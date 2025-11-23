@@ -1,5 +1,39 @@
 import type { PlanDetails, SubscriptionPlan } from '../types';
-import Plan from '../models/Plan.js';
+
+// Lazy-load Plan model only when needed (server-side only)
+let PlanModel: any = null;
+let planModelPromise: Promise<any> | null = null;
+
+const getPlanModel = async () => {
+  // Return null immediately if in browser
+  if (typeof window !== 'undefined') {
+    return null;
+  }
+  
+  // Return cached model if already loaded
+  if (PlanModel !== null) {
+    return PlanModel;
+  }
+  
+  // Return existing promise if already loading
+  if (planModelPromise) {
+    return planModelPromise;
+  }
+  
+  // Lazy load the model
+  planModelPromise = (async () => {
+    try {
+      const PlanModule = await import('../models/Plan.js');
+      PlanModel = PlanModule.default;
+      return PlanModel;
+    } catch (e) {
+      // Plan model not available (e.g., in browser or build time)
+      return null;
+    }
+  })();
+  
+  return planModelPromise;
+};
 
 export const planService = {
     // Get plan details with any updates applied
@@ -8,6 +42,11 @@ export const planService = {
         const basePlan = PLAN_DETAILS[planId];
         
         try {
+            // Only access database if Plan model is available (server-side only)
+            const Plan = await getPlanModel();
+            if (!Plan) {
+                return basePlan;
+            }
             // Try to get plan updates from database
             const planUpdate = await Plan.findOne({ planId, isCustom: false });
             if (planUpdate) {
@@ -33,6 +72,11 @@ export const planService = {
     // Get custom plan details
     getCustomPlanDetails: async (planId: string): Promise<PlanDetails | null> => {
         try {
+            const Plan = await getPlanModel();
+            // Browser fallback - return null since database access not available
+            if (!Plan) {
+                return null;
+            }
             const plan = await Plan.findOne({ planId, isCustom: true });
             if (!plan) {
                 return null;
@@ -64,6 +108,11 @@ export const planService = {
         );
         
         try {
+            const Plan = await getPlanModel();
+            // Browser fallback - return only base plans
+            if (!Plan) {
+                return basePlans.slice(0, 4);
+            }
             // Add custom plans from database
             const customPlans = await Plan.find({ isCustom: true })
                 .sort({ createdAt: -1 })
@@ -83,6 +132,11 @@ export const planService = {
 
     // Update plan details
     updatePlan: async (planId: SubscriptionPlan | string, updates: Partial<PlanDetails>): Promise<void> => {
+        const Plan = await getPlanModel();
+        // Browser fallback - throw error since database access not available
+        if (!Plan) {
+            throw new Error('Plan updates are only available server-side');
+        }
         try {
             const { PLAN_DETAILS } = await import('../constants.js');
             const basePlan = PLAN_DETAILS[planId as SubscriptionPlan];
@@ -115,6 +169,11 @@ export const planService = {
 
     // Create new plan
     createPlan: async (planData: Omit<PlanDetails, 'id'>): Promise<string> => {
+        const Plan = await getPlanModel();
+        // Browser fallback - throw error since database access not available
+        if (!Plan) {
+            throw new Error('Plan creation is only available server-side');
+        }
         try {
             const planId = `custom_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
             
@@ -142,6 +201,11 @@ export const planService = {
 
     // Delete custom plan
     deletePlan: async (planId: string): Promise<boolean> => {
+        const Plan = await getPlanModel();
+        // Browser fallback - return false since database access not available
+        if (!Plan) {
+            return false;
+        }
         try {
             const { PLAN_DETAILS } = await import('../constants.js');
             if (PLAN_DETAILS[planId as SubscriptionPlan]) {
@@ -165,6 +229,11 @@ export const planService = {
 
     // Reset plan updates (for testing)
     resetPlanUpdates: async (): Promise<void> => {
+        const Plan = await getPlanModel();
+        // Browser fallback - no-op
+        if (!Plan) {
+            return;
+        }
         try {
             await Plan.deleteMany({ isCustom: false });
         } catch (error) {
@@ -180,6 +249,11 @@ export const planService = {
 
     // Check if plan has been modified
     isPlanModified: async (planId: SubscriptionPlan): Promise<boolean> => {
+        const Plan = await getPlanModel();
+        // Browser fallback - return false since database access not available
+        if (!Plan) {
+            return false;
+        }
         try {
             const plan = await Plan.findOne({ planId, isCustom: false });
             return plan !== null;
