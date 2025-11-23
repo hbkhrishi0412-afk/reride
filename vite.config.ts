@@ -11,7 +11,7 @@ export default defineConfig({
   define: {
     // Prevent server-side code from being bundled in client
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
-    'process.emitWarning': '(() => {})',
+    // process.emitWarning is polyfilled in index.html, no need to define it here
     global: 'globalThis'
   },
   build: {
