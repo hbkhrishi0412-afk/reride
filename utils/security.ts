@@ -105,7 +105,7 @@ export const generateRefreshToken = (user: User): string => {
   });
 };
 
-interface TokenPayload {
+export interface TokenPayload {
   userId: string;
   email: string;
   role?: 'customer' | 'seller' | 'admin';

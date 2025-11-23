@@ -1,93 +1,63 @@
 /**
- * Centralized logging utility
- * Gates all console statements to prevent logging in production
- * and potential information leakage
+ * Safe logging utility that gates console statements in production
+ * Prevents information leakage and performance issues
  */
 
-type LogLevel = 'log' | 'warn' | 'error' | 'info' | 'debug';
-
-const isDevelopment = process.env.NODE_ENV === 'development';
-const isProduction = process.env.NODE_ENV === 'production';
+const isDevelopment = process.env.NODE_ENV !== 'production';
 
 /**
- * Check if logging is enabled for the current environment
+ * Log info messages (only in development)
  */
-const shouldLog = (level: LogLevel): boolean => {
-  // Always log errors, even in production (but without sensitive data)
-  if (level === 'error') {
-    return true;
+export const logInfo = (...args: any[]): void => {
+  if (isDevelopment) {
+    console.log(...args);
   }
-  // Only log other levels in development
-  return isDevelopment;
 };
 
 /**
- * Sanitize data to prevent logging sensitive information
+ * Log warning messages (only in development, unless critical)
  */
-const sanitizeData = (data: unknown): unknown => {
-  if (typeof data !== 'object' || data === null) {
-    return data;
+export const logWarn = (...args: any[]): void => {
+  if (isDevelopment) {
+    console.warn(...args);
   }
-
-  const sensitiveKeys = ['password', 'token', 'secret', 'key', 'authorization', 'auth', 'credential'];
-  const sanitized = Array.isArray(data) ? [...data] : { ...data as Record<string, unknown> };
-
-  if (Array.isArray(sanitized)) {
-    return sanitized.map(item => sanitizeData(item));
-  }
-
-  const obj = sanitized as Record<string, unknown>;
-  for (const key in obj) {
-    const lowerKey = key.toLowerCase();
-    if (sensitiveKeys.some(sk => lowerKey.includes(sk))) {
-      obj[key] = '[REDACTED]';
-    } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-      obj[key] = sanitizeData(obj[key]);
-    }
-  }
-
-  return sanitized;
 };
 
 /**
- * Logger object with methods for different log levels
+ * Log error messages (always logged, but sanitized in production)
  */
-export const logger = {
-  log: (...args: unknown[]) => {
-    if (shouldLog('log')) {
-      console.log(...args.map(sanitizeData));
-    }
-  },
-
-  info: (...args: unknown[]) => {
-    if (shouldLog('info')) {
-      console.info(...args.map(sanitizeData));
-    }
-  },
-
-  warn: (...args: unknown[]) => {
-    if (shouldLog('warn')) {
-      console.warn(...args.map(sanitizeData));
-    }
-  },
-
-  error: (...args: unknown[]) => {
-    // Always log errors, but sanitize sensitive data
-    const sanitized = args.map(sanitizeData);
-    if (isProduction) {
-      // In production, send to error tracking service (Sentry, etc.)
-      // For now, just log without sensitive data
-      console.error(...sanitized);
-    } else {
-      console.error(...sanitized);
-    }
-  },
-
-  debug: (...args: unknown[]) => {
-    if (shouldLog('debug')) {
-      console.debug(...args.map(sanitizeData));
-    }
-  },
+export const logError = (...args: any[]): void => {
+  if (isDevelopment) {
+    console.error(...args);
+  } else {
+    // In production, log errors but sanitize sensitive data
+    const sanitized = args.map(arg => {
+      if (typeof arg === 'object' && arg !== null) {
+        // Remove sensitive fields
+        const sanitized = { ...arg };
+        delete (sanitized as any).password;
+        delete (sanitized as any).token;
+        delete (sanitized as any).secret;
+        delete (sanitized as any).apiKey;
+        return sanitized;
+      }
+      return arg;
+    });
+    console.error(...sanitized);
+  }
 };
 
-export default logger;
+/**
+ * Log security events (always logged, but use proper logging service in production)
+ */
+export const logSecurity = (message: string, data?: any): void => {
+  if (isDevelopment) {
+    console.log(`[SECURITY] ${message}`, data || '');
+  } else {
+    // In production, use proper logging service (Sentry, CloudWatch, etc.)
+    // For now, log to console but consider implementing structured logging
+    console.log(`[SECURITY] ${message}`, data ? JSON.stringify(data) : '');
+    // TODO: Replace with proper logging service
+    // Example: Sentry.captureMessage(message, { level: 'info', extra: data });
+  }
+};

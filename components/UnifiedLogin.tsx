@@ -256,7 +256,9 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               {!isLogin && (
                 <>
                   <div>
+                    <label htmlFor="mobile-name" className="sr-only">Full name</label>
                     <input
+                      id="mobile-name"
                       type="text"
                       autoComplete="name"
                       required
@@ -264,10 +266,13 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                       placeholder="Full name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                      aria-label="Full name"
                     />
                   </div>
                   <div>
+                    <label htmlFor="mobile-tel" className="sr-only">Mobile number</label>
                     <input
+                      id="mobile-tel"
                       type="tel"
                       autoComplete="tel"
                       required
@@ -275,12 +280,15 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                       placeholder="Mobile number"
                       value={mobile}
                       onChange={(e) => setMobile(e.target.value)}
+                      aria-label="Mobile number"
                     />
                   </div>
                 </>
               )}
               <div>
+                <label htmlFor="mobile-email" className="sr-only">Email address</label>
                 <input
+                  id="mobile-email"
                   type="email"
                   autoComplete="email"
                   required
@@ -288,6 +296,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   placeholder="Email address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  aria-label="Email address"
                 />
               </div>
               <PasswordInput
@@ -304,12 +313,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
               {isLogin && (
                 <div className="flex items-center justify-between text-sm">
-                  <label className="flex items-center text-gray-700">
+                  <label htmlFor="mobile-remember" className="flex items-center text-gray-700">
                     <input
+                      id="mobile-remember"
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
                       className="w-4 h-4 text-orange-600 rounded mr-2"
+                      aria-label="Remember me"
                     />
                     Remember me
                   </label>
@@ -324,7 +335,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               )}
 
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4" role="alert" aria-live="polite">
                   <p className="text-red-600 text-sm text-center font-medium">{error}</p>
                 </div>
               )}
@@ -332,7 +343,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-4 rounded-2xl font-bold text-base text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-4 rounded-2xl font-bold text-base text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-2 focus:outline-offset-2 focus:outline-orange-500"
                 style={{
                   background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
                   boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
@@ -344,6 +355,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 onMouseUp={(e) => {
                   if (!isLoading) e.currentTarget.style.transform = 'scale(1)';
                 }}
+                aria-label={isLoading ? 'Processing' : (isLogin ? 'Sign in' : 'Create account')}
               >
                 {isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
               </button>

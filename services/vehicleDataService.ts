@@ -1,5 +1,7 @@
 import type { VehicleData } from '../types';
 import { VEHICLE_DATA } from '../components/vehicleData';
+import { safeGetItem, safeSetItem, isStorageAvailable } from '../utils/safeStorage';
+import { logInfo, logWarn, logError } from '../utils/logger';
 
 const VEHICLE_DATA_STORAGE_KEY = 'reRideVehicleData';
 const API_BASE_URL = '/api';
@@ -17,18 +19,18 @@ export const getVehicleData = async (): Promise<VehicleData> => {
       if (contentType && contentType.includes('application/json')) {
         try {
           const data = await response.json();
-          console.log('✅ Vehicle data loaded from vehicle-data endpoint');
-          localStorage.setItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
+          logInfo('✅ Vehicle data loaded from vehicle-data endpoint');
+          safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
           return data;
         } catch (jsonError) {
-          console.warn("Failed to parse JSON from vehicle-data endpoint", jsonError);
+          logWarn("Failed to parse JSON from vehicle-data endpoint", jsonError);
         }
       }
     } else {
-      console.warn(`Vehicle-data endpoint returned ${response.status}: ${response.statusText}`);
+      logWarn(`Vehicle-data endpoint returned ${response.status}: ${response.statusText}`);
     }
   } catch (error) {
-    console.warn("Vehicle-data endpoint failed, trying consolidated endpoint", error);
+    logWarn("Vehicle-data endpoint failed, trying consolidated endpoint", error);
   }
 
   // Try consolidated endpoint as fallback
@@ -39,39 +41,41 @@ export const getVehicleData = async (): Promise<VehicleData> => {
       if (contentType && contentType.includes('application/json')) {
         try {
           const data = await response.json();
-          localStorage.setItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
+          safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
           return data;
         } catch (jsonError) {
-          console.warn("Failed to parse JSON from standalone endpoint, falling back to localStorage", jsonError);
+          logWarn("Failed to parse JSON from standalone endpoint, falling back to localStorage", jsonError);
         }
       } else {
-        console.warn(`Standalone endpoint returned non-JSON content type: ${contentType}, falling back to localStorage`);
+        logWarn(`Standalone endpoint returned non-JSON content type: ${contentType}, falling back to localStorage`);
       }
     } else {
-      console.warn(`Standalone endpoint returned ${response.status}: ${response.statusText}, falling back to localStorage`);
+      logWarn(`Standalone endpoint returned ${response.status}: ${response.statusText}, falling back to localStorage`);
     }
   } catch (error) {
-    console.warn("Both API endpoints failed, falling back to localStorage", error);
+    logWarn("Both API endpoints failed, falling back to localStorage", error);
     if (error instanceof SyntaxError) {
-      console.warn("JSON parsing error - API likely returned HTML instead of JSON");
+      logWarn("JSON parsing error - API likely returned HTML instead of JSON");
     } else if (error instanceof Error && error.message.includes('API returned non-JSON response')) {
-      console.warn("API returned HTML instead of JSON - likely a 404 or server error page");
+      logWarn("API returned HTML instead of JSON - likely a 404 or server error page");
     }
   }
 
   // Fallback to localStorage
-  try {
-    const dataJson = localStorage.getItem(VEHICLE_DATA_STORAGE_KEY);
-    if (dataJson) {
-      return JSON.parse(dataJson);
+  if (isStorageAvailable()) {
+    try {
+      const dataJson = safeGetItem(VEHICLE_DATA_STORAGE_KEY);
+      if (dataJson) {
+        return JSON.parse(dataJson);
+      }
+    } catch (error) {
+      logError("Failed to parse vehicle data from localStorage", error);
     }
-  } catch (error) {
-    console.error("Failed to parse vehicle data from localStorage", error);
   }
 
   // Final fallback to default data
   const defaultData = VEHICLE_DATA;
-  localStorage.setItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(defaultData));
+  safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(defaultData));
   return defaultData;
 };
 
@@ -158,18 +162,20 @@ export const deleteVehicleData = async (id: string): Promise<{ success: boolean;
  * Returns cached data from localStorage immediately.
  */
 export const getVehicleDataSync = (): VehicleData => {
-  try {
-    const dataJson = localStorage.getItem(VEHICLE_DATA_STORAGE_KEY);
-    if (dataJson) {
-      return JSON.parse(dataJson);
+  if (isStorageAvailable()) {
+    try {
+      const dataJson = safeGetItem(VEHICLE_DATA_STORAGE_KEY);
+      if (dataJson) {
+        return JSON.parse(dataJson);
+      }
+    } catch (error) {
+      logError("Failed to parse vehicle data from localStorage", error);
     }
-  } catch (error) {
-    console.error("Failed to parse vehicle data from localStorage", error);
   }
   
   // Fallback to default data
   const defaultData = VEHICLE_DATA;
-  localStorage.setItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(defaultData));
+  safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(defaultData));
   return defaultData;
 };
 
@@ -177,14 +183,16 @@ export const getVehicleDataSync = (): VehicleData => {
  * Saves vehicle data to both API and localStorage with enhanced error handling and retry logic.
  */
 export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
-  console.log('🔄 Starting vehicle data save process...');
+  logInfo('🔄 Starting vehicle data save process...');
   
   // Always save to localStorage first for immediate UI update
-  try {
-    localStorage.setItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
-    console.log('✅ Vehicle data saved to localStorage');
-  } catch (error) {
-    console.error('❌ Failed to save to localStorage:', error);
+  if (isStorageAvailable()) {
+    try {
+      safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
+      logInfo('✅ Vehicle data saved to localStorage');
+    } catch (error) {
+      logError('❌ Failed to save to localStorage:', error);
+    }
   }
 
   // Try to save to API with retry logic

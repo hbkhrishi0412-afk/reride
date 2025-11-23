@@ -41,9 +41,23 @@ input[type="text"] {
   background-color: transparent;
 }
 
-input[type="text"]:focus {
-  outline: none;
-  box-shadow: none;
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="tel"]:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid #FF6B35;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+}
+
+/* Ensure all interactive elements have visible focus indicators */
+button:focus,
+a:focus,
+[role="button"]:focus {
+  outline: 2px solid #FF6B35;
+  outline-offset: 2px;
 }
 
 /* Ensure input fields are interactive */
@@ -1109,8 +1123,22 @@ code {
 }
 
 *:focus-visible {
-  outline: 2px solid var(--spinny-orange);
+  outline: 2px solid var(--spinny-orange, #FF6B35);
   outline-offset: 2px;
+}
+
+/* Enhanced focus indicators for all interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[role="link"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #FF6B35;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 }
 
 /* Smooth Scrolling */

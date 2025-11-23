@@ -21,10 +21,13 @@ import {
   sanitizeString,
   validateEmail,
   verifyToken,
-  refreshAccessToken
+  refreshAccessToken,
+  type TokenPayload
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { ObjectId } from 'mongodb';
+import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
+import { createErrorResponse, createSuccessResponse, ErrorReasons } from '../utils/errorHandler.js';
 
 // Type for MongoDB user document (with _id)
 interface UserDocument extends Omit<UserType, 'id'> {
@@ -68,9 +71,7 @@ function normalizeUser(user: UserDocument | null | undefined): NormalizedUser | 
   const id = user.id || (user._id ? user._id.toString() : undefined);
   if (!id) {
     // Only log in development to avoid information leakage
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('⚠️ User object missing both id and _id fields');
-    }
+    logWarn('⚠️ User object missing both id and _id fields');
     return null;
   }
   
@@ -78,7 +79,7 @@ function normalizeUser(user: UserDocument | null | undefined): NormalizedUser | 
   // Only set default if role is truly missing - don't overwrite existing roles
   let role: 'customer' | 'seller' | 'admin' = user.role;
   if (!role || typeof role !== 'string' || !['customer', 'seller', 'admin'].includes(role)) {
-    console.warn('⚠️ User object missing or invalid role field:', user.email, 'role:', role);
+    logWarn('⚠️ User object missing or invalid role field:', user.email, 'role:', role);
     // Default to 'customer' only if role is completely missing
     // This should rarely happen as role is required in the schema
     role = 'customer';
@@ -88,9 +89,7 @@ function normalizeUser(user: UserDocument | null | undefined): NormalizedUser | 
   const email = user.email ? user.email.toLowerCase().trim() : '';
   if (!email) {
     // Only log in development to avoid information leakage
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('⚠️ User object missing email field');
-    }
+    logWarn('⚠️ User object missing email field');
     return null;
   }
   
@@ -162,7 +161,12 @@ const authenticateRequest = (req: VercelRequest): AuthResult => {
   try {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     const decoded = verifyToken(token);
-    return { isValid: true, user: decoded };
+    // Ensure role is present for the user object
+    const user = {
+      ...decoded,
+      role: decoded.role || 'customer' as 'customer' | 'seller' | 'admin'
+    };
+    return { isValid: true, user };
   } catch (error) {
     return { isValid: false, error: 'Invalid or expired token' };
   }
@@ -272,7 +276,7 @@ const checkRateLimit = async (identifier: string, mongoAvailable: boolean): Prom
     return { allowed: true, remaining };
   } catch (error) {
     // On error, allow request (fail open) but log the error
-    console.error('Rate limiting error:', error);
+    logError('Rate limiting error:', error);
     return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS };
   }
 };
@@ -327,7 +331,7 @@ export default async function handler(
           : 'Database temporarily unavailable. Please try again later.';
         // Only log in development to avoid information leakage
         if (process.env.NODE_ENV !== 'production') {
-          console.warn('Database connection issue:', dbError);
+          logWarn('Database connection issue:', dbError);
         }
         if (req.method !== 'GET') {
           return res.status(503).json({
@@ -392,12 +396,10 @@ export default async function handler(
       }
       
       // Log for debugging to help identify routing issues
-      console.log(`📍 Request routing - method: ${req.method}, originalPath: ${originalPath || 'none'}, invokePath: ${invokePath || 'none'}, req.url: ${req.url || 'none'}, final pathname: ${pathname}`);
+      logInfo(`📍 Request routing - method: ${req.method}, originalPath: ${originalPath || 'none'}, invokePath: ${invokePath || 'none'}, req.url: ${req.url || 'none'}, final pathname: ${pathname}`);
     } catch (urlError) {
       // Only log in development to avoid information leakage
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('⚠️ Error parsing URL, using fallback:', urlError);
-      }
+      logWarn('⚠️ Error parsing URL, using fallback:', urlError);
       // Fallback: try to extract pathname from req.url directly
       if (req.url) {
         const match = req.url.match(/^([^?]+)/);
@@ -406,9 +408,7 @@ export default async function handler(
         }
       }
       // Only log in development to avoid information leakage
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`📍 Fallback pathname: ${pathname}, req.url: ${req.url}`);
-      }
+      logInfo(`📍 Fallback pathname: ${pathname}, req.url: ${req.url}`);
     }
 
     // Early detection: If this is a PUT/POST request and we can't determine the route,
@@ -421,9 +421,7 @@ export default async function handler(
       // Check if any of these indicate a /users endpoint
       if (originalPath?.includes('/users') || invokePath?.includes('/users') || urlPath.includes('/users')) {
         // Only log in development to avoid information leakage
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`🔍 Early detection: Routing ${req.method} to handleUsers based on URL/header pattern`);
-        }
+        logInfo(`🔍 Early detection: Routing ${req.method} to handleUsers based on URL/header pattern`);
         const handlerOptions: HandlerOptions = {
           mongoAvailable,
           mongoFailureReason
@@ -448,23 +446,23 @@ export default async function handler(
       if (checkPath) {
         // Extract the actual path from the original path
         if (checkPath.includes('/users') || checkPath.endsWith('/users')) {
-          console.log(`✅ Routing ${req.method} request from /api/main to handleUsers (original: ${checkPath})`);
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleUsers (original: ${checkPath})`);
           return await handleUsers(req, res, handlerOptions);
         } else if (checkPath.includes('/vehicles') || checkPath.endsWith('/vehicles')) {
-          console.log(`✅ Routing ${req.method} request from /api/main to handleVehicles (original: ${checkPath})`);
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleVehicles (original: ${checkPath})`);
           return await handleVehicles(req, res, handlerOptions);
         } else if (checkPath.includes('/faqs') || checkPath.endsWith('/faqs')) {
-          console.log(`✅ Routing ${req.method} request from /api/main to handleContent/FAQs (original: ${checkPath})`);
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleContent/FAQs (original: ${checkPath})`);
           req.query = req.query || {};
           req.query.type = 'faqs';
           return await handleContent(req, res, handlerOptions);
         } else if (checkPath.includes('/support-tickets') || checkPath.endsWith('/support-tickets')) {
-          console.log(`✅ Routing ${req.method} request from /api/main to handleContent/SupportTickets (original: ${checkPath})`);
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleContent/SupportTickets (original: ${checkPath})`);
           req.query = req.query || {};
           req.query.type = 'support-tickets';
           return await handleContent(req, res, handlerOptions);
         } else if (checkPath.includes('/content') || checkPath.endsWith('/content')) {
-          console.log(`✅ Routing ${req.method} request from /api/main to handleContent (original: ${checkPath})`);
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleContent (original: ${checkPath})`);
           return await handleContent(req, res, handlerOptions);
         }
       }
@@ -474,7 +472,7 @@ export default async function handler(
       if ((req.method === 'PUT' || req.method === 'POST') && req.body && req.body.email) {
         // Only log in development to avoid information leakage
         if (process.env.NODE_ENV !== 'production') {
-          console.log(`✅ Routing ${req.method} request from /api/main to handleUsers (fallback: body contains email)`);
+          logInfo(`✅ Routing ${req.method} request from /api/main to handleUsers (fallback: body contains email)`);
         }
         return await handleUsers(req, res, handlerOptions);
       }
@@ -482,7 +480,7 @@ export default async function handler(
       // Last resort: default to users handler for /api/main
       // Only log in development to avoid information leakage
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`⚠️ Routing ${req.method} request from /api/main to handleUsers (default fallback - no original path found)`);
+        logInfo(`⚠️ Routing ${req.method} request from /api/main to handleUsers (default fallback - no original path found)`);
       }
       return await handleUsers(req, res, handlerOptions);
     }
@@ -491,14 +489,14 @@ export default async function handler(
     if (pathname.includes('/users') || pathname.endsWith('/users') || pathname === '/api/users' || pathname === '/users') {
       // Only log in development to avoid information leakage
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`✅ Routing ${req.method} request to handleUsers handler`);
+        logInfo(`✅ Routing ${req.method} request to handleUsers handler`);
       }
       return await handleUsers(req, res, handlerOptions);
     } else if (pathname.includes('/vehicles') || pathname.endsWith('/vehicles')) {
       try {
         return await handleVehicles(req, res, handlerOptions);
       } catch (error) {
-        console.error('⚠️ Error in handleVehicles wrapper:', error);
+        logError('⚠️ Error in handleVehicles wrapper:', error);
         // For vehicles?type=data, ensure we never return 500
         if (req.query?.type === 'data') {
           res.setHeader('Content-Type', 'application/json');
@@ -521,7 +519,7 @@ export default async function handler(
       try {
         return await handleVehicleData(req, res, handlerOptions);
       } catch (error) {
-        console.error('⚠️ Error in handleVehicleData wrapper:', error);
+        logError('⚠️ Error in handleVehicleData wrapper:', error);
         // Ensure we never return 500 for vehicle-data endpoints
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('X-Data-Fallback', 'true');
@@ -542,7 +540,7 @@ export default async function handler(
       // Set query type for handleContent to route to FAQs handler
           // Only log in development to avoid information leakage
           if (process.env.NODE_ENV !== 'production') {
-            console.log(`✅ Routing ${req.method} request to handleContent/FAQs handler`);
+            logInfo(`✅ Routing ${req.method} request to handleContent/FAQs handler`);
           }
       req.query = req.query || {};
       req.query.type = 'faqs';
@@ -564,13 +562,13 @@ export default async function handler(
       // when pathname extraction fails or doesn't match expected patterns
       // Only log in development to avoid information leakage
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`⚠️ Default route: Routing ${req.method} request (pathname: ${pathname}) to handleUsers handler`);
+        logInfo(`⚠️ Default route: Routing ${req.method} request (pathname: ${pathname}) to handleUsers handler`);
       }
       return await handleUsers(req, res, handlerOptions);
     }
 
   } catch (error) {
-    console.error('Main API Error:', error);
+    logError('Main API Error:', error);
     
     // Ensure we always return JSON, never HTML
     res.setHeader('Content-Type', 'application/json');
@@ -581,7 +579,7 @@ export default async function handler(
     const originalPath = req.headers['x-vercel-original-path'] as string;
     if ((req.method === 'PUT' || req.method === 'POST') && 
         (urlPath.includes('/users') || originalPath?.includes('/users'))) {
-      console.log(`🆘 Error handler: Attempting to route ${req.method} /users request to handleUsers as last resort`);
+      logInfo(`🆘 Error handler: Attempting to route ${req.method} /users request to handleUsers as last resort`);
       try {
         const handlerOptions: HandlerOptions = {
           mongoAvailable: true,
@@ -589,7 +587,7 @@ export default async function handler(
         };
         return await handleUsers(req, res, handlerOptions);
       } catch (handlerError) {
-        console.error('❌ Even handleUsers failed in error handler:', handlerError);
+        logError('❌ Even handleUsers failed in error handler:', handlerError);
         // Fall through to return error
       }
     }
@@ -636,7 +634,7 @@ export default async function handler(
     );
     
     if (isDbError) {
-      console.error('❌ Database error in main handler:', error instanceof Error ? error.message : 'Unknown error');
+      logError('❌ Database error in main handler:', error instanceof Error ? error.message : 'Unknown error');
       // Check if it's a configuration error vs connection error
       if (error instanceof Error && (error.message.includes('MONGODB_URI') || error.message.includes('MONGODB_URL'))) {
         return res.status(503).json({ 
@@ -732,7 +730,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const normalizedUser = normalizeUser(user);
       
       if (!normalizedUser || !normalizedUser.role) {
-        console.error('❌ Failed to normalize user object:', { email: user.email, hasRole: !!user.role });
+        logError('❌ Failed to normalize user object:', { email: user.email, hasRole: !!user.role });
         return res.status(500).json({ 
           success: false, 
           reason: 'Failed to process user data. Please try again.' 
@@ -758,12 +756,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         if (mongoose.connection.readyState !== 1) {
           // Only log in development to avoid information leakage
           if (process.env.NODE_ENV !== 'production') {
-            console.log('🔄 Connecting to database for user registration...');
+            logInfo('🔄 Connecting to database for user registration...');
           }
           await connectToDatabase();
         }
       } catch (dbError) {
-        console.error('❌ Database connection error during registration:', dbError);
+        logError('❌ Database connection error during registration:', dbError);
         return res.status(503).json({ 
           success: false, 
           reason: 'Database connection failed. Please check MONGODB_URL or MONGODB_URI configuration.',
@@ -790,7 +788,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       try {
         const existingUser = await User.findOne({ email: normalizedEmail });
         if (existingUser) {
-          console.warn('⚠️ Registration attempt with existing email:', normalizedEmail);
+          logWarn('⚠️ Registration attempt with existing email:', normalizedEmail);
           return res.status(400).json({ success: false, reason: 'User already exists.' });
         }
 
@@ -798,7 +796,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         const hashedPassword = await hashPassword(sanitizedData.password);
         // Never log password hashing status or user emails in production
         if (process.env.NODE_ENV !== 'production') {
-          console.log('🔐 Password hashed successfully for user:', normalizedEmail);
+          logInfo('🔐 Password hashed successfully for user:', normalizedEmail);
         }
 
         // Generate unique ID to avoid collisions
@@ -819,20 +817,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           createdAt: new Date().toISOString()
         });
 
-        console.log('💾 Attempting to save user to MongoDB...');
+        logInfo('💾 Attempting to save user to MongoDB...');
         await newUser.save();
-        console.log('✅ New user registered and saved to MongoDB:', normalizedEmail);
+        logInfo('✅ New user registered and saved to MongoDB:', normalizedEmail);
       
         // Verify the user was saved by querying it back
         const verifyUser = await User.findOne({ email: normalizedEmail });
         if (!verifyUser) {
-          console.error('❌ User registration verification failed - user not found after save');
+          logError('❌ User registration verification failed - user not found after save');
           return res.status(500).json({ 
             success: false, 
             reason: 'User registration failed - user was not saved to database. Please try again.' 
           });
         } else {
-          console.log('✅ User registration verified in database. User ID:', verifyUser._id);
+          logInfo('✅ User registration verified in database. User ID:', verifyUser._id);
         }
       
         // Generate JWT tokens for new user
@@ -843,14 +841,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         const normalizedUser = normalizeUser(newUser.toObject());
         
         if (!normalizedUser || !normalizedUser.role) {
-          console.error('❌ Failed to normalize new user object:', { email: newUser.email, hasRole: !!newUser.role });
+          logError('❌ Failed to normalize new user object:', { email: newUser.email, hasRole: !!newUser.role });
           return res.status(500).json({ 
             success: false, 
             reason: 'Failed to process user data. Please try again.' 
           });
         }
         
-        console.log('✅ Registration complete. User ID:', newUser._id);
+        logInfo('✅ Registration complete. User ID:', newUser._id);
         return res.status(201).json({ 
           success: true, 
           user: normalizedUser,
@@ -858,12 +856,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           refreshToken
         });
       } catch (saveError) {
-        console.error('❌ Error saving user to MongoDB:', saveError);
+        logError('❌ Error saving user to MongoDB:', saveError);
         const errorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
         const errorStack = saveError instanceof Error ? saveError.stack : undefined;
         
         // Log full error details for debugging
-        console.error('Registration error details:', { 
+        logError('Registration error details:', { 
           message: errorMessage, 
           stack: errorStack,
           email: normalizedEmail 
@@ -910,7 +908,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
       let user = await User.findOne({ email: normalizedEmail });
       if (!user) {
-        console.log('🔄 OAuth registration - Creating new user:', normalizedEmail);
+        logInfo('🔄 OAuth registration - Creating new user:', normalizedEmail);
         user = new User({
           id: Date.now(),
           email: normalizedEmail,
@@ -927,25 +925,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           createdAt: new Date().toISOString()
         });
         
-        console.log('💾 Saving OAuth user to MongoDB...');
+        logInfo('💾 Saving OAuth user to MongoDB...');
         await user.save();
-        console.log('✅ OAuth user saved to MongoDB:', normalizedEmail);
+        logInfo('✅ OAuth user saved to MongoDB:', normalizedEmail);
         
         // Verify the user was saved by querying it back
         const verifyUser = await User.findOne({ email: normalizedEmail });
         if (!verifyUser) {
-          console.error('❌ OAuth user registration verification failed - user not found after save');
+          logError('❌ OAuth user registration verification failed - user not found after save');
           return res.status(500).json({ 
             success: false, 
             reason: 'OAuth registration failed - user was not saved to database. Please try again.' 
           });
         } else {
-          console.log('✅ OAuth user registration verified in database. User ID:', verifyUser._id);
+          logInfo('✅ OAuth user registration verified in database. User ID:', verifyUser._id);
           // Use the verified user to ensure we have the latest data
           user = verifyUser;
         }
       } else {
-        console.log('✅ OAuth login - Existing user found:', sanitizedData.email);
+        logInfo('✅ OAuth login - Existing user found:', sanitizedData.email);
       }
 
       // Generate JWT tokens for OAuth users
@@ -956,7 +954,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const normalizedUser = normalizeUser(user.toObject());
       
       if (!normalizedUser || !normalizedUser.role) {
-        console.error('❌ Failed to normalize OAuth user object:', { email: user.email, hasRole: !!user.role });
+        logError('❌ Failed to normalize OAuth user object:', { email: user.email, hasRole: !!user.role });
         return res.status(500).json({ 
           success: false, 
           reason: 'Failed to process user data. Please try again.' 
@@ -989,7 +987,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           accessToken: newAccessToken 
         });
       } catch (error) {
-        console.warn('Refresh token failed:', error);
+        logWarn('Refresh token failed:', error);
         return res.status(401).json({ success: false, reason: 'Invalid or expired refresh token.' });
       }
     }
@@ -1030,8 +1028,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     
     if (action === 'trust-score' && email) {
       try {
-        // Normalize email to lowercase for consistent database lookup
-        const normalizedEmail = (email as string).toLowerCase().trim();
+        // Sanitize and normalize email to prevent NoSQL injection
+        const sanitizedEmail = await sanitizeString(String(email));
+        const normalizedEmail = sanitizedEmail.toLowerCase().trim();
         const user = await User.findOne({ email: normalizedEmail });
         if (!user) {
           return res.status(404).json({ success: false, reason: 'User not found' });
@@ -1045,7 +1044,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           name: user.name
         });
       } catch (error) {
-        console.error('Error fetching trust score:', error);
+        logError('Error fetching trust score:', error);
         return res.status(500).json({ 
           success: false, 
           reason: 'Failed to fetch trust score',
@@ -1061,7 +1060,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         try {
           await connectToDatabase();
         } catch (connError) {
-          console.warn('⚠️ Database connection failed during GET /users, using fallback');
+          logWarn('⚠️ Database connection failed during GET /users, using fallback');
           isMongoAvailable = false;
         }
       }
@@ -1074,10 +1073,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       
       const users = await User.find({}).sort({ createdAt: -1 }).lean();
       // SECURITY FIX: Normalize all users to remove passwords and convert _id to id
-      const normalizedUsers = users.map(user => normalizeUser(user));
+      const normalizedUsers = users.map(user => normalizeUser(user as unknown as UserDocument));
       return res.status(200).json(normalizedUsers);
     } catch (error) {
-      console.error('❌ Error fetching users:', error);
+      logError('❌ Error fetching users:', error);
       // Always return fallback instead of 500 to prevent crashes
       try {
         const fallbackUsers = await getFallbackUsers();
@@ -1085,7 +1084,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(200).json(fallbackUsers);
       } catch (fallbackError) {
         // Even fallback failed, return empty array instead of 500
-        console.error('❌ Fallback users also failed:', fallbackError);
+        logError('❌ Fallback users also failed:', fallbackError);
         res.setHeader('X-Data-Fallback', 'true');
         return res.status(200).json([]);
       }
@@ -1104,22 +1103,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     }
     try {
       // Ensure database connection is established first
-      console.log('🔌 Connecting to database for user update...');
+      logInfo('🔌 Connecting to database for user update...');
       await connectToDatabase();
       
       // Ensure mongoose connection is ready
       if (mongoose.connection.readyState !== 1) {
-        console.warn('⚠️ MongoDB connection not ready, reconnecting...');
+        logWarn('⚠️ MongoDB connection not ready, reconnecting...');
         await connectToDatabase();
       }
       
-      console.log('✅ Database connected for user update, readyState:', mongoose.connection.readyState);
+      logInfo('✅ Database connected for user update, readyState:', mongoose.connection.readyState);
       
       const { email, ...updateData } = req.body;
       
       // SECURITY FIX: Authorization Check
       // Only allow updates if user is admin or updating their own profile
-      if (auth.user.role !== 'admin' && auth.user.email !== email) {
+      if (!auth.user || (auth.user.role !== 'admin' && auth.user.email !== email)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You can only update your own profile.' });
       }
       
@@ -1128,13 +1127,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
 
       // Only log in development to avoid information leakage
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('🔄 PUT /users - Updating user:', { email, hasPassword: !!updateData.password, fields: Object.keys(updateData) });
-      }
+      logInfo('🔄 PUT /users - Updating user:', { email, hasPassword: !!updateData.password, fields: Object.keys(updateData) });
 
       // Separate null values (to be unset) from regular updates
-      const updateFields: any = {};
-      const unsetFields: any = {};
+      const updateFields: Record<string, unknown> = {};
+      const unsetFields: Record<string, unknown> = {};
       
       // Handle password update separately - it needs to be hashed
       if (updateData.password !== undefined && updateData.password !== null) {
@@ -1156,24 +1153,24 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
             updateFields.password = updateData.password;
             // Only log in development to avoid information leakage
             if (process.env.NODE_ENV !== 'production') {
-              console.log('🔐 Password already hashed, using as-is');
+              logInfo('🔐 Password already hashed, using as-is');
             }
           } else {
             // Hash the plain text password before updating
             // Only log in development to avoid information leakage
             if (process.env.NODE_ENV !== 'production') {
-              console.log('🔐 Hashing password...');
+              logInfo('🔐 Hashing password...');
             }
             updateFields.password = await hashPassword(updateData.password);
             // Never log password hashing success in production
             if (process.env.NODE_ENV !== 'production') {
-              console.log('✅ Password hashed successfully');
+              logInfo('✅ Password hashed successfully');
             }
           }
         } catch (hashError) {
           // Only log errors in development to avoid information leakage
           if (process.env.NODE_ENV !== 'production') {
-            console.error('❌ Error hashing password:', hashError);
+            logError('❌ Error hashing password:', hashError);
           }
           const errorMessage = hashError instanceof Error ? hashError.message : 'Unknown error';
           return res.status(500).json({ 
@@ -1212,7 +1209,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(400).json({ success: false, reason: 'No fields to update.' });
       }
 
-      console.log('💾 Updating user in database...', { 
+      logInfo('💾 Updating user in database...', { 
         email, 
         operationKeys: Object.keys(updateOperation),
         hasPasswordUpdate: !!updateFields.password,
@@ -1222,18 +1219,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
       // Double-check connection before update
       if (mongoose.connection.readyState !== 1) {
-        console.warn('⚠️ Connection not ready before update, reconnecting...');
+        logWarn('⚠️ Connection not ready before update, reconnecting...');
         await connectToDatabase();
       }
 
-      // Find user first to ensure they exist
-      const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+      // Sanitize and normalize email to prevent NoSQL injection
+      const sanitizedEmail = await sanitizeString(String(email));
+      const normalizedEmail = sanitizedEmail.toLowerCase().trim();
+      const existingUser = await User.findOne({ email: normalizedEmail });
       if (!existingUser) {
-        console.warn('⚠️ User not found:', email);
+        logWarn('⚠️ User not found:', email);
         return res.status(404).json({ success: false, reason: 'User not found.' });
       }
 
-      console.log('📝 Found user, applying update operation...');
+      logInfo('📝 Found user, applying update operation...');
       
       // For password updates, ensure it's properly marked as modified
       if (updateFields.password) {
@@ -1246,17 +1245,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           );
 
           if (!updatedUser) {
-            console.error('❌ Failed to update user after findOneAndUpdate');
+            logError('❌ Failed to update user after findOneAndUpdate');
             return res.status(500).json({ success: false, reason: 'Failed to update user. User not found.' });
           }
 
           // Ensure MongoDB connection is active before save
           if (mongoose.connection.readyState !== 1) {
-            console.warn('⚠️ MongoDB connection lost before save, attempting to reconnect...');
+            logWarn('⚠️ MongoDB connection lost before save, attempting to reconnect...');
             try {
               await connectToDatabase();
             } catch (reconnectError) {
-              console.error('❌ Failed to reconnect to MongoDB:', reconnectError);
+              logError('❌ Failed to reconnect to MongoDB:', reconnectError);
               return res.status(503).json({ 
                 success: false, 
                 reason: 'Database connection lost. Please try again later.',
@@ -1270,20 +1269,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           updatedUser.markModified('password');
           // Only log in development to avoid information leakage
           if (process.env.NODE_ENV !== 'production') {
-            console.log('💾 Explicitly saving user document to ensure password persistence...');
+            logInfo('💾 Explicitly saving user document to ensure password persistence...');
           }
           
           try {
             await updatedUser.save({ validateBeforeSave: true });
-            console.log('✅ User document saved successfully');
+            logInfo('✅ User document saved successfully');
           } catch (saveError) {
-            console.error('❌ Error saving user document:', saveError);
+            logError('❌ Error saving user document:', saveError);
             const saveErrorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
             const saveErrorName = saveError instanceof Error ? saveError.name : 'Unknown';
             
             // Check if it's a validation error
             if (saveErrorName === 'ValidationError') {
-              console.error('❌ Validation error details:', saveError);
+              logError('❌ Validation error details:', saveError);
               return res.status(400).json({ 
                 success: false, 
                 reason: 'Password validation failed. Please ensure your password meets all requirements.',
@@ -1304,29 +1303,30 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
             throw saveError;
           }
 
-          console.log('✅ User updated successfully:', updatedUser.email);
+          logInfo('✅ User updated successfully:', updatedUser.email);
           // Never log password update status in production
           if (process.env.NODE_ENV !== 'production') {
-            console.log('✅ Password updated:', !!updateFields.password);
+            logInfo('✅ Password updated:', !!updateFields.password);
           }
 
           // Verify the update actually saved by checking the user again
-          const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
+          const verifyEmail = await sanitizeString(String(email));
+          const verifyUser = await User.findOne({ email: verifyEmail.toLowerCase().trim() });
           if (verifyUser && verifyUser.password) {
             // Never log password update verification in production
             if (process.env.NODE_ENV !== 'production') {
-              console.log('✅ Password update verified in database');
+              logInfo('✅ Password update verified in database');
               // Verify it's different from the old password (if we can check)
               if (verifyUser.password !== existingUser.password) {
-                console.log('✅ Password hash changed, update confirmed');
+                logInfo('✅ Password hash changed, update confirmed');
               } else {
-                console.warn('⚠️ Password hash unchanged - update may not have worked');
+                logWarn('⚠️ Password hash unchanged - update may not have worked');
               }
             }
           } else {
             // Only log errors in development to avoid information leakage
             if (process.env.NODE_ENV !== 'production') {
-              console.error('❌ Password update verification failed - password not found in database');
+              logError('❌ Password update verification failed - password not found in database');
             }
           }
 
@@ -1334,9 +1334,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           const { password: _, ...userWithoutPassword } = updatedUser.toObject();
           return res.status(200).json({ success: true, user: userWithoutPassword });
         } catch (passwordUpdateError) {
-          console.error('❌ Error during password update:', passwordUpdateError);
-          console.error('❌ Error stack:', passwordUpdateError instanceof Error ? passwordUpdateError.stack : 'No stack trace');
-          console.error('❌ Error name:', passwordUpdateError instanceof Error ? passwordUpdateError.name : 'Unknown');
+          logError('❌ Error during password update:', passwordUpdateError);
+          logError('❌ Error stack:', passwordUpdateError instanceof Error ? passwordUpdateError.stack : 'No stack trace');
+          logError('❌ Error name:', passwordUpdateError instanceof Error ? passwordUpdateError.name : 'Unknown');
           
           const errorMessage = passwordUpdateError instanceof Error ? passwordUpdateError.message : 'Unknown error';
           const errorName = passwordUpdateError instanceof Error ? passwordUpdateError.name : 'Unknown';
@@ -1381,13 +1381,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         );
 
         if (!updatedUser) {
-          console.error('❌ Failed to update user after findOneAndUpdate');
+          logError('❌ Failed to update user after findOneAndUpdate');
           return res.status(500).json({ success: false, reason: 'Failed to update user.' });
         }
 
         // Explicitly save to ensure persistence
         await updatedUser.save();
-        console.log('✅ User updated successfully:', updatedUser.email);
+        logInfo('✅ User updated successfully:', updatedUser.email);
 
         // SYNC VEHICLE EXPIRY DATES when planExpiryDate is updated
         if (updateFields.planExpiryDate !== undefined || unsetFields.planExpiryDate !== undefined) {
@@ -1406,15 +1406,16 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
               const bulkUpdates: BulkUpdateOperation[] = [];
               
               sellerVehicles.forEach(vehicle => {
-                const vehicleUpdateFields: any = {};
+                const vehicleUpdateFields: Record<string, unknown> = {};
                 
                 if (updatedUser.subscriptionPlan === 'premium') {
-                  if (newPlanExpiryDate) {
+                  if (newPlanExpiryDate && (typeof newPlanExpiryDate === 'string' || newPlanExpiryDate instanceof Date)) {
                     // Premium plan with expiry: set vehicle expiry to plan expiry
-                    vehicleUpdateFields.listingExpiresAt = new Date(newPlanExpiryDate);
+                    const expiryDate = typeof newPlanExpiryDate === 'string' ? new Date(newPlanExpiryDate) : newPlanExpiryDate;
+                    vehicleUpdateFields.listingExpiresAt = expiryDate;
                     
                     // If vehicle was expired but plan is now extended, reactivate it
-                    if (vehicle.listingExpiresAt && new Date(vehicle.listingExpiresAt) < now && new Date(newPlanExpiryDate) >= now) {
+                    if (vehicle.listingExpiresAt && new Date(vehicle.listingExpiresAt) < now && expiryDate >= now) {
                       vehicleUpdateFields.listingStatus = 'active';
                       vehicleUpdateFields.status = 'published';
                     }
@@ -1455,21 +1456,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
               
               if (bulkUpdates.length > 0) {
                 await Vehicle.bulkWrite(bulkUpdates, { ordered: false });
-                console.log(`✅ Synced ${bulkUpdates.length} vehicle expiry dates for seller ${normalizedEmail}`);
+                logInfo(`✅ Synced ${bulkUpdates.length} vehicle expiry dates for seller ${normalizedEmail}`);
               }
             }
           } catch (syncError) {
-            console.error('⚠️ Error syncing vehicle expiry dates:', syncError);
+            logError('⚠️ Error syncing vehicle expiry dates:', syncError);
             // Don't fail the user update if vehicle sync fails
           }
         }
 
         // Verify the update by querying again
-        const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
+        const verifyEmail = await sanitizeString(String(email));
+        const verifyUser = await User.findOne({ email: verifyEmail.toLowerCase().trim() });
         if (!verifyUser) {
-          console.warn('⚠️ User update verification failed - user not found after update');
+          logWarn('⚠️ User update verification failed - user not found after update');
         } else {
-          console.log('✅ User update verified in database');
+          logInfo('✅ User update verified in database');
         }
 
         // Remove password from response for security
@@ -1477,12 +1479,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(200).json({ success: true, user: userWithoutPassword });
       }
     } catch (dbError) {
-      console.error('❌ Database error during user update:', dbError);
+      logError('❌ Database error during user update:', dbError);
       const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';
       const errorStack = dbError instanceof Error ? dbError.stack : undefined;
       
       // Log full error for debugging
-      console.error('Error details:', { message: errorMessage, stack: errorStack });
+      logError('Error details:', { message: errorMessage, stack: errorStack });
       
       return res.status(500).json({ 
         success: false, 
@@ -1506,7 +1508,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const { email } = req.body;
       
       // SECURITY FIX: Authorization Check
-      if (auth.user.role !== 'admin' && auth.user.email !== email) {
+      if (!auth.user || (auth.user.role !== 'admin' && auth.user.email !== email)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized action.' });
       }
       
@@ -1514,28 +1516,31 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(400).json({ success: false, reason: 'Email is required for deletion.' });
       }
 
-      const normalizedEmail = email.toLowerCase().trim();
-      console.log('🔄 DELETE /users - Deleting user:', normalizedEmail);
+      // Sanitize email to prevent NoSQL injection
+      const sanitizedEmail = await sanitizeString(String(email));
+      const normalizedEmail = sanitizedEmail.toLowerCase().trim();
+      logInfo('🔄 DELETE /users - Deleting user:', normalizedEmail);
 
       const deletedUser = await User.findOneAndDelete({ email: normalizedEmail });
       if (!deletedUser) {
-        console.warn('⚠️ User not found for deletion:', normalizedEmail);
+        logWarn('⚠️ User not found for deletion:', normalizedEmail);
         return res.status(404).json({ success: false, reason: 'User not found.' });
       }
 
-      console.log('✅ User deleted successfully from MongoDB:', normalizedEmail);
+      logInfo('✅ User deleted successfully from MongoDB:', normalizedEmail);
 
       // Verify the user was deleted by querying it
-      const verifyUser = await User.findOne({ email: normalizedEmail });
+      const verifyEmail = await sanitizeString(String(email));
+      const verifyUser = await User.findOne({ email: verifyEmail.toLowerCase().trim() });
       if (verifyUser) {
-        console.error('❌ User deletion verification failed - user still exists in database');
+        logError('❌ User deletion verification failed - user still exists in database');
       } else {
-        console.log('✅ User deletion verified in database');
+        logInfo('✅ User deletion verified in database');
       }
 
       return res.status(200).json({ success: true, message: 'User deleted successfully.' });
     } catch (error) {
-      console.error('❌ Error deleting user:', error);
+      logError('❌ Error deleting user:', error);
       return res.status(500).json({
         success: false,
         reason: 'Failed to delete user',
@@ -1546,7 +1551,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
   return res.status(405).json({ success: false, reason: 'Method not allowed.' });
   } catch (error) {
-    console.error('❌ Error in handleUsers:', error);
+    logError('❌ Error in handleUsers:', error);
     // Ensure we always return JSON
     res.setHeader('Content-Type', 'application/json');
     
@@ -1557,7 +1562,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         res.setHeader('X-Data-Fallback', 'true');
         return res.status(200).json(fallbackUsers);
       } catch (fallbackError) {
-        console.error('❌ Fallback users also failed:', fallbackError);
+        logError('❌ Fallback users also failed:', fallbackError);
         res.setHeader('X-Data-Fallback', 'true');
         return res.status(200).json([]);
       }
@@ -1826,7 +1831,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     if (!mongoAvailable) {
       const fallbackVehicles = await getFallbackVehicles();
       if (action === 'city-stats' && req.query.city) {
-        const cityVehicles = fallbackVehicles.filter(v => v.city === req.query.city);
+        // Sanitize city input to prevent injection
+        const sanitizedCity = await sanitizeString(String(req.query.city));
+        const cityVehicles = fallbackVehicles.filter(v => v.city === sanitizedCity);
         const stats = {
           totalVehicles: cityVehicles.length,
           averagePrice: cityVehicles.reduce((sum, v) => sum + (v.price || 0), 0) / (cityVehicles.length || 1),
@@ -1914,13 +1921,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
               role: (seller.role as 'customer' | 'seller' | 'admin') || 'customer',
               status: seller.status || 'active',
               createdAt: seller.createdAt || new Date().toISOString(),
+              location: seller.location || '',
             };
             sellerMap.set(seller.email.toLowerCase(), userDoc);
           }
         });
       }
       
-      const bulkUpdates: any[] = [];
+      const bulkUpdates: BulkUpdateOperation[] = [];
       
       vehicles.forEach(vehicle => {
         const updateFields: Record<string, any> = {};
@@ -2004,8 +2012,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         });
         sellerToPublished.forEach(list => {
           list.sort((a, b) => {
-            const aTime = new Date(a.createdAt || a._id?.getTimestamp?.() || 0).getTime();
-            const bTime = new Date(b.createdAt || b._id?.getTimestamp?.() || 0).getTime();
+            // Use createdAt if available, otherwise use a default timestamp
+            const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             return bTime - aTime;
           });
         });
@@ -2023,12 +2032,17 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           if (publishedVehicles.length > numericLimit) {
             const extras = publishedVehicles.slice(numericLimit); // older ones
             extras.forEach(v => {
-              bulkUpdates.push({
-                updateOne: {
-                  filter: { _id: v._id },
-                  update: { $set: { status: 'unpublished', listingStatus: 'suspended' } }
-                }
-              });
+              // Vehicles from MongoDB have _id, but VehicleType doesn't include it
+              // Use id or sellerEmail+make+model as fallback identifier
+              const vehicleId = (v as unknown as { _id?: unknown })._id || v.id;
+              if (vehicleId) {
+                bulkUpdates.push({
+                  updateOne: {
+                    filter: { _id: vehicleId },
+                    update: { $set: { status: 'unpublished', listingStatus: 'suspended' } }
+                  }
+                });
+              }
             });
           }
         });
@@ -2081,8 +2095,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         if (!sellerEmail || typeof sellerEmail !== 'string') {
           return res.status(400).json({ success: false, reason: 'Seller email is required' });
         }
-        // Normalize email
-        const normalizedEmail = sellerEmail.toLowerCase().trim();
+        // Sanitize and normalize email to prevent NoSQL injection
+        const sanitizedEmail = await sanitizeString(String(sellerEmail));
+        const normalizedEmail = sanitizedEmail.toLowerCase().trim();
         // Ensure DB connection for safety
         await connectToDatabase();
         // Load seller
@@ -2240,7 +2255,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
           
-          const seller = await User.findOne({ email: vehicle.sellerEmail });
+          // Sanitize seller email to prevent NoSQL injection
+          const sanitizedSellerEmail = await sanitizeString(String(vehicle.sellerEmail));
+          const seller = await User.findOne({ email: sanitizedSellerEmail.toLowerCase().trim() });
           if (!seller) {
             return res.status(404).json({ success: false, reason: 'Seller not found for this vehicle' });
           }
@@ -2329,7 +2346,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
             return res.status(400).json({ success: false, reason: 'Vehicle does not have an associated seller.' });
           }
 
-          const seller = await User.findOne({ email: sellerEmail });
+          // Sanitize seller email to prevent NoSQL injection
+          const sanitizedSellerEmail = await sanitizeString(String(sellerEmail));
+          const seller = await User.findOne({ email: sanitizedSellerEmail.toLowerCase().trim() });
           if (!seller) {
             return res.status(404).json({ success: false, reason: 'Seller not found for this vehicle.' });
           }
@@ -2482,7 +2501,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     // Check if seller's plan has expired and block creation if so
     if (req.body.sellerEmail) {
       // Sanitize email input to prevent NoSQL injection
-      const sanitizedEmail = await sanitizeString(String(req.body.sellerEmail)).toLowerCase().trim();
+      const sanitizedEmail = (await sanitizeString(String(req.body.sellerEmail))).toLowerCase().trim();
       const seller = await User.findOne({ email: sanitizedEmail });
       if (seller && seller.planExpiryDate) {
         const expiryDate = new Date(seller.planExpiryDate);
@@ -2500,7 +2519,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     let listingExpiresAt: string | undefined;
     if (req.body.sellerEmail) {
       // Sanitize email input to prevent NoSQL injection
-      const sanitizedEmail = await sanitizeString(String(req.body.sellerEmail)).toLowerCase().trim();
+      const sanitizedEmail = (await sanitizeString(String(req.body.sellerEmail))).toLowerCase().trim();
       const seller = await User.findOne({ email: sanitizedEmail });
       if (seller) {
         // Plan is not expired (checked above), so compute expiry for active plans
@@ -2735,9 +2754,9 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
 
   // Verify JWT token
   const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-  let decoded: any;
+  let decoded: TokenPayload & { [key: string]: unknown };
   try {
-    decoded = verifyToken(token);
+    decoded = { ...verifyToken(token) } as TokenPayload & { [key: string]: unknown };
   } catch (error) {
     return res.status(401).json({ 
       success: false, 
@@ -2757,14 +2776,8 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
   }
 
   // Log admin action for security auditing
-  if (process.env.NODE_ENV === 'production') {
-    // In production, use proper logging service (e.g., Sentry, CloudWatch)
-    // For now, log to console but consider implementing structured logging
-    console.log(`[SECURITY] Admin action '${action}' accessed by user: ${decoded.email} (${decoded.userId})`);
-  } else {
-    // In development, use detailed logging
-    console.log(`🔐 Admin action '${action}' accessed by user: ${decoded.email} (${decoded.userId})`);
-  }
+  // SECURITY: Always log admin actions for security monitoring
+  logSecurity(`Admin action '${action}' accessed by user: ${decoded.email}`, { userId: decoded.userId, action });
 
   if (action === 'health') {
     try {
@@ -2957,7 +2970,7 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
 
       try {
         await connectToDatabase();
-        console.log('📡 Connected to database for vehicle-data fetch operation');
+        logInfo('📡 Connected to database for vehicle-data fetch operation');
         
         let vehicleDataDoc = await VehicleDataModel.findOne();
         if (!vehicleDataDoc) {
@@ -2968,7 +2981,7 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
         
         return res.status(200).json(vehicleDataDoc.data);
       } catch (dbError) {
-        console.warn('⚠️ Database connection failed for vehicle-data, returning default data:', dbError);
+        logWarn('⚠️ Database connection failed for vehicle-data, returning default data:', dbError);
         // Return default data as fallback - NEVER return 500
         res.setHeader('X-Data-Fallback', 'true');
         return res.status(200).json(defaultData);
@@ -2990,7 +3003,7 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
 
       try {
         await connectToDatabase();
-        console.log('📡 Connected to database for vehicle-data save operation');
+        logInfo('📡 Connected to database for vehicle-data save operation');
         
         const vehicleData = await VehicleDataModel.findOneAndUpdate(
           {},
@@ -3013,7 +3026,7 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
           timestamp: new Date().toISOString()
         });
       } catch (dbError) {
-        console.warn('⚠️ Database connection failed for vehicle-data save:', dbError);
+        logWarn('⚠️ Database connection failed for vehicle-data save:', dbError);
         
         // For POST requests, we should still return success but indicate fallback
         // This prevents the sync from failing completely - NEVER return 500
@@ -3032,7 +3045,7 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   } catch (error) {
     // Ultimate fallback - catch any unexpected errors
-    console.error('⚠️ Unexpected error in handleVehicleData:', error);
+    logError('⚠️ Unexpected error in handleVehicleData:', error);
     res.setHeader('X-Data-Fallback', 'true');
     if (req.method === 'GET') {
       return res.status(200).json(defaultData);
@@ -3052,25 +3065,24 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
 // Each function invocation will load fresh data from constants
 // For production, consider using Vercel KV or Redis for caching
 
-async function getFallbackVehicles(): Promise<unknown[]> {
+async function getFallbackVehicles(): Promise<VehicleType[]> {
   try {
     const { MOCK_VEHICLES } = await import('../constants.js');
     const vehicles = await MOCK_VEHICLES();
     return vehicles;
   } catch (error) {
     // Only log in development to avoid information leakage
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('⚠️ Unable to load MOCK_VEHICLES fallback:', error);
-    }
+    logWarn('⚠️ Unable to load MOCK_VEHICLES fallback:', error);
   }
 
   return [];
 }
 
-async function getFallbackUsers(): Promise<unknown[]> {
+async function getFallbackUsers(): Promise<NormalizedUser[]> {
   // Return minimal fallback user data
   return [
     {
+      id: 'fallback-user-1',
       name: 'Demo User',
       email: 'demo@reride.com',
       mobile: '9876543210',
@@ -3201,10 +3213,10 @@ async function seedUsers(): Promise<UserDocument[]> {
   
   // Log generated passwords in development (not in production)
   if (process.env.NODE_ENV !== 'production') {
-    console.log('⚠️ SEED PASSWORDS (Development only):');
-    console.log('Admin:', adminPasswordEnv || adminPasswordPlain);
-    console.log('Seller:', sellerPasswordEnv || sellerPasswordPlain);
-    console.log('Customer:', customerPasswordEnv || customerPasswordPlain);
+    logInfo('⚠️ SEED PASSWORDS (Development only):');
+    logInfo('Admin:', adminPasswordEnv ? '[from env]' : adminPasswordPlain);
+    logInfo('Seller:', sellerPasswordEnv ? '[from env]' : sellerPasswordPlain);
+    logInfo('Customer:', customerPasswordEnv ? '[from env]' : customerPasswordPlain);
   }
   
   // Set plan dates for seller

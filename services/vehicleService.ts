@@ -44,22 +44,31 @@ const FALLBACK_VEHICLES: Vehicle[] = [
 // --- API Helpers ---
 const getAuthHeader = () => {
   try {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return {};
+    }
+    
     // Try localStorage first for persistent login, fallback to sessionStorage
-    const userJson = localStorage.getItem('reRideCurrentUser') || sessionStorage.getItem('currentUser');
+    const userJson = localStorage.getItem('reRideCurrentUser') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('currentUser') : null);
     if (!userJson) return {};
     const user: User = JSON.parse(userJson);
     
     // Check if user has access token
-    const accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
+    const accessToken = localStorage.getItem('reRideAccessToken') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('accessToken') : null);
     if (accessToken) {
       return { 'Authorization': `Bearer ${accessToken}` };
     }
     
     // Fallback to email for backward compatibility (not recommended for production)
-    console.warn('No access token found, using email for authorization (not secure)');
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('No access token found, using email for authorization (not secure)');
+    }
     return { 'Authorization': user.email };
   } catch (error) {
-    console.error('Failed to get auth header:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Failed to get auth header:', error);
+    }
     return {};
   }
 };
@@ -111,30 +120,48 @@ const handleResponse = async <T>(response: Response): Promise<T> => {
 
 export const getVehiclesLocal = async (): Promise<Vehicle[]> => {
     try {
-        console.log('getVehiclesLocal: Starting...');
+        if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+            return FALLBACK_VEHICLES;
+        }
+        
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('getVehiclesLocal: Starting...');
+        }
         let vehiclesJson = localStorage.getItem('reRideVehicles');
         if (!vehiclesJson) {
-            console.log('getVehiclesLocal: No cached data, loading MOCK_VEHICLES...');
+            if (process.env.NODE_ENV !== 'production') {
+                console.log('getVehiclesLocal: No cached data, loading MOCK_VEHICLES...');
+            }
             // Dynamically import MOCK_VEHICLES to avoid blocking initial load
             const { MOCK_VEHICLES } = await import('../constants');
             localStorage.setItem('reRideVehicles', JSON.stringify(MOCK_VEHICLES));
             vehiclesJson = JSON.stringify(MOCK_VEHICLES);
         } else {
-            console.log('getVehiclesLocal: Using cached data');
+            if (process.env.NODE_ENV !== 'production') {
+                console.log('getVehiclesLocal: Using cached data');
+            }
         }
         const vehicles = JSON.parse(vehiclesJson);
-        console.log('getVehiclesLocal: Successfully loaded', vehicles.length, 'vehicles');
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('getVehiclesLocal: Successfully loaded', vehicles.length, 'vehicles');
+        }
         return vehicles;
     } catch (error) {
-        console.error('getVehiclesLocal: Error loading vehicles:', error);
+        if (process.env.NODE_ENV !== 'production') {
+            console.error('getVehiclesLocal: Error loading vehicles:', error);
+            console.log('getVehiclesLocal: Returning FALLBACK_VEHICLES as fallback');
+        }
         // Return FALLBACK_VEHICLES as final fallback
-        console.log('getVehiclesLocal: Returning FALLBACK_VEHICLES as fallback');
         return FALLBACK_VEHICLES;
     }
 };
 
 const addVehicleLocal = async (vehicleData: Vehicle): Promise<Vehicle> => {
     try {
+        if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+            return vehicleData;
+        }
+        
         const vehicles = await getVehiclesLocal();
         vehicles.unshift(vehicleData);
         localStorage.setItem('reRideVehicles', JSON.stringify(vehicles));
@@ -142,11 +169,15 @@ const addVehicleLocal = async (vehicleData: Vehicle): Promise<Vehicle> => {
     } catch (error) {
         // Handle quota exceeded error
         if (error instanceof Error && error.name === 'QuotaExceededError') {
-            console.warn('⚠️ LocalStorage quota exceeded, clearing old data...');
-            // Clear old vehicles and try again
-            localStorage.removeItem('reRideVehicles');
-            const freshVehicles = [vehicleData];
-            localStorage.setItem('reRideVehicles', JSON.stringify(freshVehicles));
+            if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+                if (process.env.NODE_ENV !== 'production') {
+                    console.warn('⚠️ LocalStorage quota exceeded, clearing old data...');
+                }
+                // Clear old vehicles and try again
+                localStorage.removeItem('reRideVehicles');
+                const freshVehicles = [vehicleData];
+                localStorage.setItem('reRideVehicles', JSON.stringify(freshVehicles));
+            }
             return vehicleData;
         }
         throw error;
@@ -154,6 +185,10 @@ const addVehicleLocal = async (vehicleData: Vehicle): Promise<Vehicle> => {
 };
 
 const updateVehicleLocal = async (vehicleData: Vehicle): Promise<Vehicle> => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return vehicleData;
+    }
+    
     let vehicles = await getVehiclesLocal();
     vehicles = vehicles.map(v => v.id === vehicleData.id ? vehicleData : v);
     localStorage.setItem('reRideVehicles', JSON.stringify(vehicles));
@@ -161,6 +196,10 @@ const updateVehicleLocal = async (vehicleData: Vehicle): Promise<Vehicle> => {
 };
 
 const deleteVehicleLocal = async (vehicleId: number): Promise<{ success: boolean, id: number }> => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return { success: true, id: vehicleId };
+    }
+    
     let vehicles = await getVehiclesLocal();
     vehicles = vehicles.filter(v => v.id !== vehicleId);
     localStorage.setItem('reRideVehicles', JSON.stringify(vehicles));

@@ -219,7 +219,9 @@ export function logListingRefresh(refresh: ListingRefresh): void {
     
     localStorage.setItem(REFRESH_LOG_KEY, JSON.stringify(recentRefreshes));
   } catch (error) {
-    console.error('Error logging refresh:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error logging refresh:', error);
+    }
   }
 }
 

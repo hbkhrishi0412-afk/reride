@@ -10,6 +10,10 @@ const CONVERSATION_STORAGE_KEY = 'reRideConversations';
  */
 export const getConversations = (customerEmail?: string): Conversation[] => {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return [];
+    }
+    
     const conversationsJson = localStorage.getItem(CONVERSATION_STORAGE_KEY);
     if (conversationsJson) {
       const allConversations = JSON.parse(conversationsJson);
@@ -179,8 +183,13 @@ export const getConversations = (customerEmail?: string): Conversation[] => {
  */
 export const saveConversations = (conversations: Conversation[]) => {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
     localStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(conversations));
   } catch (error) {
-    console.error("Failed to save conversations to localStorage", error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error("Failed to save conversations to localStorage", error);
+    }
   }
 };

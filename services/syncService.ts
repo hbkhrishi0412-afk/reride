@@ -197,11 +197,15 @@ class SyncService {
       const response = await fetch(`${this.API_BASE_URL}/vehicle-data`);
       if (response.ok) {
         const data = await response.json();
-        localStorage.setItem('reRideVehicleData', JSON.stringify(data));
+        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+          localStorage.setItem('reRideVehicleData', JSON.stringify(data));
+        }
         this.syncStatus.lastSyncTime = new Date();
         this.syncStatus.error = null;
         this.notifyListeners();
-        console.log('✅ Data fetched from vehicle-data endpoint');
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('✅ Data fetched from vehicle-data endpoint');
+        }
         return true;
       }
       
@@ -209,21 +213,30 @@ class SyncService {
       const fallbackResponse = await fetch(`${this.API_BASE_URL}/vehicles?type=data`);
       if (fallbackResponse.ok) {
         const data = await fallbackResponse.json();
-        localStorage.setItem('reRideVehicleData', JSON.stringify(data));
+        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+          localStorage.setItem('reRideVehicleData', JSON.stringify(data));
+        }
         this.syncStatus.lastSyncTime = new Date();
         this.syncStatus.error = null;
         this.notifyListeners();
-        console.log('✅ Data fetched from consolidated endpoint');
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('✅ Data fetched from consolidated endpoint');
+        }
         return true;
       }
     } catch (error) {
-      console.warn('⚠️ Failed to fetch from server:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('⚠️ Failed to fetch from server:', error);
+      }
     }
     return false;
   }
 
   private getLocalVehicleData(): VehicleData | null {
     try {
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return null;
+      }
       const data = localStorage.getItem('reRideVehicleData');
       return data ? JSON.parse(data) : null;
     } catch {

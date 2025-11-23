@@ -33,6 +33,9 @@ export function saveSearch(userId: string, name: string, filters: SearchFilters,
     };
   }
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      throw new Error('localStorage is not available');
+    }
     const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
     const searches: SavedSearch[] = stored ? JSON.parse(stored) : [];
     
@@ -52,7 +55,9 @@ export function saveSearch(userId: string, name: string, filters: SearchFilters,
     
     return newSearch;
   } catch (error) {
-    console.error('Error saving search:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error saving search:', error);
+    }
     throw error;
   }
 }
@@ -60,13 +65,18 @@ export function saveSearch(userId: string, name: string, filters: SearchFilters,
 // Get saved searches for a user
 export function getSavedSearches(userId: string): SavedSearch[] {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return [];
+    }
     const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
     if (!stored) return [];
     
     const searches: SavedSearch[] = JSON.parse(stored);
     return searches.filter(s => s.userId === userId);
   } catch (error) {
-    console.error('Error getting saved searches:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error getting saved searches:', error);
+    }
     return [];
   }
 }
@@ -74,6 +84,9 @@ export function getSavedSearches(userId: string): SavedSearch[] {
 // Delete a saved search
 export function deleteSavedSearch(searchId: string): void {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
     const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
     if (!stored) return;
     
@@ -82,7 +95,9 @@ export function deleteSavedSearch(searchId: string): void {
     
     localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(filtered));
   } catch (error) {
-    console.error('Error deleting saved search:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error deleting saved search:', error);
+    }
     throw error;
   }
 }
@@ -90,6 +105,9 @@ export function deleteSavedSearch(searchId: string): void {
 // Update saved search
 export function updateSavedSearch(searchId: string, updates: Partial<SavedSearch>): void {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
     const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
     if (!stored) return;
     
@@ -101,7 +119,9 @@ export function updateSavedSearch(searchId: string, updates: Partial<SavedSearch
       localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(searches));
     }
   } catch (error) {
-    console.error('Error updating saved search:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error updating saved search:', error);
+    }
     throw error;
   }
 }
@@ -139,6 +159,9 @@ const VEHICLE_PRICE_HISTORY_KEY = 'reride_price_history';
 // Track price change
 export function trackPriceChange(vehicleId: number, oldPrice: number, newPrice: number): void {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
     const stored = localStorage.getItem(VEHICLE_PRICE_HISTORY_KEY);
     const history: Record<string, Array<{ price: number; date: string }>> = stored ? JSON.parse(stored) : {};
     
@@ -158,7 +181,9 @@ export function trackPriceChange(vehicleId: number, oldPrice: number, newPrice: 
     
     localStorage.setItem(VEHICLE_PRICE_HISTORY_KEY, JSON.stringify(history));
   } catch (error) {
-    console.error('Error tracking price change:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error tracking price change:', error);
+    }
   }
 }
 
@@ -170,6 +195,9 @@ export function createPriceDropAlert(
   currentPrice: number
 ): PriceDropAlert {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      throw new Error('localStorage is not available');
+    }
     const stored = localStorage.getItem(PRICE_DROP_ALERTS_KEY);
     const alerts: PriceDropAlert[] = stored ? JSON.parse(stored) : [];
     
@@ -191,7 +219,9 @@ export function createPriceDropAlert(
     
     return newAlert;
   } catch (error) {
-    console.error('Error creating price drop alert:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error creating price drop alert:', error);
+    }
     throw error;
   }
 }
@@ -199,6 +229,9 @@ export function createPriceDropAlert(
 // Get price drop alerts for user
 export function getPriceDropAlerts(userId: string, onlyUnnotified: boolean = false): PriceDropAlert[] {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return [];
+    }
     const stored = localStorage.getItem(PRICE_DROP_ALERTS_KEY);
     if (!stored) return [];
     
@@ -211,7 +244,9 @@ export function getPriceDropAlerts(userId: string, onlyUnnotified: boolean = fal
     
     return userAlerts;
   } catch (error) {
-    console.error('Error getting price drop alerts:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error getting price drop alerts:', error);
+    }
     return [];
   }
 }
@@ -219,6 +254,9 @@ export function getPriceDropAlerts(userId: string, onlyUnnotified: boolean = fal
 // Mark alert as notified
 export function markAlertNotified(alertId: string): void {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
     const stored = localStorage.getItem(PRICE_DROP_ALERTS_KEY);
     if (!stored) return;
     
@@ -230,7 +268,9 @@ export function markAlertNotified(alertId: string): void {
       localStorage.setItem(PRICE_DROP_ALERTS_KEY, JSON.stringify(alerts));
     }
   } catch (error) {
-    console.error('Error marking alert as notified:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error marking alert as notified:', error);
+    }
   }
 }
 
@@ -239,6 +279,9 @@ export function checkWishlistPriceDrops(wishlist: number[], vehicles: Vehicle[],
   const alerts: PriceDropAlert[] = [];
   
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return alerts;
+    }
     const priceHistory = localStorage.getItem(VEHICLE_PRICE_HISTORY_KEY);
     if (!priceHistory) return alerts;
     
@@ -267,7 +310,9 @@ export function checkWishlistPriceDrops(wishlist: number[], vehicles: Vehicle[],
     
     return alerts;
   } catch (error) {
-    console.error('Error checking wishlist price drops:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error checking wishlist price drops:', error);
+    }
     return alerts;
   }
 }
@@ -281,6 +326,9 @@ const FOLLOWED_SELLERS_KEY = 'reride_followed_sellers';
 // Follow a seller
 export function followSeller(userId: string, sellerEmail: string, notifyOnNewListing: boolean = true): FollowedSeller {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      throw new Error('localStorage is not available');
+    }
     const stored = localStorage.getItem(FOLLOWED_SELLERS_KEY);
     const follows: FollowedSeller[] = stored ? JSON.parse(stored) : [];
     
@@ -303,7 +351,9 @@ export function followSeller(userId: string, sellerEmail: string, notifyOnNewLis
     
     return newFollow;
   } catch (error) {
-    console.error('Error following seller:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error following seller:', error);
+    }
     throw error;
   }
 }
@@ -311,6 +361,9 @@ export function followSeller(userId: string, sellerEmail: string, notifyOnNewLis
 // Unfollow a seller
 export function unfollowSeller(userId: string, sellerEmail: string): void {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return;
+    }
     const stored = localStorage.getItem(FOLLOWED_SELLERS_KEY);
     if (!stored) return;
     
@@ -319,7 +372,9 @@ export function unfollowSeller(userId: string, sellerEmail: string): void {
     
     localStorage.setItem(FOLLOWED_SELLERS_KEY, JSON.stringify(filtered));
   } catch (error) {
-    console.error('Error unfollowing seller:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error unfollowing seller:', error);
+    }
     throw error;
   }
 }
@@ -327,13 +382,18 @@ export function unfollowSeller(userId: string, sellerEmail: string): void {
 // Get followed sellers for user
 export function getFollowedSellers(userId: string): FollowedSeller[] {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return [];
+    }
     const stored = localStorage.getItem(FOLLOWED_SELLERS_KEY);
     if (!stored) return [];
     
     const follows: FollowedSeller[] = JSON.parse(stored);
     return follows.filter(f => f.userId === userId);
   } catch (error) {
-    console.error('Error getting followed sellers:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error getting followed sellers:', error);
+    }
     return [];
   }
 }
@@ -341,13 +401,18 @@ export function getFollowedSellers(userId: string): FollowedSeller[] {
 // Get all followers of a seller (users who follow this seller)
 export function getFollowersOfSeller(sellerEmail: string): FollowedSeller[] {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return [];
+    }
     const stored = localStorage.getItem(FOLLOWED_SELLERS_KEY);
     if (!stored) return [];
 
     const follows: FollowedSeller[] = JSON.parse(stored);
     return follows.filter(f => f.sellerEmail === sellerEmail);
   } catch (error) {
-    console.error('Error getting followers of seller:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error getting followers of seller:', error);
+    }
     return [];
   }
 }
@@ -365,13 +430,18 @@ export function getFollowingCount(userId: string): number {
 // Check if user is following a seller
 export function isFollowingSeller(userId: string, sellerEmail: string): boolean {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return false;
+    }
     const stored = localStorage.getItem(FOLLOWED_SELLERS_KEY);
     if (!stored) return false;
     
     const follows: FollowedSeller[] = JSON.parse(stored);
     return follows.some(f => f.userId === userId && f.sellerEmail === sellerEmail);
   } catch (error) {
-    console.error('Error checking if following seller:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Error checking if following seller:', error);
+    }
     return false;
   }
 }

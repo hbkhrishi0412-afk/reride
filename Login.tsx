@@ -161,7 +161,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
           )}
           <div>
             <label htmlFor="email-address" className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
-            <input id="email-address" name="email" type="email" autoComplete="email" required className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white/50 backdrop-blur-sm" placeholder="Enter your email address" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input id="email-address" name="email" type="email" autoComplete="email" required className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-2 focus:outline-offset-2 focus:outline-blue-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 bg-white/50 backdrop-blur-sm" placeholder="Enter your email address" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email address" />
           </div>
           <PasswordInput
             id="password"
@@ -188,7 +188,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
           </div>
         )}
 
-        {error && <p className="text-spinny-orange text-sm text-center">{error}</p>}
+        {error && <p className="text-spinny-orange text-sm text-center" role="alert" aria-live="polite">{error}</p>}
 
         <div>
           <button type="submit" disabled={isLoading} className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 transform hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
