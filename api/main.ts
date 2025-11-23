@@ -10,6 +10,7 @@ import NewCar from '../models/NewCar.js';
 import RateLimit from '../models/RateLimit.js';
 import { planService } from '../services/planService.js';
 import type { User as UserType, Vehicle as VehicleType } from '../types.js';
+import { VehicleCategory } from '../types.js';
 import { 
   hashPassword, 
   validatePassword, 
@@ -27,7 +28,6 @@ import {
 import { getSecurityConfig } from '../utils/security-config.js';
 import { ObjectId } from 'mongodb';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
-import { createErrorResponse, createSuccessResponse, ErrorReasons } from '../utils/errorHandler.js';
 
 // Type for MongoDB user document (with _id)
 interface UserDocument extends Omit<UserType, 'id'> {
@@ -293,9 +293,24 @@ export default async function handler(
   
   // Set CORS headers with proper security
   const origin = req.headers.origin;
-  if (config.CORS.ALLOWED_ORIGINS.includes(origin as string)) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isLocalhost = origin && (
+    origin.includes('localhost') || 
+    origin.includes('127.0.0.1') ||
+    origin.includes('::1')
+  );
+  
+  // Allow requests from allowed origins or localhost in development
+  if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost)) {
     res.setHeader('Access-Control-Allow-Origin', origin as string);
+  } else if (isProduction && origin) {
+    // In production, use the production origin
+    res.setHeader('Access-Control-Allow-Origin', 'https://reride-app.vercel.app');
+  } else if (!isProduction) {
+    // In development, allow all origins as fallback
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
   } else {
+    // Production fallback
     res.setHeader('Access-Control-Allow-Origin', 'https://reride-app.vercel.app');
   }
   
@@ -1833,7 +1848,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       if (action === 'city-stats' && req.query.city) {
         // Sanitize city input to prevent injection
         const sanitizedCity = await sanitizeString(String(req.query.city));
-        const cityVehicles = fallbackVehicles.filter(v => v.city === sanitizedCity);
+        const cityVehicles = fallbackVehicles.filter(v => v.city === sanitizedCity && v.status === 'published');
         const stats = {
           totalVehicles: cityVehicles.length,
           averagePrice: cityVehicles.reduce((sum, v) => sum + (v.price || 0), 0) / (cityVehicles.length || 1),
@@ -1854,12 +1869,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           );
           return distance <= parseFloat(req.query.radius as string);
         });
+        // Filter to only published vehicles
+        const publishedNearbyVehicles = nearbyVehicles.filter(v => v.status === 'published');
         res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json(nearbyVehicles);
+        return res.status(200).json(publishedNearbyVehicles);
       }
 
+      // Filter to only published vehicles for public-facing endpoint
+      const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
       res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json(fallbackVehicles);
+      return res.status(200).json(publishedFallbackVehicles);
     }
 
     try {
@@ -1869,7 +1888,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       if (action === 'city-stats' && req.query.city) {
         // Sanitize city input to prevent NoSQL injection
         const sanitizedCity = await sanitizeString(String(req.query.city));
-        const cityVehicles = await Vehicle.find({ city: sanitizedCity });
+        const cityVehicles = await Vehicle.find({ city: sanitizedCity, status: 'published' });
         const stats = {
           totalVehicles: cityVehicles.length,
           averagePrice: cityVehicles.reduce((sum, v) => sum + v.price, 0) / cityVehicles.length || 0,
@@ -2059,8 +2078,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         ? await Vehicle.find({}).sort({ createdAt: -1 })
         : vehicles;
       
+      // Filter to only published vehicles for public-facing endpoint
+      // (Admin panel and other endpoints can access all vehicles via different routes)
+      const publishedVehicles = refreshedVehicles.filter(v => v.status === 'published');
+      
       // Normalize sellerEmail to lowercase for consistent filtering
-      const normalizedVehicles = refreshedVehicles.map(v => {
+      const normalizedVehicles = publishedVehicles.map(v => {
         const vehicleObj = v.toObject ? v.toObject() : v;
         return {
           ...vehicleObj,
@@ -2073,8 +2096,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       console.error('❌ Error fetching vehicles:', error);
       // Fallback to mock data if database query fails
       const fallbackVehicles = await getFallbackVehicles();
+      // Filter to only published vehicles for public-facing endpoint
+      const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
       res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json(fallbackVehicles);
+      return res.status(200).json(publishedFallbackVehicles);
     }
   }
 
@@ -3066,16 +3091,42 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
 // For production, consider using Vercel KV or Redis for caching
 
 async function getFallbackVehicles(): Promise<VehicleType[]> {
-  try {
-    const { MOCK_VEHICLES } = await import('../constants.js');
-    const vehicles = await MOCK_VEHICLES();
-    return vehicles;
-  } catch (error) {
-    // Only log in development to avoid information leakage
-    logWarn('⚠️ Unable to load MOCK_VEHICLES fallback:', error);
-  }
-
-  return [];
+  // Return minimal fallback to prevent 500 errors
+  // Don't import from constants.js to avoid circular dependency (MOCK_VEHICLES tries to fetch from /api/vehicles)
+  return [
+    {
+      id: 1,
+      make: 'Maruti Suzuki',
+      model: 'Swift',
+      variant: 'VXi',
+      year: 2020,
+      price: 650000,
+      mileage: 25000,
+      location: 'Mumbai, Maharashtra',
+      images: ['https://via.placeholder.com/800x600?text=Swift'],
+      status: 'published',
+      category: VehicleCategory.FOUR_WHEELER,
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      sellerEmail: 'demo@reride.com',
+      features: [],
+      description: 'Well-maintained Maruti Suzuki Swift in excellent condition.',
+      engine: '1.2L Petrol',
+      transmission: 'Manual',
+      fuelType: 'Petrol',
+      fuelEfficiency: '23.2 km/l',
+      color: 'White',
+      isFeatured: false,
+      registrationYear: 2020,
+      insuranceValidity: '2025-12-31',
+      insuranceType: 'Comprehensive',
+      rto: 'MH-01',
+      noOfOwners: 1,
+      displacement: '1197 cc',
+      groundClearance: '163 mm',
+      bootSpace: '268 litres'
+    } satisfies VehicleType
+  ];
 }
 
 async function getFallbackUsers(): Promise<NormalizedUser[]> {
