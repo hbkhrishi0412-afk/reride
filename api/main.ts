@@ -70,22 +70,22 @@ function normalizeUser(user: any): any {
   return normalized;
 }
 
-// Authentication middleware (currently unused but kept for future use)
-// const authenticateRequest = (req: VercelRequest): { isValid: boolean; user?: any; error?: string } => {
-//   const authHeader = req.headers.authorization;
-//   
-//   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-//     return { isValid: false, error: 'No valid authorization header' };
-//   }
-//   
-//   try {
-//     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-//     const decoded = verifyToken(token);
-//     return { isValid: true, user: decoded };
-//   } catch (error) {
-//     return { isValid: false, error: 'Invalid or expired token' };
-//   }
-// };
+// Authentication middleware - NOW ENABLED
+const authenticateRequest = (req: VercelRequest): { isValid: boolean; user?: any; error?: string } => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { isValid: false, error: 'No valid authorization header' };
+  }
+  
+  try {
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const decoded = verifyToken(token);
+    return { isValid: true, user: decoded };
+  } catch (error) {
+    return { isValid: false, error: 'Invalid or expired token' };
+  }
+};
 
 // Rate limiting (simple in-memory implementation for demo)
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -887,6 +887,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
   // PUT - Update user
   if (req.method === 'PUT') {
+    // SECURITY FIX: Verify Auth
+    const auth = authenticateRequest(req);
+    if (!auth.isValid) {
+      return res.status(401).json({ success: false, reason: auth.error });
+    }
     if (!mongoAvailable) {
       return unavailableResponse();
     }
@@ -904,6 +909,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       console.log('✅ Database connected for user update, readyState:', mongoose.connection.readyState);
       
       const { email, ...updateData } = req.body;
+      
+      // SECURITY FIX: Authorization Check
+      // Only allow updates if user is admin or updating their own profile
+      if (auth.user.role !== 'admin' && auth.user.email !== email) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized: You can only update your own profile.' });
+      }
       
       if (!email) {
         return res.status(400).json({ success: false, reason: 'Email is required for update.' });
@@ -1249,11 +1260,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
   // DELETE - Delete user
   if (req.method === 'DELETE') {
+    // SECURITY FIX: Verify Auth
+    const auth = authenticateRequest(req);
+    if (!auth.isValid) {
+      return res.status(401).json({ success: false, reason: auth.error });
+    }
     if (!mongoAvailable) {
       return unavailableResponse();
     }
     try {
       const { email } = req.body;
+      
+      // SECURITY FIX: Authorization Check
+      if (auth.user.role !== 'admin' && auth.user.email !== email) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized action.' });
+      }
+      
       if (!email) {
         return res.status(400).json({ success: false, reason: 'Email is required for deletion.' });
       }
@@ -1794,6 +1816,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
   }
 
   if (req.method === 'POST') {
+    // SECURITY FIX: Verify Auth
+    const auth = authenticateRequest(req);
+    if (!auth.isValid) {
+      return res.status(401).json({ success: false, reason: auth.error });
+    }
     if (!mongoAvailable) {
       return unavailableResponse();
     }
@@ -2270,6 +2297,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
   }
 
   if (req.method === 'PUT') {
+    // SECURITY FIX: Verify Auth
+    const auth = authenticateRequest(req);
+    if (!auth.isValid) {
+      return res.status(401).json({ success: false, reason: auth.error });
+    }
     if (!mongoAvailable) {
       return unavailableResponse();
     }
@@ -2284,10 +2316,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       
       console.log('🔄 PUT /vehicles - Updating vehicle:', { id, fields: Object.keys(updateData) });
       
-      // Find the vehicle first to ensure it exists
+      // SECURITY FIX: Ownership Check
+      // Fetch vehicle to verify ownership before update
       const existingVehicle = await Vehicle.findOne({ id });
       if (!existingVehicle) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+      }
+      
+      if (auth.user.role !== 'admin' && existingVehicle.sellerEmail !== auth.user.email) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       
       // Use findOneAndUpdate with $set to ensure proper update
@@ -2328,6 +2365,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
   }
 
   if (req.method === 'DELETE') {
+    // SECURITY FIX: Verify Auth
+    const auth = authenticateRequest(req);
+    if (!auth.isValid) {
+      return res.status(401).json({ success: false, reason: auth.error });
+    }
     if (!mongoAvailable) {
       return unavailableResponse();
     }
@@ -2341,6 +2383,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
       
       console.log('🔄 DELETE /vehicles - Deleting vehicle:', id);
+      
+      // SECURITY FIX: Ownership Check
+      const vehicleToDelete = await Vehicle.findOne({ id });
+      if (!vehicleToDelete) {
+        return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
+      }
+      
+      if (auth.user.role !== 'admin' && vehicleToDelete.sellerEmail !== auth.user.email) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
+      }
       
       const deletedVehicle = await Vehicle.findOneAndDelete({ id });
       if (!deletedVehicle) {
