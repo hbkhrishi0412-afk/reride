@@ -18,6 +18,7 @@ import {
   validateUserInput,
   getSecurityHeaders,
   sanitizeObject,
+  sanitizeString,
   validateEmail,
   verifyToken,
   refreshAccessToken
@@ -1901,9 +1902,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       const sellerMap = new Map<string, UserDocument>();
       if (sellerEmails.size > 0) {
         const sellers = await User.find({ email: { $in: Array.from(sellerEmails) } }).lean();
-        sellers.forEach((seller: UserDocument) => {
+        sellers.forEach((seller) => {
           if (seller.email) {
-            sellerMap.set(seller.email.toLowerCase(), seller);
+            // Convert lean document to UserDocument format
+            const userDoc: UserDocument = {
+              ...seller,
+              _id: seller._id as mongoose.Types.ObjectId,
+              email: seller.email.toLowerCase().trim(),
+              name: seller.name || '',
+              mobile: seller.mobile || '',
+              role: (seller.role as 'customer' | 'seller' | 'admin') || 'customer',
+              status: seller.status || 'active',
+              createdAt: seller.createdAt || new Date().toISOString(),
+            };
+            sellerMap.set(seller.email.toLowerCase(), userDoc);
           }
         });
       }
@@ -1982,7 +1994,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       // Enforce plan listing limits: keep most recent listings within limit, unpublish extras
       try {
         // Build per-seller published vehicles list (newest first)
-        const sellerToPublished: Map<string, Vehicle[]> = new Map();
+        const sellerToPublished: Map<string, VehicleType[]> = new Map();
         vehicles.forEach(v => {
           if (v.status === 'published' && v.sellerEmail) {
             const key = v.sellerEmail.toLowerCase();
@@ -2564,7 +2576,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
       }
       
-      if (auth.user.role !== 'admin' && existingVehicle.sellerEmail !== auth.user.email) {
+      if (!auth.user || (auth.user.role !== 'admin' && existingVehicle.sellerEmail !== auth.user.email)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       
@@ -2631,7 +2643,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
       }
       
-      if (auth.user.role !== 'admin' && vehicleToDelete.sellerEmail !== auth.user.email) {
+      if (!auth.user || (auth.user.role !== 'admin' && vehicleToDelete.sellerEmail !== auth.user.email)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       

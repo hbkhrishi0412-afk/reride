@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import type { PlanDetails, SubscriptionPlan } from '../types.js';
 
 const planSchema = new mongoose.Schema({
   planId: {
