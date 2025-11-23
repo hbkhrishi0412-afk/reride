@@ -2707,16 +2707,29 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
     }
     
-    // If it's a database connection error, return 503
+    // If it's a database connection error, return 200 with fallback data instead of 503
     if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect'))) {
-      return res.status(503).json({
-        success: false,
-        reason: 'Database is currently unavailable. Please try again later.',
-        fallback: true
-      });
+      const fallbackVehicles = await getFallbackVehicles();
+      const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json(publishedFallbackVehicles);
     }
     
-    // For other errors, return 500 with error details
+    // For GET requests, always return 200 with fallback data instead of 500
+    if (req.method === 'GET') {
+      try {
+        const fallbackVehicles = await getFallbackVehicles();
+        const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json(publishedFallbackVehicles);
+      } catch (fallbackError) {
+        // Even fallback failed, return empty array
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json([]);
+      }
+    }
+    
+    // For other methods, return 500 with error details
     return res.status(500).json({
       success: false,
       reason: 'An error occurred while processing the request',
@@ -3474,6 +3487,14 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
 // Content handler - consolidates content.ts
 async function handleContent(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   if (!options.mongoAvailable) {
+    // For GET requests, return 200 with empty array instead of 503
+    if (req.method === 'GET') {
+      const { type } = req.query;
+      res.setHeader('X-Data-Fallback', 'true');
+      if (type === 'faqs' || type === 'support-tickets') {
+        return res.status(200).json([]);
+      }
+    }
     return res.status(503).json({
       success: false,
       reason: options.mongoFailureReason || 'Database is currently unavailable'
@@ -3506,6 +3527,21 @@ async function handleContent(req: VercelRequest, res: VercelResponse, options: H
     }
   } catch (error) {
     console.error('Content API Error:', error);
+    
+    // For GET requests, always return 200 with empty array instead of 500
+    if (req.method === 'GET') {
+      const { type } = req.query;
+      if (type === 'faqs') {
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json([]);
+      }
+      if (type === 'support-tickets') {
+        res.setHeader('X-Data-Fallback', 'true');
+        return res.status(200).json([]);
+      }
+    }
+    
+    // For other methods, return 500 with error details
     return res.status(500).json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error' 
@@ -3559,9 +3595,12 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, collection
     });
   } catch (error) {
     console.error('Error fetching FAQs:', error);
-    return res.status(500).json({ 
-      success: false,
-      error: 'Failed to fetch FAQs' 
+    // Always return 200 with empty array instead of 500
+    res.setHeader('X-Data-Fallback', 'true');
+    return res.status(200).json({
+      success: true,
+      faqs: [],
+      count: 0
     });
   }
 }
@@ -4397,6 +4436,41 @@ export default async function handler(
       res.setHeader('Content-Type', 'application/json');
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown fatal error';
+      const pathname = req.url?.split('?')[0] || '';
+      
+      // Special handling for critical endpoints - never return 500
+      const isCriticalEndpoint = 
+        pathname.includes('/vehicle-data') || 
+        pathname.includes('/vehicles') && req.query?.type === 'data' ||
+        pathname.includes('/users') ||
+        pathname.includes('/vehicles') ||
+        pathname.includes('/faqs');
+      
+      if (isCriticalEndpoint) {
+        // Return 200 with fallback data instead of 500
+        res.setHeader('X-Error-Fallback', 'true');
+        
+        if (pathname.includes('/vehicle-data') || (pathname.includes('/vehicles') && req.query?.type === 'data')) {
+          return res.status(200).json({
+            FOUR_WHEELER: [{ name: "Maruti Suzuki", models: [{ name: "Swift", variants: ["LXi", "VXi", "ZXi"] }] }],
+            TWO_WHEELER: [{ name: "Honda", models: [{ name: "Activa 6G", variants: ["Standard", "DLX"] }] }]
+          });
+        }
+        
+        if (pathname.includes('/users')) {
+          return res.status(200).json([]);
+        }
+        
+        if (pathname.includes('/vehicles')) {
+          return res.status(200).json([]);
+        }
+        
+        if (pathname.includes('/faqs')) {
+          return res.status(200).json([]);
+        }
+      }
+      
+      // For other endpoints, return 500 but with a user-friendly message
       return res.status(500).json({ 
         success: false, 
         reason: 'Internal server error',

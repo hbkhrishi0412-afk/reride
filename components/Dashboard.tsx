@@ -1272,6 +1272,47 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // Real-time update state for expiry dates
   const [currentTime, setCurrentTime] = useState(new Date());
   
+  // Refresh user data from API to get updated plan expiry date
+  useEffect(() => {
+    const refreshUserData = async () => {
+      try {
+        // Fetch all users and find the current seller
+        const response = await fetch('/api/users');
+        if (response.ok) {
+          const users = await response.json();
+          if (Array.isArray(users)) {
+            const updatedSeller = users.find((u: User) => u.email === seller.email);
+            if (updatedSeller) {
+              // Check if plan expiry date has changed
+              const currentExpiry = seller.planExpiryDate;
+              const newExpiry = updatedSeller.planExpiryDate;
+              
+              // Only update if expiry date actually changed
+              if (currentExpiry !== newExpiry || 
+                  updatedSeller.planActivatedDate !== seller.planActivatedDate ||
+                  updatedSeller.subscriptionPlan !== seller.subscriptionPlan) {
+                // Update localStorage with fresh user data
+                localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedSeller));
+                // Trigger a page refresh to update the seller prop
+                // This ensures the dashboard reflects the latest plan expiry date
+                window.location.reload();
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to refresh user data:', error);
+        // Silently fail - don't disrupt user experience
+      }
+    };
+
+    // Refresh user data when component mounts and every 30 seconds
+    refreshUserData();
+    const interval = setInterval(refreshUserData, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [seller.email, seller.planExpiryDate, seller.planActivatedDate, seller.subscriptionPlan]);
+  
   // Location data is now handled by individual components that need it
   
   // Helper function to filter vehicles by month

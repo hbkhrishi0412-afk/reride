@@ -213,7 +213,14 @@ Collections:
    ```env
    GEMINI_API_KEY=your_gemini_api_key_here
    MONGODB_URI=your_mongodb_connection_string_here
+   JWT_SECRET=your_jwt_secret_here
    ```
+   
+   **To generate JWT_SECRET for local development:**
+   ```bash
+   node scripts/generate-jwt-secret.js
+   ```
+   Copy the generated secret to your `.env.local` file.
    
    **Getting your credentials:**
    - **Gemini API Key**: Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
@@ -320,7 +327,14 @@ npm run preview
    In Vercel dashboard (Settings → Environment Variables):
    - `GEMINI_API_KEY` = Your Gemini API key
    - `MONGODB_URI` = Your MongoDB connection string
+   - `JWT_SECRET` = A secure random string for JWT token signing (see below)
    - Make sure they're enabled for **Production**, **Preview**, and **Development**
+   
+   **To generate JWT_SECRET:**
+   ```bash
+   node scripts/generate-jwt-secret.js
+   ```
+   This will generate a secure 64-character hex string. Copy it and add it to Vercel.
 
 4. **Deploy**
    - Click "Deploy" or push to GitHub for auto-deploy
@@ -333,6 +347,7 @@ npm run preview
 |----------|-------------|--------------|
 | `GEMINI_API_KEY` | Google Gemini API key | [Google AI Studio](https://aistudio.google.com/app/apikey) |
 | `MONGODB_URI` | MongoDB connection string | [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) |
+| `JWT_SECRET` | Secure secret for JWT token signing | Generate using `node scripts/generate-jwt-secret.js` |
 
 ### Post-Deployment Verification
 

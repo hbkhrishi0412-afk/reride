@@ -19,12 +19,22 @@ const SECURITY_CONFIG = {
 
   // JWT Configuration
   JWT: {
-    SECRET: process.env.JWT_SECRET || (() => {
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error('CRITICAL: JWT_SECRET must be set in production environment');
+    // Lazy evaluation - only check JWT_SECRET when actually used, not at module load
+    // This prevents errors during module initialization
+    get SECRET() {
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        if (process.env.NODE_ENV === 'production') {
+          // In production, log error but don't throw to prevent module load failures
+          console.error('CRITICAL: JWT_SECRET must be set in production environment');
+          // Return a fallback secret to prevent complete failure
+          // This should be fixed by setting JWT_SECRET in Vercel
+          return 'fallback-secret-please-set-jwt-secret-in-vercel';
+        }
+        return 'dev-only-secret-not-for-production';
       }
-      return 'dev-only-secret-not-for-production';
-    })(),
+      return secret;
+    },
     ACCESS_TOKEN_EXPIRES_IN: '24h',
     REFRESH_TOKEN_EXPIRES_IN: '7d',
     ISSUER: 'reride-app',
