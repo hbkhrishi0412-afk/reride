@@ -1313,6 +1313,28 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     return () => clearInterval(interval);
   }, []);
 
+  // Refresh vehicle data from API when form view is opened or when editing a vehicle
+  useEffect(() => {
+    if (activeView === 'form' || editingVehicle) {
+      const refreshVehicleData = async () => {
+        try {
+          const { getVehicleData } = await import('../services/vehicleDataService');
+          const freshData = await getVehicleData();
+          if (freshData && Object.keys(freshData).length > 0) {
+            // Update localStorage to trigger storage event for other tabs
+            localStorage.setItem('reRideVehicleData', JSON.stringify(freshData));
+            // Dispatch custom event for same-tab sync
+            window.dispatchEvent(new CustomEvent('vehicleDataUpdated', { detail: { vehicleData: freshData } }));
+            console.log('✅ Vehicle data refreshed when opening form');
+          }
+        } catch (error) {
+          console.warn('Failed to refresh vehicle data when opening form:', error);
+        }
+      };
+      refreshVehicleData();
+    }
+  }, [activeView, editingVehicle]);
+
   useEffect(() => {
     if (selectedConv && safeConversations) {
         const updatedConversation = safeConversations.find(c => c && c.id === selectedConv.id);
@@ -1442,24 +1464,39 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleMarkAsUnsold = async (vehicleId: number) => {
     try {
+      // Use the onMarkAsUnsold prop if available (handles through App.tsx with proper state updates and toast notifications)
+      if (onMarkAsUnsold) {
+        await onMarkAsUnsold(vehicleId);
+        return;
+      }
+
+      // Fallback: direct API call if prop not available
       const response = await fetch('/api/vehicles?action=unsold', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('reRideAccessToken') || ''}`
+        },
         body: JSON.stringify({ vehicleId })
       });
       
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          // Update local state
-          onUpdateVehicle(result.vehicle);
-          console.log('✅ Vehicle marked as unsold');
-        }
+      const result = await response.json();
+      
+      if (response.ok && result.success && result.vehicle) {
+        // Update local state
+        onUpdateVehicle(result.vehicle);
+        console.log('✅ Vehicle marked as unsold');
       } else {
-        console.error('❌ Failed to mark vehicle as unsold');
+        console.error('❌ Failed to mark vehicle as unsold:', result.reason || 'Unknown error');
+        throw new Error(result.reason || 'Failed to mark vehicle as unsold');
       }
     } catch (error) {
       console.error('❌ Error marking vehicle as unsold:', error);
+      // Error is logged, but UI feedback should come from App.tsx via onMarkAsUnsold prop
+      if (!onMarkAsUnsold) {
+        // Only show alert if prop is not available (shouldn't happen in normal flow)
+        alert(error instanceof Error ? error.message : 'Failed to mark vehicle as unsold. Please try again.');
+      }
     }
   };
 

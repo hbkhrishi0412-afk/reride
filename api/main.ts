@@ -1250,24 +1250,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
       logInfo('📝 Found user, applying update operation...');
       
-      // For password updates, ensure it's properly marked as modified
+      // For password updates, use findOneAndUpdate which already persists changes
       if (updateFields.password) {
         try {
-          // Use findOneAndUpdate with explicit password update
-          const updatedUser = await User.findOneAndUpdate(
-            { email: email.toLowerCase().trim() }, // Ensure email is normalized
-            updateOperation,
-            { new: true, runValidators: true }
-          );
-
-          if (!updatedUser) {
-            logError('❌ Failed to update user after findOneAndUpdate');
-            return res.status(500).json({ success: false, reason: 'Failed to update user. User not found.' });
-          }
-
-          // Ensure MongoDB connection is active before save
+          // Ensure MongoDB connection is active before update
           if (mongoose.connection.readyState !== 1) {
-            logWarn('⚠️ MongoDB connection lost before save, attempting to reconnect...');
+            logWarn('⚠️ MongoDB connection not ready, attempting to reconnect...');
             try {
               await connectToDatabase();
             } catch (reconnectError) {
@@ -1280,49 +1268,23 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
             }
           }
 
-          // Mark password as modified and explicitly save to ensure persistence
-          updatedUser.password = updateFields.password;
-          updatedUser.markModified('password');
-          // Only log in development to avoid information leakage
-          if (process.env.NODE_ENV !== 'production') {
-            logInfo('💾 Explicitly saving user document to ensure password persistence...');
-          }
-          
-          try {
-            await updatedUser.save({ validateBeforeSave: true });
-            logInfo('✅ User document saved successfully');
-          } catch (saveError) {
-            logError('❌ Error saving user document:', saveError);
-            const saveErrorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
-            const saveErrorName = saveError instanceof Error ? saveError.name : 'Unknown';
-            
-            // Check if it's a validation error
-            if (saveErrorName === 'ValidationError') {
-              logError('❌ Validation error details:', saveError);
-              return res.status(400).json({ 
-                success: false, 
-                reason: 'Password validation failed. Please ensure your password meets all requirements.',
-                error: saveErrorMessage
-              });
-            }
-            
-            // Check for MongoDB connection errors
-            if (saveErrorMessage.includes('MongoServerError') || saveErrorMessage.includes('MongoNetworkError') || saveErrorMessage.includes('connection')) {
-              return res.status(503).json({ 
-                success: false, 
-                reason: 'Database connection error. Please try again later.',
-                error: saveErrorMessage
-              });
-            }
-            
-            // Re-throw to be caught by outer catch block
-            throw saveError;
+          // Use findOneAndUpdate - it already persists changes to the database
+          // No need for additional save() call as findOneAndUpdate is atomic and persistent
+          const updatedUser = await User.findOneAndUpdate(
+            { email: email.toLowerCase().trim() }, // Ensure email is normalized
+            updateOperation,
+            { new: true, runValidators: true }
+          );
+
+          if (!updatedUser) {
+            logError('❌ Failed to update user after findOneAndUpdate');
+            return res.status(500).json({ success: false, reason: 'Failed to update user. User not found.' });
           }
 
           logInfo('✅ User updated successfully:', updatedUser.email);
           // Never log password update status in production
           if (process.env.NODE_ENV !== 'production') {
-            logInfo('✅ Password updated:', !!updateFields.password);
+            logInfo('✅ Password updated via findOneAndUpdate');
           }
 
           // Verify the update actually saved by checking the user again

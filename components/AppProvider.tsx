@@ -822,6 +822,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     };
   }, [currentUser?.email, currentUser?.role, addToast]);
 
+  // Sync vehicle data across tabs and periodically refresh from API
+  useEffect(() => {
+    // Add storage event listener to sync vehicle data across tabs (fires for other tabs)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'reRideVehicleData' && e.newValue) {
+        try {
+          const newVehicleData = JSON.parse(e.newValue);
+          setVehicleData(newVehicleData);
+          console.log('✅ Vehicle data synced from another tab');
+        } catch (error) {
+          console.error('Failed to parse vehicle data from storage event:', error);
+        }
+      }
+    };
+
+    // Add custom event listener for same-tab updates (fires when localStorage is updated in same tab)
+    const handleVehicleDataUpdate = (e: CustomEvent) => {
+      if (e.detail && e.detail.vehicleData) {
+        setVehicleData(e.detail.vehicleData);
+        console.log('✅ Vehicle data synced from same tab');
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('vehicleDataUpdated', handleVehicleDataUpdate as EventListener);
+
+    // Periodic refresh of vehicle data from API (every 5 minutes)
+    const refreshInterval = setInterval(() => {
+      dataService.getVehicleData()
+        .then((freshData) => {
+          if (freshData) {
+            setVehicleData(freshData);
+            console.log('✅ Vehicle data refreshed from API');
+          }
+        })
+        .catch((error) => {
+          console.warn('Failed to refresh vehicle data:', error);
+        });
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('vehicleDataUpdated', handleVehicleDataUpdate as EventListener);
+      clearInterval(refreshInterval);
+    };
+  }, []);
+
   // Save conversations to localStorage whenever they change
   useEffect(() => {
     if (conversations.length > 0) {
