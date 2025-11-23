@@ -281,7 +281,8 @@ const checkRateLimit = async (identifier: string, mongoAvailable: boolean): Prom
   }
 };
 
-export default async function handler(
+// Main handler with comprehensive error handling
+async function mainHandler(
   req: VercelRequest,
   res: VercelResponse,
 ) {
@@ -4415,6 +4416,31 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, options: Han
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+}
+
+// Export with error wrapper to catch any initialization or module loading errors
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse,
+) {
+  try {
+    return await mainHandler(req, res);
+  } catch (error) {
+    // Catch any errors that occur during handler initialization or module loading
+    logError('❌ Fatal error in API handler:', error);
+    
+    // Ensure response headers are set
+    if (!res.headersSent) {
+      res.setHeader('Content-Type', 'application/json');
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown fatal error';
+      return res.status(500).json({ 
+        success: false, 
+        reason: 'Internal server error',
+        error: errorMessage
+      });
+    }
   }
 }
 
