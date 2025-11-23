@@ -163,13 +163,15 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
 
     // Analytics tracking functions
     const trackFeaturedCarsClick = (vehicleId: number, vehicleMake: string, vehicleModel: string) => {
-        console.log('Analytics: Featured Cars click', { 
-            vehicleId, 
-            vehicleMake, 
-            vehicleModel, 
-            section: 'premium_spotlight',
-            timestamp: new Date().toISOString()
-        });
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Analytics: Featured Cars click', { 
+              vehicleId, 
+              vehicleMake, 
+              vehicleModel, 
+              section: 'premium_spotlight',
+              timestamp: new Date().toISOString()
+          });
+        }
         // TODO: Integrate with your analytics service (Google Analytics, Mixpanel, etc.)
     };
 
@@ -190,8 +192,9 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
         if (process.env.NODE_ENV === 'development') {
           console.log('Analytics: Section view', { 
               section: sectionName,
-            timestamp: new Date().toISOString()
-        });
+              timestamp: new Date().toISOString()
+          });
+        }
         // TODO: Integrate with your analytics service
     };
 
