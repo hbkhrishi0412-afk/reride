@@ -38,12 +38,16 @@ const VehicleCard: React.FC<VehicleCardProps> = ({ vehicle, onSelect, onToggleCo
 
   const handleQuickViewClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    console.log('VehicleCard QuickView button clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('VehicleCard QuickView button clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
+    }
     onQuickView(vehicle);
   };
 
   const handleCardClick = () => {
-    console.log('🚗 VehicleCard clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🚗 VehicleCard clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
+    }
     onSelect(vehicle);
   };
 

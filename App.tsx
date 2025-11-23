@@ -1660,7 +1660,9 @@ const AppContent: React.FC = React.memo(() => {
                   flagContent(type, id);
                 }}
                 onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-                  console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                  }
                   onOfferResponse(conversationId, messageId, response, counterPrice);
                   addToast(`Offer ${response}`, 'success');
                 }}
@@ -1742,6 +1744,7 @@ const AppContent: React.FC = React.memo(() => {
   // Render Desktop/Website Layout
   return (
     <div className="min-h-screen bg-gray-50">
+      <main id="main-content" tabIndex={-1}>
       <Header 
         onNavigate={navigate}
         currentUser={currentUser}
@@ -1809,6 +1812,7 @@ const AppContent: React.FC = React.memo(() => {
           }}
         />
       )}
+      </main>
     </div>
   );
 });

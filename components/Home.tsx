@@ -174,19 +174,22 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
     };
 
     const trackPopularCarsClick = (vehicleId: number, vehicleMake: string, vehicleModel: string) => {
-        console.log('Analytics: Popular Cars click', { 
-            vehicleId, 
-            vehicleMake, 
-            vehicleModel, 
-            section: 'featured_badge',
-            timestamp: new Date().toISOString()
-        });
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Analytics: Popular Cars click', { 
+              vehicleId, 
+              vehicleMake, 
+              vehicleModel, 
+              section: 'featured_badge',
+              timestamp: new Date().toISOString()
+          });
+        }
         // TODO: Integrate with your analytics service (Google Analytics, Mixpanel, etc.)
     };
 
     const trackSectionView = (sectionName: string) => {
-        console.log('Analytics: Section view', { 
-            section: sectionName,
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Analytics: Section view', { 
+              section: sectionName,
             timestamp: new Date().toISOString()
         });
         // TODO: Integrate with your analytics service
@@ -214,7 +217,9 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                 const viewedJson = localStorage.getItem('viewedVehicleIds');
                 return viewedJson ? JSON.parse(viewedJson) : [];
             } catch (error) {
-                console.error("Failed to get viewed vehicle IDs:", error);
+                if (process.env.NODE_ENV === 'development') {
+                  console.error("Failed to get viewed vehicle IDs:", error);
+                }
                 return [];
             }
         };
@@ -235,7 +240,9 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
             onSearch(aiSearchQuery);
             setIsAiSearching(false);
         } catch (error) {
-            console.error('AI search failed:', error);
+            if (process.env.NODE_ENV === 'development') {
+              console.error('AI search failed:', error);
+            }
             setIsAiSearching(false);
         }
     };

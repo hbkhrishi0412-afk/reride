@@ -9,7 +9,7 @@ import { PLAN_DETAILS } from '../constants.js';
 import NewCar from '../models/NewCar.js';
 import RateLimit from '../models/RateLimit.js';
 import { planService } from '../services/planService.js';
-import type { User as UserType, Vehicle } from '../types.js';
+import type { User as UserType, Vehicle as VehicleType } from '../types.js';
 import { 
   hashPassword, 
   validatePassword, 
@@ -3085,7 +3085,7 @@ function calculateTrustScore(user: any): number {
   return Math.min(100, score);
 }
 
-function getPopularMakes(vehicles: Vehicle[]): string[] {
+function getPopularMakes(vehicles: VehicleType[]): string[] {
   const makeCounts: { [key: string]: number } = {};
   vehicles.forEach(v => {
     makeCounts[v.make] = (makeCounts[v.make] || 0) + 1;
@@ -3097,7 +3097,7 @@ function getPopularMakes(vehicles: Vehicle[]): string[] {
     .map(([make]) => make);
 }
 
-function getPriceRange(vehicles: Vehicle[]): { min: number; max: number } {
+function getPriceRange(vehicles: VehicleType[]): { min: number; max: number } {
   if (vehicles.length === 0) return { min: 0, max: 0 };
   
   const prices = vehicles.map(v => v.price);
@@ -3255,7 +3255,7 @@ async function seedUsers(): Promise<UserDocument[]> {
   return users;
 }
 
-async function seedVehicles(): Promise<Vehicle[]> {
+async function seedVehicles(): Promise<VehicleType[]> {
   const sampleVehicles = [
     {
       id: 1,
@@ -4300,8 +4300,8 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, options: Han
           return res.status(400).json({ error: 'Plan name is required' });
         }
         
-        const planId = planService.createPlan(newPlanData);
-        const createdPlan = planService.getCustomPlanDetails(planId);
+        const planId = await planService.createPlan(newPlanData);
+        const createdPlan = await planService.getCustomPlanDetails(planId);
         
         return res.status(201).json(createdPlan);
 

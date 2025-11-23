@@ -148,7 +148,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           timestamp: Date.now()
         }));
         
-        console.log('✅ Vehicle data loaded for filters:', data);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Vehicle data loaded for filters:', data);
+        }
       } catch (error) {
         console.error('❌ Failed to load vehicle data for filters:', error);
       } finally {
@@ -373,7 +375,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           }
         }
       } catch (error) {
-        console.error('Failed to load location data:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to load location data:', error);
+        }
         // Fallback to basic data
         setFuelTypes(['Petrol', 'Diesel', 'Electric', 'CNG', 'Hybrid']);
       }
@@ -561,7 +565,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       }
       alert('Search saved successfully!');
     } catch (error) {
-      console.error('Error saving search:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error saving search:', error);
+      }
       alert('Failed to save search. Please try again.');
     }
   };

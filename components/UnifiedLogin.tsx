@@ -207,7 +207,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">
               <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/30">
-                <Logo className="scale-150 filter brightness-0 invert" showText={false} />
+                <Logo 
+                  className="scale-150 filter brightness-0 invert" 
+                  showText={false}
+                  onClick={() => onNavigate(View.USED_CARS)}
+                />
               </div>
             </div>
             <h1 className="text-3xl font-bold text-white mb-2 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
@@ -423,7 +427,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           {/* Left Side - Role Selection */}
           <div className="lg:w-1/3 bg-gradient-to-br from-orange-500 to-blue-600 p-8 text-white">
             <div className="flex justify-center mb-6">
-              <Logo className="scale-125 filter brightness-0 invert" showText={false} />
+              <Logo 
+                className="scale-125 filter brightness-0 invert" 
+                showText={false}
+                onClick={() => onNavigate(View.USED_CARS)}
+              />
             </div>
             <h2 className="text-2xl font-bold text-center mb-2">Welcome to ReRide</h2>
             <p className="text-center text-orange-100 mb-8">Choose your role to continue</p>

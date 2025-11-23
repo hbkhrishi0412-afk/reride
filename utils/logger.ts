@@ -1,116 +1,93 @@
-// Centralized logging utility with environment-based controls
-// Prevents information leakage and reduces performance overhead
+/**
+ * Centralized logging utility
+ * Gates all console statements to prevent logging in production
+ * and potential information leakage
+ */
 
-type LogLevel = 'info' | 'warn' | 'error' | 'debug';
+type LogLevel = 'log' | 'warn' | 'error' | 'info' | 'debug';
 
-interface LogOptions {
-  level?: LogLevel;
-  context?: string;
-  data?: unknown;
-}
+const isDevelopment = process.env.NODE_ENV === 'development';
+const isProduction = process.env.NODE_ENV === 'production';
 
-class Logger {
-  private isProduction: boolean;
-  private isDevelopment: boolean;
-
-  constructor() {
-    this.isProduction = process.env.NODE_ENV === 'production';
-    this.isDevelopment = !this.isProduction;
-  }
-
-  private shouldLog(level: LogLevel): boolean {
-    // In production, only log errors and warnings
-    if (this.isProduction) {
-      return level === 'error' || level === 'warn';
-    }
-    // In development, log everything
+/**
+ * Check if logging is enabled for the current environment
+ */
+const shouldLog = (level: LogLevel): boolean => {
+  // Always log errors, even in production (but without sensitive data)
+  if (level === 'error') {
     return true;
   }
+  // Only log other levels in development
+  return isDevelopment;
+};
 
-  private sanitizeData(data: unknown): unknown {
-    if (!data) return data;
-    
-    // Remove sensitive fields from logs
-    if (typeof data === 'object' && data !== null) {
-      const sanitized = { ...data as Record<string, unknown> };
-      const sensitiveFields = ['password', 'token', 'secret', 'apiKey', 'authorization', 'accessToken', 'refreshToken'];
-      
-      for (const field of sensitiveFields) {
-        if (field in sanitized) {
-          sanitized[field] = '[REDACTED]';
-        }
-      }
-      
-      return sanitized;
-    }
-    
+/**
+ * Sanitize data to prevent logging sensitive information
+ */
+const sanitizeData = (data: unknown): unknown => {
+  if (typeof data !== 'object' || data === null) {
     return data;
   }
 
-  info(message: string, options?: LogOptions): void {
-    if (!this.shouldLog('info')) return;
-    
-    const context = options?.context ? `[${options.context}]` : '';
-    const data = options?.data ? this.sanitizeData(options.data) : undefined;
-    
-    if (data) {
-      console.log(`${context} ${message}`, data);
-    } else {
-      console.log(`${context} ${message}`);
+  const sensitiveKeys = ['password', 'token', 'secret', 'key', 'authorization', 'auth', 'credential'];
+  const sanitized = Array.isArray(data) ? [...data] : { ...data as Record<string, unknown> };
+
+  if (Array.isArray(sanitized)) {
+    return sanitized.map(item => sanitizeData(item));
+  }
+
+  const obj = sanitized as Record<string, unknown>;
+  for (const key in obj) {
+    const lowerKey = key.toLowerCase();
+    if (sensitiveKeys.some(sk => lowerKey.includes(sk))) {
+      obj[key] = '[REDACTED]';
+    } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+      obj[key] = sanitizeData(obj[key]);
     }
   }
 
-  warn(message: string, options?: LogOptions): void {
-    if (!this.shouldLog('warn')) return;
-    
-    const context = options?.context ? `[${options.context}]` : '';
-    const data = options?.data ? this.sanitizeData(options.data) : undefined;
-    
-    if (data) {
-      console.warn(`${context} ${message}`, data);
-    } else {
-      console.warn(`${context} ${message}`);
+  return sanitized;
+};
+
+/**
+ * Logger object with methods for different log levels
+ */
+export const logger = {
+  log: (...args: unknown[]) => {
+    if (shouldLog('log')) {
+      console.log(...args.map(sanitizeData));
     }
-  }
+  },
 
-  error(message: string, error?: Error | unknown, options?: LogOptions): void {
-    if (!this.shouldLog('error')) return;
-    
-    const context = options?.context ? `[${options.context}]` : '';
-    const sanitizedData = options?.data ? this.sanitizeData(options.data) : undefined;
-    
-    if (error instanceof Error) {
-      // Log error without sensitive stack trace in production
-      if (this.isProduction) {
-        console.error(`${context} ${message}: ${error.message}`);
-      } else {
-        console.error(`${context} ${message}`, error, sanitizedData);
-      }
-    } else if (error) {
-      console.error(`${context} ${message}`, error, sanitizedData);
-    } else {
-      console.error(`${context} ${message}`, sanitizedData);
+  info: (...args: unknown[]) => {
+    if (shouldLog('info')) {
+      console.info(...args.map(sanitizeData));
     }
-  }
+  },
 
-  debug(message: string, options?: LogOptions): void {
-    // Only log debug in development
-    if (!this.isDevelopment) return;
-    
-    const context = options?.context ? `[${options.context}]` : '';
-    const data = options?.data ? this.sanitizeData(options.data) : undefined;
-    
-    if (data) {
-      console.debug(`${context} ${message}`, data);
-    } else {
-      console.debug(`${context} ${message}`);
+  warn: (...args: unknown[]) => {
+    if (shouldLog('warn')) {
+      console.warn(...args.map(sanitizeData));
     }
-  }
-}
+  },
 
-// Export singleton instance
-export const logger = new Logger();
+  error: (...args: unknown[]) => {
+    // Always log errors, but sanitize sensitive data
+    const sanitized = args.map(sanitizeData);
+    if (isProduction) {
+      // In production, send to error tracking service (Sentry, etc.)
+      // For now, just log without sensitive data
+      console.error(...sanitized);
+    } else {
+      console.error(...sanitized);
+    }
+  },
 
-// Export class for testing
-export { Logger };
+  debug: (...args: unknown[]) => {
+    if (shouldLog('debug')) {
+      console.debug(...args.map(sanitizeData));
+    }
+  },
+};
 
+export default logger;

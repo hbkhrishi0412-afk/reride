@@ -65,7 +65,9 @@ export const LazyImage: React.FC<LazyImageProps> = ({
       }
     } catch (error) {
       // Fallback if IntersectionObserver fails
-      console.warn('IntersectionObserver not supported, loading image immediately');
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('IntersectionObserver not supported, loading image immediately');
+      }
       setIsInView(true);
     }
 
