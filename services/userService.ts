@@ -49,7 +49,10 @@ const FALLBACK_USERS: User[] = [
 // --- API Helpers ---
 const getAuthHeader = (): Record<string, string> => {
   try {
-    // Get JWT token from localStorage
+    // Get JWT token from localStorage (client-side only)
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return { 'Content-Type': 'application/json' };
+    }
     const token = localStorage.getItem('reRideAccessToken');
     if (!token) return { 'Content-Type': 'application/json' };
     return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
@@ -59,6 +62,9 @@ const getAuthHeader = (): Record<string, string> => {
 };
 
 const storeTokens = (accessToken: string, refreshToken: string) => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
   try {
     localStorage.setItem('reRideAccessToken', accessToken);
     localStorage.setItem('reRideRefreshToken', refreshToken);
@@ -68,6 +74,9 @@ const storeTokens = (accessToken: string, refreshToken: string) => {
 };
 
 const clearTokens = () => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
   try {
     localStorage.removeItem('reRideAccessToken');
     localStorage.removeItem('reRideRefreshToken');
@@ -104,6 +113,9 @@ const handleResponse = async (response: Response) => {
 // --- Local Development (localStorage) Functions ---
 
 export const getUsersLocal = async (): Promise<User[]> => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+        return FALLBACK_USERS;
+    }
     try {
         console.log('getUsersLocal: Starting...');
         let usersJson = localStorage.getItem('reRideUsers');

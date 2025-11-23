@@ -19,7 +19,12 @@ const SECURITY_CONFIG = {
 
   // JWT Configuration
   JWT: {
-    SECRET: process.env.JWT_SECRET || 'fallback-secret-change-in-production',
+    SECRET: process.env.JWT_SECRET || (() => {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('CRITICAL: JWT_SECRET must be set in production environment');
+      }
+      return 'dev-only-secret-not-for-production';
+    })(),
     ACCESS_TOKEN_EXPIRES_IN: '24h',
     REFRESH_TOKEN_EXPIRES_IN: '7d',
     ISSUER: 'reride-app',
@@ -36,12 +41,14 @@ const SECURITY_CONFIG = {
 
   // CORS Configuration
   CORS: {
-    ALLOWED_ORIGINS: [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'https://reride-app.vercel.app',
-      'https://reride--2-.vercel.app'
-    ],
+    ALLOWED_ORIGINS: process.env.NODE_ENV === 'production'
+      ? [process.env.ALLOWED_ORIGIN || 'https://reride-app.vercel.app']
+      : [
+          'http://localhost:3000',
+          'http://localhost:5173',
+          'https://reride-app.vercel.app',
+          'https://reride--2-.vercel.app'
+        ],
     ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With'],
     CREDENTIALS: true,
@@ -106,6 +113,7 @@ export const getSecurityConfig = () => {
 };
 
 export { SECURITY_CONFIG };
+
 
 
 

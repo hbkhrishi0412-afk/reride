@@ -3,7 +3,7 @@
 /**
  * Measures and logs the performance of a function
  */
-export const measurePerformance = <T extends (...args: any[]) => any>(
+export const measurePerformance = <T extends (...args: unknown[]) => unknown>(
   fn: T,
   label: string
 ): T => {
@@ -28,7 +28,7 @@ export const measurePerformance = <T extends (...args: any[]) => any>(
  * Reports Web Vitals metrics
  * Note: web-vitals package is optional. Install with: npm install web-vitals
  */
-export const reportWebVitals = (onPerfEntry?: (metric: any) => void) => {
+export const reportWebVitals = (onPerfEntry?: (metric: PerformanceEntry) => void) => {
   if (onPerfEntry && onPerfEntry instanceof Function) {
     // Optional: Install web-vitals package for detailed metrics
     // For now, we'll use the built-in Performance API
@@ -63,7 +63,7 @@ export const reportWebVitals = (onPerfEntry?: (metric: any) => void) => {
 /**
  * Debounce function to limit how often a function can fire
  */
-export const debounce = <T extends (...args: any[]) => any>(
+export const debounce = <T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): ((...args: Parameters<T>) => void) => {
@@ -78,7 +78,7 @@ export const debounce = <T extends (...args: any[]) => any>(
 /**
  * Throttle function to ensure a function is only called once per specified time period
  */
-export const throttle = <T extends (...args: any[]) => any>(
+export const throttle = <T extends (...args: unknown[]) => unknown>(
   func: T,
   limit: number
 ): ((...args: Parameters<T>) => void) => {
@@ -96,7 +96,7 @@ export const throttle = <T extends (...args: any[]) => any>(
 /**
  * Memoize function results for performance
  */
-export const memoize = <T extends (...args: any[]) => any>(fn: T, maxCacheSize: number = 100): T => {
+export const memoize = <T extends (...args: unknown[]) => unknown>(fn: T, maxCacheSize: number = 100): T => {
   const cache = new Map();
   
   return ((...args: Parameters<T>) => {
@@ -139,10 +139,15 @@ export const logPerformanceMetrics = () => {
 /**
  * Check if user is on a slow connection
  */
+interface NetworkInformation {
+  saveData?: boolean;
+  effectiveType?: 'slow-2g' | '2g' | '3g' | '4g';
+}
+
 export const isSlowConnection = (): boolean => {
   if ('connection' in navigator) {
-    const conn = (navigator as any).connection;
-    return conn && (conn.saveData || conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g');
+    const conn = (navigator as Navigator & { connection?: NetworkInformation }).connection;
+    return conn ? !!(conn.saveData || conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g') : false;
   }
   return false;
 };

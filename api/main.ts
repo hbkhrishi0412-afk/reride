@@ -1,12 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
+import { randomBytes } from 'crypto';
 import connectToDatabase, { MongoConfigError } from '../lib/db.js';
 import User from '../models/User.js';
 import Vehicle from '../models/Vehicle.js';
 import VehicleDataModel from '../models/VehicleData.js';
 import { PLAN_DETAILS } from '../constants.js';
 import NewCar from '../models/NewCar.js';
+import RateLimit from '../models/RateLimit.js';
 import { planService } from '../services/planService.js';
+import type { User as UserType, Vehicle } from '../types.js';
 import { 
   hashPassword, 
   validatePassword, 
@@ -21,6 +24,26 @@ import {
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { ObjectId } from 'mongodb';
+
+// Type for MongoDB user document (with _id)
+interface UserDocument extends Omit<UserType, 'id'> {
+  _id?: mongoose.Types.ObjectId;
+  id?: string;
+  [key: string]: unknown;
+}
+
+// Type for normalized user (without _id and password)
+interface NormalizedUser extends Omit<UserType, 'password'> {
+  id: string;
+}
+
+// Type for MongoDB bulk update operations
+interface BulkUpdateOperation {
+  updateOne: {
+    filter: Record<string, unknown>;
+    update: Record<string, unknown>;
+  };
+}
 
 // Helper: Calculate distance between coordinates
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -37,41 +60,98 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 
 // Helper: Normalize MongoDB user object for frontend consumption
 // Converts _id to id, ensures role is present, and removes password
-function normalizeUser(user: any): any {
+function normalizeUser(user: UserDocument | null | undefined): NormalizedUser | null {
   if (!user) return null;
   
-  const normalized: any = { ...user };
-  
   // Convert _id to id if _id exists and id doesn't
-  if (normalized._id && !normalized.id) {
-    normalized.id = normalized._id.toString();
+  const id = user.id || (user._id ? user._id.toString() : undefined);
+  if (!id) {
+    // Only log in development to avoid information leakage
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('⚠️ User object missing both id and _id fields');
+    }
+    return null;
   }
   
   // Ensure role is present (critical for seller dashboard access)
   // Only set default if role is truly missing - don't overwrite existing roles
-  if (!normalized.role || typeof normalized.role !== 'string') {
-    console.warn('⚠️ User object missing or invalid role field:', normalized.email, 'role:', normalized.role);
+  let role: 'customer' | 'seller' | 'admin' = user.role;
+  if (!role || typeof role !== 'string' || !['customer', 'seller', 'admin'].includes(role)) {
+    console.warn('⚠️ User object missing or invalid role field:', user.email, 'role:', role);
     // Default to 'customer' only if role is completely missing
     // This should rarely happen as role is required in the schema
-    normalized.role = 'customer';
+    role = 'customer';
   }
   
   // Ensure email is present and normalized
-  if (normalized.email) {
-    normalized.email = normalized.email.toLowerCase().trim();
+  const email = user.email ? user.email.toLowerCase().trim() : '';
+  if (!email) {
+    // Only log in development to avoid information leakage
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('⚠️ User object missing email field');
+    }
+    return null;
   }
   
-  // Remove password field (security)
-  delete normalized.password;
-  
-  // Remove _id to avoid confusion (keep only id)
-  delete normalized._id;
+  // Build normalized user object
+  const normalized: NormalizedUser = {
+    id,
+    name: user.name || '',
+    email,
+    mobile: user.mobile || '',
+    role,
+    location: user.location || '',
+    status: user.status || 'active',
+    createdAt: user.createdAt || new Date().toISOString(),
+    ...(user.avatarUrl && { avatarUrl: user.avatarUrl }),
+    ...(user.isVerified !== undefined && { isVerified: user.isVerified }),
+    ...(user.firebaseUid && { firebaseUid: user.firebaseUid }),
+    ...(user.authProvider && { authProvider: user.authProvider }),
+    ...(user.dealershipName && { dealershipName: user.dealershipName }),
+    ...(user.bio && { bio: user.bio }),
+    ...(user.logoUrl && { logoUrl: user.logoUrl }),
+    ...(user.averageRating !== undefined && { averageRating: user.averageRating }),
+    ...(user.ratingCount !== undefined && { ratingCount: user.ratingCount }),
+    ...(user.badges && { badges: user.badges }),
+    ...(user.subscriptionPlan && { subscriptionPlan: user.subscriptionPlan }),
+    ...(user.featuredCredits !== undefined && { featuredCredits: user.featuredCredits }),
+    ...(user.usedCertifications !== undefined && { usedCertifications: user.usedCertifications }),
+    ...(user.planActivatedDate && { planActivatedDate: user.planActivatedDate }),
+    ...(user.planExpiryDate && { planExpiryDate: user.planExpiryDate }),
+    ...(user.phoneVerified !== undefined && { phoneVerified: user.phoneVerified }),
+    ...(user.emailVerified !== undefined && { emailVerified: user.emailVerified }),
+    ...(user.govtIdVerified !== undefined && { govtIdVerified: user.govtIdVerified }),
+    ...(user.verificationDate && { verificationDate: user.verificationDate }),
+    ...(user.pendingPlanUpgrade && { pendingPlanUpgrade: user.pendingPlanUpgrade }),
+    ...(user.responseTime !== undefined && { responseTime: user.responseTime }),
+    ...(user.responseRate !== undefined && { responseRate: user.responseRate }),
+    ...(user.joinedDate && { joinedDate: user.joinedDate }),
+    ...(user.lastActiveAt && { lastActiveAt: user.lastActiveAt }),
+    ...(user.activeListings !== undefined && { activeListings: user.activeListings }),
+    ...(user.soldListings !== undefined && { soldListings: user.soldListings }),
+    ...(user.totalViews !== undefined && { totalViews: user.totalViews }),
+    ...(user.reportedCount !== undefined && { reportedCount: user.reportedCount }),
+    ...(user.isBanned !== undefined && { isBanned: user.isBanned }),
+    ...(user.trustScore !== undefined && { trustScore: user.trustScore }),
+    ...(user.alternatePhone && { alternatePhone: user.alternatePhone }),
+    ...(user.preferredContactHours && { preferredContactHours: user.preferredContactHours }),
+    ...(user.showEmailPublicly !== undefined && { showEmailPublicly: user.showEmailPublicly }),
+    ...(user.verificationStatus && { verificationStatus: user.verificationStatus }),
+    ...(user.aadharCard && { aadharCard: user.aadharCard }),
+    ...(user.panCard && { panCard: user.panCard }),
+  };
   
   return normalized;
 }
 
-// Authentication middleware - NOW ENABLED
-const authenticateRequest = (req: VercelRequest): { isValid: boolean; user?: any; error?: string } => {
+// Authentication middleware
+interface AuthResult {
+  isValid: boolean;
+  user?: { userId: string; email: string; role: string; type?: string };
+  error?: string;
+}
+
+const authenticateRequest = (req: VercelRequest): AuthResult => {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -87,8 +167,7 @@ const authenticateRequest = (req: VercelRequest): { isValid: boolean; user?: any
   }
 };
 
-// Rate limiting (simple in-memory implementation for demo)
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+// Rate limiting using MongoDB for serverless compatibility
 const config = getSecurityConfig();
 
 type HandlerOptions = {
@@ -96,22 +175,105 @@ type HandlerOptions = {
   mongoFailureReason?: string;
 };
 
-const checkRateLimit = (identifier: string): { allowed: boolean; remaining: number } => {
+// Extract client IP from request headers (handles proxies)
+const getClientIP = (req: VercelRequest): string => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (forwardedFor) {
+    const ips = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+    return ips.split(',')[0].trim();
+  }
+  const realIP = req.headers['x-real-ip'];
+  if (realIP) {
+    return Array.isArray(realIP) ? realIP[0] : realIP;
+  }
+  return req.socket?.remoteAddress || 'unknown';
+};
+
+// In-memory rate limit cache for fallback (with TTL)
+interface RateLimitCacheEntry {
+  count: number;
+  resetTime: number;
+}
+
+const rateLimitCache = new Map<string, RateLimitCacheEntry>();
+
+// Clean up expired cache entries
+const cleanupRateLimitCache = () => {
   const now = Date.now();
-  const key = identifier;
-  const current = rateLimitMap.get(key);
+  for (const [key, entry] of rateLimitCache.entries()) {
+    if (entry.resetTime < now) {
+      rateLimitCache.delete(key);
+    }
+  }
+};
+
+// Database-based rate limiting for serverless environments
+const checkRateLimit = async (identifier: string, mongoAvailable: boolean): Promise<{ allowed: boolean; remaining: number }> => {
+  const now = Date.now();
+  const resetTime = now + config.RATE_LIMIT.WINDOW_MS;
   
-  if (!current || now > current.resetTime) {
-    rateLimitMap.set(key, { count: 1, resetTime: now + config.RATE_LIMIT.WINDOW_MS });
-    return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS - 1 };
+  // If MongoDB is not available, use in-memory fallback with TTL
+  if (!mongoAvailable) {
+    cleanupRateLimitCache();
+    const cached = rateLimitCache.get(identifier);
+    
+    if (cached && cached.resetTime >= now) {
+      // Entry exists and is still valid
+      cached.count += 1;
+      if (cached.count > config.RATE_LIMIT.MAX_REQUESTS) {
+        return { allowed: false, remaining: 0 };
+      }
+      return { allowed: true, remaining: Math.max(0, config.RATE_LIMIT.MAX_REQUESTS - cached.count) };
+    } else {
+      // Create new entry
+      rateLimitCache.set(identifier, { count: 1, resetTime });
+      return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS - 1 };
+    }
   }
   
-  if (current.count >= config.RATE_LIMIT.MAX_REQUESTS) {
-    return { allowed: false, remaining: 0 };
+  try {
+    // Clean up expired entries
+    await RateLimit.deleteMany({ resetTime: { $lt: now } });
+    
+    // Find or create rate limit entry
+    const rateLimit = await RateLimit.findOneAndUpdate(
+      { 
+        identifier,
+        resetTime: { $gte: now } // Only consider active windows
+      },
+      {
+        $inc: { count: 1 },
+        $setOnInsert: { 
+          identifier,
+          resetTime,
+          createdAt: new Date()
+        }
+      },
+      { 
+        upsert: true, 
+        new: true,
+        setDefaultsOnInsert: true
+      }
+    );
+    
+    const count = rateLimit?.count || 1;
+    const remaining = Math.max(0, config.RATE_LIMIT.MAX_REQUESTS - count);
+    
+    // If count exceeds limit, update resetTime for next window
+    if (count > config.RATE_LIMIT.MAX_REQUESTS) {
+      await RateLimit.updateOne(
+        { identifier },
+        { $set: { resetTime } }
+      );
+      return { allowed: false, remaining: 0 };
+    }
+    
+    return { allowed: true, remaining };
+  } catch (error) {
+    // On error, allow request (fail open) but log the error
+    console.error('Rate limiting error:', error);
+    return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS };
   }
-  
-  current.count++;
-  return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS - current.count };
 };
 
 export default async function handler(
@@ -150,20 +312,6 @@ export default async function handler(
     return res.status(200).end();
   }
 
-  // Rate limiting
-  const clientIP = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown';
-  const rateLimitResult = checkRateLimit(clientIP as string);
-  
-  if (!rateLimitResult.allowed) {
-    return res.status(429).json({
-      success: false,
-      reason: 'Too many requests. Please try again later.',
-      retryAfter: Math.ceil(config.RATE_LIMIT.WINDOW_MS / 1000)
-    });
-  }
-  
-  res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-
   try {
     let mongoAvailable = true;
     let mongoFailureReason: string | undefined;
@@ -176,7 +324,10 @@ export default async function handler(
         mongoFailureReason = dbError instanceof MongoConfigError
           ? 'MongoDB is not configured. Set MONGODB_URL or MONGODB_URI in your environment.'
           : 'Database temporarily unavailable. Please try again later.';
-        console.warn('Database connection issue:', dbError);
+        // Only log in development to avoid information leakage
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('Database connection issue:', dbError);
+        }
         if (req.method !== 'GET') {
           return res.status(503).json({
             success: false,
@@ -193,6 +344,21 @@ export default async function handler(
     if (earlyResponse) {
       return earlyResponse;
     }
+
+    // Rate limiting (after database connection check)
+    const clientIP = getClientIP(req);
+    const rateLimitResult = await checkRateLimit(clientIP, mongoAvailable);
+    
+    if (!rateLimitResult.allowed) {
+      return res.status(429).json({
+        success: false,
+        reason: 'Too many requests. Please try again later.',
+        retryAfter: Math.ceil(config.RATE_LIMIT.WINDOW_MS / 1000)
+      });
+    }
+    
+    res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
+    res.setHeader('X-RateLimit-Limit', config.RATE_LIMIT.MAX_REQUESTS.toString());
 
     // Route based on the path
     // Handle Vercel rewrites - check original path if available
@@ -227,7 +393,10 @@ export default async function handler(
       // Log for debugging to help identify routing issues
       console.log(`📍 Request routing - method: ${req.method}, originalPath: ${originalPath || 'none'}, invokePath: ${invokePath || 'none'}, req.url: ${req.url || 'none'}, final pathname: ${pathname}`);
     } catch (urlError) {
-      console.warn('⚠️ Error parsing URL, using fallback:', urlError);
+      // Only log in development to avoid information leakage
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('⚠️ Error parsing URL, using fallback:', urlError);
+      }
       // Fallback: try to extract pathname from req.url directly
       if (req.url) {
         const match = req.url.match(/^([^?]+)/);
@@ -235,7 +404,10 @@ export default async function handler(
           pathname = match[1];
         }
       }
-      console.log(`📍 Fallback pathname: ${pathname}, req.url: ${req.url}`);
+      // Only log in development to avoid information leakage
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`📍 Fallback pathname: ${pathname}, req.url: ${req.url}`);
+      }
     }
 
     // Early detection: If this is a PUT/POST request and we can't determine the route,
@@ -247,7 +419,10 @@ export default async function handler(
       
       // Check if any of these indicate a /users endpoint
       if (originalPath?.includes('/users') || invokePath?.includes('/users') || urlPath.includes('/users')) {
-        console.log(`🔍 Early detection: Routing ${req.method} to handleUsers based on URL/header pattern`);
+        // Only log in development to avoid information leakage
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`🔍 Early detection: Routing ${req.method} to handleUsers based on URL/header pattern`);
+        }
         const handlerOptions: HandlerOptions = {
           mongoAvailable,
           mongoFailureReason
@@ -296,18 +471,27 @@ export default async function handler(
       // Fallback: If we can't determine the route from headers, check the request body or method
       // For PUT/POST requests, if we have a body with email, it's likely a user update
       if ((req.method === 'PUT' || req.method === 'POST') && req.body && req.body.email) {
-        console.log(`✅ Routing ${req.method} request from /api/main to handleUsers (fallback: body contains email)`);
+        // Only log in development to avoid information leakage
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`✅ Routing ${req.method} request from /api/main to handleUsers (fallback: body contains email)`);
+        }
         return await handleUsers(req, res, handlerOptions);
       }
       
       // Last resort: default to users handler for /api/main
-      console.log(`⚠️ Routing ${req.method} request from /api/main to handleUsers (default fallback - no original path found)`);
+      // Only log in development to avoid information leakage
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`⚠️ Routing ${req.method} request from /api/main to handleUsers (default fallback - no original path found)`);
+      }
       return await handleUsers(req, res, handlerOptions);
     }
 
     // Enhanced routing check for /users endpoint - handles /api/users, /users, and variations
     if (pathname.includes('/users') || pathname.endsWith('/users') || pathname === '/api/users' || pathname === '/users') {
-      console.log(`✅ Routing ${req.method} request to handleUsers handler`);
+      // Only log in development to avoid information leakage
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`✅ Routing ${req.method} request to handleUsers handler`);
+      }
       return await handleUsers(req, res, handlerOptions);
     } else if (pathname.includes('/vehicles') || pathname.endsWith('/vehicles')) {
       try {
@@ -355,7 +539,10 @@ export default async function handler(
       return await handleAI(req, res, handlerOptions);
     } else if (pathname.includes('/faqs') || pathname.endsWith('/faqs') || pathname === '/api/faqs' || pathname === '/faqs') {
       // Set query type for handleContent to route to FAQs handler
-      console.log(`✅ Routing ${req.method} request to handleContent/FAQs handler`);
+          // Only log in development to avoid information leakage
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`✅ Routing ${req.method} request to handleContent/FAQs handler`);
+          }
       req.query = req.query || {};
       req.query.type = 'faqs';
       return await handleContent(req, res, handlerOptions);
@@ -374,7 +561,10 @@ export default async function handler(
       // Default to users for backward compatibility
       // This catches any unmatched routes, especially important for PUT /api/users
       // when pathname extraction fails or doesn't match expected patterns
-      console.log(`⚠️ Default route: Routing ${req.method} request (pathname: ${pathname}) to handleUsers handler`);
+      // Only log in development to avoid information leakage
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`⚠️ Default route: Routing ${req.method} request (pathname: ${pathname}) to handleUsers handler`);
+      }
       return await handleUsers(req, res, handlerOptions);
     }
 
@@ -504,7 +694,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(400).json({ success: false, reason: 'Invalid email format.' });
       }
       
-      const user = await User.findOne({ email: sanitizedData.email }).lean() as any;
+      // Normalize email to lowercase for consistent database lookup
+      const normalizedEmail = sanitizedData.email.toLowerCase().trim();
+      const user = await User.findOne({ email: normalizedEmail }).lean() as UserDocument | null;
 
       if (!user) {
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
@@ -563,7 +755,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       // Ensure database connection before proceeding
       try {
         if (mongoose.connection.readyState !== 1) {
-          console.log('🔄 Connecting to database for user registration...');
+          // Only log in development to avoid information leakage
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('🔄 Connecting to database for user registration...');
+          }
           await connectToDatabase();
         }
       } catch (dbError) {
@@ -600,7 +795,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
         // Hash password before storing
         const hashedPassword = await hashPassword(sanitizedData.password);
-        console.log('🔐 Password hashed successfully for user:', normalizedEmail);
+        // Never log password hashing status or user emails in production
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('🔐 Password hashed successfully for user:', normalizedEmail);
+        }
 
         // Generate unique ID to avoid collisions
         const userId = Date.now() + Math.floor(Math.random() * 1000);
@@ -707,12 +905,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       // Sanitize OAuth data
       const sanitizedData = await sanitizeObject({ firebaseUid, email, name, role, authProvider, avatarUrl });
 
-      let user = await User.findOne({ email: sanitizedData.email });
+      // Normalize email to lowercase for consistent database lookup
+      const normalizedEmail = sanitizedData.email.toLowerCase().trim();
+      let user = await User.findOne({ email: normalizedEmail });
       if (!user) {
-        console.log('🔄 OAuth registration - Creating new user:', sanitizedData.email);
+        console.log('🔄 OAuth registration - Creating new user:', normalizedEmail);
         user = new User({
           id: Date.now(),
-          email: sanitizedData.email,
+          email: normalizedEmail,
           name: sanitizedData.name,
           role: sanitizedData.role,
           firebaseUid: sanitizedData.firebaseUid,
@@ -728,10 +928,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         
         console.log('💾 Saving OAuth user to MongoDB...');
         await user.save();
-        console.log('✅ OAuth user saved to MongoDB:', sanitizedData.email);
+        console.log('✅ OAuth user saved to MongoDB:', normalizedEmail);
         
         // Verify the user was saved by querying it back
-        const verifyUser = await User.findOne({ email: sanitizedData.email });
+        const verifyUser = await User.findOne({ email: normalizedEmail });
         if (!verifyUser) {
           console.error('❌ OAuth user registration verification failed - user not found after save');
           return res.status(500).json({ 
@@ -809,7 +1009,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     if (!mongoAvailable) {
       const fallbackUsers = await getFallbackUsers();
       if (action === 'trust-score' && email) {
-        const user = fallbackUsers.find(u => u.email === email);
+        // Normalize email to lowercase for consistent lookup
+        const normalizedEmail = (email as string).toLowerCase().trim();
+        const user = fallbackUsers.find(u => u.email?.toLowerCase().trim() === normalizedEmail);
         if (!user) {
           return res.status(404).json({ success: false, reason: 'User not found', fallback: true });
         }
@@ -827,7 +1029,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     
     if (action === 'trust-score' && email) {
       try {
-        const user = await User.findOne({ email: email as string });
+        // Normalize email to lowercase for consistent database lookup
+        const normalizedEmail = (email as string).toLowerCase().trim();
+        const user = await User.findOne({ email: normalizedEmail });
         if (!user) {
           return res.status(404).json({ success: false, reason: 'User not found' });
         }
@@ -867,8 +1071,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(200).json(fallbackUsers);
       }
       
-      const users = await User.find({}).sort({ createdAt: -1 });
-      return res.status(200).json(users);
+      const users = await User.find({}).sort({ createdAt: -1 }).lean();
+      // SECURITY FIX: Normalize all users to remove passwords and convert _id to id
+      const normalizedUsers = users.map(user => normalizeUser(user));
+      return res.status(200).json(normalizedUsers);
     } catch (error) {
       console.error('❌ Error fetching users:', error);
       // Always return fallback instead of 500 to prevent crashes
@@ -920,7 +1126,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(400).json({ success: false, reason: 'Email is required for update.' });
       }
 
-      console.log('🔄 PUT /users - Updating user:', { email, hasPassword: !!updateData.password, fields: Object.keys(updateData) });
+      // Only log in development to avoid information leakage
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🔄 PUT /users - Updating user:', { email, hasPassword: !!updateData.password, fields: Object.keys(updateData) });
+      }
 
       // Separate null values (to be unset) from regular updates
       const updateFields: any = {};
@@ -944,15 +1153,27 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           if (isAlreadyHashed) {
             // Password is already hashed (edge case - for backward compatibility)
             updateFields.password = updateData.password;
-            console.log('🔐 Password already hashed, using as-is');
+            // Only log in development to avoid information leakage
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('🔐 Password already hashed, using as-is');
+            }
           } else {
             // Hash the plain text password before updating
-            console.log('🔐 Hashing password...');
+            // Only log in development to avoid information leakage
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('🔐 Hashing password...');
+            }
             updateFields.password = await hashPassword(updateData.password);
-            console.log('✅ Password hashed successfully');
+            // Never log password hashing success in production
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('✅ Password hashed successfully');
+            }
           }
         } catch (hashError) {
-          console.error('❌ Error hashing password:', hashError);
+          // Only log errors in development to avoid information leakage
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('❌ Error hashing password:', hashError);
+          }
           const errorMessage = hashError instanceof Error ? hashError.message : 'Unknown error';
           return res.status(500).json({ 
             success: false, 
@@ -1046,7 +1267,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           // Mark password as modified and explicitly save to ensure persistence
           updatedUser.password = updateFields.password;
           updatedUser.markModified('password');
-          console.log('💾 Explicitly saving user document to ensure password persistence...');
+          // Only log in development to avoid information leakage
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('💾 Explicitly saving user document to ensure password persistence...');
+          }
           
           try {
             await updatedUser.save({ validateBeforeSave: true });
@@ -1080,20 +1304,29 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           }
 
           console.log('✅ User updated successfully:', updatedUser.email);
-          console.log('✅ Password updated:', !!updateFields.password);
+          // Never log password update status in production
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('✅ Password updated:', !!updateFields.password);
+          }
 
           // Verify the update actually saved by checking the user again
           const verifyUser = await User.findOne({ email: email.toLowerCase().trim() });
           if (verifyUser && verifyUser.password) {
-            console.log('✅ Password update verified in database');
-            // Verify it's different from the old password (if we can check)
-            if (verifyUser.password !== existingUser.password) {
-              console.log('✅ Password hash changed, update confirmed');
-            } else {
-              console.warn('⚠️ Password hash unchanged - update may not have worked');
+            // Never log password update verification in production
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('✅ Password update verified in database');
+              // Verify it's different from the old password (if we can check)
+              if (verifyUser.password !== existingUser.password) {
+                console.log('✅ Password hash changed, update confirmed');
+              } else {
+                console.warn('⚠️ Password hash unchanged - update may not have worked');
+              }
             }
           } else {
-            console.error('❌ Password update verification failed - password not found in database');
+            // Only log errors in development to avoid information leakage
+            if (process.env.NODE_ENV !== 'production') {
+              console.error('❌ Password update verification failed - password not found in database');
+            }
           }
 
           // Remove password from response for security
@@ -1169,7 +1402,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
             
             if (sellerVehicles.length > 0) {
               const now = new Date();
-              const bulkUpdates: any[] = [];
+              const bulkUpdates: BulkUpdateOperation[] = [];
               
               sellerVehicles.forEach(vehicle => {
                 const vehicleUpdateFields: any = {};
@@ -1626,7 +1859,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       await connectToDatabase();
       
       if (action === 'city-stats' && req.query.city) {
-        const cityVehicles = await Vehicle.find({ city: req.query.city as string });
+        // Sanitize city input to prevent NoSQL injection
+        const sanitizedCity = await sanitizeString(String(req.query.city));
+        const cityVehicles = await Vehicle.find({ city: sanitizedCity });
         const stats = {
           totalVehicles: cityVehicles.length,
           averagePrice: cityVehicles.reduce((sum, v) => sum + v.price, 0) / cityVehicles.length || 0,
@@ -1663,11 +1898,13 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         }
       });
       
-      const sellerMap = new Map<string, any>();
+      const sellerMap = new Map<string, UserDocument>();
       if (sellerEmails.size > 0) {
         const sellers = await User.find({ email: { $in: Array.from(sellerEmails) } }).lean();
-        sellers.forEach(seller => {
-          sellerMap.set(seller.email.toLowerCase(), seller);
+        sellers.forEach((seller: UserDocument) => {
+          if (seller.email) {
+            sellerMap.set(seller.email.toLowerCase(), seller);
+          }
         });
       }
       
@@ -1745,7 +1982,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       // Enforce plan listing limits: keep most recent listings within limit, unpublish extras
       try {
         // Build per-seller published vehicles list (newest first)
-        const sellerToPublished: Map<string, any[]> = new Map();
+        const sellerToPublished: Map<string, Vehicle[]> = new Map();
         vehicles.forEach(v => {
           if (v.status === 'published' && v.sellerEmail) {
             const key = v.sellerEmail.toLowerCase();
@@ -2232,7 +2469,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     // Create new vehicle
     // Check if seller's plan has expired and block creation if so
     if (req.body.sellerEmail) {
-      const seller = await User.findOne({ email: req.body.sellerEmail });
+      // Sanitize email input to prevent NoSQL injection
+      const sanitizedEmail = await sanitizeString(String(req.body.sellerEmail)).toLowerCase().trim();
+      const seller = await User.findOne({ email: sanitizedEmail });
       if (seller && seller.planExpiryDate) {
         const expiryDate = new Date(seller.planExpiryDate);
         const isExpired = expiryDate < new Date();
@@ -2248,7 +2487,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     // Set listingExpiresAt based on seller's plan expiry date
     let listingExpiresAt: string | undefined;
     if (req.body.sellerEmail) {
-      const seller = await User.findOne({ email: req.body.sellerEmail });
+      // Sanitize email input to prevent NoSQL injection
+      const sanitizedEmail = await sanitizeString(String(req.body.sellerEmail)).toLowerCase().trim();
+      const seller = await User.findOne({ email: sanitizedEmail });
       if (seller) {
         // Plan is not expired (checked above), so compute expiry for active plans
         if (seller.subscriptionPlan === 'premium') {
@@ -2503,8 +2744,13 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
     });
   }
 
-  // Log admin action for security auditing (in production, consider proper logging service)
+  // Log admin action for security auditing
   if (process.env.NODE_ENV === 'production') {
+    // In production, use proper logging service (e.g., Sentry, CloudWatch)
+    // For now, log to console but consider implementing structured logging
+    console.log(`[SECURITY] Admin action '${action}' accessed by user: ${decoded.email} (${decoded.userId})`);
+  } else {
+    // In development, use detailed logging
     console.log(`🔐 Admin action '${action}' accessed by user: ${decoded.email} (${decoded.userId})`);
   }
 
@@ -2557,6 +2803,14 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
   }
 
   if (action === 'seed') {
+    // Prevent seed function from running in production
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({
+        success: false,
+        reason: 'Seed function cannot run in production environment'
+      });
+    }
+    
     if (!mongoAvailable) {
       return res.status(503).json({
         success: false,
@@ -2618,6 +2872,14 @@ async function handleHealth(_req: VercelRequest, res: VercelResponse) {
 async function handleSeed(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  }
+
+  // Prevent seed function from running in production
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({
+      success: false,
+      reason: 'Seed function cannot run in production environment'
+    });
   }
 
   if (!options.mongoAvailable) {
@@ -2774,33 +3036,28 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
   }
 }
 
-let cachedFallbackVehicles: any[] | null = null;
-let cachedFallbackUsers: any[] | null = null;
+// Note: In-memory caching is removed for serverless compatibility
+// Each function invocation will load fresh data from constants
+// For production, consider using Vercel KV or Redis for caching
 
-async function getFallbackVehicles(): Promise<any[]> {
-  if (cachedFallbackVehicles) {
-    return cachedFallbackVehicles;
-  }
-
+async function getFallbackVehicles(): Promise<unknown[]> {
   try {
     const { MOCK_VEHICLES } = await import('../constants.js');
     const vehicles = await MOCK_VEHICLES();
-    cachedFallbackVehicles = vehicles;
     return vehicles;
   } catch (error) {
-    console.warn('⚠️ Unable to load MOCK_VEHICLES fallback:', error);
+    // Only log in development to avoid information leakage
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('⚠️ Unable to load MOCK_VEHICLES fallback:', error);
+    }
   }
 
-  cachedFallbackVehicles = [];
-  return cachedFallbackVehicles;
+  return [];
 }
 
-async function getFallbackUsers(): Promise<any[]> {
-  if (cachedFallbackUsers) {
-    return cachedFallbackUsers;
-  }
-
-  cachedFallbackUsers = [
+async function getFallbackUsers(): Promise<unknown[]> {
+  // Return minimal fallback user data
+  return [
     {
       name: 'Demo User',
       email: 'demo@reride.com',
@@ -2813,8 +3070,6 @@ async function getFallbackUsers(): Promise<any[]> {
       isVerified: false
     }
   ];
-
-  return cachedFallbackUsers;
 }
 
 // Helper functions
@@ -2830,7 +3085,7 @@ function calculateTrustScore(user: any): number {
   return Math.min(100, score);
 }
 
-function getPopularMakes(vehicles: any[]): string[] {
+function getPopularMakes(vehicles: Vehicle[]): string[] {
   const makeCounts: { [key: string]: number } = {};
   vehicles.forEach(v => {
     makeCounts[v.make] = (makeCounts[v.make] || 0) + 1;
@@ -2842,7 +3097,7 @@ function getPopularMakes(vehicles: any[]): string[] {
     .map(([make]) => make);
 }
 
-function getPriceRange(vehicles: any[]): { min: number; max: number } {
+function getPriceRange(vehicles: Vehicle[]): { min: number; max: number } {
   if (vehicles.length === 0) return { min: 0, max: 0 };
   
   const prices = vehicles.map(v => v.price);
@@ -2906,11 +3161,39 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, options: H
   return res.status(405).json({ success: false, reason: 'Method not allowed.' });
 }
 
-async function seedUsers(): Promise<any[]> {
+// Generate cryptographically random password
+function generateRandomPassword(): string {
+  return randomBytes(32).toString('hex');
+}
+
+async function seedUsers(): Promise<UserDocument[]> {
+  // Prevent seed function from running in production
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Seed function cannot run in production environment');
+  }
+  
+  // Use environment variables for seed passwords or generate cryptographically random ones
+  const adminPasswordEnv = process.env.SEED_ADMIN_PASSWORD;
+  const sellerPasswordEnv = process.env.SEED_SELLER_PASSWORD;
+  const customerPasswordEnv = process.env.SEED_CUSTOMER_PASSWORD;
+  
+  // Generate random passwords if env vars not set
+  const adminPasswordPlain = adminPasswordEnv || generateRandomPassword();
+  const sellerPasswordPlain = sellerPasswordEnv || generateRandomPassword();
+  const customerPasswordPlain = customerPasswordEnv || generateRandomPassword();
+  
   // Hash passwords before inserting
-  const adminPassword = await hashPassword('password');
-  const sellerPassword = await hashPassword('password');
-  const customerPassword = await hashPassword('password');
+  const adminPassword = await hashPassword(adminPasswordPlain);
+  const sellerPassword = await hashPassword(sellerPasswordPlain);
+  const customerPassword = await hashPassword(customerPasswordPlain);
+  
+  // Log generated passwords in development (not in production)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('⚠️ SEED PASSWORDS (Development only):');
+    console.log('Admin:', adminPasswordEnv || adminPasswordPlain);
+    console.log('Seller:', sellerPasswordEnv || sellerPasswordPlain);
+    console.log('Customer:', customerPasswordEnv || customerPasswordPlain);
+  }
   
   // Set plan dates for seller
   const now = new Date();
@@ -2972,7 +3255,7 @@ async function seedUsers(): Promise<any[]> {
   return users;
 }
 
-async function seedVehicles(): Promise<any[]> {
+async function seedVehicles(): Promise<Vehicle[]> {
   const sampleVehicles = [
     {
       id: 1,
@@ -3099,6 +3382,14 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ 
         success: false, 
         reason: 'Payload is required' 
+      });
+    }
+
+    // Validate API key presence
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        reason: 'GEMINI_API_KEY environment variable is not configured'
       });
     }
 

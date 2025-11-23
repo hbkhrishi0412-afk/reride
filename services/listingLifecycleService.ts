@@ -205,6 +205,9 @@ const REFRESH_LOG_KEY = 'reride_listing_refreshes';
 
 // Log listing refresh
 export function logListingRefresh(refresh: ListingRefresh): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
   try {
     const stored = localStorage.getItem(REFRESH_LOG_KEY);
     const refreshes: ListingRefresh[] = stored ? JSON.parse(stored) : [];
@@ -222,6 +225,9 @@ export function logListingRefresh(refresh: ListingRefresh): void {
 
 // Get refresh history for a vehicle
 export function getRefreshHistory(vehicleId: number): ListingRefresh[] {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return [];
+  }
   try {
     const stored = localStorage.getItem(REFRESH_LOG_KEY);
     if (!stored) return [];

@@ -30,8 +30,8 @@ export const fetchFaqsFromMongoDB = async (): Promise<FAQItem[]> => {
       return faqItem;
     });
     
-    // Save to localStorage as backup
-    if (faqs.length > 0) {
+    // Save to localStorage as backup (client-side only)
+    if (faqs.length > 0 && typeof window !== 'undefined') {
       saveFaqs(faqs);
     }
     
@@ -45,6 +45,9 @@ export const fetchFaqsFromMongoDB = async (): Promise<FAQItem[]> => {
 };
 
 export const getFaqs = (): FAQItem[] | null => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return null;
+  }
   try {
     const faqsJson = localStorage.getItem(FAQ_STORAGE_KEY);
     return faqsJson ? JSON.parse(faqsJson) : null;
@@ -55,6 +58,9 @@ export const getFaqs = (): FAQItem[] | null => {
 };
 
 export const saveFaqs = (faqs: FAQItem[]) => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return;
+  }
   try {
     localStorage.setItem(FAQ_STORAGE_KEY, JSON.stringify(faqs));
   } catch (error) {

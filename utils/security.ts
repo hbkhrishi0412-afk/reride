@@ -76,7 +76,10 @@ export const generateAccessToken = (user: User): string => {
     type: 'access'
   };
   
-  const secret = config.JWT.SECRET || 'fallback-secret-change-in-production';
+  const secret = config.JWT.SECRET;
+  if (!secret) {
+    throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
+  }
   return jwt.sign(payload, secret, { 
     expiresIn: config.JWT.ACCESS_TOKEN_EXPIRES_IN as any,
     issuer: config.JWT.ISSUER,
@@ -91,7 +94,10 @@ export const generateRefreshToken = (user: User): string => {
     type: 'refresh'
   };
   
-  const secret = config.JWT.SECRET || 'fallback-secret-change-in-production';
+  const secret = config.JWT.SECRET;
+  if (!secret) {
+    throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
+  }
   return jwt.sign(payload, secret, { 
     expiresIn: config.JWT.REFRESH_TOKEN_EXPIRES_IN as any,
     issuer: config.JWT.ISSUER,
@@ -99,13 +105,33 @@ export const generateRefreshToken = (user: User): string => {
   });
 };
 
-export const verifyToken = (token: string): any => {
+interface TokenPayload {
+  userId: string;
+  email: string;
+  role?: 'customer' | 'seller' | 'admin';
+  type?: 'access' | 'refresh';
+  iat?: number;
+  exp?: number;
+  iss?: string;
+  aud?: string;
+}
+
+export const verifyToken = (token: string): TokenPayload => {
   try {
-    const secret = config.JWT.SECRET || 'fallback-secret-change-in-production';
-    return jwt.verify(token, secret, {
+    const secret = config.JWT.SECRET;
+    if (!secret) {
+      throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
+    }
+    const decoded = jwt.verify(token, secret, {
       issuer: config.JWT.ISSUER,
       audience: config.JWT.AUDIENCE
     });
+    
+    if (typeof decoded === 'string' || !decoded) {
+      throw new Error('Invalid token payload');
+    }
+    
+    return decoded as TokenPayload;
   } catch (error) {
     throw new Error('Invalid or expired token');
   }
@@ -140,27 +166,27 @@ export const sanitizeString = async (input: string): Promise<string> => {
   return validator.escape(sanitized);
 };
 
-export const sanitizeObject = async (obj: any): Promise<any> => {
+export const sanitizeObject = async <T>(obj: T): Promise<T> => {
   if (obj === null || obj === undefined) {
     return obj;
   }
   
   if (typeof obj === 'string') {
-    return await sanitizeString(obj);
+    return (await sanitizeString(obj)) as T;
   }
   
   if (Array.isArray(obj)) {
-    return await Promise.all(obj.map(item => sanitizeObject(item)));
+    return (await Promise.all(obj.map(item => sanitizeObject(item)))) as T;
   }
   
   if (typeof obj === 'object') {
-    const sanitized: any = {};
+    const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
       // Sanitize both key and value
       const sanitizedKey = await sanitizeString(key);
       sanitized[sanitizedKey] = await sanitizeObject(value);
     }
-    return sanitized;
+    return sanitized as T;
   }
   
   return obj;
@@ -213,7 +239,22 @@ export const validateMobile = (mobile: string): boolean => {
   return validator.isMobilePhone(mobile, 'en-IN') && mobile.length === config.VALIDATION.MOBILE_LENGTH;
 };
 
-export const validateUserInput = async (userData: any): Promise<{ isValid: boolean; errors: string[]; sanitizedData?: any }> => {
+interface UserInputData {
+  email?: string;
+  password?: string;
+  name?: string;
+  mobile?: string;
+  role?: string;
+  [key: string]: unknown;
+}
+
+interface ValidationResult {
+  isValid: boolean;
+  errors: string[];
+  sanitizedData?: UserInputData;
+}
+
+export const validateUserInput = async (userData: unknown): Promise<ValidationResult> => {
   const errors: string[] = [];
   
   // Handle null/undefined input
@@ -226,7 +267,7 @@ export const validateUserInput = async (userData: any): Promise<{ isValid: boole
   }
   
   // Sanitize input first
-  const sanitizedData = await sanitizeObject(userData);
+  const sanitizedData = await sanitizeObject(userData as UserInputData) as UserInputData;
   
   // Validate email
   if (!sanitizedData.email || !validateEmail(sanitizedData.email)) {

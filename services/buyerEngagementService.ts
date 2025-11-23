@@ -12,8 +12,26 @@ import type {
 
 const SAVED_SEARCHES_KEY = 'reride_saved_searches';
 
+// Helper to check if localStorage is available
+const isLocalStorageAvailable = (): boolean => {
+  return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+};
+
 // Save a search
 export function saveSearch(userId: string, name: string, filters: SearchFilters, emailAlerts: boolean = true): SavedSearch {
+  if (!isLocalStorageAvailable()) {
+    // Return a minimal search object if localStorage is not available
+    return {
+      id: `search_${Date.now()}`,
+      userId,
+      name,
+      filters,
+      emailAlerts,
+      smsAlerts: false,
+      notificationFrequency: 'instant',
+      createdAt: new Date().toISOString(),
+    };
+  }
   try {
     const stored = localStorage.getItem(SAVED_SEARCHES_KEY);
     const searches: SavedSearch[] = stored ? JSON.parse(stored) : [];

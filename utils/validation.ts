@@ -271,7 +271,7 @@ export const sanitizeUser = (user: Partial<User>): Partial<User> => {
 };
 
 // Error handling utilities
-export const handleApiError = (error: any, operation: string): DataServiceError => {
+export const handleApiError = (error: unknown, operation: string): DataServiceError => {
   let message = `Failed to ${operation}`;
   
   if (error instanceof ValidationError) {
