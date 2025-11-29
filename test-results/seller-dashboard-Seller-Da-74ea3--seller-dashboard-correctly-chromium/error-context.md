@@ -1,0 +1,180 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - link "Skip to main content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - main [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - generic [ref=e10]:
+          - img [ref=e11]
+          - generic [ref=e13]: Trusted by 50,000+ Happy Customers
+        - button "Mumbai" [ref=e15] [cursor=pointer]:
+          - img [ref=e16]
+          - text: Mumbai
+      - generic [ref=e21]:
+        - button [ref=e22] [cursor=pointer]:
+          - img [ref=e25]
+        - navigation [ref=e37]:
+          - button "Buy Car" [ref=e39] [cursor=pointer]:
+            - text: Buy Car
+            - img [ref=e40]
+          - button "Sell Car" [ref=e43] [cursor=pointer]:
+            - text: Sell Car
+            - img [ref=e44]
+          - button "New Cars" [ref=e46] [cursor=pointer]
+          - button "Dealers" [ref=e47] [cursor=pointer]
+          - button "Support" [ref=e48] [cursor=pointer]
+        - generic [ref=e49]:
+          - button [ref=e50] [cursor=pointer]:
+            - img [ref=e51]
+          - button [ref=e53] [cursor=pointer]:
+            - img [ref=e54]
+          - button [ref=e56] [cursor=pointer]:
+            - img [ref=e57]
+          - button "2" [ref=e60] [cursor=pointer]:
+            - img [ref=e61]
+            - generic [ref=e63]: "2"
+          - button "User" [ref=e65] [cursor=pointer]:
+            - img "User" [ref=e66]
+    - main [ref=e67]:
+      - generic [ref=e74]:
+        - complementary [ref=e75]:
+          - generic [ref=e76]:
+            - generic [ref=e77]:
+              - img [ref=e79]
+              - heading "Dashboard" [level=3] [ref=e81]
+            - button "Overview" [ref=e82] [cursor=pointer]:
+              - generic [ref=e84]:
+                - img [ref=e85]
+                - generic [ref=e88]: Overview
+            - button "Analytics" [ref=e89] [cursor=pointer]:
+              - generic [ref=e91]:
+                - img [ref=e92]
+                - generic [ref=e94]: Analytics
+            - button "My Listings" [ref=e95] [cursor=pointer]:
+              - generic [ref=e97]:
+                - img [ref=e98]
+                - generic [ref=e100]: My Listings
+            - button "Reports 0" [ref=e101] [cursor=pointer]:
+              - generic [ref=e103]:
+                - img [ref=e104]
+                - generic [ref=e106]: Reports
+              - text: "0"
+            - button "Sales History" [ref=e107] [cursor=pointer]:
+              - generic [ref=e109]:
+                - img [ref=e110]
+                - generic [ref=e112]: Sales History
+            - button "Add Vehicle" [ref=e113] [cursor=pointer]:
+              - generic [ref=e115]:
+                - img [ref=e116]
+                - generic [ref=e118]: Add Vehicle
+            - button "Inquiries 0" [ref=e119] [cursor=pointer]:
+              - generic [ref=e121]:
+                - img [ref=e122]
+                - generic [ref=e124]: Inquiries
+              - text: "0"
+        - main [ref=e125]:
+          - generic [ref=e127]:
+            - generic [ref=e128]:
+              - generic [ref=e129]:
+                - generic [ref=e130]:
+                  - img [ref=e133]
+                  - paragraph [ref=e138]: "0"
+                - heading "Active Listings" [level=3] [ref=e139]
+              - generic [ref=e140]:
+                - generic [ref=e141]:
+                  - img [ref=e144]
+                  - paragraph [ref=e147]: "0"
+                - heading "Unread Messages" [level=3] [ref=e148]
+              - generic [ref=e149]:
+                - generic [ref=e150]:
+                  - img [ref=e153]
+                  - paragraph [ref=e156]: 0.0 (0)
+                - heading "Your Seller Rating" [level=3] [ref=e157]
+            - generic [ref=e158]:
+              - 'heading "Your Plan: Premium" [level=3] [ref=e159]':
+                - generic [ref=e160]: "Your Plan: Premium"
+              - generic [ref=e161]:
+                - generic [ref=e162]:
+                  - generic [ref=e163]: "Active Listings:"
+                  - generic [ref=e164]: 0 / ∞
+                - generic [ref=e166]:
+                  - generic [ref=e167]: "Featured Credits:"
+                  - generic [ref=e168]: 5 remaining
+                - generic [ref=e169]:
+                  - generic [ref=e170]: "Free Certifications:"
+                  - generic [ref=e171]: 2 remaining
+                - generic [ref=e173]:
+                  - generic [ref=e174]: "Expiry Date:"
+                  - generic [ref=e175]: Not set
+                - generic [ref=e176]:
+                  - heading "Plan Features:" [level=4] [ref=e177]
+                  - list [ref=e178]:
+                    - listitem [ref=e179]:
+                      - img [ref=e180]
+                      - generic [ref=e182]: Unlimited Active Listings
+                    - listitem [ref=e183]:
+                      - img [ref=e184]
+                      - generic [ref=e186]: 5 Featured Credits/month
+                    - listitem [ref=e187]:
+                      - img [ref=e188]
+                      - generic [ref=e190]: 3 Free Certified Inspections/month
+                    - listitem [ref=e191]:
+                      - img [ref=e192]
+                      - generic [ref=e194]: AI Listing Assistant
+                    - listitem [ref=e195]:
+                      - img [ref=e196]
+                      - generic [ref=e198]: Advanced Analytics
+                    - listitem [ref=e199]:
+                      - img [ref=e200]
+                      - generic [ref=e202]: Dedicated Support
+            - generic [ref=e203]:
+              - heading "✨ AI Sales Assistant" [level=3] [ref=e204]:
+                - generic [ref=e205]: ✨ AI Sales Assistant
+              - generic [ref=e206]:
+                - img [ref=e207]
+                - heading "All Clear!" [level=4] [ref=e209]
+                - paragraph [ref=e210]: Your AI assistant has no new suggestions right now. Great job!
+    - generic [ref=e215]:
+      - generic [ref=e216]:
+        - generic [ref=e217]:
+          - paragraph [ref=e218]: The premier AI-driven marketplace for your next vehicle. Trusted by over 1 million customers nationwide.
+          - generic [ref=e219]:
+            - generic [ref=e220]:
+              - img [ref=e221]
+              - generic [ref=e223]: Verified Platform
+            - generic [ref=e224]:
+              - img [ref=e225]
+              - generic [ref=e227]: Secure Payments
+        - generic [ref=e228]:
+          - heading "Quick Links" [level=3] [ref=e229]
+          - generic [ref=e230]:
+            - link "Buy Used Cars" [ref=e231] [cursor=pointer]:
+              - /url: "#"
+            - link "Sell Your Car" [ref=e232] [cursor=pointer]:
+              - /url: "#"
+            - link "New Cars" [ref=e233] [cursor=pointer]:
+              - /url: "#"
+            - link "Dealer Network" [ref=e234] [cursor=pointer]:
+              - /url: "#"
+        - generic [ref=e235]:
+          - heading "Support" [level=3] [ref=e236]
+          - generic [ref=e237]:
+            - link "Contact Support" [ref=e238] [cursor=pointer]:
+              - /url: "#"
+            - link "FAQ" [ref=e239] [cursor=pointer]:
+              - /url: "#"
+            - link "Privacy Policy" [ref=e240] [cursor=pointer]:
+              - /url: "#"
+            - link "Terms of Service" [ref=e241] [cursor=pointer]:
+              - /url: "#"
+      - generic [ref=e243]:
+        - paragraph [ref=e244]: © 2025 ReRide. All rights reserved.
+        - generic [ref=e245]:
+          - generic [ref=e246]: Made with ❤️ in India
+          - generic [ref=e247]:
+            - img [ref=e249]
+            - generic [ref=e251]: Premium Platform
+```
