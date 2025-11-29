@@ -7,11 +7,8 @@ interface PaymentStatusCardProps {
 }
 
 const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) => {
-  // Early return if currentUser or email is missing
-  if (!currentUser || !currentUser.email) {
-    return null;
-  }
-
+  // CRITICAL FIX: Hooks must be called unconditionally (React Rules of Hooks)
+  // Moved useState hooks BEFORE any conditional returns
   const [paymentRequest, setPaymentRequest] = useState<PaymentRequest | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,6 +18,7 @@ const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) =>
       // Add safety check for currentUser and email
       if (!currentUser || !currentUser.email) {
         console.warn('PaymentStatusCard: currentUser or email is missing');
+        setLoading(false);
         return;
       }
       const request = await getPaymentRequestStatus(currentUser.email);
@@ -35,8 +33,16 @@ const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) =>
   useEffect(() => {
     if (currentUser?.email) {
       loadPaymentStatus();
+    } else {
+      // If no email, set loading to false to prevent infinite loading state
+      setLoading(false);
     }
   }, [currentUser?.email]);
+
+  // Early return AFTER hooks - this is the correct pattern
+  if (!currentUser || !currentUser.email) {
+    return null;
+  }
 
   if (loading) {
     return (
