@@ -2298,7 +2298,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             onCancel={handleFormCancel} 
             vehicleData={vehicleData} 
             onFeatureListing={onFeatureListing}
-            allVehicles={allVehicles}
+            allVehicles={safeAllVehicles}
         />;
       case 'inquiries':
         return (
