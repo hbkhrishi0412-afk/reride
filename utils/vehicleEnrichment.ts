@@ -8,9 +8,21 @@ import { Vehicle, User } from '../types';
  * @returns Array of vehicles with populated seller names
  */
 export const enrichVehiclesWithSellerInfo = (vehicles: Vehicle[], users: User[]): Vehicle[] => {
+  // Safety checks: ensure arrays are defined
+  if (!Array.isArray(vehicles)) {
+    console.warn('⚠️ enrichVehiclesWithSellerInfo: vehicles is not an array', vehicles);
+    return [];
+  }
+  if (!Array.isArray(users)) {
+    console.warn('⚠️ enrichVehiclesWithSellerInfo: users is not an array', users);
+    return vehicles; // Return vehicles as-is if users array is invalid
+  }
+  
   return vehicles.map(vehicle => {
+    if (!vehicle) return vehicle; // Skip null/undefined vehicles
+    
     // Find the seller user by email
-    const seller = users.find(user => user.email === vehicle.sellerEmail);
+    const seller = users.find(user => user && user.email === vehicle.sellerEmail);
     
     if (seller) {
       return {

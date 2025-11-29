@@ -598,10 +598,13 @@ const AppContent: React.FC = React.memo(() => {
             <Dashboard
               seller={currentUser}
               sellerVehicles={enrichVehiclesWithSellerInfo(
-                vehicles.filter(v => 
-                  v.sellerEmail?.toLowerCase().trim() === currentUser.email?.toLowerCase().trim()
-                ), 
-                users
+                (vehicles || []).filter(v => {
+                  if (!v || !currentUser?.email) return false;
+                  const vehicleSellerEmail = v.sellerEmail?.toLowerCase()?.trim();
+                  const userEmail = currentUser.email?.toLowerCase()?.trim();
+                  return vehicleSellerEmail && userEmail && vehicleSellerEmail === userEmail;
+                }), 
+                users || []
               )}
               reportedVehicles={[]}
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
