@@ -695,7 +695,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   if (isWishlistMode) {
      return (
       <div className="animate-fade-in container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-6 border-b border-gray-200-200 dark:border-gray-200-200 pb-4">{categoryTitle}</h1>
+        <h1 className="text-3xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-5 border-b border-gray-200-200 dark:border-gray-200-200 pb-3">{categoryTitle}</h1>
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {isLoading ? (
             Array.from({ length: 3 }).map((_, index) => <VehicleCardSkeleton key={index} />)

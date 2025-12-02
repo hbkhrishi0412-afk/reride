@@ -102,7 +102,7 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
         <div className="p-4 flex-grow flex flex-col">
           {/* Vehicle Title - Large and Bold */}
           <div className="mb-2">
-            <h3 className="text-lg font-bold text-gray-900 leading-tight">
+            <h3 className="text-base font-bold text-gray-900 leading-tight">
               {vehicle.year} {vehicle.make} {vehicle.model}
             </h3>
             {vehicle.variant && (
@@ -291,7 +291,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                     </div>
                     
                     {/* Main Heading with Premium Typography */}
-                    <h1 className="text-3xl md:text-4xl font-black mb-6 text-white leading-tight">
+                    <h1 className="text-2xl md:text-3xl font-black mb-5 text-white leading-tight">
                         <span className="bg-gradient-to-r from-white via-blue-100 to-orange-100 bg-clip-text text-transparent">
                             Premium Used Cars
                         </span>
@@ -426,7 +426,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                                         <span>⭐</span>
                                         <span>HOMEPAGE SPOTLIGHT</span>
                                     </div>
-                                    <h2 className="text-4xl font-bold text-gray-900 mb-4">Premium Listings</h2>
+                                    <h2 className="text-3xl font-bold text-gray-900 mb-4">Premium Listings</h2>
                                     <p className="text-gray-600 text-lg">Discover our most promoted vehicles with maximum visibility</p>
                                 </div>
                                 
@@ -519,7 +519,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                             <span className="text-lg">🔥</span>
                             <span>FEATURED COLLECTION</span>
                         </div>
-                        <h2 className="text-4xl md:text-5xl font-black mb-6 bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
+                        <h2 className="text-3xl md:text-4xl font-black mb-5 bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
                             Premium Vehicles
                         </h2>
                         <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
@@ -578,7 +578,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                             </svg>
                             <span>EXPLORE BY LOCATION</span>
                         </div>
-                        <h2 className="text-4xl md:text-5xl font-black mb-6 bg-gradient-to-r from-gray-900 via-indigo-800 to-blue-800 bg-clip-text text-transparent">
+                        <h2 className="text-3xl md:text-4xl font-black mb-5 bg-gradient-to-r from-gray-900 via-indigo-800 to-blue-800 bg-clip-text text-transparent">
                             Find Cars Near You
                         </h2>
                         <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
@@ -711,7 +711,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                             </svg>
                             <span>VEHICLE CATEGORIES</span>
                         </div>
-                        <h2 className="text-4xl md:text-5xl font-black mb-6 bg-gradient-to-r from-gray-900 via-purple-800 to-pink-800 bg-clip-text text-transparent">
+                        <h2 className="text-3xl md:text-4xl font-black mb-5 bg-gradient-to-r from-gray-900 via-purple-800 to-pink-800 bg-clip-text text-transparent">
                             Browse by Category
                         </h2>
                         <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
@@ -816,7 +816,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                  <section className="py-20 bg-white relative overflow-hidden">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="text-center mb-16 animate-fadeInUp">
-                             <h2 className="text-3xl md:text-4xl font-bold mb-4 premium-text-gradient">
+                             <h2 className="text-2xl md:text-3xl font-bold mb-4 premium-text-gradient">
                                  Recommended For You
                              </h2>
                              <p className="text-lg text-spinny-text-dark max-w-2xl mx-auto">
@@ -865,7 +865,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                             <span className="text-lg">⭐</span>
                             <span>TRENDING NOW</span>
                         </div>
-                        <h2 className="text-4xl md:text-5xl font-black mb-6 bg-gradient-to-r from-gray-900 via-orange-800 to-red-800 bg-clip-text text-transparent">
+                        <h2 className="text-3xl md:text-4xl font-black mb-5 bg-gradient-to-r from-gray-900 via-orange-800 to-red-800 bg-clip-text text-transparent">
                             Popular Vehicles
                         </h2>
                         <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
@@ -925,7 +925,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                                 </svg>
                                 <span>RECENTLY VIEWED</span>
                             </div>
-                            <h2 className="text-4xl md:text-5xl font-black mb-6 bg-gradient-to-r from-gray-900 via-indigo-800 to-purple-800 bg-clip-text text-transparent">
+                            <h2 className="text-3xl md:text-4xl font-black mb-5 bg-gradient-to-r from-gray-900 via-indigo-800 to-purple-800 bg-clip-text text-transparent">
                                 Continue Your Journey
                             </h2>
                             <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
@@ -981,7 +981,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                             <span>FOR SELLERS</span>
                         </div>
                         
-                        <h2 className="text-4xl md:text-6xl font-black mb-8 text-white leading-tight">
+                        <h2 className="text-3xl md:text-4xl font-black mb-6 text-white leading-tight">
                             <span className="bg-gradient-to-r from-white via-blue-100 to-purple-100 bg-clip-text text-transparent">
                                 Ready to Sell?
                             </span>

@@ -6,6 +6,10 @@ import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { reportWebVitals, logPerformanceMetrics } from './utils/performance';
 import { isDevelopmentEnvironment } from './utils/environment';
+import { initializeViewportZoom } from './utils/viewportZoom';
+
+// Initialize viewport zoom fix immediately on app load - applies to ALL pages
+initializeViewportZoom();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
