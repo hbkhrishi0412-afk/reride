@@ -902,8 +902,7 @@ const AppContent: React.FC = React.memo(() => {
                     ? result.usedCertifications
                     : usedCertifications + 1;
 
-                  // Normalize emails for comparison (critical for production)
-                  const normalizedSellerEmail = seller.email ? seller.email.toLowerCase().trim() : '';
+                  // Reuse normalizedSellerEmail from line 834 (already normalized)
                   setUsers((prevUsers: User[]) =>
                     prevUsers.map((user: User) => {
                       if (!user || !user.email) return user;

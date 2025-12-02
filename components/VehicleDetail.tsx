@@ -9,8 +9,6 @@ import Benefits from './Benefits';
 import QuickViewModal from './QuickViewModal';
 import BadgeDisplay from './BadgeDisplay';
 import VehicleHistory from './VehicleHistory';
-import MobileImageGallery from './MobileImageGallery';
-import useIsMobileApp from '../hooks/useIsMobileApp';
 import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
 
@@ -101,17 +99,17 @@ const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; d
         <div className="bg-white rounded-xl shadow-soft overflow-hidden">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex justify-between items-center text-left p-4"
+                className="w-full flex justify-between items-center text-left p-6"
                 aria-expanded={isOpen}
             >
-                <h3 className="text-base font-semibold text-spinny-text-dark dark:text-spinny-text-dark">{title}</h3>
-                <svg className={`w-5 h-5 text-spinny-text transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <h3 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">{title}</h3>
+                <svg className={`w-6 h-6 text-spinny-text transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
             <div className={`grid transition-[grid-template-rows] duration-500 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
                 <div className="overflow-hidden">
-                    <div className="p-4 pt-0 border-t border-gray-200-200 dark:border-gray-200-200">
+                    <div className="p-6 pt-0 border-t border-gray-200-200 dark:border-gray-200-200">
                         {children}
                     </div>
                 </div>
@@ -122,10 +120,10 @@ const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; d
 
 
 const KeySpec: React.FC<{ label: string; value: string | number; icon?: React.ReactNode }> = memo(({ label, value, icon }) => (
-    <div className="flex flex-col gap-1 p-3 bg-spinny-off-white dark:bg-white rounded-lg text-center">
+    <div className="flex flex-col gap-1 p-4 bg-spinny-off-white dark:bg-white rounded-lg text-center">
         {icon && <div className="mx-auto mb-1" style={{ color: '#1E88E5' }}>{icon}</div>}
-        <span className="text-xs font-medium text-brand-gray-600 dark:text-spinny-text">{label}</span>
-        <span className="text-sm font-bold text-spinny-text-dark dark:text-spinny-text-dark">{value}</span>
+        <span className="text-sm font-medium text-brand-gray-600 dark:text-spinny-text">{label}</span>
+        <span className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{value}</span>
     </div>
 ));
 
@@ -190,12 +188,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   console.log('🎯 VehicleDetail component rendering with vehicle:', vehicle);
   console.log('🎯 Vehicle data:', { id: vehicle?.id, make: vehicle?.make, model: vehicle?.model, price: vehicle?.price });
   
-  // Mobile app detection
-  const { isMobileApp } = useIsMobileApp();
-  
-  // Get updateVehicle from context at top level (hooks must be called at top level)
-  const { updateVehicle } = useApp();
-  
   // Lightweight safety check - only essential properties
   const safeVehicle = {
     ...vehicle,
@@ -232,17 +224,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
   const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
-  const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
-  
-  // Calculate starting EMI (80% loan, 10.75% interest, 60 months)
-  const startingEMI = useMemo(() => {
-    const loanAmount = safeVehicle.price * 0.8;
-    const monthlyRate = 10.75 / 12 / 100;
-    const n = 60;
-    if (monthlyRate === 0) return Math.round(loanAmount / n);
-    const emi = (loanAmount * monthlyRate * Math.pow(1 + monthlyRate, n)) / (Math.pow(1 + monthlyRate, n) - 1);
-    return Math.round(emi);
-  }, [safeVehicle.price]);
 
   useEffect(() => {
     setCurrentIndex(0);
@@ -290,9 +271,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const isCompareDisabled = !isComparing && comparisonList.length >= 4;
   
   const seller = useMemo(() => {
-    if (!safeVehicle?.sellerEmail) return undefined;
-    const normalizedSellerEmail = safeVehicle.sellerEmail.toLowerCase().trim();
-    return users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail);
+    return users.find(u => u.email === safeVehicle.sellerEmail);
   }, [users, safeVehicle.sellerEmail]);
 
   const filteredRecommendations = useMemo(() => {
@@ -324,6 +303,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
           } catch {}
           // Update global vehicles state via context so dashboards reflect the change
           try {
+            const { updateVehicle } = useApp();
             // Call asynchronously; ignore errors
             updateVehicle(safeVehicle.id, { views: data.views }).catch(() => {});
           } catch {}
@@ -335,22 +315,36 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     if (safeVehicle?.id) {
       trackView();
     }
-  }, [safeVehicle?.id, updateVehicle]);
+  }, [safeVehicle?.id]);
 
   console.log('🎯 VehicleDetail about to render JSX');
   return (
     <>
-      <div className={`bg-white dark:bg-white animate-fade-in ${isMobileApp ? 'pb-24' : ''}`}>
-          <div className={`${isMobileApp ? 'px-0' : 'container mx-auto px-4 sm:px-6 lg:px-8'} py-8`}>
-              {!isMobileApp && (
-                <button onClick={onBackToHome} className="mb-6 bg-white text-spinny-text-dark dark:text-brand-gray-200 font-bold py-2 px-4 rounded-lg hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors shadow-soft">
-                  &larr; Back to Listings
-                </button>
-              )}
+      <div className="bg-white dark:bg-white animate-fade-in">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <button onClick={onBackToHome} className="mb-6 bg-white text-spinny-text-dark dark:text-brand-gray-200 font-bold py-2 px-4 rounded-lg hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors shadow-soft">
+                &larr; Back to Listings
+              </button>
               
-              <div className={`${isMobileApp ? 'flex flex-col' : 'grid grid-cols-1 lg:grid-cols-3'} gap-6 items-start`}>
+              <h1 className="text-4xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-2">{safeVehicle.year} {safeVehicle.make} {safeVehicle.model} {safeVehicle.variant || ''}</h1>
+              <div className="flex items-center gap-4 mb-6">
+                  <div className="flex items-center gap-2">
+                    <StarRating rating={safeVehicle.averageRating || 0} readOnly />
+                    <span className="text-brand-gray-600 dark:text-spinny-text">
+                        {safeVehicle.averageRating?.toFixed(1) || 'No rating'} ({safeVehicle.ratingCount || 0} reviews)
+                    </span>
+                  </div>
+                  {safeVehicle.certifiedInspection && (
+                      <span className="bg-spinny-orange-light text-spinny-orange text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44-1.22a.75.75 0 00-1.06 0L8.172 6.172a.75.75 0 00-1.06 1.06L8.94 9.332a.75.75 0 001.191.04l3.22-4.294a.75.75 0 00-.04-1.19z" clipRule="evenodd" /></svg>
+                          Certified
+                      </span>
+                  )}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   {/* Left Column: Media */}
-                  <div className={`${isMobileApp ? 'w-full' : 'lg:col-span-2'} space-y-3`}>
+                  <div className="lg:col-span-2 space-y-4">
                     {safeVehicle.videoUrl && (
                       <div className="flex space-x-2 border-b-2 border-gray-200-200 dark:border-gray-200-200">
                         <button onClick={() => setActiveMediaTab('images')} className={`py-2 px-4 font-semibold ${activeMediaTab === 'images' ? 'border-b-2' : 'text-spinny-text'}`} style={activeMediaTab === 'images' ? { borderColor: '#FF6B35', color: '#FF6B35' } : undefined}>Images</button>
@@ -359,31 +353,21 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     )}
                     {activeMediaTab === 'images' ? (
                       <>
-                        {/* Use MobileImageGallery in mobile app mode */}
-                        {isMobileApp ? (
-                          <MobileImageGallery
-                            images={getValidImages(safeVehicle.images)}
-                            alt={`${safeVehicle.make} ${safeVehicle.model}`}
-                          />
-                        ) : (
-                          <>
-                            <div className="relative group">
-                                <img key={currentIndex} className="w-full h-auto object-cover rounded-xl shadow-soft-xl animate-fade-in" src={getValidImages(safeVehicle.images)[currentIndex] || getFirstValidImage(safeVehicle.images)} alt={`${safeVehicle.make} ${safeVehicle.model} image ${currentIndex + 1}`} />
-                                {safeVehicle.images.length > 1 && (
-                                    <>
-                                        <button onClick={handlePrevImage} className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/40 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Previous image"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
-                                        <button onClick={handleNextImage} className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/40 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Next image"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
-                                    </>
-                                )}
-                            </div>
+                        <div className="relative group">
+                            <img key={currentIndex} className="w-full h-auto object-cover rounded-xl shadow-soft-xl animate-fade-in" src={getValidImages(safeVehicle.images)[currentIndex] || getFirstValidImage(safeVehicle.images)} alt={`${safeVehicle.make} ${safeVehicle.model} image ${currentIndex + 1}`} />
                             {safeVehicle.images.length > 1 && (
-                                <div className="flex space-x-2 overflow-x-auto pb-2">
-                                    {getValidImages(safeVehicle.images).map((img, index) => (
-                                        <img key={index} src={getSafeImageSrc(img)} alt={`Thumbnail ${index + 1}`} className={`cursor-pointer rounded-md border-2 h-16 w-24 object-cover flex-shrink-0 ${currentIndex === index ? 'border-orange-500' : 'border-gray-200'} transition hover:border-orange-400`} onClick={() => setCurrentIndex(index)} />
-                                    ))}
-                                </div>
+                                <>
+                                    <button onClick={handlePrevImage} className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/40 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Previous image"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
+                                    <button onClick={handleNextImage} className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/40 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" aria-label="Next image"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
+                                </>
                             )}
-                          </>
+                        </div>
+                        {safeVehicle.images.length > 1 && (
+                            <div className="flex space-x-2 overflow-x-auto pb-2 -mt-2">
+                                {getValidImages(safeVehicle.images).map((img, index) => (
+                                    <img key={index} src={getSafeImageSrc(img)} alt={`Thumbnail ${index + 1}`} className={`cursor-pointer rounded-md border-2 h-20 w-28 object-cover flex-shrink-0 ${currentIndex === index ? '' : 'border-transparent'} transition`} style={currentIndex === index ? { borderColor: '#FF6B35' } : undefined} onMouseEnter={(e) => currentIndex !== index && (e.currentTarget.style.borderColor = 'var(--spinny-blue)')} onMouseLeave={(e) => currentIndex !== index && (e.currentTarget.style.borderColor = '')} onClick={() => setCurrentIndex(index)} />
+                                ))}
+                            </div>
                         )}
                       </>
                     ) : (
@@ -394,200 +378,66 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                   </div>
                   
                   {/* Right Column: Price and Actions */}
-                  <div className={`${isMobileApp ? 'w-full' : 'lg:col-span-1'} space-y-4`}>
-                      <div className={`${isMobileApp ? 'p-4' : 'p-5'} bg-white rounded-xl shadow-soft-lg space-y-4 ${!isMobileApp ? 'sticky top-24' : ''}`}>
-                          {/* Car Title and Basic Info - Compact */}
-                          <div className="space-y-2">
-                              <div className="flex items-start justify-between gap-2">
-                                  <h1 className={`${isMobileApp ? 'text-xl' : 'text-2xl'} font-bold text-spinny-text-dark dark:text-spinny-text-dark leading-tight`}>
-                                      {safeVehicle.year} {safeVehicle.make} {safeVehicle.model} {safeVehicle.variant || ''}
-                                  </h1>
-                                  <button
-                                      onClick={() => onToggleWishlist(safeVehicle.id)}
-                                      className={`flex-shrink-0 p-2 rounded-full transition-colors ${isInWishlist ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500'}`}
-                                      aria-label={isInWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-                                  >
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill={isInWishlist ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
-                                          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                                      </svg>
-                                  </button>
-                              </div>
-                              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                  <span>{safeVehicle.mileage?.toLocaleString('en-IN') || 'N/A'} km</span>
-                                  <span>·</span>
-                                  <span>{safeVehicle.fuelType || 'N/A'}</span>
-                                  <span>·</span>
-                                  <span>{safeVehicle.transmission || 'N/A'}</span>
-                              </div>
-                          </div>
-
-                          {/* Location */}
-                          {(safeVehicle.city || safeVehicle.state) && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                      <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                                  </svg>
-                                  <span>{safeVehicle.city || ''}{safeVehicle.city && safeVehicle.state ? ', ' : ''}{safeVehicle.state || ''}</span>
-                              </div>
-                          )}
-
-                          {/* Assured Badge */}
-                          {safeVehicle.certifiedInspection && (
-                              <div className="flex items-center gap-2">
-                                  <span className="bg-purple-100 text-purple-700 text-xs font-semibold px-2.5 py-1 rounded-full">Assured</span>
-                                  <span className="text-xs text-gray-600 dark:text-gray-400">High quality, less driven</span>
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                  </svg>
-                              </div>
-                          )}
-
-                          {/* Price Section */}
-                          <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
-                              <p className="text-xs text-gray-600 dark:text-gray-400">Fixed on road price</p>
-                              <div className="flex items-baseline gap-2">
-                                  <p className={`${isMobileApp ? 'text-2xl' : 'text-3xl'} font-bold`} style={{ color: '#9333EA' }}>
-                                      {safeVehicle.price >= 100000 
-                                        ? `₹${(safeVehicle.price / 100000).toFixed(2)} Lakh`
-                                        : `₹${safeVehicle.price.toLocaleString('en-IN')}`
-                                      }
-                                  </p>
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                  </svg>
-                              </div>
-                              <p className="text-xs text-gray-500 dark:text-gray-500">Includes RC transfer, insurance & more</p>
-                          </div>
-
-                          {/* EMI Info */}
-                          <div className="space-y-2">
-                              <div className="flex items-baseline gap-2">
-                                  <span className="text-sm text-gray-600 dark:text-gray-400">or</span>
-                                  <span className="text-lg font-semibold" style={{ color: '#9333EA' }}>₹{startingEMI.toLocaleString('en-IN')}/m</span>
-                                  <span className="text-sm text-gray-600 dark:text-gray-400">Starting EMI</span>
-                              </div>
-                              <button 
-                                  onClick={() => setShowEMICalculator(!showEMICalculator)} 
-                                  className="text-sm font-medium text-purple-700 hover:text-purple-800 transition-colors"
-                              >
-                                  Calculate your EMI
+                  <div className="space-y-6 self-start lg:sticky top-24">
+                      <div className="p-6 bg-white rounded-xl shadow-soft-lg space-y-4">
+                           <p className="text-4xl font-extrabold" style={{ color: '#FF6B35' }}>₹{safeVehicle.price.toLocaleString('en-IN')}</p>
+                           <button onClick={() => onStartChat(safeVehicle)} className="w-full btn-brand-primary text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
+                                Chat with Seller
+                            </button>
+                            <div className="flex gap-4">
+                               <button
+                                  onClick={() => onToggleCompare(safeVehicle.id)}
+                                  disabled={isCompareDisabled}
+                                  className={`w-full font-bold py-3 px-4 rounded-lg text-lg transition-all flex items-center justify-center gap-2 ${isComparing ? 'bg-spinny-orange text-spinny-orange' : 'bg-spinny-light-gray dark:bg-brand-gray-700'} ${isCompareDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  {isComparing ? 'Comparing' : 'Compare'}
                               </button>
-                              {showEMICalculator && (
-                                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                      <EMICalculator price={safeVehicle.price} />
-                                  </div>
-                              )}
-                          </div>
-
-                          {/* Seller Information Section */}
-                          {seller && (
-                              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                                  <h3 className="text-base font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-3">Seller Information</h3>
-                                  <div className="flex items-center gap-4">
-                                      <img src={getSafeImageSrc(seller.logoUrl, `https://i.pravatar.cc/100?u=${seller.email}`)} alt="Seller Logo" className="w-16 h-16 rounded-full object-cover" />
-                                      <div className="flex-1">
-                                          <h4 className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{seller.dealershipName || seller.name}</h4>
-                                          <div className="flex items-center gap-1 mt-1">
-                                              <StarRating rating={seller.averageRating || 0} size="sm" readOnly />
-                                              <span className="text-xs text-spinny-text dark:text-spinny-text">({seller.ratingCount || 0})</span>
-                                          </div>
-                                          <BadgeDisplay badges={seller.badges || []} size="sm" />
-                                          <div className="text-xs text-brand-gray-600 dark:text-spinny-text mt-1">
-                                              {getFollowersCount(seller.email)} Followers • {getFollowingCount(seller.email)} Following
-                                          </div>
-                                      </div>
-                                  </div>
-                                  <button onClick={() => onViewSellerProfile(seller.email)} className="mt-4 w-full text-center text-sm font-bold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>View Seller Profile</button>
-                                  {canRate && <div className="mt-4 pt-4 border-t dark:border-gray-200-200">
-                                      <p className="text-sm font-medium text-center text-brand-gray-600 dark:text-spinny-text mb-2">Rate your experience with this seller</p>
-                                      <div className="flex justify-center">
-                                        <StarRating rating={0} onRate={handleRateSeller} />
-                                      </div>
-                                      {showSellerRatingSuccess && <p className="text-center text-spinny-orange text-sm mt-2">Thanks for your feedback!</p>}
-                                  </div>}
-                              </div>
-                          )}
-
-                          {/* Action Button */}
-                          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                              <button 
-                                  onClick={() => onStartChat(safeVehicle)} 
-                                  className={`w-full bg-red-600 hover:bg-red-700 text-white font-semibold ${isMobileApp ? 'py-3 px-4 text-base mobile-tap-target' : 'py-3 px-6 rounded-lg'} transition-all`}
-                              >
-                                  Contact Seller
+                               <button
+                                  onClick={() => onToggleWishlist(safeVehicle.id)}
+                                  className={`w-full font-bold py-3 px-4 rounded-lg text-lg transition-all flex items-center justify-center gap-2 ${isInWishlist ? 'bg-spinny-blue text-spinny-orange' : 'bg-spinny-light-gray dark:bg-brand-gray-700'}`}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" /></svg>
+                                  {isInWishlist ? 'Saved' : 'Save'}
                               </button>
-                          </div>
-
-                          {/* Share Section */}
-                          {!isMobileApp && (
-                              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">Share with a friend:</p>
-                                  <div className="flex items-center gap-3">
-                                      <button className="p-2 rounded-full hover:bg-gray-100 transition-colors" aria-label="Share on Instagram">
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="currentColor">
-                                              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                                          </svg>
-                                      </button>
-                                      <button onClick={() => {
-                                          const url = encodeURIComponent(window.location.href);
-                                          window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'noopener,noreferrer');
-                                      }} className="p-2 rounded-full hover:bg-gray-100 transition-colors" aria-label="Share on Facebook">
-                                          <span className="text-gray-600 font-semibold text-sm">f</span>
-                                      </button>
-                                      <button onClick={() => {
-                                          const url = encodeURIComponent(window.location.href);
-                                          const text = encodeURIComponent(`Check out this ${safeVehicle.year} ${safeVehicle.make} ${safeVehicle.model} on ReRide!`);
-                                          window.open(`https://twitter.com/intent/tweet?url=${url}&text=${text}`, '_blank', 'noopener,noreferrer');
-                                      }} className="p-2 rounded-full hover:bg-gray-100 transition-colors" aria-label="Share on Twitter">
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 24 24" fill="currentColor">
-                                              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                                          </svg>
-                                      </button>
-                                      <button className="p-2 rounded-full hover:bg-gray-100 transition-colors" aria-label="Share via Email">
-                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                                              <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                                              <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
-                                          </svg>
-                                      </button>
-                                  </div>
-                              </div>
-                          )}
+                            </div>
+                            <SocialShareButtons vehicle={safeVehicle} />
                       </div>
                       
-                      {/* Mobile Sticky Action Bar */}
-                      {isMobileApp && (
-                        <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-30 safe-bottom">
-                          <div className="flex items-center gap-2 p-3">
-                            <div className="flex-1">
-                              <p className="text-xs text-gray-500">Price</p>
-                              <p className="text-xl font-bold" style={{ color: '#FF6B35' }}>₹{safeVehicle.price.toLocaleString('en-IN')}</p>
+                      {seller && <div className="p-6 bg-white rounded-xl shadow-soft">
+                            <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-3">Seller Information</h3>
+                            <div className="flex items-center gap-4">
+                                <img src={getSafeImageSrc(seller.logoUrl, `https://i.pravatar.cc/100?u=${seller.email}`)} alt="Seller Logo" className="w-16 h-16 rounded-full object-cover" />
+                                <div>
+                                    <h4 className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{seller.dealershipName || seller.name}</h4>
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <StarRating rating={seller.averageRating || 0} size="sm" readOnly />
+                                        <span className="text-xs text-spinny-text dark:text-spinny-text">({seller.ratingCount || 0})</span>
+                                    </div>
+                                    <BadgeDisplay badges={seller.badges || []} size="sm" />
+                                    <div className="text-xs text-brand-gray-600 dark:text-spinny-text mt-1">
+                                        {getFollowersCount(seller.email)} Followers • {getFollowingCount(seller.email)} Following
+                                    </div>
+                                </div>
                             </div>
-                            <button 
-                              onClick={() => onStartChat(safeVehicle)} 
-                              className="flex-1 native-button native-button-primary font-semibold py-3"
-                            >
-                              Contact Seller
-                            </button>
-                            <button
-                              onClick={() => onToggleWishlist(safeVehicle.id)}
-                              className={`p-3 rounded-lg ${isInWishlist ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'} mobile-tap-target`}
-                              aria-label={isInWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-                            >
-                              <svg className="w-6 h-6" fill={isInWishlist ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                            <button onClick={() => onViewSellerProfile(seller.email)} className="mt-4 w-full text-center text-sm font-bold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>View Seller Profile</button>
+                            {canRate && <div className="mt-4 pt-4 border-t dark:border-gray-200-200">
+                                <p className="text-sm font-medium text-center text-brand-gray-600 dark:text-spinny-text mb-2">Rate your experience with this seller</p>
+                                <div className="flex justify-center">
+                                  <StarRating rating={0} onRate={handleRateSeller} />
+                                </div>
+                                {showSellerRatingSuccess && <p className="text-center text-spinny-orange text-sm mt-2">Thanks for your feedback!</p>}
+                            </div>}
+                      </div>}
+                      
+                      <EMICalculator price={safeVehicle.price} />
 
                   </div>
               </div>
               
               {/* Collapsible Sections */}
-               <div className="mt-6 lg:mt-8 space-y-4">
+               <div className="mt-10 lg:mt-12 space-y-6">
                     <CollapsibleSection title="Overview" defaultOpen={true}>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                             <KeySpec label="Make Year" value={safeVehicle.year} />
                             <KeySpec label="Registration" value={safeVehicle.registrationYear} />
                             <KeySpec label="Fuel Type" value={safeVehicle.fuelType} />
@@ -598,15 +448,15 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             <KeySpec label="RTO" value={safeVehicle.rto} />
                         </div>
                         {safeVehicle.description && (
-                            <div className="mt-4">
-                                <h4 className="text-base font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-2">Description</h4>
-                                <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark whitespace-pre-line leading-relaxed">{safeVehicle.description}</p>
+                            <div>
+                                <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-2">Description</h4>
+                                <p className="text-spinny-text-dark dark:text-spinny-text-dark whitespace-pre-line">{safeVehicle.description}</p>
                             </div>
                         )}
                     </CollapsibleSection>
                     
                      <CollapsibleSection title="Detailed Specifications">
-                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
                              <SpecDetail label="Engine" value={safeVehicle.engine} />
                              <SpecDetail label="Displacement" value={safeVehicle.displacement} />
                              <SpecDetail label="Transmission" value={safeVehicle.transmission} />
@@ -619,9 +469,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     </CollapsibleSection>
 
                     <CollapsibleSection title="Features, Pros & Cons">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div>
-                                <h4 className="text-base font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-3">Included Features</h4>
+                                <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Included Features</h4>
                                 {safeVehicle.features.length > 0 ? (
                                     <div className="flex flex-wrap gap-3">
                                         {safeVehicle.features.map(feature => (
@@ -634,7 +484,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 ) : <p className="text-spinny-text">No features listed.</p>}
                             </div>
                              <div>
-                                <h4 className="text-base font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-3">AI Expert Analysis</h4>
+                                <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">AI Expert Analysis</h4>
                                 {isGeneratingProsCons ? (
                                     <div className="flex items-center gap-2 text-spinny-text"><div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin" style={{ borderColor: '#FF6B35' }}></div> Generating...</div>
                                 ) : prosAndCons ? (
@@ -680,16 +530,14 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                   <button onClick={handleFlagClick} className="text-xs text-spinny-text hover:text-spinny-orange">Report this listing</button>
               </div>
 
-              {filteredRecommendations.length > 0 && (
-                <div className="mt-12">
+              {filteredRecommendations.length > 0 && <div className="mt-12">
                   <h2 className="text-3xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Similar Vehicles</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                       {filteredRecommendations.map(v => (
                           <VehicleCard key={v.id} vehicle={v} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(v.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(v.id)} isCompareDisabled={!comparisonList.includes(v.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} onQuickView={setQuickViewVehicle}/>
                       ))}
                   </div>
-                </div>
-              )}
+              </div>}
 
           </div>
       </div>
