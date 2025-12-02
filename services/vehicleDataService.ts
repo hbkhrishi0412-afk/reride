@@ -97,6 +97,21 @@ export const createVehicleData = async (vehicleData: {
       body: JSON.stringify(vehicleData),
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `API returned ${response.status}: ${response.statusText}`
+      };
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      return {
+        success: false,
+        error: 'API returned non-JSON response'
+      };
+    }
+
     const result = await response.json();
     return result;
   } catch (error) {
@@ -126,6 +141,21 @@ export const updateVehicleData = async (id: string, vehicleData: {
       body: JSON.stringify(vehicleData),
     });
 
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `API returned ${response.status}: ${response.statusText}`
+      };
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      return {
+        success: false,
+        error: 'API returned non-JSON response'
+      };
+    }
+
     const result = await response.json();
     return result;
   } catch (error) {
@@ -145,6 +175,21 @@ export const deleteVehicleData = async (id: string): Promise<{ success: boolean;
     const response = await fetch(`${API_BASE_URL}/vehicle-data?id=${id}`, {
       method: 'DELETE',
     });
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: `API returned ${response.status}: ${response.statusText}`
+      };
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      return {
+        success: false,
+        error: 'API returned non-JSON response'
+      };
+    }
 
     const result = await response.json();
     return result;

@@ -120,7 +120,19 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         throw new Error('Geocoding failed');
                     }
                     
-                    const data = await response.json();
+                    // Check content type before parsing JSON
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        throw new Error('Geocoding API returned non-JSON response');
+                    }
+                    
+                    let data;
+                    try {
+                        data = await response.json();
+                    } catch (jsonError) {
+                        console.error('Failed to parse geocoding response:', jsonError);
+                        throw new Error('Failed to parse geocoding response');
+                    }
                     console.log('Geocoding response:', data);
                     
                     // Extract city and state from the response

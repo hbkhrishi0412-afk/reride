@@ -10,10 +10,22 @@ const DbStatusIndicator: React.FC = () => {
             try {
                 const response = await fetch('/api/admin?action=health');
                 if (response.ok) {
-                    const data = await response.json();
-                    if (data.status === 'ok') {
-                        setStatus('connected');
+                    // Check content type before parsing JSON
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        try {
+                            const data = await response.json();
+                            if (data && data.status === 'ok') {
+                                setStatus('connected');
+                            } else {
+                                setStatus('error');
+                            }
+                        } catch (jsonError) {
+                            console.error("Failed to parse DB health response:", jsonError);
+                            setStatus('error');
+                        }
                     } else {
+                        console.warn("DB health check returned non-JSON response");
                         setStatus('error');
                     }
                 } else {

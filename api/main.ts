@@ -305,14 +305,22 @@ async function mainHandler(
   if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost)) {
     res.setHeader('Access-Control-Allow-Origin', origin as string);
   } else if (isProduction && origin) {
-    // In production, use the production origin
-    res.setHeader('Access-Control-Allow-Origin', 'https://reride-app.vercel.app');
+    // In production, check if origin matches any allowed production domain
+    const isAllowedProductionOrigin = config.CORS.ALLOWED_ORIGINS.some(allowedOrigin => 
+      origin === allowedOrigin || origin?.includes(allowedOrigin.replace('https://', ''))
+    );
+    if (isAllowedProductionOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', origin as string);
+    } else {
+      // Fallback to primary production domain
+      res.setHeader('Access-Control-Allow-Origin', 'https://www.reride.co.in');
+    }
   } else if (!isProduction) {
     // In development, allow all origins as fallback
     res.setHeader('Access-Control-Allow-Origin', origin || '*');
   } else {
-    // Production fallback
-    res.setHeader('Access-Control-Allow-Origin', 'https://reride-app.vercel.app');
+    // Production fallback - use primary domain
+    res.setHeader('Access-Control-Allow-Origin', 'https://www.reride.co.in');
   }
   
   res.setHeader('Access-Control-Allow-Methods', config.CORS.ALLOWED_METHODS.join(', '));
@@ -1251,12 +1259,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       });
 
       // Build update operation
-      const updateOperation: any = {};
+      const updateOperation: {
+        $set?: Record<string, unknown>;
+        $unset?: Record<string, string | number>;
+      } = {};
       if (Object.keys(updateFields).length > 0) {
         updateOperation.$set = updateFields;
       }
       if (Object.keys(unsetFields).length > 0) {
-        updateOperation.$unset = unsetFields;
+        // Convert unsetFields to proper format (MongoDB $unset expects empty string or 1)
+        const unsetObj: Record<string, string | number> = {};
+        Object.keys(unsetFields).forEach(key => {
+          unsetObj[key] = '';
+        });
+        updateOperation.$unset = unsetObj;
       }
 
       // Only proceed with update if there are fields to update
@@ -3610,16 +3626,27 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, collection
   try {
     const { category } = req.query;
     
-    let query: any = {};
+    interface FAQQuery {
+      category?: string;
+    }
+    const query: FAQQuery = {};
     
-    if (category && category !== 'all') {
-      query.category = category;
+    if (category && category !== 'all' && typeof category === 'string') {
+      // Sanitize category to prevent NoSQL injection
+      query.category = await sanitizeString(category);
     }
 
     const faqs = await collection.find(query).toArray();
     
     // Transform MongoDB documents to include id field
-    const transformedFaqs = faqs.map((faq: any, index: number) => ({
+    interface FAQDocument {
+      _id?: { toString(): string };
+      id?: number;
+      question?: string;
+      answer?: string;
+      category?: string;
+    }
+    const transformedFaqs = faqs.map((faq: FAQDocument, index: number) => ({
       id: faq.id || (faq._id ? parseInt(faq._id.toString().slice(-8), 16) : index + 1),
       question: faq.question || '',
       answer: faq.answer || '',
@@ -3799,14 +3826,23 @@ async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, 
   try {
     const { userEmail, status } = req.query;
     
-    let query: any = {};
+    interface TicketQuery {
+      userEmail?: string;
+      status?: string;
+    }
+    const query: TicketQuery = {};
     
-    if (userEmail) {
-      query.userEmail = userEmail;
+    if (userEmail && typeof userEmail === 'string') {
+      // Sanitize email to prevent NoSQL injection
+      query.userEmail = await sanitizeString(userEmail);
     }
     
-    if (status) {
-      query.status = status;
+    if (status && typeof status === 'string') {
+      // Validate status is one of allowed values
+      const allowedStatuses = ['Open', 'In Progress', 'Resolved', 'Closed'];
+      if (allowedStatuses.includes(status)) {
+        query.status = status;
+      }
     }
 
     const tickets = await collection.find(query).sort({ createdAt: -1 }).toArray();
@@ -4021,7 +4057,9 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
           });
         }
 
-        const result = await collection.insertOne(submissionData as any);
+        // Sanitize submission data to prevent NoSQL injection
+        const sanitizedSubmissionData = await sanitizeObject(submissionData);
+        const result = await collection.insertOne(sanitizedSubmissionData);
         
         res.status(201).json({
           success: true,
@@ -4032,22 +4070,32 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
 
       case 'GET':
         const { page = 1, limit = 10, status: statusFilter, search } = req.query;
-        const pageNum = parseInt(page as string);
-        const limitNum = parseInt(limit as string);
-        const skip = (pageNum - 1) * limitNum;
+        const pageNum = parseInt(String(page), 10) || 1;
+        const limitNum = parseInt(String(limit), 10) || 10;
+        const skip = Math.max(0, (pageNum - 1) * limitNum);
 
-        let filter: any = {};
+        interface SubmissionFilter {
+          status?: string;
+          $or?: Array<{ [key: string]: { $regex: string; $options: string } }>;
+        }
+        const filter: SubmissionFilter = {};
         
-        if (statusFilter) {
-          filter.status = statusFilter;
+        if (statusFilter && typeof statusFilter === 'string') {
+          // Validate status is one of allowed values
+          const allowedStatuses = ['pending', 'approved', 'rejected', 'processing'];
+          if (allowedStatuses.includes(statusFilter.toLowerCase())) {
+            filter.status = statusFilter;
+          }
         }
         
-        if (search) {
+        if (search && typeof search === 'string') {
+          // Sanitize search term to prevent NoSQL injection
+          const sanitizedSearch = await sanitizeString(search);
           filter.$or = [
-            { registration: { $regex: search, $options: 'i' } },
-            { make: { $regex: search, $options: 'i' } },
-            { model: { $regex: search, $options: 'i' } },
-            { customerContact: { $regex: search, $options: 'i' } }
+            { registration: { $regex: sanitizedSearch, $options: 'i' } },
+            { make: { $regex: sanitizedSearch, $options: 'i' } },
+            { model: { $regex: sanitizedSearch, $options: 'i' } },
+            { customerContact: { $regex: sanitizedSearch, $options: 'i' } }
           ];
         }
 
@@ -4086,11 +4134,29 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
           return res.status(400).json({ error: 'Invalid submission ID format' });
         }
 
-        const updateData: any = {};
-        if (updateStatus) updateData.status = updateStatus;
-        if (adminNotes) updateData.adminNotes = adminNotes;
-        if (estimatedPrice) updateData.estimatedPrice = estimatedPrice;
-        updateData.updatedAt = new Date().toISOString();
+        interface UpdateData {
+          status?: string;
+          adminNotes?: string;
+          estimatedPrice?: number;
+          updatedAt: string;
+        }
+        const updateData: UpdateData = {
+          updatedAt: new Date().toISOString()
+        };
+        
+        // Validate and sanitize update fields
+        if (updateStatus && typeof updateStatus === 'string') {
+          const allowedStatuses = ['pending', 'approved', 'rejected', 'processing'];
+          if (allowedStatuses.includes(updateStatus.toLowerCase())) {
+            updateData.status = updateStatus;
+          }
+        }
+        if (adminNotes && typeof adminNotes === 'string') {
+          updateData.adminNotes = await sanitizeString(adminNotes);
+        }
+        if (estimatedPrice && typeof estimatedPrice === 'number') {
+          updateData.estimatedPrice = estimatedPrice;
+        }
 
         const updateResult = await collection.updateOne(
           { _id: objectId },
@@ -4428,8 +4494,13 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, options: Han
           return res.status(400).json({ error: 'Plan ID is required' });
         }
         
+        // Validate planId is a string
+        if (typeof updatePlanId !== 'string') {
+          return res.status(400).json({ error: 'Plan ID must be a string' });
+        }
+        
         planService.updatePlan(updatePlanId, updateData);
-        const updatedPlan = await planService.getPlanDetails(updatePlanId as any);
+        const updatedPlan = await planService.getPlanDetails(updatePlanId);
         
         return res.status(200).json(updatedPlan);
 

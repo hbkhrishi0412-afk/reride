@@ -42,13 +42,20 @@ export const SECURITY_CONFIG = {
   // CORS Configuration
   CORS: {
     ALLOWED_ORIGINS: process.env.NODE_ENV === 'production'
-      ? [process.env.ALLOWED_ORIGIN || 'https://reride-app.vercel.app']
+      ? [
+          process.env.ALLOWED_ORIGIN || 'https://www.reride.co.in',
+          'https://www.reride.co.in',
+          'https://reride.co.in',
+          'https://reride-app.vercel.app' // Keep for backward compatibility
+        ]
       : [
           'http://localhost:3000',
           'http://localhost:5173',
           'http://localhost:5174',  // FIXED: Added port 5174 for consistency
           'https://reride-app.vercel.app',
-          'https://reride--2-.vercel.app'
+          'https://reride--2-.vercel.app',
+          'https://www.reride.co.in',
+          'https://reride.co.in'
         ],
     ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With'],

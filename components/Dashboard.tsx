@@ -1279,9 +1279,23 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         // Fetch all users and find the current seller
         const response = await fetch('/api/users');
         if (response.ok) {
-          const users = await response.json();
+          // Check content type before parsing
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            console.warn('⚠️ API returned non-JSON response, skipping user refresh');
+            return;
+          }
+          
+          let users;
+          try {
+            users = await response.json();
+          } catch (jsonError) {
+            console.warn('⚠️ Failed to parse JSON response:', jsonError);
+            return;
+          }
+          
           if (Array.isArray(users)) {
-            const updatedSeller = users.find((u: User) => u.email === seller.email);
+            const updatedSeller = users.find((u: User) => u && u.email === seller.email);
             if (updatedSeller) {
               // Check if plan expiry date has changed
               const currentExpiry = seller.planExpiryDate;
@@ -1291,18 +1305,29 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               if (currentExpiry !== newExpiry || 
                   updatedSeller.planActivatedDate !== seller.planActivatedDate ||
                   updatedSeller.subscriptionPlan !== seller.subscriptionPlan) {
-                // Update localStorage with fresh user data
-                localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedSeller));
-                // Trigger a page refresh to update the seller prop
-                // This ensures the dashboard reflects the latest plan expiry date
-                window.location.reload();
+                try {
+                  // Update localStorage with fresh user data
+                  localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedSeller));
+                  // Trigger a page refresh to update the seller prop
+                  // This ensures the dashboard reflects the latest plan expiry date
+                  window.location.reload();
+                } catch (storageError) {
+                  console.warn('⚠️ Failed to update localStorage:', storageError);
+                  // Don't reload if storage fails
+                }
               }
             }
           }
+        } else {
+          // Log non-OK responses but don't throw errors
+          console.warn(`⚠️ User refresh API returned ${response.status}: ${response.statusText}`);
         }
       } catch (error) {
-        console.warn('Failed to refresh user data:', error);
         // Silently fail - don't disrupt user experience
+        // Only log in development to avoid console noise in production
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ Failed to refresh user data:', error);
+        }
       }
     };
 
@@ -1412,17 +1437,31 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       });
       
       if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          // Update local state instead of reloading page
-          onUpdateVehicle(result.vehicle);
-          console.log('✅ Vehicle refreshed successfully');
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const result = await response.json();
+            if (result && result.success && result.vehicle) {
+              // Update local state instead of reloading page
+              onUpdateVehicle(result.vehicle);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('✅ Vehicle refreshed successfully');
+              }
+            }
+          } catch (jsonError) {
+            console.warn('⚠️ Failed to parse refresh response:', jsonError);
+          }
         }
       } else {
-        console.error('❌ Failed to refresh vehicle');
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`⚠️ Failed to refresh vehicle: ${response.status} ${response.statusText}`);
+        }
       }
     } catch (error) {
-      console.error('❌ Error refreshing vehicle:', error);
+      // Silently handle errors to prevent dashboard crashes
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error refreshing vehicle:', error);
+      }
     }
   };
 
@@ -1440,17 +1479,31 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       });
       
       if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          // Update local state instead of reloading page
-          onUpdateVehicle(result.vehicle);
-          console.log('✅ Vehicle renewed successfully');
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const result = await response.json();
+            if (result && result.success && result.vehicle) {
+              // Update local state instead of reloading page
+              onUpdateVehicle(result.vehicle);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('✅ Vehicle renewed successfully');
+              }
+            }
+          } catch (jsonError) {
+            console.warn('⚠️ Failed to parse renew response:', jsonError);
+          }
         }
       } else {
-        console.error('❌ Failed to renew vehicle');
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`⚠️ Failed to renew vehicle: ${response.status} ${response.statusText}`);
+        }
       }
     } catch (error) {
-      console.error('❌ Error renewing vehicle:', error);
+      // Silently handle errors to prevent dashboard crashes
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error renewing vehicle:', error);
+      }
     }
   };
 
@@ -1463,17 +1516,31 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       });
       
       if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          // Update local state
-          onUpdateVehicle(result.vehicle);
-          console.log('✅ Certification request submitted');
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const result = await response.json();
+            if (result && result.success && result.vehicle) {
+              // Update local state
+              onUpdateVehicle(result.vehicle);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('✅ Certification request submitted');
+              }
+            }
+          } catch (jsonError) {
+            console.warn('⚠️ Failed to parse certification response:', jsonError);
+          }
         }
       } else {
-        console.error('❌ Failed to submit certification request');
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`⚠️ Failed to submit certification request: ${response.status} ${response.statusText}`);
+        }
       }
     } catch (error) {
-      console.error('❌ Error submitting certification request:', error);
+      // Silently handle errors to prevent dashboard crashes
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error submitting certification request:', error);
+      }
     }
   };
 
@@ -1486,20 +1553,40 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       });
       
       if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          // Update local state
-          onUpdateVehicle(result.vehicle);
-          console.log('✅ Vehicle marked as sold');
-        } else {
-          console.error('❌ Failed to mark vehicle as sold:', result.reason || 'Unknown error');
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const result = await response.json();
+            if (result && result.success && result.vehicle) {
+              // Update local state
+              onUpdateVehicle(result.vehicle);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('✅ Vehicle marked as sold');
+              }
+            } else if (result && result.reason) {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('⚠️ Failed to mark vehicle as sold:', result.reason);
+              }
+            }
+          } catch (jsonError) {
+            console.warn('⚠️ Failed to parse sold response:', jsonError);
+          }
         }
       } else {
-        const errorText = await response.text();
-        console.error('❌ Failed to mark vehicle as sold:', response.status, errorText);
+        if (process.env.NODE_ENV === 'development') {
+          try {
+            const errorText = await response.text();
+            console.warn(`⚠️ Failed to mark vehicle as sold: ${response.status} ${errorText}`);
+          } catch (textError) {
+            console.warn(`⚠️ Failed to mark vehicle as sold: ${response.status}`);
+          }
+        }
       }
     } catch (error) {
-      console.error('❌ Error marking vehicle as sold:', error);
+      // Silently handle errors to prevent dashboard crashes
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error marking vehicle as sold:', error);
+      }
     }
   };
 
@@ -1521,18 +1608,41 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         body: JSON.stringify({ vehicleId })
       });
       
-      const result = await response.json();
-      
-      if (response.ok && result.success && result.vehicle) {
-        // Update local state
-        onUpdateVehicle(result.vehicle);
-        console.log('✅ Vehicle marked as unsold');
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const result = await response.json();
+            if (result && result.success && result.vehicle) {
+              // Update local state
+              onUpdateVehicle(result.vehicle);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('✅ Vehicle marked as unsold');
+              }
+            } else if (result && result.reason) {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('⚠️ Failed to mark vehicle as unsold:', result.reason);
+              }
+            }
+          } catch (jsonError) {
+            console.warn('⚠️ Failed to parse unsold response:', jsonError);
+          }
+        }
       } else {
-        console.error('❌ Failed to mark vehicle as unsold:', result.reason || 'Unknown error');
-        throw new Error(result.reason || 'Failed to mark vehicle as unsold');
+        if (process.env.NODE_ENV === 'development') {
+          try {
+            const errorText = await response.text();
+            console.warn(`⚠️ Failed to mark vehicle as unsold: ${response.status} ${errorText}`);
+          } catch (textError) {
+            console.warn(`⚠️ Failed to mark vehicle as unsold: ${response.status}`);
+          }
+        }
       }
     } catch (error) {
-      console.error('❌ Error marking vehicle as unsold:', error);
+      // Silently handle errors to prevent dashboard crashes
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error marking vehicle as unsold:', error);
+      }
       // Error is logged, but UI feedback should come from App.tsx via onMarkAsUnsold prop
       if (!onMarkAsUnsold) {
         // Only show alert if prop is not available (shouldn't happen in normal flow)

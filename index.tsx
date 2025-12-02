@@ -82,6 +82,45 @@ reportWebVitals((metric) => {
   // In production, you could send to analytics service here
 });
 
+// CRITICAL: Global error handlers to prevent unhandled promise rejections
+if (typeof window !== 'undefined') {
+  // Handle unhandled promise rejections
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('⚠️ Unhandled promise rejection:', event.reason);
+    
+    // Prevent default browser error handling
+    event.preventDefault();
+    
+    // Log error details (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error details:', {
+        reason: event.reason,
+        promise: event.promise,
+        stack: event.reason?.stack
+      });
+    }
+    
+    // In production, silently handle to prevent dashboard crashes
+    // The ErrorBoundary will catch React errors, but we need to handle
+    // async errors that occur outside React's error boundary
+  });
+  
+  // Handle general errors
+  window.addEventListener('error', (event) => {
+    // Only log in development to avoid console noise
+    if (process.env.NODE_ENV === 'development') {
+      console.error('⚠️ Global error:', {
+        message: event.message,
+        filename: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error
+      });
+    }
+    // Don't prevent default - let ErrorBoundary handle it
+  });
+}
+
 // CRITICAL: Global safety mechanism to prevent infinite loading states
 // This ensures the app never gets stuck in a loading state
 if (typeof window !== 'undefined') {
