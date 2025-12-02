@@ -411,13 +411,29 @@ const authApi = async (body: any): Promise<any> => {
 // --- Environment Detection ---
 // Use local storage in development, API in production
 // Force development mode on localhost even if running on different ports
-const isDevelopment =
-  isDevelopmentEnvironment() ||
-  window.location.hostname === 'localhost' ||
-  window.location.hostname === '127.0.0.1' ||
-  window.location.hostname.includes('localhost') ||
-  window.location.hostname.includes('127.0.0.1') ||
-  window.location.port !== '';
+const isDevelopment = (() => {
+  // Check if we're explicitly in development mode
+  if (isDevelopmentEnvironment()) return true;
+  
+  // Check hostname for local development
+  const hostname = window.location.hostname;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+  
+  // Check if we're on a local development port (common ports)
+  const port = window.location.port;
+  if (port && ['5173', '3000', '3001', '8080', '5174', '4173'].includes(port)) return true;
+  
+  // Check for Vercel preview URLs - these should use API (production mode)
+  if (hostname.includes('vercel.app') || hostname.includes('vercel.com')) return false;
+  
+  // Check for other production domains (not localhost)
+  if (hostname && !hostname.includes('localhost') && !hostname.includes('127.0.0.1') && !port) {
+    return false; // Production domain without port = production
+  }
+  
+  // Default to development if we can't determine (safer for local dev)
+  return true;
+})();
 
 // --- Exported Environment-Aware Service Functions ---
 
@@ -482,16 +498,60 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
   // Only try API in true production environments
   if (!isDevelopment) {
     try {
-      console.log('🌐 Trying API login...');
+      console.log('🌐 Trying API login...', { 
+        email: credentials.email, 
+        role: credentials.role,
+        endpoint: '/api/users'
+      });
       const result = await authApi({ action: 'login', ...credentials });
       
-      // Store JWT tokens if provided
-      if (result.success && result.accessToken && result.refreshToken) {
-        storeTokens(result.accessToken, result.refreshToken);
-        localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+      // Validate API response structure
+      if (!result || typeof result !== 'object') {
+        console.error('❌ Invalid API response structure:', result);
+        throw new Error('Invalid response from server');
       }
       
-      console.log('✅ API login successful');
+      if (!result.success) {
+        console.warn('⚠️ API login failed:', result.reason);
+        return result;
+      }
+      
+      // Validate user object structure (critical for seller dashboard)
+      if (!result.user) {
+        console.error('❌ API response missing user object:', result);
+        throw new Error('User data not received from server');
+      }
+      
+      if (!result.user.email || !result.user.role) {
+        console.error('❌ API user object missing required fields:', {
+          hasEmail: !!result.user.email,
+          hasRole: !!result.user.role,
+          userObject: result.user
+        });
+        throw new Error('Invalid user data received from server');
+      }
+      
+      // Verify role matches requested role
+      if (credentials.role && result.user.role !== credentials.role) {
+        console.warn('⚠️ Role mismatch in API response:', {
+          requested: credentials.role,
+          received: result.user.role,
+          email: result.user.email
+        });
+      }
+      
+      // Store JWT tokens if provided
+      if (result.accessToken && result.refreshToken) {
+        storeTokens(result.accessToken, result.refreshToken);
+        localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+        console.log('✅ Tokens stored successfully');
+      }
+      
+      console.log('✅ API login successful:', {
+        email: result.user.email,
+        role: result.user.role,
+        userId: result.user.id
+      });
       return result;
     } catch (error) {
       // Check if it's a network/server error (should fallback) vs invalid credentials

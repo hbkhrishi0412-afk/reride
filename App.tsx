@@ -572,6 +572,19 @@ const AppContent: React.FC = React.memo(() => {
 
       case ViewEnum.SELLER_DASHBOARD:
         // CRITICAL: Enhanced validation for seller dashboard access
+        console.log('🔍 Seller Dashboard Access Check:', {
+          hasCurrentUser: !!currentUser,
+          userEmail: currentUser?.email,
+          userRole: currentUser?.role,
+          userObject: currentUser ? {
+            id: currentUser.id,
+            email: currentUser.email,
+            role: currentUser.role,
+            name: currentUser.name
+          } : null,
+          isProduction: typeof window !== 'undefined' && !window.location.hostname.includes('localhost')
+        });
+        
         if (!currentUser) {
           console.warn('⚠️ Attempted to render seller dashboard without logged-in user');
           navigate(ViewEnum.LOGIN_PORTAL);
@@ -581,17 +594,20 @@ const AppContent: React.FC = React.memo(() => {
         if (!currentUser.email || !currentUser.role) {
           console.error('❌ Invalid user object - missing email or role:', { 
             hasEmail: !!currentUser.email, 
-            hasRole: !!currentUser.role 
+            hasRole: !!currentUser.role,
+            userObject: currentUser
           });
           navigate(ViewEnum.LOGIN_PORTAL);
           return null;
         }
         
         if (currentUser.role !== 'seller') {
-          console.warn('⚠️ Attempted to render seller dashboard with role:', currentUser.role);
+          console.warn('⚠️ Attempted to render seller dashboard with role:', currentUser.role, 'Expected: seller');
           navigate(ViewEnum.LOGIN_PORTAL);
           return null;
         }
+        
+        console.log('✅ Seller dashboard validation passed, rendering dashboard');
         
         return (
           <DashboardErrorBoundary>

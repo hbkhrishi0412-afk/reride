@@ -148,6 +148,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     // Check for existing logged-in user on app startup
     try {
       const savedUser = localStorage.getItem('reRideCurrentUser');
+      const savedSession = sessionStorage.getItem('currentUser');
+      
       if (savedUser) {
         const user = JSON.parse(savedUser);
         
@@ -155,10 +157,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         if (!user || !user.email || !user.role) {
           console.warn('⚠️ Invalid user object in localStorage - missing required fields:', { 
             hasEmail: !!user?.email, 
-            hasRole: !!user?.role 
+            hasRole: !!user?.role,
+            userObject: user
           });
           // Clear invalid user data
           localStorage.removeItem('reRideCurrentUser');
+          if (savedSession) sessionStorage.removeItem('currentUser');
           return null;
         }
         
@@ -166,13 +170,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         if (!['customer', 'seller', 'admin'].includes(user.role)) {
           console.warn('⚠️ Invalid role in user object:', user.role);
           localStorage.removeItem('reRideCurrentUser');
+          if (savedSession) sessionStorage.removeItem('currentUser');
           return null;
         }
         
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔄 Restoring logged-in user:', user.name, user.role, user.email);
-        }
+        console.log('🔄 Restoring logged-in user:', {
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          userId: user.id,
+          source: 'localStorage',
+          isProduction: !window.location.hostname.includes('localhost')
+        });
         return user;
+      } else if (savedSession) {
+        // Fallback to sessionStorage if localStorage doesn't have user
+        const user = JSON.parse(savedSession);
+        if (user && user.email && user.role && ['customer', 'seller', 'admin'].includes(user.role)) {
+          console.log('🔄 Restoring logged-in user from sessionStorage:', {
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            userId: user.id,
+            source: 'sessionStorage'
+          });
+          // Also restore to localStorage for consistency
+          localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
+          return user;
+        }
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -369,6 +394,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     setCurrentUser(user);
     sessionStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
+    
+    // Verify user storage (for debugging production issues)
+    const storedInSession = sessionStorage.getItem('currentUser');
+    const storedInLocal = localStorage.getItem('reRideCurrentUser');
+    console.log('✅ User stored after login:', {
+      email: user.email,
+      role: user.role,
+      storedInSessionStorage: !!storedInSession,
+      storedInLocalStorage: !!storedInLocal,
+      sessionMatches: storedInSession ? JSON.parse(storedInSession).email === user.email : false,
+      localMatches: storedInLocal ? JSON.parse(storedInLocal).email === user.email : false
+    });
+    
     addToast(`Welcome back, ${user.name}!`, 'success');
     
     // Navigate based on user role
@@ -407,6 +445,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     setCurrentUser(user);
     sessionStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
+    
+    // Verify user storage (for debugging production issues)
+    const storedInSession = sessionStorage.getItem('currentUser');
+    const storedInLocal = localStorage.getItem('reRideCurrentUser');
+    console.log('✅ User stored after registration:', {
+      email: user.email,
+      role: user.role,
+      storedInSessionStorage: !!storedInSession,
+      storedInLocalStorage: !!storedInLocal,
+      sessionMatches: storedInSession ? JSON.parse(storedInSession).email === user.email : false,
+      localMatches: storedInLocal ? JSON.parse(storedInLocal).email === user.email : false
+    });
+    
     addToast(`Welcome to ReRide, ${user.name}!`, 'success');
     
     // Navigate based on user role

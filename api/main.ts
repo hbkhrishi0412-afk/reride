@@ -746,12 +746,51 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const normalizedUser = normalizeUser(user);
       
       if (!normalizedUser || !normalizedUser.role) {
-        logError('❌ Failed to normalize user object:', { email: user.email, hasRole: !!user.role });
+        logError('❌ Failed to normalize user object:', { 
+          email: user.email, 
+          hasRole: !!user.role,
+          userObject: {
+            id: user.id || user._id,
+            email: user.email,
+            role: user.role,
+            has_id: !!user._id,
+            hasId: !!user.id
+          }
+        });
         return res.status(500).json({ 
           success: false, 
           reason: 'Failed to process user data. Please try again.' 
         });
       }
+      
+      // Validate role matches requested role (critical for seller dashboard access)
+      if (sanitizedData.role && normalizedUser.role !== sanitizedData.role) {
+        logWarn('⚠️ Role mismatch in login response:', { 
+          userRole: normalizedUser.role, 
+          requestedRole: sanitizedData.role,
+          email: normalizedUser.email
+        });
+        // Don't fail the login, but log the warning
+        // The frontend will handle role validation
+      }
+      
+      // Ensure email is present (critical for seller dashboard)
+      if (!normalizedUser.email) {
+        logError('❌ Normalized user missing email:', { 
+          userId: normalizedUser.id,
+          role: normalizedUser.role
+        });
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Failed to process user data. Please try again.' 
+        });
+      }
+      
+      logInfo('✅ Login successful:', { 
+        email: normalizedUser.email, 
+        role: normalizedUser.role,
+        userId: normalizedUser.id
+      });
       
       return res.status(200).json({ 
         success: true, 
