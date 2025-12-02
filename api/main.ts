@@ -9,7 +9,7 @@ import { PLAN_DETAILS } from '../constants.js';
 import NewCar from '../models/NewCar.js';
 import RateLimit from '../models/RateLimit.js';
 import { planService } from '../services/planService.js';
-import type { User as UserType, Vehicle as VehicleType } from '../types.js';
+import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan } from '../types.js';
 import { VehicleCategory } from '../types.js';
 import { 
   hashPassword, 
@@ -1181,7 +1181,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       
       // SECURITY FIX: Authorization Check
       // Only allow updates if user is admin or updating their own profile
-      if (!auth.user || (auth.user.role !== 'admin' && auth.user.email !== email)) {
+      // Normalize emails for comparison (critical for production)
+      const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      const normalizedRequestEmail = email ? String(email).toLowerCase().trim() : '';
+      if (!auth.user || (auth.user.role !== 'admin' && normalizedAuthEmail !== normalizedRequestEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You can only update your own profile.' });
       }
       
@@ -1541,7 +1544,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const { email } = req.body;
       
       // SECURITY FIX: Authorization Check
-      if (!auth.user || (auth.user.role !== 'admin' && auth.user.email !== email)) {
+      // Normalize emails for comparison (critical for production)
+      const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      const normalizedRequestEmail = email ? String(email).toLowerCase().trim() : '';
+      if (!auth.user || (auth.user.role !== 'admin' && normalizedAuthEmail !== normalizedRequestEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized action.' });
       }
       
@@ -2217,7 +2223,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(404).json({ success: false, reason: 'Vehicle not found' });
       }
       
-      if (vehicle.sellerEmail !== sellerEmail) {
+      // Normalize emails for comparison (critical for production)
+      const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
+      const normalizedRequestSellerEmail = sellerEmail ? String(sellerEmail).toLowerCase().trim() : '';
+      if (normalizedVehicleSellerEmail !== normalizedRequestSellerEmail) {
         return res.status(403).json({ success: false, reason: 'Unauthorized' });
       }
       
@@ -2638,7 +2647,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
       }
       
-      if (!auth.user || (auth.user.role !== 'admin' && existingVehicle.sellerEmail !== auth.user.email)) {
+      // Normalize emails for comparison (critical for production)
+      const normalizedVehicleSellerEmail = existingVehicle.sellerEmail ? existingVehicle.sellerEmail.toLowerCase().trim() : '';
+      const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       
@@ -2705,7 +2717,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
       }
       
-      if (!auth.user || (auth.user.role !== 'admin' && vehicleToDelete.sellerEmail !== auth.user.email)) {
+      // Normalize emails for comparison (critical for production)
+      const normalizedVehicleSellerEmail = vehicleToDelete.sellerEmail ? vehicleToDelete.sellerEmail.toLowerCase().trim() : '';
+      const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       
@@ -4494,13 +4509,16 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, options: Han
           return res.status(400).json({ error: 'Plan ID is required' });
         }
         
-        // Validate planId is a string
+        // Validate planId is a string and a valid SubscriptionPlan
         if (typeof updatePlanId !== 'string') {
           return res.status(400).json({ error: 'Plan ID must be a string' });
         }
+        if (!['free', 'pro', 'premium'].includes(updatePlanId)) {
+          return res.status(400).json({ error: 'Invalid plan ID. Must be one of: free, pro, premium' });
+        }
         
-        planService.updatePlan(updatePlanId, updateData);
-        const updatedPlan = await planService.getPlanDetails(updatePlanId);
+        planService.updatePlan(updatePlanId as SubscriptionPlan, updateData);
+        const updatedPlan = await planService.getPlanDetails(updatePlanId as SubscriptionPlan);
         
         return res.status(200).json(updatedPlan);
 

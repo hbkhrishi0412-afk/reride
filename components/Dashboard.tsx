@@ -1086,8 +1086,14 @@ const InquiriesView: React.FC<{
 
     const sortedConversations = useMemo(() => {
         // Filter conversations to only show those for the current seller
-        if (!conversations || !Array.isArray(conversations)) return [];
-        const sellerConversations = conversations.filter(conv => conv && conv.sellerId === sellerEmail);
+        if (!conversations || !Array.isArray(conversations) || !sellerEmail) return [];
+        // Normalize emails for case-insensitive comparison (critical for production)
+        const normalizedSellerEmail = (sellerEmail || '').toLowerCase().trim();
+        const sellerConversations = conversations.filter(conv => {
+          if (!conv || !conv.sellerId) return false;
+          const normalizedConvSellerId = (conv.sellerId || '').toLowerCase().trim();
+          return normalizedConvSellerId === normalizedSellerEmail;
+        });
         return [...sellerConversations].sort((a, b) => {
           const dateA = a?.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
           const dateB = b?.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
@@ -1294,8 +1300,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             return;
           }
           
-          if (Array.isArray(users)) {
-            const updatedSeller = users.find((u: User) => u && u.email === seller.email);
+          if (Array.isArray(users) && seller?.email) {
+            // Normalize emails for comparison (critical for production)
+            const normalizedSellerEmail = seller.email.toLowerCase().trim();
+            const updatedSeller = users.find((u: User) => {
+              if (!u || !u.email) return false;
+              return u.email.toLowerCase().trim() === normalizedSellerEmail;
+            });
             if (updatedSeller) {
               // Check if plan expiry date has changed
               const currentExpiry = seller.planExpiryDate;
@@ -1690,7 +1701,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
   };
 
-  const unreadCount = useMemo(() => safeConversations.filter(c => c && !c.isReadBySeller && c.sellerId === seller?.email).length, [safeConversations, seller?.email]);
+  const unreadCount = useMemo(() => {
+    if (!seller?.email) return 0;
+    const normalizedSellerEmail = seller.email.toLowerCase().trim();
+    return safeConversations.filter(c => {
+      if (!c || c.isReadBySeller || !c.sellerId) return false;
+      return c.sellerId.toLowerCase().trim() === normalizedSellerEmail;
+    }).length;
+  }, [safeConversations, seller?.email]);
   const activeListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status !== 'sold'), [safeSellerVehicles]);
   const soldListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'sold'), [safeSellerVehicles]);
   const reportedCount = useMemo(() => safeReportedVehicles.length, [safeReportedVehicles]);
@@ -1812,7 +1830,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             <PaymentStatusCard currentUser={seller} />
             <AiAssistant
               vehicles={activeListings}
-              conversations={safeConversations.filter(c => c && c.sellerId === seller.email)}
+              conversations={safeConversations.filter(c => {
+                if (!c || !c.sellerId || !seller?.email) return false;
+                return c.sellerId.toLowerCase().trim() === seller.email.toLowerCase().trim();
+              })}
               onNavigateToVehicle={handleNavigateToVehicle}
               onNavigateToInquiry={handleNavigateToInquiry}
             />

@@ -1030,7 +1030,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     // Pagination logic for vehicles
     const filteredVehicles = useMemo(() => {
         if (selectedSeller === 'all') return vehicles;
-        return vehicles.filter(vehicle => vehicle.sellerEmail === selectedSeller);
+        // Normalize emails for comparison (critical for production)
+        const normalizedSelectedSeller = selectedSeller ? selectedSeller.toLowerCase().trim() : '';
+        return vehicles.filter(vehicle => {
+          if (!vehicle?.sellerEmail) return false;
+          return vehicle.sellerEmail.toLowerCase().trim() === normalizedSelectedSeller;
+        });
     }, [vehicles, selectedSeller]);
 
     const paginatedVehicles = useMemo(() => {
@@ -2042,7 +2047,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 planService.getPlanDetails(currentPlan).then(setPlanDetails);
             }, [currentPlan]);
             
-            const userVehicles = vehicles.filter((v: Vehicle) => v.sellerEmail === user.email);
+            // Normalize emails for comparison (critical for production)
+            const normalizedUserEmail = user?.email ? user.email.toLowerCase().trim() : '';
+            const userVehicles = vehicles.filter((v: Vehicle) => {
+              if (!v?.sellerEmail) return false;
+              return v.sellerEmail.toLowerCase().trim() === normalizedUserEmail;
+            });
             const activeListings = userVehicles.filter((v: Vehicle) => v.status === 'published').length;
             const featuredListings = userVehicles.filter((v: Vehicle) => v.isFeatured).length;
 

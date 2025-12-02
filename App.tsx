@@ -24,6 +24,7 @@ import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conver
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { isDevelopmentEnvironment } from './utils/environment';
+import { resetViewportZoom } from './utils/viewportZoom';
 
 // Simple loading component
 const LoadingSpinner: React.FC = () => (
@@ -103,6 +104,30 @@ const AppContent: React.FC = React.memo(() => {
   // Preload critical components after initial render
   React.useEffect(() => {
     preloadCriticalComponents();
+  }, []);
+  
+  // Fix viewport zoom on mount and route changes - applies to ALL pages
+  React.useEffect(() => {
+    // Reset zoom on mount
+    resetViewportZoom();
+    
+    // Reset zoom after route changes
+    const handleRouteChange = () => {
+      setTimeout(() => resetViewportZoom(), 100);
+    };
+    
+    // Listen for navigation events
+    window.addEventListener('popstate', handleRouteChange);
+    
+    // Reset zoom periodically to catch any issues
+    const zoomCheckInterval = setInterval(() => {
+      resetViewportZoom();
+    }, 5000);
+    
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      clearInterval(zoomCheckInterval);
+    };
   }, []);
   
   const { 
@@ -368,7 +393,9 @@ const AppContent: React.FC = React.memo(() => {
             }}
             wishlist={wishlist}
             onViewSellerProfile={(sellerEmail) => {
-              const seller = users.find(u => u.email === sellerEmail);
+              // Normalize emails for comparison (critical for production)
+              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
               if (seller) {
                 setPublicProfile(seller);
                 navigate(ViewEnum.SELLER_PROFILE);
@@ -417,7 +444,9 @@ const AppContent: React.FC = React.memo(() => {
               initialCategory={currentCategory}
               initialSearchQuery={initialSearchQuery}
               onViewSellerProfile={(sellerEmail) => {
-                const seller = users.find(u => u.email === sellerEmail);
+                // Normalize emails for comparison (critical for production)
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
                 if (seller) {
                   setPublicProfile(seller);
                   navigate(ViewEnum.SELLER_PROFILE);
@@ -446,7 +475,9 @@ const AppContent: React.FC = React.memo(() => {
             onFlagContent={(type, id, _reason) => flagContent(type, id)}
             users={users}
             onViewSellerProfile={(sellerEmail: string) => {
-              const seller = users.find(u => u.email === sellerEmail);
+              // Normalize emails for comparison (critical for production)
+              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
               if (seller) {
                 setPublicProfile(seller);
                 navigate(ViewEnum.SELLER_PROFILE);
@@ -461,10 +492,12 @@ const AppContent: React.FC = React.memo(() => {
               }
               
               // Find or create conversation
-              let conversation = conversations.find(c => 
-                c.vehicleId === vehicle.id && 
-                c.customerId === currentUser.email
-              );
+              // Normalize emails for comparison (critical for production)
+              const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+              let conversation = normalizedCustomerEmail ? conversations.find(c => {
+                if (!c || !c.customerId) return false;
+                return c.vehicleId === vehicle.id && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
+              }) : undefined;
               
               if (!conversation) {
                 // Create new conversation
@@ -556,7 +589,9 @@ const AppContent: React.FC = React.memo(() => {
             categoryTitle="My Wishlist"
             isWishlistMode={true}
             onViewSellerProfile={(sellerEmail) => {
-              const seller = users.find(u => u.email === sellerEmail);
+              // Normalize emails for comparison (critical for production)
+              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
               if (seller) {
                 setPublicProfile(seller);
                 navigate(ViewEnum.SELLER_PROFILE);
@@ -614,10 +649,11 @@ const AppContent: React.FC = React.memo(() => {
             <Dashboard
               seller={currentUser}
               sellerVehicles={enrichVehiclesWithSellerInfo(
-                vehicles.filter(v => 
-                  v.sellerEmail?.toLowerCase().trim() === currentUser.email?.toLowerCase().trim()
-                ), 
-                users
+                (vehicles || []).filter(v => {
+                  if (!v || !v.sellerEmail || !currentUser?.email) return false;
+                  return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+                }), 
+                users || []
               )}
               reportedVehicles={[]}
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
@@ -720,7 +756,7 @@ const AppContent: React.FC = React.memo(() => {
               onMarkAsUnsold={async (vehicleId) => {
                 await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
               }}
-              conversations={conversations}
+              conversations={(conversations || []).filter(c => c && c.sellerId && currentUser?.email && c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim())}
               onSellerSendMessage={(conversationId, messageText, _type, _payload) => sendMessage(conversationId, messageText)}
               onMarkConversationAsReadBySeller={(conversationId) => markAsRead(conversationId)}
               typingStatus={typingStatus}
@@ -770,7 +806,8 @@ const AppContent: React.FC = React.memo(() => {
                       const remainingCredits = result.remainingCredits;
 
                       if (sellerEmail) {
-                        if (currentUser?.email === sellerEmail) {
+                        // Normalize emails for comparison (critical for production)
+                        if (currentUser?.email && currentUser.email.toLowerCase().trim() === sellerEmail.toLowerCase().trim()) {
                           setCurrentUser({
                             ...currentUser,
                             featuredCredits: remainingCredits
@@ -793,7 +830,9 @@ const AppContent: React.FC = React.memo(() => {
                 try {
                   const vehicle = vehicles.find(v => v.id === vehicleId);
                   const sellerEmail = vehicle?.sellerEmail || currentUser?.email;
-                  const seller = sellerEmail ? users.find(u => u.email === sellerEmail) : undefined;
+                  // Normalize emails for comparison (critical for production)
+                  const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                  const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
 
                   if (!seller) {
                     addToast('Unable to determine the seller for this certification request.', 'error');
@@ -863,15 +902,18 @@ const AppContent: React.FC = React.memo(() => {
                     ? result.usedCertifications
                     : usedCertifications + 1;
 
+                  // Normalize emails for comparison (critical for production)
+                  const normalizedSellerEmail = seller.email ? seller.email.toLowerCase().trim() : '';
                   setUsers((prevUsers: User[]) =>
-                    prevUsers.map((user: User) =>
-                      user.email === seller.email
+                    prevUsers.map((user: User) => {
+                      if (!user || !user.email) return user;
+                      return user.email.toLowerCase().trim() === normalizedSellerEmail
                         ? { ...user, usedCertifications: updatedUsedCertifications }
-                        : user
-                    )
+                        : user;
+                    })
                   );
 
-                  if (currentUser?.email === seller.email) {
+                  if (currentUser?.email && currentUser.email.toLowerCase().trim() === normalizedSellerEmail) {
                     setCurrentUser({
                       ...currentUser,
                       usedCertifications: updatedUsedCertifications
@@ -906,7 +948,10 @@ const AppContent: React.FC = React.memo(() => {
             currentUser={currentUser}
             vehicles={vehicles}
             wishlist={wishlist}
-            conversations={(conversations || []).filter(c => c.customerId === currentUser.email)}
+            conversations={(conversations || []).filter(c => {
+              if (!c || !c.customerId || !currentUser?.email) return false;
+              return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+            })}
             onNavigate={navigate}
             onSelectVehicle={selectVehicle}
             onToggleWishlist={(id) => {
@@ -925,7 +970,9 @@ const AppContent: React.FC = React.memo(() => {
             }}
             comparisonList={comparisonList}
             onViewSellerProfile={(sellerEmail) => {
-              const seller = users.find(u => u.email === sellerEmail);
+              // Normalize emails for comparison (critical for production)
+              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
               if (seller) {
                 setPublicProfile(seller);
                 navigate(ViewEnum.SELLER_PROFILE);
@@ -1064,12 +1111,18 @@ const AppContent: React.FC = React.memo(() => {
       case ViewEnum.INBOX:
         return currentUser ? (
           <CustomerInbox 
-            conversations={conversations.filter(c => c.customerId === currentUser.email)}
+            conversations={conversations.filter(c => {
+              if (!c || !c.customerId || !currentUser?.email) return false;
+              return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+            })}
             onSendMessage={(vehicleId, messageText, type, payload) => {
               // Only find conversations that belong to the current user
-              const conversation = conversations.find(c => 
-                c.vehicleId === vehicleId && c.customerId === currentUser.email
-              );
+              // Normalize emails for comparison (critical for production)
+              const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+              const conversation = normalizedCustomerEmail ? conversations.find(c => {
+                if (!c || !c.customerId) return false;
+                return c.vehicleId === vehicleId && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
+              }) : undefined;
               if (conversation) {
                 // Handle offer messages with proper structure
                 if (type === 'offer' && payload) {
@@ -1129,7 +1182,13 @@ const AppContent: React.FC = React.memo(() => {
         return publicSellerProfile ? (
           <SellerProfilePage 
             seller={publicSellerProfile}
-            vehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => v.sellerEmail === publicSellerProfile?.email), users)}
+            vehicles={enrichVehiclesWithSellerInfo(
+              (vehicles || []).filter(v => {
+                if (!v || !v.sellerEmail || !publicSellerProfile?.email) return false;
+                return v.sellerEmail.toLowerCase().trim() === publicSellerProfile.email.toLowerCase().trim();
+              }), 
+              users || []
+            )}
             onSelectVehicle={selectVehicle}
             comparisonList={comparisonList}
             onToggleCompare={toggleCompare}
@@ -1137,7 +1196,9 @@ const AppContent: React.FC = React.memo(() => {
             onToggleWishlist={toggleWishlist}
             onBack={() => navigate(ViewEnum.HOME)}
             onViewSellerProfile={(sellerEmail) => {
-              const seller = users.find(u => u.email === sellerEmail);
+              // Normalize emails for comparison (critical for production)
+              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
               if (seller) {
                 setPublicProfile(seller);
                 navigate(ViewEnum.SELLER_PROFILE);
@@ -1209,7 +1270,9 @@ const AppContent: React.FC = React.memo(() => {
             wishlist={wishlist}
             comparisonList={comparisonList}
             onViewSellerProfile={(sellerEmail) => {
-              const seller = users.find(u => u.email === sellerEmail);
+              // Normalize emails for comparison (critical for production)
+              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
               if (seller) {
                 setPublicProfile(seller);
                 navigate(ViewEnum.SELLER_PROFILE);
@@ -1523,12 +1586,21 @@ const AppContent: React.FC = React.memo(() => {
           onNavigate={navigate}
           currentView={currentView}
           wishlistCount={wishlist.length}
-          inboxCount={conversations.filter(c => c.customerId === currentUser?.email && !c.isReadByCustomer).length}
+          inboxCount={conversations.filter(c => {
+            if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
+            return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+          }).length}
         >
           <MobileDashboard
             currentUser={currentUser}
-            userVehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => v.sellerEmail === currentUser.email), users)}
-            conversations={conversations}
+            userVehicles={enrichVehiclesWithSellerInfo(
+              (vehicles || []).filter(v => {
+                if (!v || !v.sellerEmail || !currentUser?.email) return false;
+                return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+              }), 
+              users || []
+            )}
+            conversations={(conversations || []).filter(c => c && c.sellerId && currentUser?.email && c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim())}
             onNavigate={navigate}
             onEditVehicle={(vehicle) => {
               // Handle edit vehicle
@@ -1702,7 +1774,10 @@ const AppContent: React.FC = React.memo(() => {
         currentUser={currentUser}
         onLogout={handleLogout}
         wishlistCount={wishlist.length}
-        inboxCount={conversations.filter(c => c.customerId === currentUser?.email && !c.isReadByCustomer).length}
+        inboxCount={conversations.filter(c => {
+          if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
+          return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+        }).length}
         headerCurrentView={currentView}
       >
         <ErrorBoundary>

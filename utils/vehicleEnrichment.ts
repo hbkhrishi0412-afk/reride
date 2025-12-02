@@ -8,9 +8,31 @@ import { Vehicle, User } from '../types';
  * @returns Array of vehicles with populated seller names
  */
 export const enrichVehiclesWithSellerInfo = (vehicles: Vehicle[], users: User[]): Vehicle[] => {
+  // Defensive checks to prevent production crashes
+  if (!vehicles || !Array.isArray(vehicles)) return [];
+  if (!users || !Array.isArray(users)) return vehicles || [];
+  
   return vehicles.map(vehicle => {
-    // Find the seller user by email
-    const seller = users.find(user => user.email === vehicle.sellerEmail);
+    if (!vehicle || !vehicle.sellerEmail) {
+      // Return vehicle with defaults if sellerEmail is missing
+      return {
+        ...vehicle,
+        sellerName: vehicle?.sellerName || 'Seller',
+        sellerBadges: vehicle?.sellerBadges || [],
+        sellerAverageRating: vehicle?.sellerAverageRating || 0,
+        sellerRatingCount: vehicle?.sellerRatingCount || 0
+      };
+    }
+    
+    // Normalize emails for case-insensitive comparison (critical for production)
+    const normalizedVehicleEmail = (vehicle.sellerEmail || '').toLowerCase().trim();
+    
+    // Find the seller user by email with normalization
+    const seller = users.find(user => {
+      if (!user || !user.email) return false;
+      const normalizedUserEmail = (user.email || '').toLowerCase().trim();
+      return normalizedUserEmail === normalizedVehicleEmail;
+    });
     
     if (seller) {
       return {
@@ -40,7 +62,34 @@ export const enrichVehiclesWithSellerInfo = (vehicles: Vehicle[], users: User[])
  * @returns Vehicle with populated seller information
  */
 export const enrichVehicleWithSellerInfo = (vehicle: Vehicle, users: User[]): Vehicle => {
-  const seller = users.find(user => user.email === vehicle.sellerEmail);
+  // Defensive checks
+  if (!vehicle) {
+    return {
+      sellerName: 'Seller',
+      sellerBadges: [],
+      sellerAverageRating: 0,
+      sellerRatingCount: 0
+    } as Vehicle;
+  }
+  
+  if (!users || !Array.isArray(users) || !vehicle.sellerEmail) {
+    return {
+      ...vehicle,
+      sellerName: vehicle.sellerName || 'Seller',
+      sellerBadges: vehicle.sellerBadges || [],
+      sellerAverageRating: vehicle.sellerAverageRating || 0,
+      sellerRatingCount: vehicle.sellerRatingCount || 0
+    };
+  }
+  
+  // Normalize emails for case-insensitive comparison
+  const normalizedVehicleEmail = (vehicle.sellerEmail || '').toLowerCase().trim();
+  
+  const seller = users.find(user => {
+    if (!user || !user.email) return false;
+    const normalizedUserEmail = (user.email || '').toLowerCase().trim();
+    return normalizedUserEmail === normalizedVehicleEmail;
+  });
   
   if (seller) {
     return {
