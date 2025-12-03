@@ -2134,7 +2134,36 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
   }
 
   if (req.method === 'POST') {
-    // SECURITY FIX: Verify Auth
+    // PUBLIC ACTION: Track view doesn't require authentication (it's just tracking public views)
+    if (action === 'track-view') {
+      try {
+        const { vehicleId } = req.body || {};
+        const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
+        if (!vehicleIdNum || Number.isNaN(vehicleIdNum)) {
+          return res.status(400).json({ success: false, reason: 'Valid vehicleId is required' });
+        }
+
+        if (!mongoAvailable) {
+          return unavailableResponse();
+        }
+
+        await connectToDatabase();
+        const vehicle = await Vehicle.findOne({ id: vehicleIdNum });
+        if (!vehicle) {
+          return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+        }
+
+        const currentViews = typeof vehicle.views === 'number' ? vehicle.views : 0;
+        vehicle.views = currentViews + 1;
+        await vehicle.save();
+
+        return res.status(200).json({ success: true, views: vehicle.views });
+      } catch (error) {
+        return res.status(500).json({ success: false, reason: 'Failed to track view', error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    }
+
+    // SECURITY FIX: Verify Auth for all other POST actions
     const auth = authenticateRequest(req);
     if (!auth.isValid) {
       return res.status(401).json({ success: false, reason: auth.error });
@@ -2144,7 +2173,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     }
     // Enforce plan expiry and listing limits for creation (no action or unknown action)
     // Only applies to standard create flow (i.e., when not handling action sub-routes above)
-    if (!action || (action !== 'refresh' && action !== 'boost' && action !== 'certify' && action !== 'sold' && action !== 'unsold' && action !== 'feature' && action !== 'track-view')) {
+    if (!action || (action !== 'refresh' && action !== 'boost' && action !== 'certify' && action !== 'sold' && action !== 'unsold' && action !== 'feature')) {
       try {
         const { sellerEmail } = req.body || {};
         if (!sellerEmail || typeof sellerEmail !== 'string') {
@@ -2197,30 +2226,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
     }
 
-    // Track a single view for a vehicle
-    if (action === 'track-view') {
-      try {
-        const { vehicleId } = req.body || {};
-        const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-        if (!vehicleIdNum || Number.isNaN(vehicleIdNum)) {
-          return res.status(400).json({ success: false, reason: 'Valid vehicleId is required' });
-        }
-
-        await connectToDatabase();
-        const vehicle = await Vehicle.findOne({ id: vehicleIdNum });
-        if (!vehicle) {
-          return res.status(404).json({ success: false, reason: 'Vehicle not found' });
-        }
-
-        const currentViews = typeof vehicle.views === 'number' ? vehicle.views : 0;
-        vehicle.views = currentViews + 1;
-        await vehicle.save();
-
-        return res.status(200).json({ success: true, views: vehicle.views });
-      } catch (error) {
-        return res.status(500).json({ success: false, reason: 'Failed to track view', error: error instanceof Error ? error.message : 'Unknown error' });
-      }
-    }
     if (action === 'refresh') {
       const { vehicleId, refreshAction, sellerEmail } = req.body;
       const vehicle = await Vehicle.findOne({ id: vehicleId });
@@ -4490,8 +4495,6 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, opti
       });
     }
 
-    const { action } = req.query;
-
     // GET - Retrieve conversations
     if (req.method === 'GET') {
       const { customerId, sellerId, conversationId } = req.query;
@@ -4604,8 +4607,14 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
       
       // Build query
       const query: any = {};
-      if (recipientEmail) query.recipientEmail = recipientEmail.toLowerCase().trim();
-      if (isRead !== undefined) query.isRead = isRead === 'true';
+      if (recipientEmail) {
+        const emailValue = Array.isArray(recipientEmail) ? recipientEmail[0] : recipientEmail;
+        query.recipientEmail = emailValue.toLowerCase().trim();
+      }
+      if (isRead !== undefined) {
+        const isReadValue = Array.isArray(isRead) ? isRead[0] : isRead;
+        query.isRead = isReadValue === 'true';
+      }
       
       const notifications = await Notification.find(query).sort({ timestamp: -1 }).lean();
       return res.status(200).json({ success: true, data: notifications });
