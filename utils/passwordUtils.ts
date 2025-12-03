@@ -12,7 +12,8 @@
 export const hashPassword = async (password: string): Promise<string> => {
   try {
     // Import bcryptjs dynamically to avoid SSR issues
-    const bcrypt = await import('bcryptjs');
+    const bcryptModule = await import('bcryptjs');
+    const bcrypt = bcryptModule.default || bcryptModule;
     return await bcrypt.hash(password, 10);
   } catch (error) {
     console.error('Failed to hash password:', error);
@@ -35,7 +36,8 @@ export const comparePassword = async (password: string, hash: string): Promise<b
     }
     
     // Import bcryptjs dynamically to avoid SSR issues
-    const bcrypt = await import('bcryptjs');
+    const bcryptModule = await import('bcryptjs');
+    const bcrypt = bcryptModule.default || bcryptModule;
     return await bcrypt.compare(password, hash);
   } catch (error) {
     // Log the error but return false to treat it as an authentication failure

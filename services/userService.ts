@@ -283,7 +283,8 @@ const loginLocal = async (
         // Password appears to be hashed - try bcrypt comparison if available
         try {
             // Use dynamic import for browser compatibility
-            const bcrypt = await import('bcryptjs');
+            const bcryptModule = await import('bcryptjs');
+            const bcrypt = bcryptModule.default || bcryptModule;
             isPasswordValid = await bcrypt.compare(normalizedPassword, storedPassword);
             console.log('🔍 loginLocal: Bcrypt comparison result', { isValid: isPasswordValid });
         } catch (error) {
