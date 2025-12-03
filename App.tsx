@@ -179,6 +179,7 @@ const AppContent: React.FC = React.memo(() => {
     setForgotPasswordRole,
     addSellerRating,
     sendMessage,
+    sendMessageWithType,
     markAsRead,
     toggleTyping,
     flagContent,
@@ -518,6 +519,17 @@ const AppContent: React.FC = React.memo(() => {
                 
                 // Add to conversations
                 setConversations([...conversations, newConversation]);
+                
+                // Save to MongoDB (async, don't block)
+                (async () => {
+                  try {
+                    const { saveConversationToMongoDB } = await import('./services/conversationService');
+                    await saveConversationToMongoDB(newConversation);
+                  } catch (error) {
+                    console.warn('Failed to save conversation to MongoDB:', error);
+                  }
+                })();
+                
                 conversation = newConversation;
               }
               
@@ -1136,30 +1148,9 @@ const AppContent: React.FC = React.memo(() => {
                 return c.vehicleId === vehicleId && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
               }) : undefined;
               if (conversation) {
-                // Handle offer messages with proper structure
-                if (type === 'offer' && payload) {
-                  setConversations(prev => {
-                    const updated = prev.map(conv => 
-                      conv.id === conversation.id ? {
-                        ...conv,
-                        messages: [...conv.messages, {
-                          id: Date.now() + Math.floor(Math.random() * 1000),
-                          sender: 'user' as const,
-                          text: messageText,
-                          timestamp: new Date().toISOString(),
-                          isRead: false,
-                          type: 'offer' as const,
-                          payload: payload
-                        }],
-                        lastMessageAt: new Date().toISOString()
-                      } : conv
-                    );
-                    return updated;
-                  });
-                } else {
-                  // Handle regular text messages
-                  sendMessage(conversation.id, messageText);
-                }
+                // Use sendMessageWithType for both regular and offer messages
+                // This ensures proper saving, notifications, and activeChat updates
+                sendMessageWithType(conversation.id, messageText, type, payload);
               }
             }}
             onMarkAsRead={markAsRead}
@@ -1456,7 +1447,7 @@ const AppContent: React.FC = React.memo(() => {
     }
   }, []);
 
-  const handleMarkNotificationsAsRead = React.useCallback((ids: number[]) => {
+  const handleMarkNotificationsAsRead = React.useCallback(async (ids: number[]) => {
     if (!ids.length) {
       return;
     }
@@ -1469,9 +1460,21 @@ const AppContent: React.FC = React.memo(() => {
 
     setNotifications(updated);
     persistNotifications(updated);
+    
+    // Update in MongoDB (async, don't block)
+    try {
+      const { updateNotificationInMongoDB } = await import('./services/notificationService');
+      ids.forEach(id => {
+        updateNotificationInMongoDB(id, { isRead: true }).catch(err => {
+          console.warn('Failed to update notification in MongoDB:', err);
+        });
+      });
+    } catch (error) {
+      console.warn('Failed to import notification service:', error);
+    }
   }, [notifications, persistNotifications, setNotifications]);
 
-  const handleMarkAllNotificationsAsRead = React.useCallback(() => {
+  const handleMarkAllNotificationsAsRead = React.useCallback(async () => {
     if (!notifications.length) {
       return;
     }
@@ -1483,6 +1486,16 @@ const AppContent: React.FC = React.memo(() => {
 
     setNotifications(updated);
     persistNotifications(updated);
+    
+    // Update all in MongoDB (async, don't block)
+    const { updateNotificationInMongoDB } = await import('./services/notificationService');
+    notifications.forEach(notification => {
+      if (!notification.isRead) {
+        updateNotificationInMongoDB(notification.id, { isRead: true }).catch(err => {
+          console.warn('Failed to update notification in MongoDB:', err);
+        });
+      }
+    });
   }, [notifications, persistNotifications, setNotifications]);
 
   const handleOpenCommandPalette = React.useCallback(() => {
