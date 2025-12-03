@@ -1,284 +1,251 @@
-import type { VehicleData } from '../types';
+import type { Conversation, Notification } from '../types';
+import { saveConversationToMongoDB, addMessageToConversation } from './conversationService';
+import { saveNotificationToMongoDB, updateNotificationInMongoDB } from './notificationService';
 
-interface SyncStatus {
-  isActive: boolean;
-  lastSyncTime: Date | null;
-  isOnline: boolean;
-  pendingChanges: boolean;
-  error: string | null;
+interface SyncQueueItem {
+  id: string;
+  type: 'conversation' | 'notification' | 'message';
+  data: any;
+  retries: number;
+  timestamp: number;
 }
 
-class SyncService {
-  private syncStatus: SyncStatus = {
-    isActive: false,
-    lastSyncTime: null,
-    isOnline: navigator.onLine,
-    pendingChanges: false,
-    error: null
-  };
+const SYNC_QUEUE_KEY = 'reRideSyncQueue';
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 5000; // 5 seconds
 
-  private listeners: ((status: SyncStatus) => void)[] = [];
-  private syncInterval: NodeJS.Timeout | null = null;
-  private readonly SYNC_INTERVAL = 30000; // 30 seconds
-  private readonly API_BASE_URL = '/api';
-
-  constructor() {
-    this.setupEventListeners();
+/**
+ * Get sync queue from localStorage
+ */
+function getSyncQueue(): SyncQueueItem[] {
+  try {
+    const queueJson = localStorage.getItem(SYNC_QUEUE_KEY);
+    return queueJson ? JSON.parse(queueJson) : [];
+  } catch {
+    return [];
   }
+}
 
-  private setupEventListeners() {
-    // Listen for online/offline events
-    window.addEventListener('online', () => {
-      this.syncStatus.isOnline = true;
-      this.syncStatus.error = null;
-      this.notifyListeners();
-      this.startAutoSync();
-    });
-
-    window.addEventListener('offline', () => {
-      this.syncStatus.isOnline = false;
-      this.syncStatus.error = 'No internet connection';
-      this.notifyListeners();
-      this.stopAutoSync();
-    });
-
-    // Listen for visibility change to sync when tab becomes active
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && this.syncStatus.isOnline) {
-        this.performSync();
-      }
-    });
+/**
+ * Save sync queue to localStorage
+ */
+function saveSyncQueue(queue: SyncQueueItem[]): void {
+  try {
+    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+  } catch (error) {
+    console.error('Failed to save sync queue:', error);
   }
+}
 
-  public startSync(): void {
-    console.log('🔄 Starting sync service...');
-    this.syncStatus.isActive = true;
-    this.syncStatus.error = null;
-    this.notifyListeners();
-    this.startAutoSync();
-    this.performSync();
-  }
+/**
+ * Add item to sync queue
+ */
+function addToSyncQueue(item: Omit<SyncQueueItem, 'retries' | 'timestamp'>): void {
+  const queue = getSyncQueue();
+  queue.push({
+    ...item,
+    retries: 0,
+    timestamp: Date.now()
+  });
+  saveSyncQueue(queue);
+}
 
-  public stopSync(): void {
-    console.log('⏹️ Stopping sync service...');
-    this.syncStatus.isActive = false;
-    this.stopAutoSync();
-    this.notifyListeners();
-  }
+/**
+ * Remove item from sync queue
+ */
+function removeFromSyncQueue(itemId: string): void {
+  const queue = getSyncQueue();
+  const filtered = queue.filter(item => item.id !== itemId);
+  saveSyncQueue(filtered);
+}
 
-  private startAutoSync(): void {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-    }
-    
-    this.syncInterval = setInterval(() => {
-      if (this.syncStatus.isActive && this.syncStatus.isOnline) {
-        this.performSync();
-      }
-    }, this.SYNC_INTERVAL);
-  }
+/**
+ * Process sync queue - retry failed syncs
+ */
+export async function processSyncQueue(): Promise<{ success: number; failed: number }> {
+  const queue = getSyncQueue();
+  if (queue.length === 0) return { success: 0, failed: 0 };
 
-  private stopAutoSync(): void {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-      this.syncInterval = null;
-    }
-  }
+  let success = 0;
+  let failed = 0;
+  const toRemove: string[] = [];
+  const toRetry: SyncQueueItem[] = [];
 
-  public async performSync(): Promise<boolean> {
-    if (!this.syncStatus.isOnline) {
-      this.syncStatus.error = 'No internet connection';
-      this.notifyListeners();
-      return false;
-    }
-
+  for (const item of queue) {
     try {
-      console.log('🔄 Performing sync...');
-      
-      // Get local vehicle data
-      const localData = this.getLocalVehicleData();
-      if (!localData) {
-        console.log('📥 No local data to sync, fetching from server...');
-        return await this.fetchFromServer();
+      let syncSuccess = false;
+
+      switch (item.type) {
+        case 'conversation':
+          const convResult = await saveConversationToMongoDB(item.data);
+          syncSuccess = convResult.success;
+          break;
+        case 'message':
+          const msgResult = await addMessageToConversation(item.data.conversationId, item.data.message);
+          syncSuccess = msgResult.success;
+          break;
+        case 'notification':
+          if (item.data.updates) {
+            // Update notification
+            const updateResult = await updateNotificationInMongoDB(item.data.notificationId, item.data.updates);
+            syncSuccess = updateResult.success;
+          } else {
+            // Create notification
+            const notifResult = await saveNotificationToMongoDB(item.data);
+            syncSuccess = notifResult.success;
+          }
+          break;
       }
 
-      // Try to save local data to server
-      const success = await this.saveToServer(localData);
-      
-      if (success) {
-        this.syncStatus.lastSyncTime = new Date();
-        this.syncStatus.pendingChanges = false;
-        this.syncStatus.error = null;
-        console.log('✅ Sync completed successfully');
+      if (syncSuccess) {
+        success++;
+        toRemove.push(item.id);
+        console.log(`✅ Successfully synced ${item.type}:`, item.id);
       } else {
-        this.syncStatus.pendingChanges = true;
-        this.syncStatus.error = 'Failed to sync with server';
-        console.warn('⚠️ Sync failed, changes pending');
-      }
-
-      this.notifyListeners();
-      return success;
-    } catch (error) {
-      console.error('❌ Sync error:', error);
-      this.syncStatus.error = error instanceof Error ? error.message : 'Unknown sync error';
-      this.syncStatus.pendingChanges = true;
-      this.notifyListeners();
-      return false;
-    }
-  }
-
-  public async forceSync(): Promise<boolean> {
-    console.log('🔄 Force sync initiated...');
-    this.syncStatus.error = null;
-    this.notifyListeners();
-    
-    const success = await this.performSync();
-    
-    if (success) {
-      console.log('✅ Force sync completed successfully');
-    } else {
-      console.warn('⚠️ Force sync failed');
-    }
-    
-    return success;
-  }
-
-  private async saveToServer(data: VehicleData): Promise<boolean> {
-    const maxRetries = 2;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        // Try standalone endpoint first (correct for production)
-        const response = await fetch(`${this.API_BASE_URL}/vehicle-data`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(data)
-        });
-
-        if (response.ok) {
-          console.log('✅ Data synced via vehicle-data endpoint');
-          return true;
+        // Retry logic
+        if (item.retries < MAX_RETRIES) {
+          item.retries++;
+          toRetry.push(item);
+          console.log(`⚠️ Retrying sync for ${item.type} (attempt ${item.retries}/${MAX_RETRIES}):`, item.id);
+        } else {
+          failed++;
+          toRemove.push(item.id);
+          console.error(`❌ Failed to sync ${item.type} after ${MAX_RETRIES} retries:`, item.id);
         }
-
-        // Try consolidated endpoint as fallback
-        const fallbackResponse = await fetch(`${this.API_BASE_URL}/vehicles?type=data`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(data)
-        });
-
-        if (fallbackResponse.ok) {
-          console.log('✅ Data synced via consolidated endpoint');
-          return true;
-        }
-
-        console.warn(`⚠️ Both endpoints failed (attempt ${attempt}/${maxRetries})`);
-      } catch (error) {
-        console.warn(`⚠️ Sync attempt ${attempt} failed:`, error);
-      }
-
-      if (attempt < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-
-    return false;
-  }
-
-  private async fetchFromServer(): Promise<boolean> {
-    try {
-      // Try standalone endpoint first
-      const response = await fetch(`${this.API_BASE_URL}/vehicle-data`);
-      if (response.ok) {
-        const data = await response.json();
-        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-          localStorage.setItem('reRideVehicleData', JSON.stringify(data));
-        }
-        this.syncStatus.lastSyncTime = new Date();
-        this.syncStatus.error = null;
-        this.notifyListeners();
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('✅ Data fetched from vehicle-data endpoint');
-        }
-        return true;
-      }
-      
-      // Try consolidated endpoint as fallback
-      const fallbackResponse = await fetch(`${this.API_BASE_URL}/vehicles?type=data`);
-      if (fallbackResponse.ok) {
-        const data = await fallbackResponse.json();
-        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-          localStorage.setItem('reRideVehicleData', JSON.stringify(data));
-        }
-        this.syncStatus.lastSyncTime = new Date();
-        this.syncStatus.error = null;
-        this.notifyListeners();
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('✅ Data fetched from consolidated endpoint');
-        }
-        return true;
       }
     } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('⚠️ Failed to fetch from server:', error);
+      console.error(`Error processing sync queue item:`, error);
+      if (item.retries < MAX_RETRIES) {
+        item.retries++;
+        toRetry.push(item);
+      } else {
+        failed++;
+        toRemove.push(item.id);
       }
     }
-    return false;
   }
 
-  private getLocalVehicleData(): VehicleData | null {
-    try {
-      if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-        return null;
-      }
-      const data = localStorage.getItem('reRideVehicleData');
-      return data ? JSON.parse(data) : null;
-    } catch {
-      return null;
+  // Update queue
+  let updatedQueue = getSyncQueue();
+  updatedQueue = updatedQueue.filter(item => !toRemove.includes(item.id));
+  // Update retry counts
+  toRetry.forEach(retryItem => {
+    const index = updatedQueue.findIndex(item => item.id === retryItem.id);
+    if (index !== -1) {
+      updatedQueue[index] = retryItem;
     }
-  }
+  });
+  saveSyncQueue(updatedQueue);
 
-  public markPendingChanges(): void {
-    this.syncStatus.pendingChanges = true;
-    this.notifyListeners();
-  }
-
-  public getStatus(): SyncStatus {
-    return { ...this.syncStatus };
-  }
-
-  public subscribe(listener: (status: SyncStatus) => void): () => void {
-    this.listeners.push(listener);
-    // Immediately call with current status
-    listener(this.syncStatus);
-    
-    // Return unsubscribe function
-    return () => {
-      const index = this.listeners.indexOf(listener);
-      if (index > -1) {
-        this.listeners.splice(index, 1);
-      }
-    };
-  }
-
-  private notifyListeners(): void {
-    this.listeners.forEach(listener => listener(this.syncStatus));
-  }
-
-  public destroy(): void {
-    this.stopAutoSync();
-    this.listeners = [];
-  }
+  return { success, failed };
 }
 
-// Create singleton instance
-export const syncService = new SyncService();
+/**
+ * Save conversation with sync queue fallback
+ */
+export async function saveConversationWithSync(conversation: Conversation): Promise<{ synced: boolean; queued: boolean }> {
+  try {
+    const result = await saveConversationToMongoDB(conversation);
+    if (result.success) {
+      return { synced: true, queued: false };
+    }
+  } catch (error) {
+    console.warn('Failed to save conversation to MongoDB:', error);
+  }
 
-// Export types
-export type { SyncStatus };
+  // Add to sync queue
+  addToSyncQueue({
+    id: `conv_${conversation.id}_${Date.now()}`,
+    type: 'conversation',
+    data: conversation
+  });
+
+  return { synced: false, queued: true };
+}
+
+/**
+ * Add message with sync queue fallback
+ */
+export async function addMessageWithSync(conversationId: string, message: any): Promise<{ synced: boolean; queued: boolean }> {
+  try {
+    const result = await addMessageToConversation(conversationId, message);
+    if (result.success) {
+      return { synced: true, queued: false };
+    }
+  } catch (error) {
+    console.warn('Failed to add message to MongoDB:', error);
+  }
+
+  // Add to sync queue
+  addToSyncQueue({
+    id: `msg_${conversationId}_${message.id}_${Date.now()}`,
+    type: 'message',
+    data: { conversationId, message }
+  });
+
+  return { synced: false, queued: true };
+}
+
+/**
+ * Save notification with sync queue fallback
+ */
+export async function saveNotificationWithSync(notification: Notification): Promise<{ synced: boolean; queued: boolean }> {
+  try {
+    const result = await saveNotificationToMongoDB(notification);
+    if (result.success) {
+      return { synced: true, queued: false };
+    }
+  } catch (error) {
+    console.warn('Failed to save notification to MongoDB:', error);
+  }
+
+  // Add to sync queue
+  addToSyncQueue({
+    id: `notif_${notification.id}_${Date.now()}`,
+    type: 'notification',
+    data: notification
+  });
+
+  return { synced: false, queued: true };
+}
+
+/**
+ * Update notification with sync queue fallback
+ */
+export async function updateNotificationWithSync(notificationId: number, updates: Partial<Notification>): Promise<{ synced: boolean; queued: boolean }> {
+  try {
+    const result = await updateNotificationInMongoDB(notificationId, updates);
+    if (result.success) {
+      return { synced: true, queued: false };
+    }
+  } catch (error) {
+    console.warn('Failed to update notification in MongoDB:', error);
+  }
+
+  // Add to sync queue
+  addToSyncQueue({
+    id: `notif_update_${notificationId}_${Date.now()}`,
+    type: 'notification',
+    data: { notificationId, updates }
+  });
+
+  return { synced: false, queued: true };
+}
+
+/**
+ * Get sync queue status
+ */
+export function getSyncQueueStatus(): { pending: number; items: SyncQueueItem[] } {
+  const queue = getSyncQueue();
+  return {
+    pending: queue.length,
+    items: queue
+  };
+}
+
+/**
+ * Clear sync queue (for admin/testing)
+ */
+export function clearSyncQueue(): void {
+  localStorage.removeItem(SYNC_QUEUE_KEY);
+}

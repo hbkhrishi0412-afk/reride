@@ -8,6 +8,8 @@ import VehicleDataModel from '../models/VehicleData.js';
 import { PLAN_DETAILS } from '../constants.js';
 import NewCar from '../models/NewCar.js';
 import RateLimit from '../models/RateLimit.js';
+import Conversation from '../models/Conversation.js';
+import Notification from '../models/Notification.js';
 import { planService } from '../services/planService.js';
 import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan } from '../types.js';
 import { VehicleCategory } from '../types.js';
@@ -580,6 +582,10 @@ async function mainHandler(
       return await handleSellCar(req, res, handlerOptions);
     } else if (pathname.includes('/payments') || pathname.endsWith('/payments') || pathname.includes('/plans') || pathname.endsWith('/plans') || pathname.includes('/business')) {
       return await handleBusiness(req, res, handlerOptions);
+    } else if (pathname.includes('/conversations') || pathname.endsWith('/conversations')) {
+      return await handleConversations(req, res, handlerOptions);
+    } else if (pathname.includes('/notifications') || pathname.endsWith('/notifications')) {
+      return await handleNotifications(req, res, handlerOptions);
     } else {
       // Default to users for backward compatibility
       // This catches any unmatched routes, especially important for PUT /api/users
@@ -4469,6 +4475,196 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, options: 
     return res.status(500).json({
       success: false,
       reason: 'Payments handler failed',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
+
+// Conversations Handler
+async function handleConversations(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  try {
+    if (!options.mongoAvailable) {
+      return res.status(503).json({
+        success: false,
+        reason: options.mongoFailureReason || 'Database is currently unavailable'
+      });
+    }
+
+    const { action } = req.query;
+
+    // GET - Retrieve conversations
+    if (req.method === 'GET') {
+      const { customerId, sellerId, conversationId } = req.query;
+      
+      if (conversationId) {
+        // Get single conversation
+        const conversation = await Conversation.findOne({ id: conversationId }).lean();
+        if (!conversation) {
+          return res.status(404).json({ success: false, reason: 'Conversation not found' });
+        }
+        return res.status(200).json({ success: true, data: conversation });
+      }
+      
+      // Build query
+      const query: any = {};
+      if (customerId) query.customerId = customerId;
+      if (sellerId) query.sellerId = sellerId;
+      
+      const conversations = await Conversation.find(query).sort({ lastMessageAt: -1 }).lean();
+      return res.status(200).json({ success: true, data: conversations });
+    }
+
+    // POST - Create or update conversation
+    if (req.method === 'POST') {
+      const conversationData = req.body;
+      
+      if (!conversationData.id) {
+        return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
+      }
+
+      // Use upsert to create or update
+      const conversation = await Conversation.findOneAndUpdate(
+        { id: conversationData.id },
+        conversationData,
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean();
+
+      return res.status(200).json({ success: true, data: conversation });
+    }
+
+    // PUT - Update conversation (add message)
+    if (req.method === 'PUT') {
+      const { conversationId, message } = req.body;
+      
+      if (!conversationId || !message) {
+        return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
+      }
+
+      const conversation = await Conversation.findOneAndUpdate(
+        { id: conversationId },
+        { 
+          $push: { messages: message },
+          $set: { lastMessageAt: message.timestamp }
+        },
+        { new: true }
+      ).lean();
+
+      if (!conversation) {
+        return res.status(404).json({ success: false, reason: 'Conversation not found' });
+      }
+
+      return res.status(200).json({ success: true, data: conversation });
+    }
+
+    // DELETE - Delete conversation
+    if (req.method === 'DELETE') {
+      const { conversationId } = req.query;
+      
+      if (!conversationId) {
+        return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
+      }
+
+      await Conversation.deleteOne({ id: conversationId });
+      return res.status(200).json({ success: true, message: 'Conversation deleted successfully' });
+    }
+
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  } catch (error) {
+    logError('Conversations Handler Error:', error);
+    return res.status(500).json({
+      success: false,
+      reason: 'Failed to process conversation request',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
+
+// Notifications Handler
+async function handleNotifications(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+  try {
+    if (!options.mongoAvailable) {
+      return res.status(503).json({
+        success: false,
+        reason: options.mongoFailureReason || 'Database is currently unavailable'
+      });
+    }
+
+    // GET - Retrieve notifications
+    if (req.method === 'GET') {
+      const { recipientEmail, isRead, notificationId } = req.query;
+      
+      if (notificationId) {
+        // Get single notification
+        const notification = await Notification.findOne({ id: Number(notificationId) }).lean();
+        if (!notification) {
+          return res.status(404).json({ success: false, reason: 'Notification not found' });
+        }
+        return res.status(200).json({ success: true, data: notification });
+      }
+      
+      // Build query
+      const query: any = {};
+      if (recipientEmail) query.recipientEmail = recipientEmail.toLowerCase().trim();
+      if (isRead !== undefined) query.isRead = isRead === 'true';
+      
+      const notifications = await Notification.find(query).sort({ timestamp: -1 }).lean();
+      return res.status(200).json({ success: true, data: notifications });
+    }
+
+    // POST - Create notification
+    if (req.method === 'POST') {
+      const notificationData = req.body;
+      
+      if (!notificationData.id || !notificationData.recipientEmail) {
+        return res.status(400).json({ success: false, reason: 'Notification ID and recipient email are required' });
+      }
+
+      // Normalize email
+      notificationData.recipientEmail = notificationData.recipientEmail.toLowerCase().trim();
+
+      const notification = await Notification.create(notificationData);
+      return res.status(201).json({ success: true, data: notification.toObject() });
+    }
+
+    // PUT - Update notification (mark as read, etc.)
+    if (req.method === 'PUT') {
+      const { notificationId, updates } = req.body;
+      
+      if (!notificationId) {
+        return res.status(400).json({ success: false, reason: 'Notification ID is required' });
+      }
+
+      const notification = await Notification.findOneAndUpdate(
+        { id: Number(notificationId) },
+        { $set: updates },
+        { new: true }
+      ).lean();
+
+      if (!notification) {
+        return res.status(404).json({ success: false, reason: 'Notification not found' });
+      }
+
+      return res.status(200).json({ success: true, data: notification });
+    }
+
+    // DELETE - Delete notification
+    if (req.method === 'DELETE') {
+      const { notificationId } = req.query;
+      
+      if (!notificationId) {
+        return res.status(400).json({ success: false, reason: 'Notification ID is required' });
+      }
+
+      await Notification.deleteOne({ id: Number(notificationId) });
+      return res.status(200).json({ success: true, message: 'Notification deleted successfully' });
+    }
+
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  } catch (error) {
+    logError('Notifications Handler Error:', error);
+    return res.status(500).json({
+      success: false,
+      reason: 'Failed to process notification request',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }

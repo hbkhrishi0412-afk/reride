@@ -1031,6 +1031,65 @@ app.delete('/api/content', (req, res) => {
   });
 });
 
+// Conversations endpoints (mock handlers for development)
+app.get('/api/conversations', (req, res) => {
+  const { customerId, sellerId } = req.query;
+  // Return empty array - actual data comes from localStorage in dev
+  res.json({
+    success: true,
+    data: []
+  });
+});
+
+app.post('/api/conversations', (req, res) => {
+  // Accept and return the conversation data (mock save)
+  res.json({
+    success: true,
+    data: req.body
+  });
+});
+
+app.put('/api/conversations', (req, res) => {
+  // Accept message updates (mock update)
+  res.json({
+    success: true,
+    data: req.body
+  });
+});
+
+app.delete('/api/conversations', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Conversation deleted successfully'
+  });
+});
+
+// Notifications endpoints (mock handlers for development)
+app.get('/api/notifications', (req, res) => {
+  const { recipientEmail, isRead } = req.query;
+  // Return empty array - actual data comes from localStorage in dev
+  res.json({
+    success: true,
+    data: []
+  });
+});
+
+app.post('/api/notifications', (req, res) => {
+  // Accept and return the notification data (mock save)
+  res.json({
+    success: true,
+    data: req.body
+  });
+});
+
+app.put('/api/notifications', (req, res) => {
+  // Accept notification updates (mock update)
+  res.json({
+    success: true,
+    data: req.body
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -1045,6 +1104,8 @@ app.get('/api/health', (req, res) => {
       vehicleDataManagement: '/api/vehicle-data-management',
       users: '/api/users',
       faqs: '/api/faqs',
+      conversations: '/api/conversations',
+      notifications: '/api/notifications',
       health: '/api/health'
     }
   });
@@ -1074,6 +1135,13 @@ app.listen(PORT, () => {
   console.log(`   - POST /api/faqs - Create new FAQ`);
   console.log(`   - PUT  /api/content?type=faqs&id=... - Update FAQ`);
   console.log(`   - DELETE /api/content?type=faqs&id=... - Delete FAQ`);
+  console.log(`   - GET  /api/conversations - Get conversations (returns empty in dev)`);
+  console.log(`   - POST /api/conversations - Save conversation`);
+  console.log(`   - PUT  /api/conversations - Update conversation`);
+  console.log(`   - DELETE /api/conversations - Delete conversation`);
+  console.log(`   - GET  /api/notifications - Get notifications (returns empty in dev)`);
+  console.log(`   - POST /api/notifications - Save notification`);
+  console.log(`   - PUT  /api/notifications - Update notification`);
   console.log(`   - GET  /api/admin - Admin health check`);
   console.log(`   - GET  /api/health - Server health check`);
   console.log(`\n🔗 Test the API:`);

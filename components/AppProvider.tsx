@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan } from '../types';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
 import { View, VehicleCategory as CategoryEnum } from '../types';
 import { getConversations, saveConversations } from '../services/chatService';
+import { saveConversationWithSync, addMessageWithSync, processSyncQueue } from '../services/syncService';
+import { saveNotificationWithSync, updateNotificationWithSync } from '../services/syncService';
 import { getSettings } from '../services/settingsService';
 import { getAuditLog, logAction, saveAuditLog } from '../services/auditLogService';
 import { getFaqs, saveFaqs } from '../services/faqService';
@@ -9,6 +11,7 @@ import { getSupportTickets } from '../services/supportTicketService';
 import { dataService } from '../services/dataService';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
+import { showNotification } from '../services/notificationService';
 
 interface VehicleUpdateOptions {
   successMessage?: string;
@@ -113,6 +116,7 @@ interface AppContextType {
   addRating: (vehicleId: number, rating: number) => void;
   addSellerRating: (sellerEmail: string, rating: number) => void;
   sendMessage: (conversationId: string, message: string) => void;
+  sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   markAsRead: (conversationId: string) => void;
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
   flagContent: (type: 'vehicle' | 'conversation', id: number | string) => void;
@@ -137,6 +141,8 @@ export const useApp = () => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo(({ children }) => {
+  // Track which notifications have already shown browser notifications
+  const shownNotificationIdsRef = useRef<Set<number>>(new Set());
   
   // All state from App.tsx moved here
   const [currentView, setCurrentView] = useState<View>(View.HOME);
@@ -154,24 +160,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         const user = JSON.parse(savedUser);
         
         // CRITICAL: Validate user object has required fields (especially role)
-        if (!user || !user.email || !user.role) {
-          console.warn('⚠️ Invalid user object in localStorage - missing required fields:', { 
-            hasEmail: !!user?.email, 
-            hasRole: !!user?.role,
-            userObject: user
-          });
-          // Clear invalid user data
+        // Provide defaults for missing fields if possible
+        if (!user) {
+          console.warn('⚠️ Invalid user object in localStorage - user is null/undefined');
           localStorage.removeItem('reRideCurrentUser');
           if (savedSession) sessionStorage.removeItem('currentUser');
           return null;
         }
-        
-        // Ensure role is a valid value
-        if (!['customer', 'seller', 'admin'].includes(user.role)) {
-          console.warn('⚠️ Invalid role in user object:', user.role);
+
+        // Validate and fix missing email
+        if (!user.email || typeof user.email !== 'string') {
+          // Only log in development - don't spam production console
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Invalid user object - missing or invalid email. Clearing user data.');
+          }
           localStorage.removeItem('reRideCurrentUser');
           if (savedSession) sessionStorage.removeItem('currentUser');
           return null;
+        }
+
+        // Validate and fix missing role - provide default if we can infer it
+        if (!user.role || typeof user.role !== 'string') {
+          // Try to infer role from other fields (e.g., has dealership = seller)
+          if (user.dealershipName) {
+            user.role = 'seller';
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔧 Auto-assigned role "seller" based on dealershipName');
+            }
+          } else {
+            user.role = 'customer'; // Safe default
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔧 Auto-assigned role "customer" as default');
+            }
+          }
+        }
+        
+        // Ensure role is a valid value
+        if (!['customer', 'seller', 'admin'].includes(user.role)) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Invalid role in user object:', user.role, '- defaulting to customer');
+          }
+          user.role = 'customer'; // Safe default instead of clearing
+          // Save corrected user back
+          try {
+            localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
+          } catch (e) {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Failed to save corrected user:', e);
+            }
+          }
         }
         
         console.log('🔄 Restoring logged-in user:', {
@@ -694,12 +731,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         }, 3000); // 3 seconds max - very aggressive for fast initial render
         
         // Load critical data first (vehicles and users) with individual timeouts
-        const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+        const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T, silent: boolean = false): Promise<T> => {
           return Promise.race([
             promise,
             new Promise<T>((resolve) => {
               setTimeout(() => {
-                console.warn(`Request timeout after ${timeoutMs}ms, using fallback`);
+                // Only log timeout warnings in development mode to reduce console noise
+                if (!silent && process.env.NODE_ENV === 'development') {
+                  console.warn(`Request timeout after ${timeoutMs}ms, using fallback`);
+                }
                 resolve(fallback);
               }, timeoutMs);
             })
@@ -709,19 +749,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         const [vehiclesData, usersData] = await Promise.all([
           loadWithTimeout(
             dataService.getVehicles().catch(err => {
-              console.warn('Failed to load vehicles, using empty array:', err);
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('Failed to load vehicles, using empty array:', err);
+              }
               return [];
             }),
-            5000, // 5 second timeout for vehicles (reduced for faster loading)
-            []
+            10000, // 10 second timeout for vehicles (increased for better reliability)
+            [],
+            true // Silent timeout warning
           ),
           loadWithTimeout(
             dataService.getUsers().catch(err => {
-              console.warn('Failed to load users, using empty array:', err);
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('Failed to load users, using empty array:', err);
+              }
               return [];
             }),
-            5000, // 5 second timeout for users (reduced for faster loading)
-            []
+            10000, // 10 second timeout for users (increased for better reliability)
+            [],
+            true // Silent timeout warning
           )
         ]);
         
@@ -758,7 +804,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           })(),
           new Promise<void>((resolve) => {
             setTimeout(() => {
-              console.warn('FAQ loading timeout, using localStorage fallback');
+              // Only log in development to reduce console noise
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('FAQ loading timeout, using localStorage fallback');
+              }
               if (isMounted) {
                 const localFaqs = getFaqs();
                 if (localFaqs) {
@@ -768,7 +817,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 }
               }
               resolve();
-            }, 5000);
+            }, 10000); // Increased to 10 seconds
           })
         ]).catch(() => {
           // Silently handle any errors
@@ -781,23 +830,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               // Silently fail - we already have fallback data
               return null;
             }),
-            Promise.resolve(getConversations()).catch(() => {
-              // Silently fail - empty conversations is fine
-              return [];
-            })
-          ]).then(([vehicleDataData, conversationsData]) => {
+            // Try to load conversations from MongoDB first, fallback to localStorage
+            (async () => {
+              try {
+                // Get current user from localStorage if available
+                let userEmail: string | undefined;
+                let userRole: string | undefined;
+                try {
+                  const savedUser = localStorage.getItem('reRideCurrentUser');
+                  if (savedUser) {
+                    const user = JSON.parse(savedUser);
+                    userEmail = user?.email;
+                    userRole = user?.role;
+                  }
+                } catch {}
+                
+                const { getConversationsFromMongoDB } = await import('../services/conversationService');
+                // Filter by user role
+                const result = userRole === 'seller' 
+                  ? await getConversationsFromMongoDB(undefined, userEmail)
+                  : userRole === 'customer'
+                  ? await getConversationsFromMongoDB(userEmail)
+                  : await getConversationsFromMongoDB();
+                
+                if (result.success && result.data) {
+                  return result.data;
+                }
+              } catch (error) {
+                console.warn('Failed to load conversations from MongoDB, using localStorage:', error);
+              }
+              // Fallback to localStorage
+              return Promise.resolve(getConversations()).catch(() => []);
+            })(),
+            // Try to load notifications from MongoDB first, fallback to localStorage
+            (async () => {
+              try {
+                // Get current user from localStorage if available
+                let userEmail: string | undefined;
+                try {
+                  const savedUser = localStorage.getItem('reRideCurrentUser');
+                  if (savedUser) {
+                    const user = JSON.parse(savedUser);
+                    userEmail = user?.email;
+                  }
+                } catch {}
+                
+                if (userEmail) {
+                  const { getNotificationsFromMongoDB } = await import('../services/notificationService');
+                  const result = await getNotificationsFromMongoDB(userEmail);
+                  if (result.success && result.data) {
+                    return result.data;
+                  }
+                }
+              } catch (error) {
+                console.warn('Failed to load notifications from MongoDB, using localStorage:', error);
+              }
+              // Fallback to localStorage
+              try {
+                const notificationsJson = localStorage.getItem('reRideNotifications');
+                return notificationsJson ? JSON.parse(notificationsJson) : [];
+              } catch {
+                return [];
+              }
+            })()
+          ]).then(([vehicleDataData, conversationsData, notificationsData]) => {
             if (isMounted && vehicleDataData) {
               setVehicleData(vehicleDataData);
             }
             if (isMounted) {
               setConversations(conversationsData || []);
             }
+            if (isMounted && notificationsData) {
+              setNotifications(notificationsData);
+              // Also save to localStorage for offline support
+              try {
+                localStorage.setItem('reRideNotifications', JSON.stringify(notificationsData));
+              } catch (error) {
+                console.warn('Failed to save notifications to localStorage:', error);
+              }
+            }
           }),
           new Promise<void>((resolve) => {
             setTimeout(() => {
-              console.warn('Background data loading timeout');
+              // Only log in development to reduce console noise
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('Background data loading timeout');
+              }
               resolve();
-            }, 10000);
+            }, 15000); // Increased to 15 seconds for background loading
           })
         ]).catch(error => {
           console.warn('Background data loading failed:', error);
@@ -872,6 +992,123 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       isSubscribed = false;
     };
   }, [currentUser?.email, currentUser?.role, addToast]);
+
+  // Watch for new notifications and show browser notifications
+  useEffect(() => {
+    if (!currentUser?.email || notifications.length === 0) {
+      return;
+    }
+
+    // Get notifications for current user
+    const userNotifications = notifications.filter(n => 
+      n.recipientEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim()
+    );
+
+    if (userNotifications.length === 0) {
+      return;
+    }
+
+    // Get unread notifications that haven't been shown yet
+    const unreadNotifications = userNotifications
+      .filter(n => !n.isRead && !shownNotificationIdsRef.current.has(n.id))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    // Show browser notification for each new unread notification (when page is hidden)
+    unreadNotifications.forEach(notification => {
+      // Mark as shown
+      shownNotificationIdsRef.current.add(notification.id);
+      
+      // Only show browser notification if page is in background
+      if (document.visibilityState === 'hidden') {
+        const title = notification.targetType === 'conversation' 
+          ? 'New Message' 
+          : 'New Notification';
+        
+        showNotification(title, {
+          body: notification.message,
+          icon: '/favicon.ico',
+          tag: `notification-${notification.id}`,
+          requireInteraction: false
+        }).catch(err => {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to show browser notification:', err);
+          }
+        });
+      }
+    });
+
+    // Clean up old notification IDs from the ref (keep last 100)
+    if (shownNotificationIdsRef.current.size > 100) {
+      const notificationIds = new Set(notifications.map(n => n.id));
+      shownNotificationIdsRef.current = new Set(
+        Array.from(shownNotificationIdsRef.current).filter(id => notificationIds.has(id))
+      );
+    }
+  }, [notifications, currentUser?.email]);
+
+  // Periodic sync queue processor - retry failed MongoDB saves
+  useEffect(() => {
+    const SYNC_INTERVAL = 30000; // 30 seconds
+    const MIN_SYNC_INTERVAL = 5000; // Minimum 5 seconds between syncs
+
+    let syncInterval: NodeJS.Timeout | null = null;
+    let isProcessing = false;
+
+    const processSync = async () => {
+      // Prevent concurrent sync processing
+      if (isProcessing) {
+        console.log('⏳ Sync already in progress, skipping...');
+        return;
+      }
+
+      try {
+        isProcessing = true;
+        const { getSyncQueueStatus } = await import('../services/syncService');
+        const queueStatus = getSyncQueueStatus();
+        
+        if (queueStatus.pending > 0) {
+          console.log(`🔄 Processing sync queue: ${queueStatus.pending} items pending`);
+          
+          const { processSyncQueue } = await import('../services/syncService');
+          const result = await processSyncQueue();
+          
+          if (result.success > 0) {
+            console.log(`✅ Successfully synced ${result.success} items to MongoDB`);
+            if (process.env.NODE_ENV === 'development') {
+              addToast(`Synced ${result.success} items to server`, 'success');
+            }
+          }
+          
+          if (result.failed > 0) {
+            console.warn(`⚠️ Failed to sync ${result.failed} items after retries`);
+            const remainingStatus = getSyncQueueStatus();
+            if (remainingStatus.pending > 0 && process.env.NODE_ENV === 'development') {
+              console.log(`⏳ ${remainingStatus.pending} items still pending sync`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error processing sync queue:', error);
+      } finally {
+        isProcessing = false;
+      }
+    };
+
+    // Process sync queue immediately on mount (after a short delay)
+    const initialTimeout = setTimeout(() => {
+      processSync();
+    }, 5000); // Wait 5 seconds after mount
+
+    // Then process periodically
+    syncInterval = setInterval(processSync, SYNC_INTERVAL);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      if (syncInterval) {
+        clearInterval(syncInterval);
+      }
+    };
+  }, [addToast]);
 
   // Sync vehicle data across tabs and periodically refresh from API
   useEffect(() => {
@@ -1739,27 +1976,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     sendMessage: (conversationId: string, message: string) => {
       console.log('🔧 sendMessage called:', { conversationId, message, currentUser: currentUser?.email });
       
+      if (!currentUser) {
+        console.warn('⚠️ Cannot send message: no current user');
+        addToast('You must be logged in to send messages.', 'error');
+        return;
+      }
+
       try {
+        // Find conversation BEFORE updating state to avoid stale state issues
+        const conversation = conversations.find(conv => conv.id === conversationId);
+        if (!conversation) {
+          console.warn('⚠️ Conversation not found:', conversationId);
+          addToast('Conversation not found. Please refresh and try again.', 'error');
+          return;
+        }
+
+        // Generate a more unique message ID to prevent collisions
+        const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        
         const newMessage = {
-          id: Date.now(),
-          sender: (currentUser?.role === 'seller' ? 'seller' : 'user') as 'seller' | 'user',
+          id: messageId,
+          sender: (currentUser.role === 'seller' ? 'seller' : 'user') as 'seller' | 'user',
           text: message,
           timestamp: new Date().toISOString(),
           isRead: false,
           type: 'text' as const
         };
 
-        // Update conversations first
+        // Update conversations and save to localStorage
         setConversations(prev => {
           const updated = prev.map(conv => 
             conv.id === conversationId ? {
               ...conv,
               messages: [...conv.messages, newMessage],
               lastMessageAt: newMessage.timestamp,
-              isReadBySeller: currentUser?.role === 'seller' ? true : conv.isReadBySeller,
-              isReadByCustomer: currentUser?.role === 'customer' ? true : conv.isReadByCustomer
+              isReadBySeller: currentUser.role === 'seller' ? true : conv.isReadBySeller,
+              isReadByCustomer: currentUser.role === 'customer' ? true : conv.isReadByCustomer
             } : conv
           );
+          
+          // Save to localStorage immediately
+          try {
+            saveConversations(updated);
+          } catch (error) {
+            console.error('Failed to save conversations to localStorage:', error);
+          }
+          
+          // Save to MongoDB with sync queue fallback
+          const updatedConversation = updated.find(conv => conv.id === conversationId);
+          if (updatedConversation) {
+            // Save entire conversation to MongoDB (with queue fallback)
+            (async () => {
+              const result = await saveConversationWithSync(updatedConversation);
+              if (result.synced) {
+                console.log('✅ Conversation synced to MongoDB:', conversationId);
+              } else if (result.queued) {
+                console.log('⏳ Conversation queued for sync (will retry):', conversationId);
+              }
+            })();
+            
+            // Also add message via API with sync queue
+            (async () => {
+              const result = await addMessageWithSync(conversationId, newMessage);
+              if (result.synced) {
+                console.log('✅ Message synced to MongoDB:', messageId);
+              } else if (result.queued) {
+                console.log('⏳ Message queued for sync (will retry):', messageId);
+              }
+            })();
+          }
           
           if (process.env.NODE_ENV === 'development') {
             console.log('🔧 Updated conversations:', updated);
@@ -1775,46 +2060,203 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 ...prev,
                 messages: [...prev.messages, newMessage],
                 lastMessageAt: newMessage.timestamp,
-                isReadBySeller: currentUser?.role === 'seller' ? true : prev.isReadBySeller,
-                isReadByCustomer: currentUser?.role === 'customer' ? true : prev.isReadByCustomer
+                isReadBySeller: currentUser.role === 'seller' ? true : prev.isReadBySeller,
+                isReadByCustomer: currentUser.role === 'customer' ? true : prev.isReadByCustomer
               };
             }
             return prev;
           });
         }
 
-        // Create notification for the recipient
-        if (currentUser) {
-          const conversation = conversations.find(conv => conv.id === conversationId);
-          if (conversation) {
-            const recipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
-            const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
-            
-            const newNotification: Notification = {
-              id: Date.now() + 1, // Ensure unique ID
-              recipientEmail,
-              message: `New message from ${senderName}: ${message.length > 50 ? message.substring(0, 50) + '...' : message}`,
-              targetId: conversationId,
-              targetType: 'conversation',
-              isRead: false,
-              timestamp: new Date().toISOString()
-            };
+        // Create notification for the recipient using the conversation we found
+        const recipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
+        const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
+        
+        // Generate a more unique notification ID
+        const notificationId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        
+        const newNotification: Notification = {
+          id: notificationId,
+          recipientEmail,
+          message: `New message from ${senderName}: ${message.length > 50 ? message.substring(0, 50) + '...' : message}`,
+          targetId: conversationId,
+          targetType: 'conversation',
+          isRead: false,
+          timestamp: new Date().toISOString()
+        };
 
-            // Update notifications separately
-            setNotifications(prevNotifications => {
-              const updatedNotifications = [newNotification, ...prevNotifications];
-              // Save to localStorage
-              try {
-                localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
-              } catch (error) {
-                console.error('Failed to save notifications to localStorage:', error);
-              }
-              return updatedNotifications;
-            });
+        // Update notifications separately
+        setNotifications(prevNotifications => {
+          const updatedNotifications = [newNotification, ...prevNotifications];
+          // Save to localStorage
+          try {
+            localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
+          } catch (error) {
+            console.error('Failed to save notifications to localStorage:', error);
           }
-        }
+          
+          // Save to MongoDB with sync queue fallback - wait for completion
+          (async () => {
+            const result = await saveNotificationWithSync(newNotification);
+            if (result.synced) {
+              console.log('✅ Notification synced to MongoDB:', notificationId);
+            } else if (result.queued) {
+              console.log('⏳ Notification queued for sync (will retry):', notificationId);
+            }
+          })();
+          
+          return updatedNotifications;
+        });
       } catch (error) {
         console.error('Error in sendMessage:', error);
+        addToast('Failed to send message. Please try again.', 'error');
+      }
+    },
+    sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: any) => {
+      console.log('🔧 sendMessageWithType called:', { conversationId, messageText, type, payload, currentUser: currentUser?.email });
+      
+      if (!currentUser) {
+        console.warn('⚠️ Cannot send message: no current user');
+        addToast('You must be logged in to send messages.', 'error');
+        return;
+      }
+
+      try {
+        // Find conversation BEFORE updating state to avoid stale state issues
+        const conversation = conversations.find(conv => conv.id === conversationId);
+        if (!conversation) {
+          console.warn('⚠️ Conversation not found:', conversationId);
+          addToast('Conversation not found. Please refresh and try again.', 'error');
+          return;
+        }
+
+        // Generate a more unique message ID to prevent collisions
+        const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        
+        const newMessage: ChatMessage = {
+          id: messageId,
+          sender: (currentUser.role === 'seller' ? 'seller' : 'user') as 'seller' | 'user',
+          text: messageText,
+          timestamp: new Date().toISOString(),
+          isRead: false,
+          type: type || 'text',
+          ...(type === 'offer' && payload ? { payload } : {})
+        };
+
+        // Update conversations and save to localStorage
+        setConversations(prev => {
+          const updated = prev.map(conv => 
+            conv.id === conversationId ? {
+              ...conv,
+              messages: [...conv.messages, newMessage],
+              lastMessageAt: newMessage.timestamp,
+              isReadBySeller: currentUser.role === 'seller' ? true : conv.isReadBySeller,
+              isReadByCustomer: currentUser.role === 'customer' ? true : conv.isReadByCustomer
+            } : conv
+          );
+          
+          // Save to localStorage immediately
+          try {
+            saveConversations(updated);
+          } catch (error) {
+            console.error('Failed to save conversations to localStorage:', error);
+          }
+          
+          // Save to MongoDB with sync queue fallback
+          const updatedConversation = updated.find(conv => conv.id === conversationId);
+          if (updatedConversation) {
+            // Save entire conversation to MongoDB (with queue fallback)
+            (async () => {
+              const result = await saveConversationWithSync(updatedConversation);
+              if (result.synced) {
+                console.log('✅ Conversation synced to MongoDB:', conversationId);
+              } else if (result.queued) {
+                console.log('⏳ Conversation queued for sync (will retry):', conversationId);
+              }
+            })();
+            
+            // Also add message via API with sync queue
+            (async () => {
+              const result = await addMessageWithSync(conversationId, newMessage);
+              if (result.synced) {
+                console.log('✅ Message synced to MongoDB:', messageId);
+              } else if (result.queued) {
+                console.log('⏳ Message queued for sync (will retry):', messageId);
+              }
+            })();
+          }
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 Updated conversations:', updated);
+          }
+          return updated;
+        });
+
+        // Update activeChat separately to avoid race conditions
+        if (activeChat?.id === conversationId) {
+          setActiveChat(prev => {
+            if (prev?.id === conversationId) {
+              return {
+                ...prev,
+                messages: [...prev.messages, newMessage],
+                lastMessageAt: newMessage.timestamp,
+                isReadBySeller: currentUser.role === 'seller' ? true : prev.isReadBySeller,
+                isReadByCustomer: currentUser.role === 'customer' ? true : prev.isReadByCustomer
+              };
+            }
+            return prev;
+          });
+        }
+
+        // Create notification for the recipient using the conversation we found
+        const recipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
+        const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
+        
+        // Create appropriate notification message
+        let notificationMessage = '';
+        if (type === 'offer' && payload?.offerPrice) {
+          notificationMessage = `New offer from ${senderName}: ₹${payload.offerPrice.toLocaleString()}`;
+        } else {
+          notificationMessage = `New message from ${senderName}: ${messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText}`;
+        }
+        
+        // Generate a more unique notification ID
+        const notificationId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        
+        const newNotification: Notification = {
+          id: notificationId,
+          recipientEmail,
+          message: notificationMessage,
+          targetId: conversationId,
+          targetType: 'conversation',
+          isRead: false,
+          timestamp: new Date().toISOString()
+        };
+
+        // Update notifications separately
+        setNotifications(prevNotifications => {
+          const updatedNotifications = [newNotification, ...prevNotifications];
+          // Save to localStorage
+          try {
+            localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
+          } catch (error) {
+            console.error('Failed to save notifications to localStorage:', error);
+          }
+          
+          // Save to MongoDB with sync queue fallback - wait for completion
+          (async () => {
+            const result = await saveNotificationWithSync(newNotification);
+            if (result.synced) {
+              console.log('✅ Notification synced to MongoDB:', notificationId);
+            } else if (result.queued) {
+              console.log('⏳ Notification queued for sync (will retry):', notificationId);
+            }
+          })();
+          
+          return updatedNotifications;
+        });
+      } catch (error) {
+        console.error('Error in sendMessageWithType:', error);
         addToast('Failed to send message. Please try again.', 'error');
       }
     },
