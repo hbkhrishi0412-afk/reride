@@ -5,7 +5,6 @@ import { getFirstValidImage, getValidImages, getSafeImageSrc } from '../utils/im
 import StarRating from './StarRating';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
-import Benefits from './Benefits';
 import QuickViewModal from './QuickViewModal';
 import BadgeDisplay from './BadgeDisplay';
 import VehicleHistory from './VehicleHistory';
@@ -188,6 +187,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   console.log('🎯 VehicleDetail component rendering with vehicle:', vehicle);
   console.log('🎯 Vehicle data:', { id: vehicle?.id, make: vehicle?.make, model: vehicle?.model, price: vehicle?.price });
   
+  // ✅ FIX: Call useApp() at the top level (React hooks rule)
+  const { updateVehicle } = useApp();
+  
   // Lightweight safety check - only essential properties
   const safeVehicle = {
     ...vehicle,
@@ -270,8 +272,14 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const canRate = currentUser?.role === 'customer';
   const isCompareDisabled = !isComparing && comparisonList.length >= 4;
   
+  // ✅ FIX: Normalize emails for comparison (consistent with codebase pattern)
   const seller = useMemo(() => {
-    return users.find(u => u.email === safeVehicle.sellerEmail);
+    if (!safeVehicle.sellerEmail) return undefined;
+    const normalizedSellerEmail = safeVehicle.sellerEmail.toLowerCase().trim();
+    return users.find(u => {
+      if (!u || !u.email) return false;
+      return u.email.toLowerCase().trim() === normalizedSellerEmail;
+    });
   }, [users, safeVehicle.sellerEmail]);
 
   const filteredRecommendations = useMemo(() => {
@@ -301,9 +309,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
               }
             }
           } catch {}
+          // ✅ FIX: Use updateVehicle from top-level hook call
           // Update global vehicles state via context so dashboards reflect the change
           try {
-            const { updateVehicle } = useApp();
             // Call asynchronously; ignore errors
             updateVehicle(safeVehicle.id, { views: data.views }).catch(() => {});
           } catch {}
@@ -315,7 +323,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     if (safeVehicle?.id) {
       trackView();
     }
-  }, [safeVehicle?.id]);
+  }, [safeVehicle?.id, updateVehicle]); // ✅ FIX: Add updateVehicle to dependencies
 
   console.log('🎯 VehicleDetail about to render JSX');
   return (

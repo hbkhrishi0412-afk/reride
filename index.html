@@ -122,12 +122,24 @@
         }
         viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, shrink-to-fit=no';
         
-        // Reset any CSS zoom
-        document.documentElement.style.zoom = '1';
-        document.body.style.zoom = '1';
+        // ✅ FIX: Reset any CSS zoom - check if elements exist first
+        if (document.documentElement) {
+          document.documentElement.style.zoom = '1';
+        }
+        // ✅ FIX: Check if body exists before accessing its style
+        if (document.body) {
+          document.body.style.zoom = '1';
+        } else {
+          // If body doesn't exist yet, wait for DOMContentLoaded
+          document.addEventListener('DOMContentLoaded', function() {
+            if (document.body) {
+              document.body.style.zoom = '1';
+            }
+          });
+        }
         
         // Prevent text size adjustment that causes zooming
-        if ('textSizeAdjust' in document.documentElement.style) {
+        if (document.documentElement && 'textSizeAdjust' in document.documentElement.style) {
           document.documentElement.style.textSizeAdjust = '100%';
         }
       })();
