@@ -644,6 +644,19 @@ const AppContent: React.FC = React.memo(() => {
         
         console.log('✅ Seller dashboard validation passed, rendering dashboard');
         
+        // Safety check: Ensure vehicleData is defined
+        if (!vehicleData) {
+          console.error('❌ vehicleData is undefined, cannot render dashboard');
+          return (
+            <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-600 mb-4">Loading Dashboard...</h2>
+                <p className="text-gray-500">Please wait while we load the dashboard data.</p>
+              </div>
+            </div>
+          );
+        }
+        
         return (
           <DashboardErrorBoundary>
             <Dashboard
@@ -1777,7 +1790,6 @@ const AppContent: React.FC = React.memo(() => {
           if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
           return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
         }).length}
-        headerCurrentView={currentView}
       >
         <ErrorBoundary>
           <Suspense fallback={<LoadingSpinner />}>

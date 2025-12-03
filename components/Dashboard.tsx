@@ -1280,10 +1280,24 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   
   // Refresh user data from API to get updated plan expiry date
   useEffect(() => {
+    // Only refresh if seller is authenticated
+    if (!seller || !seller.email) {
+      return;
+    }
+    
     const refreshUserData = async () => {
       try {
         // Fetch all users and find the current seller
         const response = await fetch('/api/users');
+        
+        // Handle 401 Unauthorized gracefully - user might not be authenticated
+        if (response.status === 401) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ User refresh: 401 Unauthorized - user may not be authenticated');
+          }
+          return; // Silently return - don't show error
+        }
+        
         if (response.ok) {
           // Check content type before parsing
           const contentType = response.headers.get('content-type');
@@ -1330,8 +1344,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             }
           }
         } else {
-          // Log non-OK responses but don't throw errors
-          console.warn(`⚠️ User refresh API returned ${response.status}: ${response.statusText}`);
+          // Log non-OK responses but don't throw errors (except 401 which is handled above)
+          if (response.status !== 401) {
+            console.warn(`⚠️ User refresh API returned ${response.status}: ${response.statusText}`);
+          }
         }
       } catch (error) {
         // Silently fail - don't disrupt user experience
