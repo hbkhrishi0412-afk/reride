@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { VehicleData, VehicleCategory } from '../types.js';
-import { syncService, type SyncStatus } from '../services/syncService.js';
 
 interface VehicleDataManagementProps {
   vehicleData: VehicleData;
@@ -30,8 +29,6 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
   const [newItemValue, setNewItemValue] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncService.getStatus());
 
   // Get available data based on selections
   const categories = Object.keys(vehicleData).sort();
@@ -60,19 +57,6 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
     variant.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Subscribe to sync status updates
-  useEffect(() => {
-    const unsubscribe = syncService.subscribe(setSyncStatus);
-    return unsubscribe;
-  }, []);
-
-  // Start sync service when component mounts
-  useEffect(() => {
-    syncService.startSync();
-    return () => {
-      // Don't stop sync service when component unmounts as other components might need it
-    };
-  }, []);
 
   const handleUpdateData = (updater: (draft: VehicleData) => void) => {
     console.log('🔄 Updating vehicle data...');
@@ -86,10 +70,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
     
     // Update parent component
     onUpdate(newData);
-    
-    // Mark that there are pending changes for sync
-    syncService.markPendingChanges();
-    console.log('✅ Vehicle data update sent to parent and marked for sync');
+    console.log('✅ Vehicle data update sent to parent');
   };
 
   const handleEdit = (type: EditingState['type'], path: string[], value: string) => {
@@ -463,74 +444,11 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all duration-200 ${
-              syncStatus.isActive 
-                ? syncStatus.error 
-                  ? 'bg-red-500/20 border border-red-500/30' 
-                  : syncStatus.pendingChanges
-                    ? 'bg-yellow-500/20 border border-yellow-500/30'
-                    : 'bg-green-500/20 border border-green-500/30'
-                : 'bg-gray-500/20 border border-gray-500/30'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${
-                syncStatus.isActive 
-                  ? syncStatus.error 
-                    ? 'bg-red-400' 
-                    : syncStatus.pendingChanges
-                      ? 'bg-yellow-400 animate-pulse'
-                      : 'bg-green-400 animate-pulse'
-                  : 'bg-gray-400'
-              }`}></div>
-              <span className="text-sm font-medium">
-                {syncStatus.isActive 
-                  ? syncStatus.error 
-                    ? 'Sync Error' 
-                    : syncStatus.pendingChanges
-                      ? 'Syncing...'
-                      : 'Live Sync Active'
-                  : 'Sync Inactive'
-                }
-              </span>
-              {syncStatus.lastSyncTime && (
-                <span className="text-xs opacity-75">
-                  ({syncStatus.lastSyncTime.toLocaleTimeString()})
-                </span>
-              )}
-              {syncStatus.error && (
-                <span className="text-xs text-red-300 cursor-help" title={syncStatus.error}>
-                  ⚠️
-                </span>
-              )}
-            </div>
             <button
               onClick={onPreview}
               className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 backdrop-blur-sm border border-white/20"
             >
               📋 Show Seller Form Preview
-            </button>
-            <button
-              onClick={async () => {
-                setIsSyncing(true);
-                try {
-                  const success = await syncService.forceSync();
-                  if (success) {
-                    console.log('✅ Force sync completed successfully');
-                  } else {
-                    console.warn('⚠️ Force sync failed');
-                  }
-                } finally {
-                  setIsSyncing(false);
-                }
-              }}
-              disabled={!syncStatus.isOnline || isSyncing}
-              className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${
-                syncStatus.isOnline && !isSyncing
-                  ? 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
-                  : 'bg-gray-500/20 text-gray-400 cursor-not-allowed'
-              }`}
-              title={syncStatus.isOnline ? 'Force sync now' : 'No internet connection'}
-            >
-              {isSyncing ? '⏳ Syncing...' : `🔄 ${syncStatus.pendingChanges ? 'Sync Now' : 'Force Sync'}`}
             </button>
             <button
               onClick={onBulkUpload}

@@ -1801,10 +1801,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             const actor = currentUser?.name || currentUser?.email || 'System';
             const entry = logAction(actor, 'Update Vehicle Data', 'Vehicle Data', 'Updated vehicle data configuration (saved locally)');
             setAuditLog(prev => [entry, ...prev]);
-            
-            // Import sync service to mark pending changes
-            const { syncService } = await import('../services/syncService');
-            syncService.markPendingChanges();
           } catch (error) {
             console.warn('Failed to save vehicle data to localStorage:', error);
             addToast('Failed to save vehicle data', 'error');
