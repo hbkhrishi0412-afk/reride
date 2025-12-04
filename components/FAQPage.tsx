@@ -38,7 +38,7 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
   };
 
   return (
-    <div className="animate-fade-in container mx-auto px-4 py-8 max-w-4xl">
+    <div className="animate-fade-in container mx-auto py-8 max-w-4xl">
       <div className="text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark">
           Frequently Asked Questions

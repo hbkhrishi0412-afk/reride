@@ -329,7 +329,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   return (
     <>
       <div className="bg-white dark:bg-white animate-fade-in">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="container mx-auto py-8">
               <button onClick={onBackToHome} className="mb-6 bg-white text-spinny-text-dark dark:text-brand-gray-200 font-bold py-2 px-4 rounded-lg hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors shadow-soft">
                 &larr; Back to Listings
               </button>

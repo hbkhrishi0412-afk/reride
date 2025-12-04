@@ -52,7 +52,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan }) 
 
     return (
         <div className="bg-white dark:bg-white py-12 sm:py-20 animate-fade-in">
-            <div className="container mx-auto px-4">
+            <div className="container mx-auto">
                 <div className="max-w-2xl mx-auto text-center mb-12">
                     <h1 className="text-4xl md:text-5xl font-extrabold text-spinny-text-dark dark:text-white">
                         Find the Perfect Plan for Your Dealership

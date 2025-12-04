@@ -694,7 +694,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   if (isWishlistMode) {
      return (
-      <div className="animate-fade-in container mx-auto px-4 py-8">
+      <div className="animate-fade-in container mx-auto py-8">
         <h1 className="text-3xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-5 border-b border-gray-200-200 dark:border-gray-200-200 pb-3">{categoryTitle}</h1>
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {isLoading ? (
@@ -1160,7 +1160,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-tr from-orange-200/15 to-pink-200/15 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
         </div>
         
-        <div className="relative z-10 used-cars-page grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4 lg:gap-8 container mx-auto px-4 py-4 lg:py-8">
+        <div className="relative z-10 used-cars-page grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4 lg:gap-8 container mx-auto py-4 lg:py-8">
           <aside className={`filters hidden lg:block lg:sticky top-24 self-start space-y-6 transition-all duration-300 ${isDesktopFilterVisible ? 'w-[300px] opacity-100' : 'w-0 opacity-0 -translate-x-full'}`}>
               <div className={`bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-6 ${isDesktopFilterVisible ? 'block' : 'hidden'}`}>
                 <div className="flex items-center gap-3 mb-6">
@@ -1175,14 +1175,17 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               </div>
           </aside>
 
-          <main className="space-y-4 lg:space-y-6">
+          <main className="space-y-2 lg:space-y-4">
             {/* Mobile-optimized search - collapsible on mobile */}
-            <div className="intelligent-search bg-white/80 backdrop-blur-xl rounded-xl lg:rounded-3xl shadow-xl border border-white/20 p-4 lg:p-8">
-              <div className="flex items-center justify-between mb-2 lg:mb-0">
-                <label htmlFor="ai-search" className="text-base lg:text-lg font-bold text-spinny-text-dark dark:text-spinny-text-dark">✨ Intelligent Search</label>
+            <div className="intelligent-search bg-white/80 backdrop-blur-xl rounded-xl lg:rounded-2xl shadow-xl border border-white/20 p-2.5 lg:p-4 -mt-12">
+              <div className="flex items-center gap-2 mb-1.5 lg:mb-1.5">
+                <label htmlFor="ai-search" className="text-xs lg:text-sm font-semibold text-spinny-text-dark dark:text-spinny-text-dark flex-shrink-0">✨ Intelligent Search</label>
+                <p className={`hidden lg:block text-xs text-spinny-text dark:text-spinny-text flex-1 truncate`}>
+                  Describe what you're looking for, e.g., "a white Tata Nexon under ₹15 lakhs with a sunroof"
+                </p>
                 <button 
                   onClick={() => setIsAiSearchCollapsed(prev => !prev)}
-                  className="lg:hidden p-1 text-gray-500 hover:text-gray-700"
+                  className="lg:hidden p-1 text-gray-500 hover:text-gray-700 flex-shrink-0"
                   aria-label="Toggle search"
                 >
                   <svg className={`w-5 h-5 transition-transform ${isAiSearchCollapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1190,13 +1193,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   </svg>
                 </button>
               </div>
-              <p className={`text-xs lg:text-sm text-spinny-text dark:text-spinny-text mb-2 ${isAiSearchCollapsed ? 'hidden lg:block' : ''}`}>
+              <p className={`lg:hidden text-xs text-spinny-text dark:text-spinny-text mb-1.5 ${isAiSearchCollapsed ? 'hidden' : ''}`}>
                 Describe what you're looking for, e.g., "a white Tata Nexon under ₹15 lakhs with a sunroof"
               </p>
               <div className={`relative ${isAiSearchCollapsed ? 'hidden lg:block' : ''}`} ref={aiSearchRef}>
                   <div className="flex gap-2">
-                      <input type="text" id="ai-search" placeholder="Let our AI find your perfect vehicle..." value={aiSearchQuery} onChange={handleAiQueryChange} onFocus={() => setShowSuggestions(suggestions.length > 0)} onKeyDown={(e) => { if (e.key === 'Enter') handleAiSearch(); }} autoComplete="off" className={`${formElementClass} text-base`} style={{ fontSize: '16px' }} />
-                      <button onClick={() => handleAiSearch()} disabled={isAiSearching} className="btn-brand-primary text-white font-bold py-2 px-4 lg:px-6 rounded-lg transition-colors disabled:bg-brand-gray-400 disabled:cursor-wait text-sm lg:text-base whitespace-nowrap">{isAiSearching ? '...' : 'Search'}</button>
+                      <input type="text" id="ai-search" placeholder="Let our AI find your perfect vehicle..." value={aiSearchQuery} onChange={handleAiQueryChange} onFocus={() => setShowSuggestions(suggestions.length > 0)} onKeyDown={(e) => { if (e.key === 'Enter') handleAiSearch(); }} autoComplete="off" className={`${formElementClass} text-sm py-2`} style={{ fontSize: '14px' }} />
+                      <button onClick={() => handleAiSearch()} disabled={isAiSearching} className="btn-brand-primary text-white font-bold py-2 px-3 lg:px-4 rounded-lg transition-colors disabled:bg-brand-gray-400 disabled:cursor-wait text-xs lg:text-sm whitespace-nowrap flex-shrink-0">{isAiSearching ? '...' : 'Search'}</button>
                   </div>
                   {showSuggestions && suggestions.length > 0 && (
                       <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200-200 dark:border-gray-200-300 z-10 overflow-hidden"><ul className="divide-y divide-brand-gray-100 dark:divide-brand-gray-600">{suggestions.map((suggestion, index) => ( <li key={index}><button onClick={() => handleSuggestionClick(suggestion)} className="w-full text-left px-4 py-2 text-spinny-text-dark dark:text-brand-gray-200 hover:bg-spinny-off-white dark:hover:bg-brand-gray-600 transition-colors">{suggestion}</button></li>))}</ul></div>
@@ -1205,44 +1208,44 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </div>
 
           {/* Mobile-optimized filters and sort bar - sticky on mobile */}
-          <div className="sticky top-[56px] lg:static z-20 bg-white/95 backdrop-blur-sm lg:bg-transparent py-2 lg:py-0 border-b border-gray-200 lg:border-none -mx-4 px-4 lg:mx-0 lg:px-0">
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 lg:gap-4">
-              <div className='flex items-center gap-2 w-full sm:w-auto'>
-                <button onClick={() => setIsDesktopFilterVisible(prev => !prev)} className="hidden lg:block p-2 rounded-md bg-white dark:bg-brand-gray-700 hover:bg-spinny-off-white dark:hover:bg-brand-gray-600 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
+          <div className="sticky top-[56px] lg:static z-20 bg-white/95 backdrop-blur-sm lg:bg-transparent py-0.5 lg:py-0 border-b border-gray-200 lg:border-none -mx-4 px-4 lg:mx-0 lg:px-0 -mt-2">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-2 lg:gap-3">
+              <div className='flex items-center gap-1.5 w-full sm:w-auto'>
+                <button onClick={() => setIsDesktopFilterVisible(prev => !prev)} className="hidden lg:block p-1.5 rounded-md bg-white dark:bg-brand-gray-700 hover:bg-spinny-off-white dark:hover:bg-brand-gray-600 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
                 </button>
                 <button 
                   onClick={handleOpenFilterModal} 
-                  className="lg:hidden relative p-3 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-colors native-button active:opacity-80 min-h-[48px] min-w-[48px] flex items-center justify-center shadow-md"
+                  className="lg:hidden relative p-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors native-button active:opacity-80 min-h-[40px] min-w-[40px] flex items-center justify-center shadow-md"
                   style={{ backgroundColor: '#FF6B35' }}
                   aria-label={`Open filters${activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}`}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
-                    </svg>
-                    {activeFilterCount > 0 && (
-                        <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold leading-none text-white bg-red-500 rounded-full border-2 border-white shadow-md">
-                          {activeFilterCount}
-                        </span>
-                    )}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
+                  </svg>
+                  {activeFilterCount > 0 && (
+                      <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-4 px-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full border-2 border-white shadow-md">
+                        {activeFilterCount}
+                      </span>
+                  )}
                 </button>
-                <p className="text-xs lg:text-sm text-gray-600 dark:text-gray-400 flex-shrink-0 ml-2">
+                <p className="text-xs text-gray-600 dark:text-gray-400 flex-shrink-0 ml-1">
                   <span className="text-gray-500 dark:text-gray-400">Showing</span>{' '}
                   <span className="font-bold text-gray-900 dark:text-white">{paginatedVehicles.length}</span>{' '}
                   <span className="text-gray-500 dark:text-gray-400">of</span>{' '}
                   <span className="font-bold text-gray-900 dark:text-white">{processedVehicles.length}</span>
                 </p>
               </div>
-              <div className="flex items-center gap-3 lg:gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                <div className="flex items-center p-1 bg-spinny-off-white dark:bg-brand-gray-700 rounded-lg">
-                  <button title="Grid View" onClick={() => setViewMode('grid')} className={`p-2 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white shadow' : 'text-spinny-text hover:text-spinny-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'grid' ? { color: '#FF6B35' } : undefined}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+              <div className="flex items-center gap-2 lg:gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                <div className="flex items-center p-0.5 bg-spinny-off-white dark:bg-brand-gray-700 rounded-md">
+                  <button title="Grid View" onClick={() => setViewMode('grid')} className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white shadow' : 'text-spinny-text hover:text-spinny-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'grid' ? { color: '#FF6B35' } : undefined}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                   </button>
-                  <button title="List View" onClick={() => setViewMode('tile')} className={`p-2 rounded-md transition-colors ${viewMode === 'tile' ? 'bg-white shadow' : 'text-spinny-text hover:text-spinny-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'tile' ? { color: '#FF6B35' } : undefined}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 4a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 9a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 14a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" /></svg>
+                  <button title="List View" onClick={() => setViewMode('tile')} className={`p-1.5 rounded transition-colors ${viewMode === 'tile' ? 'bg-white shadow' : 'text-spinny-text hover:text-spinny-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'tile' ? { color: '#FF6B35' } : undefined}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M2 4a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 9a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 14a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" /></svg>
                   </button>
                 </div>
-                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className={`${formElementClass} text-sm w-auto lg:w-auto flex-shrink-0`} style={{ fontSize: '16px' }}>
+                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className={`${formElementClass} text-xs py-1.5 px-2 w-auto lg:w-auto flex-shrink-0`} style={{ fontSize: '13px' }}>
                     {Object.entries(sortOptions).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
                 </select>
               </div>

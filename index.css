@@ -726,7 +726,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: #FFFFFF;
   color: #2C2C2C;
-  font-size: 15px; /* Slightly reduced for less zoomed appearance */
+  font-size: 16px; /* Standard base size for better readability */
   line-height: 1.6;
 }
 
@@ -736,18 +736,30 @@ code {
 
 /* Container */
 .container {
-  max-width: 1600px; /* Increased from 1280px for better use of screen space */
+  max-width: 1280px; /* Standard width for e-commerce sites - aligned with industry standards */
   margin: 0 auto;
-  padding: 0 2rem; /* Increased from 1rem */
+  padding: 0 1rem; /* Reduced padding for better alignment */
   width: 100%;
   box-sizing: border-box;
 }
 
 /* Responsive container widths */
-@media (min-width: 1536px) {
+@media (min-width: 640px) {
   .container {
-    max-width: 1800px; /* Even wider on very large screens */
-    padding: 0 3rem;
+    padding: 0 1.5rem; /* 24px on tablets */
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    padding: 0 2rem; /* 32px on desktop */
+  }
+}
+
+@media (min-width: 1280px) {
+  .container {
+    max-width: 1400px; /* More reasonable max width for large screens */
+    padding: 0 2.5rem; /* 40px on large screens */
   }
 }
 
@@ -1289,10 +1301,16 @@ a:hover {
   --spacing-2xl: 3rem;
 }
 
-/* Reduce excessive padding on large screens */
+/* Responsive typography */
+@media (min-width: 1024px) {
+  html {
+    font-size: 16px;
+  }
+}
+
 @media (min-width: 1280px) {
-  .container {
-    padding: 0 3rem; /* More breathing room on large screens */
+  html {
+    font-size: 16px; /* Keep consistent, don't scale up */
   }
 }
 

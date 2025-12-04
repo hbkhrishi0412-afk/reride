@@ -26,7 +26,7 @@ const DealerCard: React.FC<{
   return (
     <div
       onClick={() => onViewProfile(seller.email)}
-      className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 cursor-pointer animate-stagger-fade-in"
+      className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-5 cursor-pointer animate-stagger-fade-in"
       style={{
         animationDelay: `${index * 50}ms`,
       }}
@@ -46,14 +46,14 @@ const DealerCard: React.FC<{
         </div>
       )}
 
-      <div className="relative p-6 flex flex-col items-center text-center">
+      <div className="relative p-4 flex flex-col items-center text-center">
         {/* Profile Picture with Enhanced Border */}
-        <div className="relative mb-4">
+        <div className="relative mb-0.5">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500 rounded-full blur-md opacity-0 group-hover:opacity-30 transition-opacity duration-500"></div>
           <img
             src={seller.logoUrl || `https://i.pravatar.cc/120?u=${seller.email}`}
             alt={`${seller.dealershipName || seller.name}'s logo`}
-            className="relative w-28 h-28 rounded-full object-cover border-4 border-white shadow-lg group-hover:scale-110 transition-transform duration-500"
+            className="relative w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg group-hover:scale-110 transition-transform duration-500"
           />
           {isVerified && (
             <div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-1.5 shadow-lg">
@@ -65,26 +65,26 @@ const DealerCard: React.FC<{
         </div>
 
         {/* Dealer Name */}
-        <h3 className="font-extrabold text-xl text-gray-900 mb-2 flex items-center justify-center gap-2 line-clamp-1">
+        <h3 className="font-extrabold text-lg text-gray-900 mb-1 flex items-center justify-center gap-2 line-clamp-1">
           {seller.dealershipName || seller.name}
         </h3>
 
         {/* Badges */}
         {seller.badges && seller.badges.length > 0 && (
-          <div className="mb-3 flex flex-wrap justify-center gap-1.5">
+          <div className="mb-2 flex flex-wrap justify-center gap-1.5">
             <BadgeDisplay badges={seller.badges || []} />
           </div>
         )}
 
         {/* Rating */}
-        <div className="flex items-center justify-center gap-2 mb-3">
+        <div className="flex items-center justify-center gap-2 mb-2">
           <StarRating rating={rating} readOnly size="sm" />
           <span className="text-sm font-semibold text-gray-700">{rating > 0 ? rating.toFixed(1) : 'N/A'}</span>
           <span className="text-xs text-gray-500">({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})</span>
         </div>
 
         {/* Social Stats */}
-        <div className="flex items-center justify-center gap-4 mb-4 text-sm">
+        <div className="flex items-center justify-center gap-4 mb-3 text-sm">
           <div className="flex items-center gap-1.5 text-gray-600">
             <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -103,7 +103,7 @@ const DealerCard: React.FC<{
         </div>
 
         {/* Bio */}
-        <p className="text-sm text-gray-600 mb-5 flex-grow line-clamp-3 min-h-[3.75rem]">
+        <p className="text-sm text-gray-600 mb-2 flex-grow line-clamp-2 min-h-[2.5rem]">
           {seller.bio || 'No description available'}
         </p>
 
@@ -113,7 +113,7 @@ const DealerCard: React.FC<{
             e.stopPropagation();
             onViewProfile(seller.email);
           }}
-          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-3 px-6 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
+          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-2 px-6 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
         >
           View Profile & Listings
         </button>
@@ -173,22 +173,22 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
   }, [sellers, searchQuery, sortBy, verifiedFilter]);
 
   return (
-    <div className="dealers container mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fade-in min-h-screen">
+    <div className="dealers container mx-auto py-3 animate-fade-in min-h-screen">
       {/* Header Section with Gradient */}
-      <div className="relative mb-10 overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-purple-600 to-orange-500 p-6 md:p-10 text-white">
+      <div className="relative mb-2 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-orange-500 p-2 md:p-3 text-white">
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="bg-white/20 backdrop-blur-sm rounded-xl p-2.5">
-              <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="flex items-center gap-2">
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1.5">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
             </div>
             <div>
-              <h1 className="text-3xl md:text-4xl font-extrabold mb-1.5">
+              <h1 className="text-xl md:text-2xl font-extrabold mb-0">
                 Certified Dealer Profiles
               </h1>
-              <p className="text-blue-100 text-base md:text-lg">
+              <p className="text-blue-100 text-xs md:text-sm">
                 Connect with trusted automotive dealers
               </p>
             </div>
@@ -197,12 +197,12 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-5 mb-6 border border-gray-100">
-        <div className="flex flex-col md:flex-row gap-4">
+      <div className="bg-white rounded-xl shadow-md p-3 mb-3 border border-gray-100">
+        <div className="flex flex-col md:flex-row gap-3">
           {/* Search Input */}
           <div className="flex-1 relative">
-            <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
@@ -211,8 +211,28 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
               placeholder="Search dealers by name, description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  // Trigger search on Enter key
+                  e.currentTarget.blur();
+                }
+              }}
+              className="w-full pl-10 pr-12 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
             />
+            <button
+              onClick={() => {
+                // Trigger search action
+                const input = document.querySelector('input[type="text"]') as HTMLInputElement;
+                input?.blur();
+              }}
+              className="absolute right-1.5 top-1/2 transform -translate-y-1/2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white p-2 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 shadow-sm hover:shadow-md"
+              aria-label="Search"
+              title="Search"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
           </div>
 
           {/* Sort Dropdown */}
@@ -220,7 +240,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="appearance-none bg-white border border-gray-300 rounded-xl px-6 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer transition-all font-medium"
+              className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer transition-all font-medium"
             >
               <option value="name">Sort by Name</option>
               <option value="rating">Sort by Rating</option>
@@ -228,8 +248,8 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
               <option value="followers">Sort by Followers</option>
               <option value="newest">Sort by Newest</option>
             </select>
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </div>
@@ -238,13 +258,13 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
           {/* Filter Toggle Button */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`px-6 py-3 rounded-xl font-medium transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
               verifiedFilter !== null
                 ? 'bg-blue-600 text-white hover:bg-blue-700'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
             Filters
@@ -299,7 +319,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
 
       {/* Results Count */}
       {filteredAndSortedSellers.length > 0 && (
-        <div className="mb-5 text-gray-600 text-sm">
+        <div className="mb-2 text-gray-600 text-sm">
           Showing <span className="font-bold text-gray-900">{filteredAndSortedSellers.length}</span> dealer{filteredAndSortedSellers.length !== 1 ? 's' : ''}
           {searchQuery && (
             <span> for &quot;<span className="font-semibold">{searchQuery}</span>&quot;</span>

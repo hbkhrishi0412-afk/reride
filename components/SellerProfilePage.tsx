@@ -80,7 +80,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
     }, [vehicles, searchQuery]);
 
     return (
-        <div className="animate-fade-in container mx-auto px-4 py-8">
+        <div className="animate-fade-in container mx-auto py-8">
             <button onClick={onBack} className="mb-6 bg-white text-spinny-text-dark dark:text-brand-gray-200 font-bold py-2 px-4 rounded-lg hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors shadow-soft">
                 &larr; Back
             </button>

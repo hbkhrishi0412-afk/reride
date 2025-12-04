@@ -861,7 +861,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
         }}></div>
       </div>
 
-      <div className="relative z-10 container mx-auto px-4 py-12">
+      <div className="relative z-10 container mx-auto py-12">
         {/* Header */}
         <div className="text-center mb-12 animate-fade-in">
           <div className="flex items-center justify-center mb-6">

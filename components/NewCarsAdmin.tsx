@@ -87,7 +87,7 @@ const NewCarsAdmin: React.FC<NewCarsAdminProps> = ({ currentUser, onNavigate }) 
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">New Cars Admin</h1>
         <button className="btn-brand-primary" onClick={() => onNavigate(View.NEW_CARS)}>View Public Page</button>

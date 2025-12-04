@@ -19,7 +19,7 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         <div className="absolute bottom-10 left-10 w-80 h-80 bg-gradient-to-tr from-orange-500/5 to-pink-500/5 rounded-full blur-3xl"></div>
       </div>
       
-      <div className="relative z-10 container mx-auto px-4 py-12 mt-16">
+      <div className="relative z-10 container mx-auto py-12 mt-16">
         {/* Premium Footer Content */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand Section */}

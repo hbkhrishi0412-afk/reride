@@ -32,7 +32,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
 
   if (!cityStats) {
     return (
-      <div className="container mx-auto px-4 py-16 text-center">
+      <div className="container mx-auto py-16 text-center">
         <h2 className="text-2xl font-bold text-gray-600">No vehicles found in {city}</h2>
         <p className="text-gray-500 mt-4">Check back later for listings in this area.</p>
       </div>
@@ -40,7 +40,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto py-8">
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-spinny-orange to-orange-600 text-white rounded-2xl p-8 mb-8 animate-fade-in">
         <h1 className="text-4xl font-bold mb-4">Used Cars in {city}</h1>

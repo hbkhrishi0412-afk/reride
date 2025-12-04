@@ -54,10 +54,10 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
     return (
       <div 
         onClick={() => onSelectVehicle(vehicle)}
-        className="group cursor-pointer bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 aspect-[3/4] flex flex-col"
+        className="group cursor-pointer bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-2 flex flex-col"
       >
         {/* Image Container */}
-        <div className="relative overflow-hidden flex-shrink-0" style={{ height: '50%' }}>
+        <div className="relative overflow-hidden flex-shrink-0" style={{ height: '200px' }}>
           <LazyImage
             src={getFirstValidImage(vehicle.images)}
             alt={`${vehicle.make} ${vehicle.model}`}
@@ -99,19 +99,19 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
         </div>
         
         {/* Content Section */}
-        <div className="p-4 flex-grow flex flex-col">
+        <div className="p-2.5 flex flex-col">
           {/* Vehicle Title - Large and Bold */}
-          <div className="mb-2">
-            <h3 className="text-base font-bold text-gray-900 leading-tight">
+          <div className="mb-0.5">
+            <h3 className="text-sm font-bold text-gray-900 leading-tight">
               {vehicle.year} {vehicle.make} {vehicle.model}
             </h3>
             {vehicle.variant && (
-              <p className="text-sm text-gray-600 mt-0.5">{vehicle.variant}</p>
+              <p className="text-xs text-gray-600 mt-0">{vehicle.variant}</p>
             )}
           </div>
           
           {/* Specs - Three icons with text */}
-          <div className="flex items-center gap-4 my-3 text-xs text-gray-600">
+          <div className="flex items-center gap-3 my-1 text-xs text-gray-600">
             {/* Clock Icon - Mileage */}
             <div className="flex items-center gap-1">
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -137,13 +137,13 @@ const FeaturedVehicleCard: React.FC<Pick<HomeProps, 'onSelectVehicle' | 'onToggl
             </div>
           </div>
           
-          {/* Location - Bottom with purple bold text */}
-          <div className="mt-auto pt-3">
-            <div className="flex items-center gap-2">
-              <svg className="h-5 w-5 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+          {/* Location - Right below specs */}
+          <div className="mt-1 mb-0">
+            <div className="flex items-center gap-1.5">
+              <svg className="h-4 w-4 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
               </svg>
-              <span className="text-base font-bold" style={{ color: '#9333EA' }}>
+              <span className="text-sm font-bold" style={{ color: '#9333EA' }}>
                 {vehicle.city || vehicle.location || 'Location N/A'}
               </span>
             </div>
@@ -283,7 +283,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                 </div>
                 
                 {/* Content */}
-                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center -mt-24">
                     {/* Premium Badge */}
                     <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-full px-6 py-2 mb-8 animate-fade-in">
                         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
@@ -514,12 +514,12 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
                 
                 <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     {/* Premium Section Header */}
-                    <div className="text-center mb-16">
-                        <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-full text-sm font-bold mb-6 shadow-lg">
+                    <div className="text-center mb-12">
+                        <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-full text-sm font-bold mb-4 shadow-lg">
                             <span className="text-lg">🔥</span>
                             <span>FEATURED COLLECTION</span>
                         </div>
-                        <h2 className="text-3xl md:text-4xl font-black mb-5 bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
+                        <h2 className="text-3xl md:text-4xl font-black mb-3 bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
                             Premium Vehicles
                         </h2>
                         <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
@@ -562,7 +562,7 @@ const Home: React.FC<HomeProps> = ({ onSearch, onSelectCategory, featuredVehicle
             </section>
 
             {/* Premium Browse by City Section */}
-            <section className="py-24 bg-gradient-to-br from-gray-50 via-white to-slate-50 relative overflow-hidden">
+            <section className="py-24 bg-gradient-to-br from-gray-50 via-white to-slate-50 relative overflow-hidden -mt-12">
                 {/* Background Elements */}
                 <div className="absolute inset-0 overflow-hidden">
                     <div className="absolute top-10 left-10 w-64 h-64 bg-gradient-to-br from-blue-100/40 to-purple-100/40 rounded-full blur-2xl"></div>
