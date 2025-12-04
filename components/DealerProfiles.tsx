@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import type { User } from '../types.js';
 import StarRating from './StarRating.js';
 import BadgeDisplay from './BadgeDisplay.js';
 import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
-import VerifiedBadge, { isUserVerified } from './VerifiedBadge.js';
+import { isUserVerified } from './VerifiedBadge.js';
 
 interface DealerProfilesProps {
   sellers: User[];
@@ -127,6 +127,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
   const [sortBy, setSortBy] = useState<SortOption>('name');
   const [showFilters, setShowFilters] = useState(false);
   const [verifiedFilter, setVerifiedFilter] = useState<boolean | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Filter and sort dealers
   const filteredAndSortedSellers = useMemo(() => {
@@ -173,22 +174,22 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
   }, [sellers, searchQuery, sortBy, verifiedFilter]);
 
   return (
-    <div className="dealers container mx-auto py-3 animate-fade-in min-h-screen">
+    <div className="dealers container mx-auto py-2 animate-fade-in min-h-screen">
       {/* Header Section with Gradient */}
-      <div className="relative mb-2 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-orange-500 p-2 md:p-3 text-white">
+      <div className="relative mb-3 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-orange-500 p-3 md:p-4 text-white">
         <div className="absolute inset-0 bg-black/10"></div>
         <div className="relative z-10">
           <div className="flex items-center gap-2">
             <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1.5">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-extrabold mb-0">
+              <h1 className="text-2xl md:text-3xl font-extrabold mb-0">
                 Certified Dealer Profiles
               </h1>
-              <p className="text-blue-100 text-xs md:text-sm">
+              <p className="text-blue-100 text-sm md:text-base">
                 Connect with trusted automotive dealers
               </p>
             </div>
@@ -197,7 +198,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="bg-white rounded-xl shadow-md p-3 mb-3 border border-gray-100">
+      <div className="bg-white rounded-xl shadow-md p-2.5 mb-2 border border-gray-100">
         <div className="flex flex-col md:flex-row gap-3">
           {/* Search Input */}
           <div className="flex-1 relative">
@@ -207,6 +208,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
               </svg>
             </div>
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search dealers by name, description..."
               value={searchQuery}
@@ -221,9 +223,8 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
             />
             <button
               onClick={() => {
-                // Trigger search action
-                const input = document.querySelector('input[type="text"]') as HTMLInputElement;
-                input?.blur();
+                // Trigger search action - blur the specific search input
+                searchInputRef.current?.blur();
               }}
               className="absolute right-1.5 top-1/2 transform -translate-y-1/2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white p-2 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 shadow-sm hover:shadow-md"
               aria-label="Search"
@@ -278,7 +279,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
 
         {/* Filter Options */}
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-gray-200 animate-fade-in">
+          <div className="mt-3 pt-3 border-t border-gray-200 animate-fade-in">
             <div className="flex flex-wrap gap-3">
               <label className="flex items-center gap-2 cursor-pointer group">
                 <input
@@ -319,7 +320,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
 
       {/* Results Count */}
       {filteredAndSortedSellers.length > 0 && (
-        <div className="mb-2 text-gray-600 text-sm">
+        <div className="mt-8 mb-1.5 text-gray-600 text-sm">
           Showing <span className="font-bold text-gray-900">{filteredAndSortedSellers.length}</span> dealer{filteredAndSortedSellers.length !== 1 ? 's' : ''}
           {searchQuery && (
             <span> for &quot;<span className="font-semibold">{searchQuery}</span>&quot;</span>
@@ -329,7 +330,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
 
       {/* Dealer Grid */}
       {filteredAndSortedSellers.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-5">
           {filteredAndSortedSellers.map((seller, index) => (
             <DealerCard 
               key={seller.email} 
