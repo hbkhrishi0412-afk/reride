@@ -162,7 +162,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
   const isLogin = mode === 'login';
   const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm rounded-md";
-  const mobileFormInputClass = "w-full px-5 py-4 text-base bg-white/95 backdrop-blur-sm border-0.5 border-white/30 rounded-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white transition-all";
+  const mobileFormInputClass = "w-full px-4 py-2.5 text-sm bg-white/95 backdrop-blur-sm border-0.5 border-white/30 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white transition-all";
 
   // Handle OTP mode
   if (mode === 'otp') {
@@ -196,40 +196,40 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   if (isMobileApp) {
     return (
       <div 
-        className="w-full min-h-screen flex flex-col items-center justify-center p-6"
+        className="w-full min-h-screen flex flex-col items-center justify-center p-4"
         style={{
           background: 'linear-gradient(180deg, #6366F1 0%, #8B5CF6 40%, #A855F7 70%, #EC4899 100%)',
           minHeight: '100vh'
         }}
       >
-        <div className="w-full max-w-md space-y-6">
-          {/* Logo and Welcome */}
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-6">
-              <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/30">
+        <div className="w-full max-w-md space-y-3">
+          {/* Logo and Welcome - Compact Design */}
+          <div className="text-center mb-2">
+            <div className="flex justify-center mb-2">
+              <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center border border-white/30">
                 <Logo 
-                  className="scale-150 filter brightness-0 invert" 
+                  className="scale-100 filter brightness-0 invert" 
                   showText={false}
                   onClick={() => onNavigate(View.USED_CARS)}
                 />
               </div>
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
+            <h1 className="text-lg font-bold text-white mb-0.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
               {isLogin ? roleConfig[selectedRole].loginTitle : roleConfig[selectedRole].registerTitle}
             </h1>
-            <p className="text-white/90 text-base font-medium">
+            <p className="text-white/80 text-xs">
               {isLogin ? 'Sign in to continue' : 'Create your account to get started'}
             </p>
           </div>
 
           {/* Role Selection (if not forced) */}
           {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
-            <div className="flex gap-3 mb-6">
+            <div className="flex gap-2 mb-3">
               {allowedRoles.map((role) => (
                 <button
                   key={role}
                   onClick={() => handleRoleChange(role)}
-                  className={`flex-1 py-3 px-4 rounded-2xl font-semibold text-sm transition-all ${
+                  className={`flex-1 py-2 px-3 rounded-xl font-semibold text-xs transition-all ${
                     selectedRole === role
                       ? 'bg-white text-purple-600 shadow-lg scale-105'
                       : 'bg-white/20 text-white border border-white/30'
@@ -247,12 +247,12 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
           {/* Form Card */}
           <div 
-            className="bg-white/95 backdrop-blur-xl rounded-3xl p-6 shadow-2xl border border-white/30"
+            className="bg-white/95 backdrop-blur-xl rounded-2xl p-4 shadow-2xl border border-white/30"
             style={{
               boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
             }}
           >
-            <form className="space-y-5" onSubmit={handleSubmit}>
+            <form className="space-y-3" onSubmit={handleSubmit}>
               {!isLogin && (
                 <>
                   <div>
@@ -335,15 +335,15 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               )}
 
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4" role="alert" aria-live="polite">
-                  <p className="text-red-600 text-sm text-center font-medium">{error}</p>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-2.5" role="alert" aria-live="polite">
+                  <p className="text-red-600 text-xs text-center font-medium">{error}</p>
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-4 rounded-2xl font-bold text-base text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-2 focus:outline-offset-2 focus:outline-orange-500"
+                className="w-full py-3 rounded-xl font-bold text-sm text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-2 focus:outline-offset-2 focus:outline-orange-500"
                 style={{
                   background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
                   boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
@@ -362,24 +362,24 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             </form>
 
             {/* Social Login */}
-            <div className="mt-6">
-              <div className="relative mb-6">
+            <div className="mt-4">
+              <div className="relative mb-4">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-200"></div>
                 </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-3 bg-white text-gray-500 font-medium">Or continue with</span>
+                <div className="relative flex justify-center text-xs">
+                  <span className="px-2 bg-white text-gray-500 font-medium">Or continue with</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={isLoading}
-                  className="flex items-center justify-center py-3.5 px-4 bg-white border border-gray-200 rounded-2xl font-semibold text-sm text-gray-700 transition-all disabled:opacity-50 active:scale-95"
+                  className="flex items-center justify-center py-2.5 px-3 bg-white border border-gray-200 rounded-xl font-semibold text-xs text-gray-700 transition-all disabled:opacity-50 active:scale-95"
                 >
-                  <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -392,9 +392,9 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   type="button"
                   onClick={() => setMode('otp')}
                   disabled={isLoading}
-                  className="flex items-center justify-center py-3.5 px-4 bg-white border border-gray-200 rounded-2xl font-semibold text-sm text-gray-700 transition-all disabled:opacity-50 active:scale-95"
+                  className="flex items-center justify-center py-2.5 px-3 bg-white border border-gray-200 rounded-xl font-semibold text-xs text-gray-700 transition-all disabled:opacity-50 active:scale-95"
                 >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                   Phone OTP
@@ -403,10 +403,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             </div>
 
             {/* Toggle Mode */}
-            <div className="mt-6 text-center">
+            <div className="mt-4 text-center">
               <button
                 onClick={toggleMode}
-                className="text-sm font-semibold text-gray-600"
+                className="text-xs font-semibold text-gray-600"
               >
                 {isLogin 
                   ? `Don't have an account? ` 
@@ -417,10 +417,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             </div>
 
             {/* Guest Access */}
-            <div className="mt-4 text-center">
+            <div className="mt-3 text-center">
               <button
                 onClick={() => onNavigate(View.USED_CARS)}
-                className="text-sm font-medium text-gray-500"
+                className="text-xs font-medium text-gray-500"
               >
                 Continue as guest →
               </button>

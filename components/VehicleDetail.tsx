@@ -1,4 +1,4 @@
-import React, { useState, useMemo, memo, useEffect } from 'react';
+import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
 import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, getSafeImageSrc } from '../utils/imageUtils';
@@ -226,14 +226,24 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
   const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
+  const ratingSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setCurrentIndex(0);
     setProsAndCons(null);
     setIsGeneratingProsCons(false);
-    setActiveMediaTab(safeVehicle.videoUrl ? 'images' : 'images');
+    setActiveMediaTab(safeVehicle.videoUrl ? 'video' : 'images');
     window.scrollTo(0, 0);
   }, [safeVehicle]);
+
+  // Cleanup timeout on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (ratingSuccessTimeoutRef.current) {
+        clearTimeout(ratingSuccessTimeoutRef.current);
+      }
+    };
+  }, []);
   
   const handlePrevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -255,7 +265,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const handleRateSeller = (rating: number) => {
     onAddSellerRating(safeVehicle.sellerEmail, Number(rating));
     setShowSellerRatingSuccess(true);
-    setTimeout(() => setShowSellerRatingSuccess(false), 3000);
+    // Clear any existing timeout before setting a new one
+    if (ratingSuccessTimeoutRef.current) {
+      clearTimeout(ratingSuccessTimeoutRef.current);
+    }
+    ratingSuccessTimeoutRef.current = setTimeout(() => setShowSellerRatingSuccess(false), 3000);
   };
 
   const handleFlagClick = () => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import type { Toast as ToastType } from '../types';
 
 interface ToastProps {
@@ -38,18 +38,31 @@ const BG_COLORS = {
 
 const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
     const [isExiting, setIsExiting] = useState(false);
+    const removeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const autoDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        const timer = setTimeout(() => {
+        autoDismissTimerRef.current = setTimeout(() => {
             handleClose();
         }, 4000); // Auto-dismiss after 4 seconds
 
-        return () => clearTimeout(timer);
+        return () => {
+            if (autoDismissTimerRef.current) {
+                clearTimeout(autoDismissTimerRef.current);
+            }
+            if (removeTimeoutRef.current) {
+                clearTimeout(removeTimeoutRef.current);
+            }
+        };
     }, []);
 
     const handleClose = () => {
         setIsExiting(true);
-        setTimeout(() => onRemove(toast.id), 500); // Wait for animation to finish
+        // Clear any existing timeout before setting a new one
+        if (removeTimeoutRef.current) {
+            clearTimeout(removeTimeoutRef.current);
+        }
+        removeTimeoutRef.current = setTimeout(() => onRemove(toast.id), 500); // Wait for animation to finish
     };
 
     return (

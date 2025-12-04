@@ -135,7 +135,14 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
+    const errorMessage = 'useApp must be used within an AppProvider';
+    // Log helpful debugging info in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('⚠️', errorMessage);
+      console.trace('Stack trace:');
+      // Still throw to catch real issues, but with better error message
+    }
+    throw new Error(errorMessage);
   }
   return context;
 };

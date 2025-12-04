@@ -68,6 +68,7 @@ export interface Vehicle {
   fuelEfficiency: string;
   color: string;
   status: 'published' | 'unpublished' | 'sold';
+  listingType?: 'buy' | 'rental'; // 'buy' for regular sale, 'rental' for rental vehicles
   isFeatured: boolean;
   views?: number;
   inquiriesCount?: number;
@@ -293,6 +294,7 @@ export enum View {
   HOME = 'HOME',
   USED_CARS = 'USED_CARS',
   NEW_CARS = 'NEW_CARS',
+  RENTAL = 'RENTAL',
   DEALER_PROFILES = 'DEALER_PROFILES',
   DETAIL = 'DETAIL',
   SELLER_DASHBOARD = 'SELLER_DASHBOARD',

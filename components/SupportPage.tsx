@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { User, SupportTicket } from '../types';
 
 interface SupportPageProps {
@@ -16,6 +16,16 @@ const SupportPage: React.FC<SupportPageProps> = ({ currentUser, onSubmitTicket }
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []); // Empty dependency array means this only runs on mount/unmount
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -86,7 +96,11 @@ const SupportPage: React.FC<SupportPageProps> = ({ currentUser, onSubmitTicket }
       });
       
       setIsSuccess(true);
-      setTimeout(() => setIsSuccess(false), 5000);
+      // Clear any existing timeout before setting a new one
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => setIsSuccess(false), 5000);
     } catch (err) {
       setErrors({ submit: 'Failed to submit ticket. Please try again.' });
     } finally {
