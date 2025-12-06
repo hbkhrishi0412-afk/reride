@@ -500,7 +500,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
                 }
                 
                 // Fallback: Try clearbit
-                const brandSlug = brandName.toLowerCase().replace(/\s+/g, '').replace('-', '');
+                const brandSlug = brandName.toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
                 return `https://logo.clearbit.com/${brandSlug}.com`;
               };
 

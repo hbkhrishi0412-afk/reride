@@ -75,27 +75,30 @@ const ComboboxInput: React.FC<{
   tooltip?: string;
 }> = ({ label, name, value, onChange, options, placeholder, error, required = false, disabled = false, tooltip }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(value);
-  const [filteredOptions, setFilteredOptions] = useState(options);
+  const [inputValue, setInputValue] = useState(value || '');
+  const [filteredOptions, setFilteredOptions] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Ensure options is always an array
+  const safeOptions = Array.isArray(options) ? options : [];
+
   // Update input value when prop value changes
   useEffect(() => {
-    setInputValue(value);
+    setInputValue(value || '');
   }, [value]);
 
   // Filter options based on input
   useEffect(() => {
-    if (inputValue.trim() === '') {
-      setFilteredOptions(options);
+    if (!inputValue || inputValue.trim() === '') {
+      setFilteredOptions(safeOptions);
     } else {
-      const filtered = options.filter(opt => 
-        opt.toLowerCase().includes(inputValue.toLowerCase())
+      const filtered = safeOptions.filter(opt => 
+        opt && typeof opt === 'string' && opt.toLowerCase().includes(inputValue.toLowerCase())
       );
       setFilteredOptions(filtered);
     }
-  }, [inputValue, options]);
+  }, [inputValue, safeOptions]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -117,26 +120,36 @@ const ComboboxInput: React.FC<{
   }, [isOpen]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setInputValue(newValue);
-    setIsOpen(true);
-    onChange(e);
+    try {
+      const newValue = e.target.value || '';
+      setInputValue(newValue);
+      setIsOpen(true);
+      onChange(e);
+    } catch (error) {
+      console.error('Error in handleInputChange:', error);
+    }
   };
 
   const handleSelectOption = (option: string) => {
+    if (!option || typeof option !== 'string') return;
     setInputValue(option);
     setIsOpen(false);
     // Create synthetic event for onChange
-    const syntheticEvent = {
-      target: { 
-        name, 
-        value: option,
-        type: 'text'
-      },
-      currentTarget: inputRef.current
-    } as React.ChangeEvent<HTMLInputElement>;
-    onChange(syntheticEvent);
-    inputRef.current?.focus();
+    try {
+      // Create a minimal event object that handleChange expects
+      const syntheticEvent = {
+        target: {
+          name,
+          value: option
+        } as HTMLInputElement,
+        currentTarget: inputRef.current
+      } as React.ChangeEvent<HTMLInputElement>;
+      
+      onChange(syntheticEvent);
+      inputRef.current?.focus();
+    } catch (error) {
+      console.error('Error in handleSelectOption:', error);
+    }
   };
 
   const handleInputFocus = () => {
@@ -144,13 +157,26 @@ const ComboboxInput: React.FC<{
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown' && filteredOptions.length > 0) {
-      e.preventDefault();
-      setIsOpen(true);
-    } else if (e.key === 'Escape') {
-      setIsOpen(false);
+    try {
+      if (e.key === 'ArrowDown' && Array.isArray(filteredOptions) && filteredOptions.length > 0) {
+        e.preventDefault();
+        setIsOpen(true);
+      } else if (e.key === 'Escape') {
+        setIsOpen(false);
+      } else if (e.key === 'Enter' && isOpen && Array.isArray(filteredOptions) && filteredOptions.length > 0 && filteredOptions[0]) {
+        e.preventDefault();
+        handleSelectOption(filteredOptions[0]);
+      }
+    } catch (error) {
+      console.error('Error in handleInputKeyDown:', error);
     }
   };
+
+  // Safety check - ensure we have valid data before rendering
+  if (typeof name !== 'string' || name.length === 0) {
+    console.error('ComboboxInput: Invalid name prop');
+    return null;
+  }
 
   return (
     <div className="relative">
@@ -164,7 +190,7 @@ const ComboboxInput: React.FC<{
           type="text"
           id={name}
           name={name}
-          value={inputValue}
+          value={inputValue || ''}
           onChange={handleInputChange}
           onFocus={handleInputFocus}
           onKeyDown={handleInputKeyDown}
@@ -179,21 +205,24 @@ const ComboboxInput: React.FC<{
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
-        {isOpen && !disabled && filteredOptions.length > 0 && (
+        {isOpen && !disabled && Array.isArray(filteredOptions) && filteredOptions.length > 0 && (
           <div
             ref={dropdownRef}
             className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto"
           >
-            {filteredOptions.slice(0, 10).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => handleSelectOption(option)}
-                className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors"
-              >
-                {option}
-              </button>
-            ))}
+            {filteredOptions.slice(0, 10).map((option, index) => {
+              if (!option || typeof option !== 'string') return null;
+              return (
+                <button
+                  key={option || `option-${index}`}
+                  type="button"
+                  onClick={() => handleSelectOption(option)}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors"
+                >
+                  {option}
+                </button>
+              );
+            })}
             {filteredOptions.length > 10 && (
               <div className="px-4 py-2 text-xs text-gray-500 text-center">
                 +{filteredOptions.length - 10} more options
@@ -561,35 +590,81 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     }, []);
 
     const availableMakes = useMemo(() => {
-        console.log('🔧 availableMakes calculation:', {
-            category: formData.category,
-            hasCategory: !!formData.category,
-            hasVehicleData: !!safeVehicleData,
-            vehicleDataKeys: Object.keys(safeVehicleData),
-            categoryData: safeVehicleData[formData.category]
-        });
-        
-        if (!formData.category || !safeVehicleData[formData.category]) {
-            console.log('⚠️ No category or category data available');
+        try {
+            if (!formData.category || !safeVehicleData || !safeVehicleData[formData.category]) {
+                return [];
+            }
+            
+            const categoryData = safeVehicleData[formData.category];
+            if (!Array.isArray(categoryData)) {
+                return [];
+            }
+            
+            const makes = categoryData
+                .map(make => make?.name)
+                .filter((name): name is string => typeof name === 'string' && name.length > 0)
+                .sort();
+            return makes;
+        } catch (error) {
+            console.error('Error calculating availableMakes:', error);
             return [];
         }
-        
-        const makes = (safeVehicleData[formData.category] || []).map(make => make.name).sort();
-        console.log('✅ Available makes:', makes);
-        return makes;
     }, [formData.category, safeVehicleData]);
 
     const availableModels = useMemo(() => {
-        if (!formData.category || !formData.make || !safeVehicleData[formData.category]) return [];
-        const makeData = safeVehicleData[formData.category].find(m => m.name === formData.make);
-        return makeData ? makeData.models.map(model => model.name).sort() : [];
+        try {
+            if (!formData.category || !formData.make || !safeVehicleData || !safeVehicleData[formData.category]) {
+                return [];
+            }
+            
+            const categoryData = safeVehicleData[formData.category];
+            if (!Array.isArray(categoryData)) {
+                return [];
+            }
+            
+            const makeData = categoryData.find(m => m?.name === formData.make);
+            if (!makeData || !Array.isArray(makeData.models)) {
+                return [];
+            }
+            
+            return makeData.models
+                .map(model => model?.name)
+                .filter((name): name is string => typeof name === 'string' && name.length > 0)
+                .sort();
+        } catch (error) {
+            console.error('Error calculating availableModels:', error);
+            return [];
+        }
     }, [formData.category, formData.make, safeVehicleData]);
 
     const availableVariants = useMemo(() => {
-        if (!formData.category || !formData.make || !formData.model || !safeVehicleData[formData.category]) return [];
-        const makeData = safeVehicleData[formData.category].find(m => m.name === formData.make);
-        const modelData = makeData?.models.find(m => m.name === formData.model);
-        return modelData ? [...modelData.variants].sort() : [];
+        try {
+            if (!formData.category || !formData.make || !formData.model || !safeVehicleData || !safeVehicleData[formData.category]) {
+                return [];
+            }
+            
+            const categoryData = safeVehicleData[formData.category];
+            if (!Array.isArray(categoryData)) {
+                return [];
+            }
+            
+            const makeData = categoryData.find(m => m?.name === formData.make);
+            if (!makeData || !Array.isArray(makeData.models)) {
+                return [];
+            }
+            
+            const modelData = makeData.models.find(m => m?.name === formData.model);
+            if (!modelData || !Array.isArray(modelData.variants)) {
+                return [];
+            }
+            
+            return modelData.variants
+                .filter((variant): variant is string => typeof variant === 'string' && variant.length > 0)
+                .sort();
+        } catch (error) {
+            console.error('Error calculating availableVariants:', error);
+            return [];
+        }
     }, [formData.category, formData.make, formData.model, safeVehicleData]);
 
     const availableCities = useMemo(() => {
@@ -937,11 +1012,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         <option value="" disabled>Select Category</option>
                         {(() => {
                             const categories = Object.keys(safeVehicleData);
-                            console.log('🔧 Rendering category dropdown:', {
-                                categories,
-                                vehicleDataKeys: Object.keys(safeVehicleData),
-                                vehicleDataEmpty: Object.keys(safeVehicleData).length === 0
-                            });
+                            // Categories loaded successfully
                             
                             if (categories.length === 0) {
                                 return <option value="" disabled>Loading categories...</option>;
@@ -957,9 +1028,9 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     <ComboboxInput
                         label="Make"
                         name="make"
-                        value={formData.make}
+                        value={formData.make || ''}
                         onChange={handleChange}
-                        options={availableMakes}
+                        options={Array.isArray(availableMakes) ? availableMakes : []}
                         placeholder={!formData.category ? 'Select Category First' : 'Select or type Make'}
                         error={errors.make}
                         disabled={!formData.category}
@@ -968,9 +1039,9 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     <ComboboxInput
                         label="Model"
                         name="model"
-                        value={formData.model}
+                        value={formData.model || ''}
                         onChange={handleChange}
-                        options={availableModels}
+                        options={Array.isArray(availableModels) ? availableModels : []}
                         placeholder={!formData.make ? 'Select Make First' : 'Select or type Model'}
                         error={errors.model}
                         disabled={!formData.make}
@@ -981,7 +1052,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         name="variant"
                         value={formData.variant || ''}
                         onChange={handleChange}
-                        options={availableVariants}
+                        options={Array.isArray(availableVariants) ? availableVariants : []}
                         placeholder="Select or type Variant (Optional)"
                         disabled={!formData.model}
                     />
@@ -1727,7 +1798,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleMarkAsSold = async (vehicleId: number) => {
     try {
-      const { authenticatedFetch } = await import('../utils/authenticatedFetch');
       const response = await authenticatedFetch('/api/vehicles?action=sold', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

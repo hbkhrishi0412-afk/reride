@@ -150,6 +150,8 @@ export const useApp = () => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo(({ children }) => {
   // Track which notifications have already shown browser notifications
   const shownNotificationIdsRef = useRef<Set<number>>(new Set());
+  // Track vehicles currently being updated to prevent duplicate updates
+  const updatingVehiclesRef = useRef<Set<number>>(new Set());
   
   // All state from App.tsx moved here
   const [currentView, setCurrentView] = useState<View>(View.HOME);
@@ -370,13 +372,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         return;
       }
 
-      const id = Date.now();
-      const toast: ToastType = { id, message: message.trim(), type };
-      setToasts(prev => [...prev, toast]);
+      const trimmedMessage = message.trim();
+      const now = Date.now();
       
-      // Auto-remove after 5 seconds
+      // Prevent duplicate toasts: Check if the same message and type already exists
+      // and was added within the last 3 seconds
+      setToasts(prev => {
+        const recentDuplicate = prev.find(
+          toast => 
+            toast.message === trimmedMessage && 
+            toast.type === type &&
+            // Check if toast was added recently (within last 3 seconds)
+            // Since toast IDs are timestamps, we can use them to check recency
+            (now - toast.id) < 3000
+        );
+        
+        if (recentDuplicate) {
+          // Toast with same message already exists and is recent, skip adding duplicate
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Skipping duplicate toast:', trimmedMessage);
+          }
+          return prev;
+        }
+        
+        const id = now;
+        const toast: ToastType = { id, message: trimmedMessage, type };
+        
+        return [...prev, toast];
+      });
+      
+      // Auto-remove after 5 seconds (moved outside setToasts to access removeToast)
+      const toastId = now;
       setTimeout(() => {
-        removeToast(id);
+        setToasts(prev => prev.filter(toast => toast.id !== toastId));
       }, 5000);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -1240,9 +1268,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, [addToast]);
 
   const updateVehicleHandler = useCallback(async (id: number, updates: Partial<Vehicle>, options: VehicleUpdateOptions = {}) => {
+    // Prevent duplicate updates for the same vehicle
+    if (updatingVehiclesRef.current.has(id)) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⏸️ Update already in progress for vehicle:', id);
+      }
+      return;
+    }
+
     try {
+      // Mark vehicle as being updated
+      updatingVehiclesRef.current.add(id);
+
       const vehicleToUpdate = vehicles.find(v => v.id === id);
       if (!vehicleToUpdate) {
+        updatingVehiclesRef.current.delete(id);
         addToast('Vehicle not found', 'error');
         return;
       }
@@ -1286,6 +1326,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         console.error('❌ Failed to update vehicle:', error);
       }
       addToast('Failed to update vehicle. Please try again.', 'error');
+    } finally {
+      // Always remove from updating set, even if there was an error
+      updatingVehiclesRef.current.delete(id);
     }
   }, [vehicles, addToast, setVehicles, currentUser, setAuditLog]);
 
