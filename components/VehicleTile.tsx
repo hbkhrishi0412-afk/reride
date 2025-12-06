@@ -48,26 +48,28 @@ const VehicleTile: React.FC<VehicleTileProps> = ({ vehicle, onSelect, onToggleCo
       
       <div className="p-4 flex flex-col flex-grow">
         {/* Title: Year Make Model Variant */}
-        <h3 className="text-base sm:text-lg font-bold text-spinny-text-dark dark:text-spinny-text-dark">
+        <h3 className="text-sm sm:text-base font-bold text-spinny-text-dark dark:text-spinny-text-dark">
             {vehicle.year} {vehicle.make} {vehicle.model} {vehicle.variant || ''}
         </h3>
         
-        {/* Specifications */}
-        <div className="mt-2 flex-grow grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs text-brand-gray-600 dark:text-spinny-text">
+        {/* Specifications - 2 lines */}
+        <div className="mt-2 flex-grow flex flex-col gap-y-1 text-xs text-brand-gray-600 dark:text-spinny-text">
+          {/* First Line: Mileage, Fuel Type, Transmission */}
+          <div className="grid grid-cols-3 gap-x-2">
             <span>{`${Math.round(vehicle.mileage / 1000)}K km`}</span>
             <span>{vehicle.fuelType}</span>
             <span>{vehicle.transmission}</span>
-            <span>{vehicle.rto}</span>
-        </div>
-        
-        {/* Location/HUB */}
-        <div className="mt-2 text-xs text-brand-gray-600 dark:text-spinny-text">
-            {vehicle.location ? `HUB - ${vehicle.location}` : `HUB - ${vehicle.city}`}
+          </div>
+          {/* Second Line: Location, RTO */}
+          <div className="grid grid-cols-2 gap-x-4">
+            <span>{vehicle.location ? `HUB - ${vehicle.location}` : `HUB - ${vehicle.city || 'N/A'}`}</span>
+            {vehicle.rto && <span>{vehicle.rto}</span>}
+          </div>
         </div>
 
         <div className="mt-auto pt-2 border-t border-gray-200">
           <div className="flex items-baseline justify-between gap-2 mb-1">
-            <p className="text-lg sm:text-xl font-extrabold" style={{ color: '#FF6B35' }}>₹{(vehicle.price / 100000).toFixed(2)} Lakh</p>
+            <p className="text-base sm:text-lg font-extrabold" style={{ color: '#FF6B35' }}>₹{(vehicle.price / 100000).toFixed(2)} Lakh</p>
           </div>
           <div className="flex justify-between items-center mt-1">
              <p className="text-xs text-gray-600 font-medium">EMI ₹{Math.round(vehicle.price / 60).toLocaleString('en-IN')}/m*</p>

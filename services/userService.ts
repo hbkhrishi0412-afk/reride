@@ -348,8 +348,18 @@ const registerLocal = async (credentials: any): Promise<{ success: boolean, user
 // --- Production (API) Functions ---
 
 const getUsersApi = async (): Promise<User[]> => {
-  const response = await fetch('/api/users');
-  return handleResponse(response);
+  // Use authenticatedFetch for production API calls
+  try {
+    const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+    const response = await authenticatedFetch('/api/users');
+    return handleResponse(response);
+  } catch (error) {
+    // If authenticatedFetch fails, try regular fetch (for development)
+    const response = await fetch('/api/users', {
+      headers: getAuthHeader()
+    });
+    return handleResponse(response);
+  }
 };
 
 const updateUserApi = async (userData: Partial<User> & { email: string }): Promise<User> => {

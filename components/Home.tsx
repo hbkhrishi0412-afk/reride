@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Vehicle, VehicleCategory, View } from '../types';
 import { View as ViewEnum } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import LazyImage from './LazyImage';
 import QuickViewModal from './QuickViewModal';
 
@@ -37,6 +37,27 @@ const Home: React.FC<HomeProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
 
+    // Preload the first featured vehicle image (LCP element) for better performance
+    useEffect(() => {
+        if (featuredVehicles.length > 0) {
+            const firstVehicle = featuredVehicles[0];
+            const firstImage = getFirstValidImage(firstVehicle.images);
+            if (firstImage && !firstImage.startsWith('data:')) {
+                const optimizedImage = optimizeImageUrl(firstImage, 800, 85);
+                // Check if preload link already exists to avoid duplicates
+                const existingLink = document.querySelector(`link[rel="preload"][as="image"][href="${optimizedImage}"]`);
+                if (!existingLink) {
+                    const link = document.createElement('link');
+                    link.rel = 'preload';
+                    link.as = 'image';
+                    link.href = optimizedImage;
+                    link.setAttribute('fetchpriority', 'high');
+                    document.head.appendChild(link);
+                }
+            }
+        }
+    }, [featuredVehicles]);
+
     const cities = [
         { name: 'Delhi NCR', abbr: 'DN', hubs: 1, cars: 0, color: 'bg-yellow-400' },
         { name: 'Hyderabad', abbr: 'HY', hubs: 1, cars: 0, color: 'bg-purple-400' },
@@ -64,7 +85,7 @@ const Home: React.FC<HomeProps> = ({
         <div className="min-h-screen bg-white overflow-x-hidden w-full">
             {/* Hero Section with Search - Exact Design Match */}
             <div 
-                className="relative py-20 md:py-28 px-4 overflow-hidden"
+                className="relative py-12 md:py-16 px-4 overflow-hidden"
                 style={{
                     background: 'linear-gradient(180deg, #6A2D9D 0%, #D24B9F 100%)',
                     fontFamily: "'Poppins', sans-serif"
@@ -79,7 +100,7 @@ const Home: React.FC<HomeProps> = ({
                 <div className="relative max-w-5xl mx-auto text-center">
                     {/* Trust Badge - Exact Match */}
                     <div 
-                        className="inline-flex items-center gap-2 px-5 py-2 rounded-full mb-8 shadow-lg"
+                        className="inline-flex items-center gap-2 px-5 py-2 rounded-full mb-5 shadow-lg"
                         style={{
                             background: 'rgba(159, 122, 234, 0.3)',
                             backdropFilter: 'blur(10px)',
@@ -104,7 +125,7 @@ const Home: React.FC<HomeProps> = ({
 
                     {/* Main Heading - Exact Match */}
                     <h1 
-                        className="text-white mb-6 leading-tight"
+                        className="text-white mb-3 leading-tight"
                         style={{
                             fontSize: 'clamp(40px, 5vw, 48px)',
                             fontWeight: 700,
@@ -117,7 +138,7 @@ const Home: React.FC<HomeProps> = ({
                     
                     {/* Subheading - Exact Match */}
                     <p 
-                        className="text-white mb-12 max-w-3xl mx-auto"
+                        className="text-white mb-6 max-w-3xl mx-auto"
                         style={{
                             fontSize: 'clamp(16px, 2vw, 18px)',
                             fontWeight: 400,
@@ -174,36 +195,39 @@ const Home: React.FC<HomeProps> = ({
                         </button>
                     </div>
 
-                    {/* Feature Cards - Exact Match */}
+                    {/* Feature Cards - Enhanced Style */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 max-w-5xl mx-auto">
                         {/* Card 1: 200+ Quality Checks */}
                         <div 
-                            className="rounded-3xl p-6 shadow-lg"
+                            className="rounded-3xl p-5 md:p-6 shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl cursor-pointer"
                             style={{
-                                background: 'rgba(159, 122, 234, 0.3)',
-                                backdropFilter: 'blur(10px)',
-                                WebkitBackdropFilter: 'blur(10px)',
-                                borderRadius: '24px',
-                                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                                background: 'rgba(159, 122, 234, 0.35)',
+                                backdropFilter: 'blur(12px)',
+                                WebkitBackdropFilter: 'blur(12px)',
+                                borderRadius: '20px',
+                                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)'
                             }}
                         >
                             <div 
-                                className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 mx-auto"
+                                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
                                 style={{ 
-                                    background: '#4CAF50',
-                                    borderRadius: '16px'
+                                    background: 'linear-gradient(135deg, #4CAF50 0%, #45A049 100%)',
+                                    borderRadius: '16px',
+                                    boxShadow: '0 4px 12px rgba(76, 175, 80, 0.3)'
                                 }}
                             >
-                                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-6 h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                 </svg>
                             </div>
                             <h3 
-                                className="text-white mb-2 text-center"
+                                className="text-white mb-1.5 md:mb-2 text-center"
                                 style={{
-                                    fontSize: '16px',
+                                    fontSize: '14px',
                                     fontWeight: 600,
-                                    fontFamily: "'Poppins', sans-serif"
+                                    fontFamily: "'Poppins', sans-serif",
+                                    lineHeight: '1.3'
                                 }}
                             >
                                 200+ Quality Checks
@@ -211,10 +235,11 @@ const Home: React.FC<HomeProps> = ({
                             <p 
                                 className="text-center"
                                 style={{
-                                    fontSize: '13px',
+                                    fontSize: '12px',
                                     fontWeight: 400,
                                     fontFamily: "'Poppins', sans-serif",
-                                    color: '#E0E0E0'
+                                    color: 'rgba(255, 255, 255, 0.85)',
+                                    lineHeight: '1.4'
                                 }}
                             >
                                 Comprehensive inspection
@@ -223,26 +248,28 @@ const Home: React.FC<HomeProps> = ({
 
                         {/* Card 2: Fixed Price */}
                         <div 
-                            className="rounded-3xl p-6 shadow-lg"
+                            className="rounded-3xl p-5 md:p-6 shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl cursor-pointer"
                             style={{
-                                background: 'rgba(159, 122, 234, 0.3)',
-                                backdropFilter: 'blur(10px)',
-                                WebkitBackdropFilter: 'blur(10px)',
-                                borderRadius: '24px',
-                                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                                background: 'rgba(159, 122, 234, 0.35)',
+                                backdropFilter: 'blur(12px)',
+                                WebkitBackdropFilter: 'blur(12px)',
+                                borderRadius: '20px',
+                                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)'
                             }}
                         >
                             <div 
-                                className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 mx-auto"
+                                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
                                 style={{ 
-                                    background: '#42A5F5',
-                                    borderRadius: '16px'
+                                    background: 'linear-gradient(135deg, #42A5F5 0%, #1E88E5 100%)',
+                                    borderRadius: '16px',
+                                    boxShadow: '0 4px 12px rgba(66, 165, 245, 0.3)'
                                 }}
                             >
                                 <span 
                                     className="text-white"
                                     style={{
-                                        fontSize: '24px',
+                                        fontSize: '20px',
                                         fontWeight: 700,
                                         fontFamily: "'Poppins', sans-serif"
                                     }}
@@ -251,11 +278,12 @@ const Home: React.FC<HomeProps> = ({
                                 </span>
                             </div>
                             <h3 
-                                className="text-white mb-2 text-center"
+                                className="text-white mb-1.5 md:mb-2 text-center"
                                 style={{
-                                    fontSize: '16px',
+                                    fontSize: '14px',
                                     fontWeight: 600,
-                                    fontFamily: "'Poppins', sans-serif"
+                                    fontFamily: "'Poppins', sans-serif",
+                                    lineHeight: '1.3'
                                 }}
                             >
                                 Fixed Price
@@ -263,10 +291,11 @@ const Home: React.FC<HomeProps> = ({
                             <p 
                                 className="text-center"
                                 style={{
-                                    fontSize: '13px',
+                                    fontSize: '12px',
                                     fontWeight: 400,
                                     fontFamily: "'Poppins', sans-serif",
-                                    color: '#E0E0E0'
+                                    color: 'rgba(255, 255, 255, 0.85)',
+                                    lineHeight: '1.4'
                                 }}
                             >
                                 No hidden costs
@@ -275,32 +304,35 @@ const Home: React.FC<HomeProps> = ({
 
                         {/* Card 3: 5-Day Money Back */}
                         <div 
-                            className="rounded-3xl p-6 shadow-lg"
+                            className="rounded-3xl p-5 md:p-6 shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl cursor-pointer"
                             style={{
-                                background: 'rgba(159, 122, 234, 0.3)',
-                                backdropFilter: 'blur(10px)',
-                                WebkitBackdropFilter: 'blur(10px)',
-                                borderRadius: '24px',
-                                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                                background: 'rgba(159, 122, 234, 0.35)',
+                                backdropFilter: 'blur(12px)',
+                                WebkitBackdropFilter: 'blur(12px)',
+                                borderRadius: '20px',
+                                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)'
                             }}
                         >
                             <div 
-                                className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 mx-auto"
+                                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
                                 style={{ 
-                                    background: '#FF7043',
-                                    borderRadius: '16px'
+                                    background: 'linear-gradient(135deg, #FF7043 0%, #F4511E 100%)',
+                                    borderRadius: '16px',
+                                    boxShadow: '0 4px 12px rgba(255, 112, 67, 0.3)'
                                 }}
                             >
-                                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-6 h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                 </svg>
                             </div>
                             <h3 
-                                className="text-white mb-2 text-center"
+                                className="text-white mb-1.5 md:mb-2 text-center"
                                 style={{
-                                    fontSize: '16px',
+                                    fontSize: '14px',
                                     fontWeight: 600,
-                                    fontFamily: "'Poppins', sans-serif"
+                                    fontFamily: "'Poppins', sans-serif",
+                                    lineHeight: '1.3'
                                 }}
                             >
                                 5-Day Money Back
@@ -308,10 +340,11 @@ const Home: React.FC<HomeProps> = ({
                             <p 
                                 className="text-center"
                                 style={{
-                                    fontSize: '13px',
+                                    fontSize: '12px',
                                     fontWeight: 400,
                                     fontFamily: "'Poppins', sans-serif",
-                                    color: '#E0E0E0'
+                                    color: 'rgba(255, 255, 255, 0.85)',
+                                    lineHeight: '1.4'
                                 }}
                             >
                                 Risk-free purchase
@@ -320,32 +353,35 @@ const Home: React.FC<HomeProps> = ({
 
                         {/* Card 4: Free RC Transfer */}
                         <div 
-                            className="rounded-3xl p-6 shadow-lg"
+                            className="rounded-3xl p-5 md:p-6 shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl cursor-pointer"
                             style={{
-                                background: 'rgba(159, 122, 234, 0.3)',
-                                backdropFilter: 'blur(10px)',
-                                WebkitBackdropFilter: 'blur(10px)',
-                                borderRadius: '24px',
-                                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                                background: 'rgba(159, 122, 234, 0.35)',
+                                backdropFilter: 'blur(12px)',
+                                WebkitBackdropFilter: 'blur(12px)',
+                                borderRadius: '20px',
+                                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)'
                             }}
                         >
                             <div 
-                                className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 mx-auto"
+                                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center mb-3 md:mb-4 mx-auto transition-transform duration-300 group-hover:scale-110"
                                 style={{ 
-                                    background: '#AB47BC',
-                                    borderRadius: '16px'
+                                    background: 'linear-gradient(135deg, #AB47BC 0%, #8E24AA 100%)',
+                                    borderRadius: '16px',
+                                    boxShadow: '0 4px 12px rgba(171, 71, 188, 0.3)'
                                 }}
                             >
-                                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-6 h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                             </div>
                             <h3 
-                                className="text-white mb-2 text-center"
+                                className="text-white mb-1.5 md:mb-2 text-center"
                                 style={{
-                                    fontSize: '16px',
+                                    fontSize: '14px',
                                     fontWeight: 600,
-                                    fontFamily: "'Poppins', sans-serif"
+                                    fontFamily: "'Poppins', sans-serif",
+                                    lineHeight: '1.3'
                                 }}
                             >
                                 Free RC Transfer
@@ -353,10 +389,11 @@ const Home: React.FC<HomeProps> = ({
                             <p 
                                 className="text-center"
                                 style={{
-                                    fontSize: '13px',
+                                    fontSize: '12px',
                                     fontWeight: 400,
                                     fontFamily: "'Poppins', sans-serif",
-                                    color: '#E0E0E0'
+                                    color: 'rgba(255, 255, 255, 0.85)',
+                                    lineHeight: '1.4'
                                 }}
                             >
                                 Complete documentation
@@ -386,12 +423,12 @@ const Home: React.FC<HomeProps> = ({
                                 </svg>
                                 FEATURED COLLECTION
                             </button>
-                            <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight">Premium Vehicles</h2>
-                            <p className="text-gray-600 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">Handpicked vehicles that meet our highest standards of quality and performance</p>
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Premium Vehicles</h2>
+                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">Handpicked vehicles that meet our highest standards of quality and performance</p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
-                            {featuredVehicles.slice(0, 4).map((vehicle) => (
+                            {featuredVehicles.slice(0, 4).map((vehicle, index) => (
                                 <div
                                     key={vehicle.id}
                                     onClick={() => onSelectVehicle(vehicle)}
@@ -404,6 +441,8 @@ const Home: React.FC<HomeProps> = ({
                                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                                             width={400}
                                             quality={85}
+                                            eager={index === 0}
+                                            fetchPriority={index === 0 ? 'high' : 'auto'}
                                         />
                                         <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                                         <div className="absolute top-4 left-4 bg-green-500 text-white px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-black shadow-lg">
@@ -474,8 +513,8 @@ const Home: React.FC<HomeProps> = ({
                             </svg>
                             EXPLORE BY LOCATION
                         </button>
-                        <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight">Find Cars Near You</h2>
-                        <p className="text-gray-600 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">Discover premium vehicles available in your city with local sellers and dealers</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Find Cars Near You</h2>
+                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">Discover premium vehicles available in your city with local sellers and dealers</p>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6 mb-8">
@@ -490,7 +529,7 @@ const Home: React.FC<HomeProps> = ({
                             >
                                 <h3 className="text-white font-black mb-4 text-base">{city.name}</h3>
                                 <div className="bg-white rounded-xl w-18 h-18 flex items-center justify-center mb-4 mx-auto shadow-xl group-hover:scale-110 transition-transform duration-300">
-                                    <span className="text-gray-900 font-black text-2xl">{city.abbr}</span>
+                                    <span className="text-gray-900 font-black text-xl">{city.abbr}</span>
                                 </div>
                                 <div className="text-center text-white/95">
                                     <p className="text-sm mb-1 font-medium">{city.hubs} hubs</p>
@@ -521,8 +560,8 @@ const Home: React.FC<HomeProps> = ({
                             </svg>
                             VEHICLE CATEGORIES
                         </button>
-                        <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight">Browse by Category</h2>
-                        <p className="text-gray-600 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">Find the perfect vehicle type that matches your needs and lifestyle</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Browse by Category</h2>
+                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">Find the perfect vehicle type that matches your needs and lifestyle</p>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6">
@@ -551,8 +590,8 @@ const Home: React.FC<HomeProps> = ({
                 <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
                     <div className="max-w-7xl mx-auto">
                         <div className="text-center mb-12">
-                            <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight">Recommended For You</h2>
-                            <p className="text-gray-600 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">Handpicked vehicles based on your preferences and market trends</p>
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Recommended For You</h2>
+                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">Handpicked vehicles based on your preferences and market trends</p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
@@ -639,8 +678,8 @@ const Home: React.FC<HomeProps> = ({
                                 </svg>
                                 TRENDING NOW
                             </button>
-                            <h2 className="text-4xl md:text-5xl font-black text-gray-900 mb-4 tracking-tight">Popular Vehicles</h2>
-                            <p className="text-gray-600 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed mb-8">Discover what other buyers are choosing - trending vehicles with great value</p>
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Popular Vehicles</h2>
+                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">Discover what other buyers are choosing - trending vehicles with great value</p>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-bold text-base md:text-lg flex items-center gap-2 mx-auto transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
@@ -674,8 +713,8 @@ const Home: React.FC<HomeProps> = ({
                         </svg>
                         FOR SELLERS
                     </button>
-                    <h2 className="text-5xl md:text-6xl font-black mb-6 leading-tight">Ready to Sell?</h2>
-                    <p className="text-xl md:text-2xl text-white/90 mb-12 max-w-3xl mx-auto leading-relaxed">
+                    <h2 className="text-4xl md:text-5xl font-black mb-6 leading-tight">Ready to Sell?</h2>
+                    <p className="text-lg md:text-xl text-white/90 mb-12 max-w-3xl mx-auto leading-relaxed">
                         Join thousands of successful sellers on our premium marketplace. Reach qualified buyers with our advanced AI tools and marketing features.
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
@@ -685,7 +724,7 @@ const Home: React.FC<HomeProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                 </svg>
                             </div>
-                            <h3 className="font-black text-xl mb-3">Wide Reach</h3>
+                            <h3 className="font-black text-lg mb-3">Wide Reach</h3>
                             <p className="text-white/90 text-base">Access millions of potential buyers</p>
                         </div>
                         <div className="bg-white/15 backdrop-blur-xl rounded-2xl p-8 border border-white/30 hover:bg-white/20 transition-all duration-300 hover:scale-105">
@@ -694,7 +733,7 @@ const Home: React.FC<HomeProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 </svg>
                             </div>
-                            <h3 className="font-black text-xl mb-3">Fast Sales</h3>
+                            <h3 className="font-black text-lg mb-3">Fast Sales</h3>
                             <p className="text-white/90 text-base">Sell your vehicle quickly and efficiently</p>
                         </div>
                         <div className="bg-white/15 backdrop-blur-xl rounded-2xl p-8 border border-white/30 hover:bg-white/20 transition-all duration-300 hover:scale-105">
@@ -703,7 +742,7 @@ const Home: React.FC<HomeProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                             </div>
-                            <h3 className="font-black text-xl mb-3">Fair Pricing</h3>
+                            <h3 className="font-black text-lg mb-3">Fair Pricing</h3>
                             <p className="text-white/90 text-base">Get the best value for your vehicle</p>
                         </div>
                     </div>

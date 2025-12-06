@@ -192,7 +192,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       } else if (width < 1024) {
         setItemsPerPage(24);  // Tablet: 24 items
       } else {
-        setItemsPerPage(48);  // Desktop: 48 items
+        setItemsPerPage(45);  // Desktop: 45 items (15 rows × 3 columns)
       }
     };
     
@@ -232,7 +232,18 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     if (vehicleData && !isLoadingVehicleData) {
       // Get categories from admin database
       const categoriesFromDb = Object.keys(vehicleData).sort();
-      return categoriesFromDb;
+      // Ensure categories match VehicleCategory enum format
+      return categoriesFromDb.map(cat => {
+        // If already in enum format, return as is
+        if (Object.values(CategoryEnum).includes(cat as VehicleCategory)) {
+          return cat;
+        }
+        // Try to match enum values by normalizing
+        const normalized = cat.toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-');
+        const enumValues = Object.values(CategoryEnum);
+        const matched = enumValues.find(enumVal => enumVal.toLowerCase() === normalized);
+        return matched || cat; // Return matched enum value or original
+      });
     }
     // Fallback to enum values
     return Object.values(CategoryEnum);
@@ -451,18 +462,18 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   const handleApplyFilters = () => {
     setCategoryFilter(tempFilters.categoryFilter);
-    setMakeFilter(tempFilters.makeFilter);
-    setModelFilter(tempFilters.modelFilter);
+    setMakeFilter(tempFilters.makeFilter?.trim() || '');
+    setModelFilter(tempFilters.modelFilter?.trim() || '');
     setPriceRange(tempFilters.priceRange);
     setMileageRange(tempFilters.mileageRange);
-    setFuelTypeFilter(tempFilters.fuelTypeFilter);
-    setYearFilter(tempFilters.yearFilter);
-    setColorFilter(tempFilters.colorFilter);
-    setStateFilter(tempFilters.stateFilter);
+    setFuelTypeFilter(tempFilters.fuelTypeFilter?.trim() || '');
+    setYearFilter(tempFilters.yearFilter || '0');
+    setColorFilter(tempFilters.colorFilter?.trim() || '');
+    setStateFilter(tempFilters.stateFilter?.trim() || '');
     // Mark state filter as user-set if it has a value (user explicitly set it in the modal)
     setIsStateFilterUserSet(!!(tempFilters.stateFilter && tempFilters.stateFilter.trim() !== ''));
-    setSelectedFeatures(tempFilters.selectedFeatures);
-    setFeatureSearch(tempFilters.featureSearch);
+    setSelectedFeatures(tempFilters.selectedFeatures || []);
+    setFeatureSearch(''); // Clear feature search when applying filters
     setCurrentPage(1); // Reset to first page when filters are applied
     setIsFilterModalOpen(false);
   };
@@ -586,16 +597,58 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
     const filtered = sourceVehicles.filter(vehicle => {
         // Use early returns for better performance
-        if (categoryFilter !== 'ALL' && vehicle.category !== categoryFilter) return false;
-        if (makeFilter && vehicle.make !== makeFilter) return false;
-        if (modelFilter && vehicle.model !== modelFilter) return false;
-        if (vehicle.price < priceRange.min || vehicle.price > priceRange.max) return false;
-        if (vehicle.mileage < mileageRange.min || vehicle.mileage > mileageRange.max) return false;
-        if (fuelTypeFilter && vehicle.fuelType !== fuelTypeFilter) return false;
-        if (yearFilter && yearFilter !== '0' && vehicle.year !== Number(yearFilter)) return false;
-        if (colorFilter && vehicle.color !== colorFilter) return false;
-        if (stateFilter && vehicle.state !== stateFilter) return false;
-        if (selectedFeatures.length > 0 && (!vehicle.features || !selectedFeatures.every(feature => vehicle.features.includes(feature)))) return false;
+        // Normalize category comparison to handle different formats
+        if (categoryFilter !== 'ALL') {
+          const vehicleCategory = vehicle.category?.toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          const filterCategory = categoryFilter.toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          if (vehicleCategory !== filterCategory) return false;
+        }
+        // Make filter - case-insensitive comparison
+        if (makeFilter && makeFilter.trim() !== '') {
+          if (vehicle.make?.toLowerCase().trim() !== makeFilter.toLowerCase().trim()) return false;
+        }
+        // Model filter - case-insensitive comparison
+        if (modelFilter && modelFilter.trim() !== '') {
+          if (vehicle.model?.toLowerCase().trim() !== modelFilter.toLowerCase().trim()) return false;
+        }
+        // Price range filter - ensure vehicle has valid price
+        if (vehicle.price != null && typeof vehicle.price === 'number') {
+          if (vehicle.price < priceRange.min || vehicle.price > priceRange.max) return false;
+        } else {
+          return false; // Exclude vehicles without valid price
+        }
+        // Mileage range filter - ensure vehicle has valid mileage
+        if (vehicle.mileage != null && typeof vehicle.mileage === 'number') {
+          if (vehicle.mileage < mileageRange.min || vehicle.mileage > mileageRange.max) return false;
+        } else {
+          return false; // Exclude vehicles without valid mileage
+        }
+        // Fuel type filter - case-insensitive comparison
+        if (fuelTypeFilter && fuelTypeFilter.trim() !== '') {
+          if (vehicle.fuelType?.toLowerCase().trim() !== fuelTypeFilter.toLowerCase().trim()) return false;
+        }
+        // Year filter
+        if (yearFilter && yearFilter !== '0' && yearFilter.trim() !== '') {
+          const filterYear = Number(yearFilter);
+          if (isNaN(filterYear) || vehicle.year !== filterYear) return false;
+        }
+        // Color filter - case-insensitive comparison
+        if (colorFilter && colorFilter.trim() !== '') {
+          if (vehicle.color?.toLowerCase().trim() !== colorFilter.toLowerCase().trim()) return false;
+        }
+        // State filter - exact match (state codes are case-sensitive)
+        if (stateFilter && stateFilter.trim() !== '') {
+          if (vehicle.state?.trim() !== stateFilter.trim()) return false;
+        }
+        // Features filter - vehicle must have all selected features
+        if (selectedFeatures.length > 0) {
+          if (!vehicle.features || !Array.isArray(vehicle.features)) return false;
+          const vehicleFeaturesLower = vehicle.features.map(f => f.toLowerCase().trim());
+          const allFeaturesMatch = selectedFeatures.every(feature => 
+            vehicleFeaturesLower.includes(feature.toLowerCase().trim())
+          );
+          if (!allFeaturesMatch) return false;
+        }
         
         return true;
     });
@@ -660,12 +713,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     });
   }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, selectedFeatures, sortOrder, isWishlistMode, wishlist, colorFilter, stateFilter]);
   
-  const totalPages = Math.ceil(processedVehicles.length / itemsPerPage);
-  const paginatedVehicles = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return processedVehicles.slice(startIndex, startIndex + itemsPerPage);
-  }, [processedVehicles, currentPage, itemsPerPage]);
-
   const activeFilterCount = useMemo(() => {
     let count = 0;
     // Only count category filter if it's explicitly changed from the initial/default
@@ -691,6 +738,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     count += selectedFeatures.length;
     return count;
   }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, isWishlistMode, isStateFilterUserSet, initialCategory]);
+
+  const totalPages = Math.ceil(processedVehicles.length / itemsPerPage);
+  const paginatedVehicles = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return processedVehicles.slice(startIndex, startIndex + itemsPerPage);
+  }, [processedVehicles, currentPage, itemsPerPage]);
 
   if (isWishlistMode) {
      return (

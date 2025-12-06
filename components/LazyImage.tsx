@@ -10,6 +10,8 @@ interface LazyImageProps {
   placeholder?: string;
   onLoad?: () => void;
   onError?: () => void;
+  eager?: boolean; // For critical above-the-fold images (LCP)
+  fetchPriority?: 'high' | 'low' | 'auto'; // For LCP optimization
 }
 
 /**
@@ -24,16 +26,24 @@ export const LazyImage: React.FC<LazyImageProps> = ({
   quality = 80,
   placeholder,
   onLoad,
-  onError
+  onError,
+  eager = false,
+  fetchPriority = 'auto'
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(false);
+  const [isInView, setIsInView] = useState(eager); // Load immediately if eager
   const [hasError, setHasError] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
+    // Skip lazy loading for eager images (critical LCP images)
+    if (eager) {
+      setIsInView(true);
+      return;
+    }
+
     // Use Intersection Observer for lazy loading
     if (!containerRef.current || typeof window === 'undefined') {
       // Fallback: load immediately if IntersectionObserver is not available
@@ -126,7 +136,8 @@ export const LazyImage: React.FC<LazyImageProps> = ({
             isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
           style={{ objectFit: 'cover' }}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
+          fetchPriority={fetchPriority}
           onLoad={handleLoad}
           onError={handleError}
         />
@@ -139,7 +150,8 @@ export const LazyImage: React.FC<LazyImageProps> = ({
           alt={alt}
           className={`w-full h-full`}
           style={{ objectFit: 'cover' }}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
+          fetchPriority={fetchPriority}
           onLoad={handleLoad}
           onError={handleError}
         />

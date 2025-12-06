@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from 'react';
 import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types';
 import { View, VehicleCategory } from '../types';
 import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
@@ -20,6 +20,7 @@ import PricingGuidance from './PricingGuidance';
 import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController);
 
@@ -59,6 +60,152 @@ const HelpTooltip: React.FC<{ text: string }> = memo(({ text }) => (
         <span className="absolute bottom-full mb-2 w-48 bg-white text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 left-1/2 -translate-x-1/2 z-10">{text}</span>
     </span>
 ));
+
+// Combobox component for Make, Model, and Variant fields
+const ComboboxInput: React.FC<{
+  label: string;
+  name: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  options: string[];
+  placeholder?: string;
+  error?: string;
+  required?: boolean;
+  disabled?: boolean;
+  tooltip?: string;
+}> = ({ label, name, value, onChange, options, placeholder, error, required = false, disabled = false, tooltip }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(value);
+  const [filteredOptions, setFilteredOptions] = useState(options);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Update input value when prop value changes
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  // Filter options based on input
+  useEffect(() => {
+    if (inputValue.trim() === '') {
+      setFilteredOptions(options);
+    } else {
+      const filtered = options.filter(opt => 
+        opt.toLowerCase().includes(inputValue.toLowerCase())
+      );
+      setFilteredOptions(filtered);
+    }
+  }, [inputValue, options]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        inputRef.current &&
+        !inputRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setInputValue(newValue);
+    setIsOpen(true);
+    onChange(e);
+  };
+
+  const handleSelectOption = (option: string) => {
+    setInputValue(option);
+    setIsOpen(false);
+    // Create synthetic event for onChange
+    const syntheticEvent = {
+      target: { 
+        name, 
+        value: option,
+        type: 'text'
+      },
+      currentTarget: inputRef.current
+    } as React.ChangeEvent<HTMLInputElement>;
+    onChange(syntheticEvent);
+    inputRef.current?.focus();
+  };
+
+  const handleInputFocus = () => {
+    setIsOpen(true);
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown' && filteredOptions.length > 0) {
+      e.preventDefault();
+      setIsOpen(true);
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div className="relative">
+      <label htmlFor={name} className="flex items-center text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">
+        {label}{required && <span className="text-spinny-orange ml-0.5">*</span>}
+        {tooltip && <HelpTooltip text={tooltip} />}
+      </label>
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          id={name}
+          name={name}
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onKeyDown={handleInputKeyDown}
+          disabled={disabled}
+          placeholder={placeholder}
+          required={required}
+          className={`block w-full p-3 pr-10 border rounded-lg focus:outline-none transition bg-white dark:text-spinny-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-spinny-orange' : 'border-gray-200 dark:border-gray-200-300'}`}
+          style={!error ? { boxShadow: 'none' } : {}}
+        />
+        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+        {isOpen && !disabled && filteredOptions.length > 0 && (
+          <div
+            ref={dropdownRef}
+            className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto"
+          >
+            {filteredOptions.slice(0, 10).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => handleSelectOption(option)}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors"
+              >
+                {option}
+              </button>
+            ))}
+            {filteredOptions.length > 10 && (
+              <div className="px-4 py-2 text-xs text-gray-500 text-center">
+                +{filteredOptions.length - 10} more options
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {error && <p className="mt-1 text-xs text-spinny-orange">{error}</p>}
+    </div>
+  );
+};
 
 const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type?: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; error?: string; tooltip?: string; required?: boolean; children?: React.ReactNode; disabled?: boolean; placeholder?: string; rows?: number }> = 
   ({ label, name, type = 'text', value, onChange, onBlur, error, tooltip, required = false, children, disabled = false, placeholder, rows }) => (
@@ -807,30 +954,37 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             ));
                         })()}
                     </FormInput>
-                    <FormInput label="Make" name="make" type="select" value={formData.make} onChange={handleChange} error={errors.make} disabled={!formData.category} required>
-                        <option value="" disabled>
-                            {!formData.category ? 'Select Category First' : 'Select Make'}
-                        </option>
-                        {availableMakes.length === 0 && formData.category ? (
-                            <option value="" disabled>No makes available for this category</option>
-                        ) : (
-                            availableMakes.map(make => <option key={make} value={make}>{make}</option>)
-                        )}
-                    </FormInput>
-                    <FormInput label="Model" name="model" type="select" value={formData.model} onChange={handleChange} error={errors.model} disabled={!formData.make} required>
-                        <option value="" disabled>
-                            {!formData.make ? 'Select Make First' : 'Select Model'}
-                        </option>
-                        {availableModels.length === 0 && formData.make ? (
-                            <option value="" disabled>No models available for this make</option>
-                        ) : (
-                            availableModels.map(model => <option key={model} value={model}>{model}</option>)
-                        )}
-                    </FormInput>
-                    <FormInput label="Variant" name="variant" type="select" value={formData.variant || ''} onChange={handleChange} disabled={!formData.model}>
-                        <option value="">Select Variant (Optional)</option>
-                        {availableVariants.map(variant => <option key={variant} value={variant}>{variant}</option>)}
-                    </FormInput>
+                    <ComboboxInput
+                        label="Make"
+                        name="make"
+                        value={formData.make}
+                        onChange={handleChange}
+                        options={availableMakes}
+                        placeholder={!formData.category ? 'Select Category First' : 'Select or type Make'}
+                        error={errors.make}
+                        disabled={!formData.category}
+                        required
+                    />
+                    <ComboboxInput
+                        label="Model"
+                        name="model"
+                        value={formData.model}
+                        onChange={handleChange}
+                        options={availableModels}
+                        placeholder={!formData.make ? 'Select Make First' : 'Select or type Model'}
+                        error={errors.model}
+                        disabled={!formData.make}
+                        required
+                    />
+                    <ComboboxInput
+                        label="Variant"
+                        name="variant"
+                        value={formData.variant || ''}
+                        onChange={handleChange}
+                        options={availableVariants}
+                        placeholder="Select or type Variant (Optional)"
+                        disabled={!formData.model}
+                    />
                     <FormInput label="Make Year" name="year" type="number" value={formData.year} onChange={handleChange} onBlur={handleBlur} error={errors.year} required />
                     <FormInput label="Registration Year" name="registrationYear" type="number" value={formData.registrationYear} onChange={handleChange} onBlur={handleBlur} required />
                     <div>
@@ -1287,8 +1441,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     
     const refreshUserData = async () => {
       try {
-        // Fetch all users and find the current seller
-        const response = await fetch('/api/users');
+        // Use authenticatedFetch to include JWT token for production API
+        const response = await authenticatedFetch('/api/users');
         
         // Handle 401 Unauthorized gracefully - user might not be authenticated
         if (response.status === 401) {
@@ -1452,7 +1606,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleRefreshVehicle = async (vehicleId: number) => {
     try {
-      const response = await fetch('/api/vehicles?action=refresh', {
+      const response = await authenticatedFetch('/api/vehicles?action=refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1494,7 +1648,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleRenewVehicle = async (vehicleId: number) => {
     try {
-      const response = await fetch('/api/vehicles?action=refresh', {
+      const response = await authenticatedFetch('/api/vehicles?action=refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1536,7 +1690,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleCertifyVehicle = async (vehicleId: number) => {
     try {
-      const response = await fetch('/api/vehicles?action=certify', {
+      const response = await authenticatedFetch('/api/vehicles?action=certify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vehicleId })
@@ -1573,7 +1727,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const handleMarkAsSold = async (vehicleId: number) => {
     try {
-      const response = await fetch('/api/vehicles?action=sold', {
+      const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+      const response = await authenticatedFetch('/api/vehicles?action=sold', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vehicleId })
@@ -1626,11 +1781,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       }
 
       // Fallback: direct API call if prop not available
-      const response = await fetch('/api/vehicles?action=unsold', {
+      const response = await authenticatedFetch('/api/vehicles?action=unsold', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('reRideAccessToken') || ''}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ vehicleId })
       });
@@ -2028,7 +2182,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
-                            <ListingLifecycleIndicator vehicle={v} seller={seller} compact={true} onRefresh={async () => { await fetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'refresh', sellerEmail: seller.email }) }); window.location.reload(); }} onRenew={async () => { await fetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'renew', sellerEmail: seller.email }) }); window.location.reload(); }} />
+                            <ListingLifecycleIndicator vehicle={v} seller={seller} compact={true} onRefresh={async () => { await authenticatedFetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'refresh', sellerEmail: seller.email }) }); window.location.reload(); }} onRenew={async () => { await authenticatedFetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'renew', sellerEmail: seller.email }) }); window.location.reload(); }} />
                             
                             {/* Boost Status Indicators */}
                             {v.activeBoosts?.filter(boost => boost.isActive && new Date(boost.expiresAt) > new Date()).map(boost => {
@@ -2646,7 +2800,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             vehicle={vehicleToBoost}
             onClose={() => { setShowBoostModal(false); setVehicleToBoost(null); }}
             onBoost={async (vehicleId, packageId) => {
-              await fetch('/api/vehicles?action=boost', {
+              await authenticatedFetch('/api/vehicles?action=boost', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ vehicleId, packageId, sellerEmail: seller.email })

@@ -143,19 +143,20 @@ class DataService {
 
   private getAuthHeaders(): Record<string, string> {
     try {
-      const userJson = localStorage.getItem('reRideCurrentUser') || sessionStorage.getItem('currentUser');
-      if (!userJson) return {};
-      const user: User = JSON.parse(userJson);
-      
-      // Check if user has access token
+      // Check if user has access token (required for production)
       const accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
       if (accessToken) {
         return { 'Authorization': `Bearer ${accessToken}` };
       }
       
-      // Fallback to email for backward compatibility (not recommended for production)
-      console.warn('No access token found, using email for authorization (not secure)');
-      return { 'Authorization': user.email };
+      // In production, we must have a token - return empty headers to trigger 401
+      // This will cause the API to return 401, which will trigger fallback to local storage
+      // In development, we can proceed without token (localStorage mode)
+      if (!this.isDevelopment) {
+        console.warn('⚠️ No access token found in production - API calls will fail and fallback to local storage');
+      }
+      
+      return {};
     } catch (error) {
       console.error('Failed to get auth headers:', error);
       return {};

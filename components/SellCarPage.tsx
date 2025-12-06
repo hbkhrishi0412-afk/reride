@@ -50,7 +50,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   const [customerContact, setCustomerContact] = useState('');
   const [contactError, setContactError] = useState('');
 
-  const totalSteps = 12; // Step 0 is preference selection, steps 1-11 are form steps
+  const totalSteps = 12; // Steps 0-11: Step 0 is preference, Steps 1-11 are form steps (registration input is step 1)
   const districts = getIndianDistricts();
   const years = getCarYears();
   const ownershipOptions = getOwnershipOptions();
@@ -297,118 +297,88 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
 
   const renderStep0 = () => (
     <div className={`transition-all duration-500 ${isAnimating ? 'opacity-0 transform translate-x-4' : 'opacity-100 transform translate-x-0'}`}>
-      <form onSubmit={handleLogin} className="space-y-6">
-        {/* Login Form */}
-        <div className="space-y-4">
-          {/* Email Input */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Email address
-            </label>
+      <div className="space-y-4">
+        {/* Title */}
+        <h2 className="text-xl font-bold text-gray-900 text-center mb-4">
+          Choose Your Preference
+        </h2>
+
+        {/* Preference Options */}
+        <div className="space-y-3">
+          {/* Sell as an Individual */}
+          <div
+            onClick={() => {
+              console.log('Individual clicked');
+              setSellerType('individual');
+              // Proceed to step 1 (registration input page)
+              setTimeout(() => {
+                console.log('Moving to step 1');
+                handleNextStep();
+              }, 300);
+            }}
+            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all duration-300 ${
+              sellerType === 'individual'
+                ? 'border-orange-500 bg-orange-50'
+                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+            }`}
+          >
             <input
-              id="email"
-              type="email"
-              value={email}
+              type="radio"
+              name="sellerType"
+              value="individual"
+              checked={sellerType === 'individual'}
               onChange={(e) => {
-                setEmail(e.target.value);
-                setLoginError('');
+                setSellerType('individual');
+                // Proceed to step 1 (registration input page)
+                setTimeout(() => handleNextStep(), 300);
               }}
-              className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 transition-all duration-300 text-base"
-              placeholder="Enter your email address"
-              required
-              autoComplete="email"
+              onClick={(e) => e.stopPropagation()}
+              className="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500"
             />
+            <div className="flex items-center gap-2 flex-1">
+              <span className="text-gray-900 font-medium text-sm">Sell as an Individual</span>
+              <svg className="w-5 h-5 text-gray-600 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+            </div>
           </div>
 
-          {/* Password Input */}
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Password
-            </label>
-            <div className="relative">
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setLoginError('');
-                }}
-                className="w-full px-4 py-2.5 pr-12 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500 transition-all duration-300 text-base"
-                placeholder="Enter your password"
-                required
-                autoComplete="current-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showPassword ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
+          {/* Sell as a Dealer */}
+          <div
+            onClick={() => {
+              console.log('Dealer clicked, navigating to seller login');
+              setSellerType('dealer');
+              // Redirect to seller login page
+              onNavigate(ViewEnum.SELLER_LOGIN);
+            }}
+            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all duration-300 ${
+              sellerType === 'dealer'
+                ? 'border-orange-500 bg-orange-50'
+                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+            }`}
+          >
+            <input
+              type="radio"
+              name="sellerType"
+              value="dealer"
+              checked={sellerType === 'dealer'}
+              onChange={(e) => {
+                setSellerType('dealer');
+                // Redirect to seller login page
+                onNavigate(ViewEnum.SELLER_LOGIN);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500"
+            />
+            <div className="flex items-center gap-2 flex-1">
+              <span className="text-gray-900 font-medium text-sm">Sell as a Dealer</span>
+              <svg className="w-5 h-5 text-gray-600 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
             </div>
           </div>
         </div>
-
-        {/* Error Message */}
-        {loginError && (
-          <div className="text-red-500 text-sm text-center">
-            {loginError}
-          </div>
-        )}
-
-        {/* Remember Me and Forgot Password */}
-        <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500"
-            />
-            <span className="text-sm text-gray-700">Remember me</span>
-          </label>
-          <button
-            type="button"
-            onClick={() => onNavigate(ViewEnum.FORGOT_PASSWORD)}
-            className="text-sm text-orange-500 hover:text-orange-600 font-medium"
-          >
-            Forgot password?
-          </button>
-        </div>
-
-        {/* Login Button */}
-        <button
-          type="submit"
-          disabled={isLoggingIn || !email || !password}
-          className={`w-full py-3 px-6 rounded-lg font-semibold text-base transition-all duration-300 ${
-            isLoggingIn || !email || !password
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-700 text-white shadow-md active:scale-95'
-          }`}
-        >
-          {isLoggingIn ? (
-            <span className="flex items-center justify-center">
-              <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Logging in...
-            </span>
-          ) : (
-            'Login'
-          )}
-        </button>
-      </form>
+      </div>
     </div>
   );
 
@@ -416,23 +386,18 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     <div className={`transition-all duration-500 ${isAnimating ? 'opacity-0 transform translate-x-4' : 'opacity-100 transform translate-x-0'}`}>
       <div className="space-y-6">
         {/* Instructional Text */}
-        <p className="text-gray-500 text-base leading-relaxed text-center">
+        <p className="text-gray-500 text-sm leading-relaxed text-center">
           Get an instant valuation for your car. We'll fetch basic details automatically.
         </p>
         
         {/* Registration Input */}
         <div className="relative">
-          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
           <input
             type="text"
-            className={`w-full pl-10 pr-4 py-3 text-base border-2 rounded-lg bg-white text-black placeholder-gray-400 focus:outline-none transition-all duration-300 ${
+            className={`w-full px-4 py-3 text-base border rounded-lg bg-white text-black placeholder-gray-400 focus:outline-none transition-all duration-300 ${
               inputFocused ? 'border-orange-500 shadow-md' : 'border-gray-300'
             }`}
-            placeholder="Search by brand, model..."
+            placeholder="e.g., MH01AB1234"
             value={registrationNumber}
             onChange={(e) => {
               setRegistrationNumber(e.target.value.toUpperCase());
@@ -446,6 +411,11 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             autoCapitalize="off"
             spellCheck="false"
           />
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
         </div>
         
         {registrationError && (
@@ -454,13 +424,13 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
           </div>
         )}
         
-        {/* Search Button */}
+        {/* Get Your Car Price Button */}
         <button
           onClick={handleRegistrationSubmit}
           disabled={isVerifying || !registrationNumber.trim()}
-          className={`w-full py-3 px-6 rounded-lg font-semibold text-base transition-all duration-300 ${
+          className={`w-full py-3.5 px-6 rounded-lg font-bold text-base uppercase tracking-wide transition-all duration-300 ${
             registrationNumber.trim() && !isVerifying
-              ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-md active:scale-95'
+              ? 'bg-gray-700 hover:bg-gray-800 text-white shadow-md active:scale-95'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           }`}
         >
@@ -473,7 +443,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
               Verifying...
             </span>
           ) : (
-            'Search'
+            'GET YOUR CAR PRICE'
           )}
         </button>
       </div>
@@ -483,11 +453,8 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   const renderStep2 = () => (
     <div className={`transition-all duration-500 ${isAnimating ? 'opacity-0 transform translate-x-4' : 'opacity-100 transform translate-x-0'}`}>
       <div className="space-y-6">
-        <div className="text-center space-y-2">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">
-            Select Your Car's Make
-          </h2>
-          <p className="text-sm text-gray-600">
+        <div className="text-center mb-4">
+          <p className="text-sm md:text-base text-gray-500 font-normal">
             Choose the manufacturer of your vehicle
           </p>
         </div>
@@ -497,21 +464,80 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            {carData?.makes.map((brand, index) => (
-              <button
-                key={brand.name}
-                onClick={() => handleBrandSelect(brand)}
-                className="flex flex-col items-center p-3 border-2 rounded-lg transition-all duration-300 active:scale-95 border-gray-200 hover:border-orange-300 hover:bg-orange-50"
-              >
-                <div className="text-2xl mb-1">
-                  {brand.logo}
-                </div>
-                <span className="text-xs text-center font-medium text-gray-700">
-                  {brand.name}
-                </span>
-              </button>
-            ))}
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
+            {carData?.makes.map((brand, index) => {
+              // Get real brand logo URL using multiple reliable sources
+              const getBrandLogo = (brandName: string): string => {
+                // Primary: Wikipedia Commons (most reliable)
+                const logoMap: Record<string, string> = {
+                  'Maruti Suzuki': 'https://upload.wikimedia.org/wikipedia/commons/1/12/Maruti_Suzuki_logo.svg',
+                  'Hyundai': 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Hyundai_Motor_Company_logo.svg',
+                  'Tata': 'https://upload.wikimedia.org/wikipedia/commons/7/79/Tata_logo.svg',
+                  'Honda': 'https://upload.wikimedia.org/wikipedia/commons/7/79/Honda_Logo.svg',
+                  'Renault': 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Renault_2021_logo.svg',
+                  'Mahindra': 'https://upload.wikimedia.org/wikipedia/commons/5/5e/Mahindra_%26_Mahindra_Logo.svg',
+                  'Kia': 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Kia_logo.svg',
+                  'Toyota': 'https://upload.wikimedia.org/wikipedia/commons/a/a1/Toyota_logo.svg',
+                  'Volkswagen': 'https://upload.wikimedia.org/wikipedia/commons/6/6d/Volkswagen_logo_2019.svg',
+                  'Skoda': 'https://upload.wikimedia.org/wikipedia/commons/9/95/%C5%A0koda_Auto_logo.svg',
+                  'MG': 'https://upload.wikimedia.org/wikipedia/commons/8/8b/MG_Motor_logo.svg',
+                  'Nissan': 'https://upload.wikimedia.org/wikipedia/commons/2/23/Nissan_logo.svg',
+                  'Ford': 'https://upload.wikimedia.org/wikipedia/commons/a/a0/Ford_Motor_Company_Logo.svg',
+                  'BMW': 'https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg',
+                  'Mercedes-Benz': 'https://upload.wikimedia.org/wikipedia/commons/9/90/Mercedes-Logo.svg',
+                  'Audi': 'https://upload.wikimedia.org/wikipedia/commons/9/92/Audi-Logo_2016.svg',
+                  'Volvo': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Volvo_Logo.svg',
+                  'Jeep': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Jeep_logo.svg',
+                  'Land Rover': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Land_Rover_logo.svg',
+                  'Porsche': 'https://upload.wikimedia.org/wikipedia/commons/f/f5/Porsche_logo.svg',
+                  'Mini': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/MINI_logo.svg',
+                  'Mitsubishi': 'https://upload.wikimedia.org/wikipedia/commons/5/5a/Mitsubishi_logo.svg',
+                };
+                
+                // Return mapped logo or fallback to clearbit
+                if (logoMap[brandName]) {
+                  return logoMap[brandName];
+                }
+                
+                // Fallback: Try clearbit
+                const brandSlug = brandName.toLowerCase().replace(/\s+/g, '').replace('-', '');
+                return `https://logo.clearbit.com/${brandSlug}.com`;
+              };
+
+              const logoUrl = getBrandLogo(brand.name);
+
+              return (
+                <button
+                  key={brand.name}
+                  onClick={() => handleBrandSelect(brand)}
+                  className="group flex flex-col items-center justify-center p-2 md:p-3 border rounded-lg transition-all duration-200 active:scale-95 bg-white border-gray-200 hover:border-orange-400 hover:bg-orange-50 hover:shadow-md"
+                >
+                  <div className="w-12 h-12 md:w-14 md:h-14 mb-1.5 md:mb-2 flex items-center justify-center bg-white rounded-lg p-1.5 md:p-2">
+                    <img 
+                      src={logoUrl} 
+                      alt={`${brand.name} logo`}
+                      className="max-w-full max-h-full object-contain"
+                      loading="lazy"
+                      style={{ maxWidth: '40px', maxHeight: '40px' }}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector('.logo-fallback')) {
+                          const fallback = document.createElement('span');
+                          fallback.className = 'logo-fallback text-xl md:text-2xl';
+                          fallback.textContent = brand.logo;
+                          parent.appendChild(fallback);
+                        }
+                      }}
+                    />
+                  </div>
+                  <span className="text-[10px] md:text-xs text-center font-medium text-gray-700 group-hover:text-orange-600 transition-colors duration-200 leading-tight px-1">
+                    {brand.name}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
         
@@ -1009,70 +1035,39 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
 
   // Calculate progress: Step 0 (preference) = 0%, Step 1 = ~9%, Step 11 = 100%
   const progressPercentage = currentStep === 0 ? 0 : ((currentStep) / (totalSteps - 1)) * 100;
-  const isLoginStep = currentStep === 0;
 
   return (
-    <div className="min-h-screen bg-white pb-20">
-      {/* Purple Header Section - Mobile Design */}
-      <div 
-        className="px-4 pt-3 pb-4"
-        style={{
-          background: 'linear-gradient(180deg, #6b21a8 0%, #7c3aed 50%, #9333ea 100%)'
-        }}
-      >
-        {/* White Square Icon */}
-        <div className="flex justify-center mb-1.5">
-          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-md">
-            <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
+    <div className="min-h-[calc(100vh-140px)] py-6 md:py-8" style={{ background: 'linear-gradient(180deg, #6A2D9D 0%, #D24B9F 100%)' }}>
+      {/* Purple Header Section - SellRight Design */}
+      <div className="px-4 pt-4 md:pt-6 pb-4 md:pb-6 max-w-4xl mx-auto">
+        {/* SellRight Branding */}
+        <div className="flex justify-center items-center gap-2 mb-4">
+          <div className="w-10 h-10 bg-red-600 rounded flex items-center justify-center shadow-md">
+            <span className="text-white font-bold text-lg">S</span>
           </div>
+          <span className="text-white font-semibold text-lg">SellRight</span>
         </div>
 
-        {/* Welcome Text */}
-        <h1 className="text-xl font-bold text-white text-center leading-tight mb-0.5">
-          Welcome Back, {sellerType === 'dealer' ? 'Seller' : 'Customer'}!
+        {/* Main Heading */}
+        <h1 className="text-3xl md:text-4xl font-bold text-white text-center leading-tight mb-2">
+          Sell Car Online
         </h1>
-        <p className="text-white/90 text-sm text-center mb-2">
-          Sign in to continue
+        
+        {/* Slogan */}
+        <p className="text-teal-300 italic text-center text-base mb-6">
+          at the Best Price
         </p>
 
-        {/* Customer/Seller Toggle Buttons */}
-        <div className="flex gap-2 justify-center">
-          <button
-            type="button"
-            onClick={() => setSellerType('individual')}
-            className={`px-5 py-1.5 rounded-full font-medium text-xs transition-all duration-300 ${
-              sellerType === 'individual'
-                ? 'bg-purple-700 text-white shadow-md'
-                : 'bg-white/20 text-white hover:bg-white/30'
-            }`}
-          >
-            Customer
-          </button>
-          <button
-            type="button"
-            onClick={() => setSellerType('dealer')}
-            className={`px-5 py-1.5 rounded-full font-medium text-xs transition-all duration-300 ${
-              sellerType === 'dealer'
-                ? 'bg-purple-700 text-white shadow-md'
-                : 'bg-white/20 text-white hover:bg-white/30'
-            }`}
-          >
-            Seller
-          </button>
-        </div>
-
-        {/* Progress Indicator - Hidden for login step */}
-        {!isLoginStep && (
-          <div className="mb-4">
-            <div className="flex items-center justify-between text-xs text-white/90 mb-2">
+        {/* Progress Indicator - Show for step 1 and above */}
+        {currentStep >= 1 && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between text-sm text-white/90 mb-2">
               <span>Step {currentStep} of {totalSteps - 1}</span>
               <span>{Math.round(progressPercentage)}% Complete</span>
             </div>
-            <div className="w-full bg-gray-700/50 rounded-full h-1.5">
+            <div className="w-full bg-white/20 rounded-full h-2">
               <div 
-                className="bg-white h-1.5 rounded-full transition-all duration-500 ease-out"
+                className="bg-white h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${progressPercentage}%` }}
               ></div>
             </div>
@@ -1082,11 +1077,45 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
 
       {/* Main Content Card */}
       <div className="px-4 -mt-4">
-        <div className="bg-white rounded-2xl shadow-lg p-5">
+        <div className="bg-white rounded-2xl shadow-xl p-4 md:p-6 max-w-3xl mx-auto">
           {renderCurrentStep()}
         </div>
       </div>
 
+      {/* Footer Benefits - Show for step 2 and above */}
+      {currentStep >= 2 && (
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-6 md:gap-8 mt-8 md:mt-12 pb-6 md:pb-8 max-w-4xl mx-auto px-4">
+          {/* Instant Payment */}
+          <div className="flex flex-col items-center">
+            <div className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-green-500 flex items-center justify-center mb-2 shadow-lg">
+              <svg className="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <span className="text-white text-sm md:text-base font-medium text-center">Instant Payment</span>
+          </div>
+
+          {/* Free Car Evaluation */}
+          <div className="flex flex-col items-center">
+            <div className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-blue-500 flex items-center justify-center mb-2 shadow-lg">
+              <svg className="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <span className="text-white text-sm md:text-base font-medium text-center">Free Car Evaluation</span>
+          </div>
+
+          {/* Free & Fast RC Transfer */}
+          <div className="flex flex-col items-center">
+            <div className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-purple-500 flex items-center justify-center mb-2 shadow-lg">
+              <svg className="w-7 h-7 md:w-8 md:h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <span className="text-white text-sm md:text-base font-medium text-center">Free & Fast RC Transfer</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

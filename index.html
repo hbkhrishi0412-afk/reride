@@ -5,10 +5,8 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     
-    <!-- Prevent caching issues -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
+    <!-- Cache control for HTML - allow short cache for updates -->
+    <meta http-equiv="Cache-Control" content="public, max-age=3600, must-revalidate" />
     
     <!-- Performance optimizations -->
     <meta name="theme-color" content="#FF6B35" />
@@ -33,6 +31,9 @@
     <!-- Load fonts with display=swap and media=print trick for async loading -->
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap"></noscript>
+    
+    <!-- Preload critical font files for faster rendering - using font-display: swap -->
+    <!-- Note: Actual font URLs will be determined by Google Fonts, but preconnect helps -->
     
     <!-- CRITICAL: Polyfill process.emitWarning BEFORE any modules load -->
     <script>

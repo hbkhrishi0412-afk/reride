@@ -375,7 +375,7 @@ const AppContent: React.FC = React.memo(() => {
               setSelectedCategory(category);
               navigate(ViewEnum.USED_CARS);
             }}
-            featuredVehicles={vehicles.slice(0, 6)}
+            featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4)}
             onSelectVehicle={selectVehicle}
             onToggleCompare={(id) => {
               setComparisonList(prev => 
@@ -403,7 +403,7 @@ const AppContent: React.FC = React.memo(() => {
               }
             }}
             recommendations={recommendations}
-            allVehicles={vehicles}
+            allVehicles={vehicles.filter(v => v.status === 'published')}
             onNavigate={navigate}
             onSelectCity={(city) => {
               setSelectedCity(city);

@@ -348,14 +348,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                 &larr; Back to Listings
               </button>
               
-              <h1 className="text-4xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-2">{safeVehicle.year} {safeVehicle.make} {safeVehicle.model} {safeVehicle.variant || ''}</h1>
+              <h1 className="text-3xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-6">{safeVehicle.year} {safeVehicle.make} {safeVehicle.model} {safeVehicle.variant || ''}</h1>
               <div className="flex items-center gap-4 mb-6">
-                  <div className="flex items-center gap-2">
-                    <StarRating rating={safeVehicle.averageRating || 0} readOnly />
-                    <span className="text-brand-gray-600 dark:text-spinny-text">
-                        {safeVehicle.averageRating?.toFixed(1) || 'No rating'} ({safeVehicle.ratingCount || 0} reviews)
-                    </span>
-                  </div>
                   {safeVehicle.certifiedInspection && (
                       <span className="bg-spinny-orange-light text-spinny-orange text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44-1.22a.75.75 0 00-1.06 0L8.172 6.172a.75.75 0 00-1.06 1.06L8.94 9.332a.75.75 0 001.191.04l3.22-4.294a.75.75 0 00-.04-1.19z" clipRule="evenodd" /></svg>
@@ -402,7 +396,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                   {/* Right Column: Price and Actions */}
                   <div className="space-y-6 self-start lg:sticky top-24">
                       <div className="p-6 bg-white rounded-xl shadow-soft-lg space-y-4">
-                           <p className="text-4xl font-extrabold" style={{ color: '#FF6B35' }}>₹{safeVehicle.price.toLocaleString('en-IN')}</p>
+                           <p className="text-3xl font-extrabold" style={{ color: '#FF6B35' }}>₹{safeVehicle.price.toLocaleString('en-IN')}</p>
                            <button onClick={() => onStartChat(safeVehicle)} className="w-full btn-brand-primary text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
                                 Chat with Seller
                             </button>

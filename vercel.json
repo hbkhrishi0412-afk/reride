@@ -11,6 +11,10 @@
       "destination": "/api/main"
     },
     {
+      "source": "/manifest.webmanifest",
+      "destination": "/manifest.webmanifest"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
