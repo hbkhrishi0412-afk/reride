@@ -131,14 +131,19 @@ export const authenticatedFetch = async (
         },
         credentials: 'include',
       });
-    } else {
-      console.warn('⚠️ Token refresh failed, clearing auth and redirecting to login');
-      clearAuthTokens();
       
-      // Redirect to login if we're not already there
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+      // If retry still returns 401, token refresh didn't help (maybe different issue)
+      if (response.status === 401) {
+        console.warn('⚠️ Request still returns 401 after token refresh - authentication issue persists');
+        clearAuthTokens();
+        // Don't redirect immediately - let the caller handle the error first
+        // The redirect will happen when the error is shown to the user
       }
+    } else {
+      console.warn('⚠️ Token refresh failed, clearing auth tokens');
+      clearAuthTokens();
+      // Don't redirect immediately - let the caller handle the error and show message first
+      // The error handler in AppProvider will show the error, then user can manually navigate to login
     }
   }
 

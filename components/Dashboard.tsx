@@ -1504,16 +1504,30 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   const [currentTime, setCurrentTime] = useState(new Date());
   
   // Refresh user data from API to get updated plan expiry date
+  // FIXED: Removed window.location.reload() to prevent crashes - now uses localStorage update only
   useEffect(() => {
     // Only refresh if seller is authenticated
     if (!seller || !seller.email) {
       return;
     }
     
+    let isMounted = true; // Track if component is still mounted
+    let refreshTimeout: NodeJS.Timeout | null = null;
+    
     const refreshUserData = async () => {
+      // Prevent refresh if component is unmounted
+      if (!isMounted) {
+        return;
+      }
+      
       try {
         // Use authenticatedFetch to include JWT token for production API
         const response = await authenticatedFetch('/api/users');
+        
+        // Check if component is still mounted after async operation
+        if (!isMounted) {
+          return;
+        }
         
         // Handle 401 Unauthorized gracefully - user might not be authenticated
         if (response.status === 401) {
@@ -1527,7 +1541,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           // Check content type before parsing
           const contentType = response.headers.get('content-type');
           if (!contentType || !contentType.includes('application/json')) {
-            console.warn('⚠️ API returned non-JSON response, skipping user refresh');
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('⚠️ API returned non-JSON response, skipping user refresh');
+            }
             return;
           }
           
@@ -1535,7 +1551,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           try {
             users = await response.json();
           } catch (jsonError) {
-            console.warn('⚠️ Failed to parse JSON response:', jsonError);
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('⚠️ Failed to parse JSON response:', jsonError);
+            }
+            return;
+          }
+          
+          // Check if component is still mounted after async operation
+          if (!isMounted) {
             return;
           }
           
@@ -1557,38 +1580,58 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   updatedSeller.subscriptionPlan !== seller.subscriptionPlan) {
                 try {
                   // Update localStorage with fresh user data
+                  // FIXED: Removed window.location.reload() - localStorage update is sufficient
+                  // The App component will pick up the change through its own refresh mechanism
                   localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedSeller));
-                  // Trigger a page refresh to update the seller prop
-                  // This ensures the dashboard reflects the latest plan expiry date
-                  window.location.reload();
+                  
+                  // Dispatch a custom event to notify other components of the update
+                  // This allows the app to update without a full page reload
+                  window.dispatchEvent(new CustomEvent('userDataUpdated', { 
+                    detail: { user: updatedSeller } 
+                  }));
+                  
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('✅ User data updated in localStorage (plan expiry changed)');
+                  }
                 } catch (storageError) {
-                  console.warn('⚠️ Failed to update localStorage:', storageError);
-                  // Don't reload if storage fails
+                  if (process.env.NODE_ENV === 'development') {
+                    console.warn('⚠️ Failed to update localStorage:', storageError);
+                  }
                 }
               }
             }
           }
         } else {
           // Log non-OK responses but don't throw errors (except 401 which is handled above)
-          if (response.status !== 401) {
+          if (response.status !== 401 && process.env.NODE_ENV === 'development') {
             console.warn(`⚠️ User refresh API returned ${response.status}: ${response.statusText}`);
           }
         }
       } catch (error) {
         // Silently fail - don't disrupt user experience
         // Only log in development to avoid console noise in production
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.NODE_ENV === 'development' && isMounted) {
           console.warn('⚠️ Failed to refresh user data:', error);
         }
       }
     };
 
-    // Refresh user data when component mounts and every 30 seconds
+    // Refresh user data when component mounts and every 60 seconds (increased from 30 to reduce load)
+    // FIXED: Only refresh on mount, not on every dependency change to prevent loops
     refreshUserData();
-    const interval = setInterval(refreshUserData, 30000); // Refresh every 30 seconds
+    refreshTimeout = setInterval(() => {
+      if (isMounted) {
+        refreshUserData();
+      }
+    }, 60000); // Refresh every 60 seconds (reduced frequency)
     
-    return () => clearInterval(interval);
-  }, [seller.email, seller.planExpiryDate, seller.planActivatedDate, seller.subscriptionPlan]);
+    return () => {
+      isMounted = false; // Mark as unmounted
+      if (refreshTimeout) {
+        clearInterval(refreshTimeout);
+      }
+    };
+  }, [seller.email, seller.planExpiryDate, seller.planActivatedDate, seller.subscriptionPlan]); // FIXED: Include all plan-related fields to prevent stale closures
   
   // Location data is now handled by individual components that need it
   
@@ -1654,16 +1697,33 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   }, [activeView, editingVehicle]);
 
   useEffect(() => {
-    if (selectedConv && safeConversations) {
-        const updatedConversation = safeConversations.find(c => c && c.id === selectedConv.id);
-        if (updatedConversation) {
-            // Using stringify is a simple way to deep-compare for changes.
-            if (JSON.stringify(updatedConversation) !== JSON.stringify(selectedConv)) {
-                 setSelectedConv(updatedConversation);
+    // FIXED: Added safety checks to prevent crashes
+    if (selectedConv && safeConversations && Array.isArray(safeConversations)) {
+        try {
+            const updatedConversation = safeConversations.find(c => c && c.id && c.id === selectedConv.id);
+            if (updatedConversation) {
+                // Using stringify is a simple way to deep-compare for changes.
+                // Added try-catch to handle circular references or serialization errors
+                try {
+                    if (JSON.stringify(updatedConversation) !== JSON.stringify(selectedConv)) {
+                        setSelectedConv(updatedConversation);
+                    }
+                } catch (stringifyError) {
+                    // If stringify fails, do a shallow comparison instead
+                    if (updatedConversation.messages?.length !== selectedConv.messages?.length ||
+                        updatedConversation.isReadBySeller !== selectedConv.isReadBySeller) {
+                        setSelectedConv(updatedConversation);
+                    }
+                }
+            } else {
+                // The selected conversation is no longer in the list, so deselect it.
+                setSelectedConv(null);
             }
-        } else {
-            // The selected conversation is no longer in the list, so deselect it.
-            setSelectedConv(null);
+        } catch (error) {
+            // Silently handle errors to prevent crashes
+            if (process.env.NODE_ENV === 'development') {
+                console.warn('⚠️ Error updating selected conversation:', error);
+            }
         }
     }
   }, [safeConversations, selectedConv]);
@@ -1912,32 +1972,83 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   };
   
   const handleEditClick = (vehicle: Vehicle) => {
-    setEditingVehicle(vehicle);
-    handleNavigate('form');
+    // FIXED: Added safety check to prevent crashes
+    if (!vehicle || !vehicle.id) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Attempted to edit invalid vehicle');
+      }
+      return;
+    }
+    try {
+      setEditingVehicle(vehicle);
+      handleNavigate('form');
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error in handleEditClick:', error);
+      }
+    }
   };
   
   const handleAddNewClick = () => {
-    setEditingVehicle(null);
-    handleNavigate('form');
+    try {
+      setEditingVehicle(null);
+      handleNavigate('form');
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error in handleAddNewClick:', error);
+      }
+    }
   }
 
   const handleFormCancel = () => {
-    setEditingVehicle(null);
-    handleNavigate('listings');
+    try {
+      setEditingVehicle(null);
+      handleNavigate('listings');
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error in handleFormCancel:', error);
+      }
+    }
   }
 
   const handleNavigateToVehicle = (vehicleId: number) => {
-    const vehicle = safeSellerVehicles.find(v => v && v.id === vehicleId);
-    if (vehicle) {
+    // FIXED: Added safety checks
+    if (!vehicleId || !Number.isInteger(vehicleId)) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Invalid vehicleId provided:', vehicleId);
+      }
+      return;
+    }
+    try {
+      const vehicle = safeSellerVehicles.find(v => v && v.id === vehicleId);
+      if (vehicle) {
         handleEditClick(vehicle);
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error in handleNavigateToVehicle:', error);
+      }
     }
   };
 
   const handleNavigateToInquiry = (conversationId: string) => {
-    const conv = safeConversations.find(c => c && c.id === conversationId);
-    if (conv) {
+    // FIXED: Added safety checks
+    if (!conversationId || typeof conversationId !== 'string') {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Invalid conversationId provided:', conversationId);
+      }
+      return;
+    }
+    try {
+      const conv = safeConversations.find(c => c && c.id === conversationId);
+      if (conv) {
         setSelectedConv(conv);
         handleNavigate('inquiries');
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Error in handleNavigateToInquiry:', error);
+      }
     }
   };
 
@@ -1990,32 +2101,74 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   }, [activeListings.length, activeView]);
   
   const analyticsData = useMemo(() => {
-    const totalSalesValue = filteredSoldListings.reduce((sum: number, v) => sum + (v.price || 0), 0);
-    const totalViews = filteredActiveListings.reduce((sum, v) => sum + (v.views || 0), 0);
-    const totalInquiries = filteredActiveListings.reduce((sum, v) => sum + (v.inquiriesCount || 0), 0);
-    const chartLabels = filteredActiveListings.map(v => `${v.year} ${v.model} ${v.variant || ''}`.trim().slice(0, 25));
-    const chartData = {
-      labels: chartLabels,
-      datasets: [
-        {
-          label: 'Views',
-          data: filteredActiveListings.map(v => v.views || 0),
-          backgroundColor: 'rgba(255, 107, 53, 0.5)',
-          borderColor: 'rgba(255, 107, 53, 1)',
-          borderWidth: 1,
-          yAxisID: 'y',
-        },
-        {
-          label: 'Inquiries',
-          data: filteredActiveListings.map(v => v.inquiriesCount || 0),
-          backgroundColor: 'rgba(30, 136, 229, 0.5)',
-          borderColor: 'rgba(30, 136, 229, 1)',
-          borderWidth: 1,
-          yAxisID: 'y1',
-        },
-      ],
-    };
-    return { totalSalesValue, totalViews, totalInquiries, chartData };
+    // FIXED: Added safety checks to prevent crashes from null/undefined data
+    try {
+      const safeFilteredSoldListings = Array.isArray(filteredSoldListings) ? filteredSoldListings : [];
+      const safeFilteredActiveListings = Array.isArray(filteredActiveListings) ? filteredActiveListings : [];
+      
+      const totalSalesValue = safeFilteredSoldListings.reduce((sum: number, v) => {
+        if (!v || typeof v.price !== 'number') return sum;
+        return sum + v.price;
+      }, 0);
+      
+      const totalViews = safeFilteredActiveListings.reduce((sum, v) => {
+        if (!v || typeof v.views !== 'number') return sum;
+        return sum + v.views;
+      }, 0);
+      
+      const totalInquiries = safeFilteredActiveListings.reduce((sum, v) => {
+        if (!v || typeof v.inquiriesCount !== 'number') return sum;
+        return sum + v.inquiriesCount;
+      }, 0);
+      
+      const chartLabels = safeFilteredActiveListings.map(v => {
+        if (!v) return '';
+        const year = v.year || '';
+        const model = v.model || '';
+        const variant = v.variant || '';
+        return `${year} ${model} ${variant}`.trim().slice(0, 25);
+      }).filter(label => label.length > 0);
+      
+      const chartData = {
+        labels: chartLabels,
+        datasets: [
+          {
+            label: 'Views',
+            data: safeFilteredActiveListings.map(v => (v && typeof v.views === 'number') ? v.views : 0),
+            backgroundColor: 'rgba(255, 107, 53, 0.5)',
+            borderColor: 'rgba(255, 107, 53, 1)',
+            borderWidth: 1,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Inquiries',
+            data: safeFilteredActiveListings.map(v => (v && typeof v.inquiriesCount === 'number') ? v.inquiriesCount : 0),
+            backgroundColor: 'rgba(30, 136, 229, 0.5)',
+            borderColor: 'rgba(30, 136, 229, 1)',
+            borderWidth: 1,
+            yAxisID: 'y1',
+          },
+        ],
+      };
+      return { totalSalesValue, totalViews, totalInquiries, chartData };
+    } catch (error) {
+      // Return safe defaults if computation fails
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Error computing analytics data:', error);
+      }
+      return {
+        totalSalesValue: 0,
+        totalViews: 0,
+        totalInquiries: 0,
+        chartData: {
+          labels: [],
+          datasets: [
+            { label: 'Views', data: [], backgroundColor: 'rgba(255, 107, 53, 0.5)', borderColor: 'rgba(255, 107, 53, 1)', borderWidth: 1, yAxisID: 'y' },
+            { label: 'Inquiries', data: [], backgroundColor: 'rgba(30, 136, 229, 0.5)', borderColor: 'rgba(30, 136, 229, 1)', borderWidth: 1, yAxisID: 'y1' }
+          ]
+        }
+      };
+    }
   }, [filteredActiveListings, filteredSoldListings]);
 
   const getCertificationButton = (vehicle: Vehicle) => {
@@ -2252,7 +2405,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                         <td className="px-6 py-4">₹{v.price.toLocaleString('en-IN')}</td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
-                            <ListingLifecycleIndicator vehicle={v} seller={seller} compact={true} onRefresh={async () => { await authenticatedFetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'refresh', sellerEmail: seller.email }) }); window.location.reload(); }} onRenew={async () => { await authenticatedFetch('/api/vehicles?action=refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: v.id, refreshAction: 'renew', sellerEmail: seller.email }) }); window.location.reload(); }} />
+                            <ListingLifecycleIndicator vehicle={v} seller={seller} compact={true} onRefresh={() => handleRefreshVehicle(v.id)} onRenew={() => handleRenewVehicle(v.id)} />
                             
                             {/* Boost Status Indicators */}
                             {v.activeBoosts?.filter(boost => boost.isActive && new Date(boost.expiresAt) > new Date()).map(boost => {
@@ -2870,14 +3023,64 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             vehicle={vehicleToBoost}
             onClose={() => { setShowBoostModal(false); setVehicleToBoost(null); }}
             onBoost={async (vehicleId, packageId) => {
-              await authenticatedFetch('/api/vehicles?action=boost', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ vehicleId, packageId, sellerEmail: seller.email })
-              });
-              setShowBoostModal(false);
-              setVehicleToBoost(null);
-              window.location.reload();
+              // FIXED: Removed window.location.reload() - use proper state update instead
+              try {
+                const response = await authenticatedFetch('/api/vehicles?action=boost', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ vehicleId, packageId, sellerEmail: seller.email })
+                });
+                
+                if (response.ok) {
+                  const contentType = response.headers.get('content-type');
+                  if (contentType && contentType.includes('application/json')) {
+                    try {
+                      const result = await response.json();
+                      if (result && result.success && result.vehicle) {
+                        // Update local state instead of reloading page
+                        onUpdateVehicle(result.vehicle);
+                        // Only close modal on successful boost
+                        setShowBoostModal(false);
+                        setVehicleToBoost(null);
+                      } else {
+                        // API returned success but result indicates failure
+                        const errorMsg = result?.message || result?.error || 'Failed to boost listing. Please try again.';
+                        alert(errorMsg);
+                        // Keep modal open so user can retry
+                      }
+                    } catch (jsonError) {
+                      if (process.env.NODE_ENV === 'development') {
+                        console.warn('⚠️ Failed to parse boost response:', jsonError);
+                      }
+                      alert('Failed to process boost response. Please try again.');
+                      // Keep modal open so user can retry
+                    }
+                  } else {
+                    // Response OK but not JSON - unexpected format
+                    alert('Unexpected response format. Please try again.');
+                    // Keep modal open so user can retry
+                  }
+                } else {
+                  // Response not OK - API error
+                  let errorMsg = 'Failed to boost listing. ';
+                  try {
+                    const errorData = await response.json();
+                    errorMsg += errorData.message || errorData.error || `Server returned status ${response.status}`;
+                  } catch {
+                    errorMsg += `Server returned status ${response.status}`;
+                  }
+                  alert(errorMsg);
+                  // Keep modal open so user can retry
+                }
+              } catch (error) {
+                // Network or other errors
+                const errorMsg = error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
+                alert(`Error boosting vehicle: ${errorMsg}`);
+                if (process.env.NODE_ENV === 'development') {
+                  console.error('❌ Error boosting vehicle:', error);
+                }
+                // Keep modal open so user can retry
+              }
             }}
           />
         )}

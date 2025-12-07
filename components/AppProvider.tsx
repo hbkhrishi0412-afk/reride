@@ -152,6 +152,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   const shownNotificationIdsRef = useRef<Set<number>>(new Set());
   // Track vehicles currently being updated to prevent duplicate updates
   const updatingVehiclesRef = useRef<Set<number>>(new Set());
+  // Counter for generating unique toast IDs to prevent collisions
+  // FIXED: Use simple incrementing counter to avoid precision issues with large numbers
+  const toastCounterRef = useRef<number>(0);
+  // FIXED: Store timestamps separately to avoid precision loss from division operations
+  const toastTimestampsRef = useRef<Map<number, number>>(new Map());
   
   // All state from App.tsx moved here
   const [currentView, setCurrentView] = useState<View>(View.HOME);
@@ -375,16 +380,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       const trimmedMessage = message.trim();
       const now = Date.now();
       
+      // FIXED: Generate unique toast ID using simple incrementing counter
+      // This avoids precision issues with large numbers (now * 1000 creates ~1.7×10^15)
+      // JavaScript's floating point precision can cause Math.floor(id / 1000) to fail
+      const id = toastCounterRef.current;
+      toastCounterRef.current += 1;
+      
+      // Store timestamp separately to avoid precision loss from division operations
+      toastTimestampsRef.current.set(id, now);
+      
       // Prevent duplicate toasts: Check if the same message and type already exists
       // and was added within the last 3 seconds
+      const toastId = id;
+      
       setToasts(prev => {
         const recentDuplicate = prev.find(
-          toast => 
-            toast.message === trimmedMessage && 
-            toast.type === type &&
-            // Check if toast was added recently (within last 3 seconds)
-            // Since toast IDs are timestamps, we can use them to check recency
-            (now - toast.id) < 3000
+          toast => {
+            if (toast.message !== trimmedMessage || toast.type !== type) {
+              return false;
+            }
+            // Use stored timestamp instead of extracting from ID to avoid precision issues
+            const toastTimestamp = toastTimestampsRef.current.get(toast.id);
+            if (toastTimestamp === undefined) {
+              return false; // Timestamp not found, assume not recent
+            }
+            return (now - toastTimestamp) < 3000;
+          }
         );
         
         if (recentDuplicate) {
@@ -392,20 +413,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           if (process.env.NODE_ENV === 'development') {
             console.log('Skipping duplicate toast:', trimmedMessage);
           }
+          // Clean up the timestamp we just stored since we're not using this ID
+          toastTimestampsRef.current.delete(id);
           return prev;
         }
         
-        const id = now;
         const toast: ToastType = { id, message: trimmedMessage, type };
+        
+        // Schedule auto-remove after 5 seconds - do this inside the state update callback
+        // to ensure it only runs when the toast is actually added (not a duplicate)
+        // Use setTimeout to schedule after the current state update completes
+        setTimeout(() => {
+          setToasts(prevToasts => {
+            const filtered = prevToasts.filter(t => t.id !== toastId);
+            // Clean up timestamp when toast is removed
+            if (filtered.length < prevToasts.length) {
+              toastTimestampsRef.current.delete(toastId);
+            }
+            return filtered;
+          });
+        }, 5000);
         
         return [...prev, toast];
       });
-      
-      // Auto-remove after 5 seconds (moved outside setToasts to access removeToast)
-      const toastId = now;
-      setTimeout(() => {
-        setToasts(prev => prev.filter(toast => toast.id !== toastId));
-      }, 5000);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error adding toast:', error);
@@ -414,7 +444,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, []);
 
   const removeToast = useCallback((id: number) => {
-    setToasts(prev => prev.filter(toast => toast.id !== id));
+    setToasts(prev => {
+      const filtered = prev.filter(toast => toast.id !== id);
+      // Clean up timestamp when toast is manually removed
+      if (filtered.length < prev.length) {
+        toastTimestampsRef.current.delete(id);
+      }
+      return filtered;
+    });
   }, []);
 
   // CRITICAL: Emergency fail-safe to prevent infinite loading
@@ -442,6 +479,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     setActiveChat(null);
     addToast('You have been logged out.', 'info');
   }, [addToast]);
+
+  // Listen for userDataUpdated events to sync currentUser state when plan expiry changes
+  useEffect(() => {
+    const handleUserDataUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ user: User }>;
+      if (customEvent.detail?.user) {
+        const updatedUser = customEvent.detail.user;
+        // Only update if this is the current user
+        setCurrentUser(prev => {
+          if (prev && prev.email === updatedUser.email) {
+            return updatedUser;
+          }
+          return prev;
+        });
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ User data updated from custom event:', updatedUser.email);
+        }
+      }
+    };
+
+    window.addEventListener('userDataUpdated', handleUserDataUpdated);
+    return () => {
+      window.removeEventListener('userDataUpdated', handleUserDataUpdated);
+    };
+  }, []);
 
   const handleLogin = useCallback((user: User) => {
     // CRITICAL: Validate user object before setting
@@ -1457,60 +1519,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           return { success: false, reason: 'User with this email already exists.' };
         }
 
-        // Add to local state
-        const newUser: User = {
-          ...userData,
-          status: 'active',
-          subscriptionPlan: userData.subscriptionPlan || 'free',
-          featuredCredits: userData.featuredCredits || 0,
-          usedCertifications: userData.usedCertifications || 0,
-        };
-        
-        setUsers(prev => [...prev, newUser]);
-        
-        // Save to localStorage in development
-        const isDevelopment = isDevelopmentEnvironment() || window.location.hostname === 'localhost';
-        if (isDevelopment) {
-          const { getUsersLocal } = await import('../services/userService');
-          const users = await getUsersLocal();
-          users.push(newUser);
-          localStorage.setItem('reRideUsers', JSON.stringify(users));
-        }
-        
-        // Save to MongoDB via API
+        // CRITICAL FIX: Create user in MongoDB FIRST (real-time), then sync to local state only on success
         try {
           const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+          const { handleApiResponse } = await import('../utils/authenticatedFetch');
+          
           const response = await authenticatedFetch('/api/main', {
             method: 'POST',
             skipAuth: true, // Registration doesn't require auth
             body: JSON.stringify({
               action: 'register',
-              email: newUser.email,
-              password: newUser.password,
-              name: newUser.name,
-              mobile: newUser.mobile,
-              role: newUser.role,
+              email: userData.email,
+              password: userData.password,
+              name: userData.name,
+              mobile: userData.mobile,
+              role: userData.role,
             }),
           });
           
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-            console.warn('⚠️ Failed to save user to MongoDB:', errorData.reason || 'Unknown error');
-            // User is still created locally, just MongoDB sync failed
-            addToast(`User created locally. MongoDB sync failed: ${errorData.reason || 'Unknown error'}`, 'warning');
-          } else {
-            console.log('✅ User created and saved to MongoDB:', newUser.email);
-            addToast(`User ${newUser.name} created successfully`, 'success');
+          const apiResult = await handleApiResponse(response);
+          
+          if (!apiResult.success || !response.ok) {
+            const errorReason = apiResult.reason || 'Unknown error';
+            console.error('❌ Failed to create user in MongoDB:', errorReason);
+            addToast(`User creation failed: ${errorReason}`, 'error');
+            // Don't create locally - MongoDB creation failed
+            throw new Error(errorReason);
           }
+          
+          // MongoDB creation succeeded - NOW update local state
+          const createdUser = apiResult.data?.user || {
+            ...userData,
+            status: 'active',
+            subscriptionPlan: userData.subscriptionPlan || 'free',
+            featuredCredits: userData.featuredCredits || 0,
+            usedCertifications: userData.usedCertifications || 0,
+          };
+          
+          setUsers(prev => [...prev, createdUser]);
+          
+          // Save to localStorage after MongoDB success
+          const isDevelopment = isDevelopmentEnvironment() || window.location.hostname === 'localhost';
+          if (isDevelopment) {
+            try {
+              const { getUsersLocal } = await import('../services/userService');
+              const users = await getUsersLocal();
+              users.push(createdUser);
+              localStorage.setItem('reRideUsers', JSON.stringify(users));
+            } catch (localError) {
+              console.warn('⚠️ Failed to save user to localStorage:', localError);
+            }
+          }
+          
+          console.log('✅ User created and saved to MongoDB:', createdUser.email);
+          addToast(`User ${createdUser.name} created successfully`, 'success');
+          
+          // Log audit entry for user creation (inside try block where createdUser is in scope)
+          const actor = currentUser?.name || currentUser?.email || 'System';
+          const entry = logAction(actor, 'Create User', createdUser.email, `Created user: ${createdUser.name} (${createdUser.role})`);
+          setAuditLog(prev => [entry, ...prev]);
         } catch (apiError) {
-          console.error('❌ Error saving user to MongoDB:', apiError);
-          addToast(`User created locally. Failed to sync to MongoDB.`, 'warning');
+          console.error('❌ Error creating user in MongoDB:', apiError);
+          const errorMsg = apiError instanceof Error ? apiError.message : 'Failed to create user';
+          addToast(`User creation failed: ${errorMsg}`, 'error');
+          // Don't create locally - MongoDB creation failed
+          throw apiError;
         }
-        
-        // Log audit entry for user creation
-        const actor = currentUser?.name || currentUser?.email || 'System';
-        const entry = logAction(actor, 'Create User', newUser.email, `Created user: ${newUser.name} (${newUser.role})`);
-        setAuditLog(prev => [entry, ...prev]);
         
         return { success: true, reason: '' };
       } catch (error) {
@@ -1825,40 +1899,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     },
     onUpdateVehicleData: async (newData: VehicleData) => {
       try {
-        // Update local state first
-        setVehicleData(newData);
-        
-        // Save to API for persistence with enhanced error handling
+        // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state only on success
         const { saveVehicleData } = await import('../services/vehicleDataService');
         const success = await saveVehicleData(newData);
         
-        if (success) {
-          // Log audit entry for vehicle data update
-          const actor = currentUser?.name || currentUser?.email || 'System';
-          const entry = logAction(actor, 'Update Vehicle Data', 'Vehicle Data', 'Updated vehicle data configuration');
-          setAuditLog(prev => [entry, ...prev]);
-          
-          addToast('Vehicle data updated and synced successfully', 'success');
-          console.log('✅ Vehicle data updated via API:', newData);
-        } else {
-          // Fallback to localStorage if API fails
-          try {
-            localStorage.setItem('reRideVehicleData', JSON.stringify(newData));
-            addToast('Vehicle data updated (saved locally, will sync when online)', 'warning');
-            console.warn('⚠️ API failed, saved to localStorage as fallback');
-            
-            // Log audit entry for vehicle data update (local only)
-            const actor = currentUser?.name || currentUser?.email || 'System';
-            const entry = logAction(actor, 'Update Vehicle Data', 'Vehicle Data', 'Updated vehicle data configuration (saved locally)');
-            setAuditLog(prev => [entry, ...prev]);
-          } catch (error) {
-            console.warn('Failed to save vehicle data to localStorage:', error);
-            addToast('Failed to save vehicle data', 'error');
-          }
+        if (!success) {
+          // MongoDB update failed - don't update local state
+          addToast('Vehicle data update failed. Please try again.', 'error');
+          throw new Error('Failed to update vehicle data in MongoDB');
         }
+        
+        // MongoDB update succeeded - NOW update local state
+        setVehicleData(newData);
+        
+        // Log audit entry for vehicle data update
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const entry = logAction(actor, 'Update Vehicle Data', 'Vehicle Data', 'Updated vehicle data configuration');
+        setAuditLog(prev => [entry, ...prev]);
+        
+        addToast('Vehicle data updated successfully', 'success');
+        console.log('✅ Vehicle data updated via API:', newData);
       } catch (error) {
+        // Error already handled with specific toast message in inner catch block (line 1908)
+        // Only log here to avoid duplicate error toasts
         console.error('❌ Failed to update vehicle data:', error);
-        addToast('Failed to update vehicle data. Please try again.', 'error');
+        // Don't show generic toast - inner catch already showed specific error message
+        // Don't update local state - MongoDB update failed
+        throw error;
       }
     },
     onToggleVerifiedStatus: (email: string) => {
@@ -1875,11 +1942,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     },
     onAddFaq: async (faq: Omit<FAQItem, 'id'>) => {
       try {
-        // Save to MongoDB first
+        // CRITICAL FIX: Save to MongoDB FIRST (real-time), then sync to local state only on success
         const { saveFaqToMongoDB } = await import('../services/faqService');
         const savedFaq = await saveFaqToMongoDB(faq);
         
-        // Update local state
+        if (!savedFaq) {
+          throw new Error('Failed to save FAQ to MongoDB');
+        }
+        
+        // MongoDB save succeeded - NOW update local state
         const newFaq: FAQItem = savedFaq || { ...faq, id: Date.now() };
         
         // If MongoDB returned _id, store it
@@ -1895,15 +1966,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         addToast('FAQ added successfully', 'success');
       } catch (error) {
-        console.error('Failed to add FAQ:', error);
-        // Still add locally even if MongoDB fails
-        const newFaq: FAQItem = { ...faq, id: Date.now() };
-        setFaqItems(prev => {
-          const updated = [...prev, newFaq];
-          saveFaqs(updated);
-          return updated;
-        });
-        addToast('FAQ added locally (MongoDB sync failed)', 'warning');
+        console.error('❌ Failed to add FAQ to MongoDB:', error);
+        addToast('FAQ creation failed. Please try again.', 'error');
+        // Don't add locally - MongoDB creation failed
+        throw error;
       }
     },
     onUpdateFaq: async (faq: FAQItem) => {
@@ -1912,13 +1978,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         const existingFaq = faqItems.find(f => f.id === faq.id);
         const mongoId = (existingFaq as any)?._id;
         
-        // Try to update in MongoDB if we have _id
-        if (mongoId) {
-          const { updateFaqInMongoDB } = await import('../services/faqService');
-          await updateFaqInMongoDB(faq, mongoId);
+        if (!mongoId) {
+          throw new Error('FAQ not found in database');
         }
         
-        // Update local state
+        // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state only on success
+        const { updateFaqInMongoDB } = await import('../services/faqService');
+        await updateFaqInMongoDB(faq, mongoId);
+        
+        // MongoDB update succeeded - NOW update local state
         setFaqItems(prev => {
           const updated = prev.map(f => {
             if (f.id === faq.id) {
@@ -1936,23 +2004,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         });
         addToast('FAQ updated successfully', 'success');
       } catch (error) {
-        console.error('Failed to update FAQ:', error);
-        // Still update locally
-        setFaqItems(prev => {
-          const updated = prev.map(f => {
-            if (f.id === faq.id) {
-              const updatedFaq = { ...faq };
-              if ((f as any)._id) {
-                (updatedFaq as any)._id = (f as any)._id;
-              }
-              return updatedFaq;
-            }
-            return f;
-          });
-          saveFaqs(updated);
-          return updated;
-        });
-        addToast('FAQ updated locally (MongoDB sync failed)', 'warning');
+        console.error('❌ Failed to update FAQ in MongoDB:', error);
+        addToast('FAQ update failed. Please try again.', 'error');
+        // Don't update locally - MongoDB update failed
+        throw error;
       }
     },
     onDeleteFaq: async (id: number) => {
@@ -1961,13 +2016,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         const existingFaq = faqItems.find(f => f.id === id);
         const mongoId = (existingFaq as any)?._id;
         
-        // Try to delete from MongoDB if we have _id
-        if (mongoId) {
-          const { deleteFaqFromMongoDB } = await import('../services/faqService');
-          await deleteFaqFromMongoDB(mongoId);
+        if (!mongoId) {
+          throw new Error('FAQ not found in database');
         }
         
-        // Delete from local state
+        // CRITICAL FIX: Delete from MongoDB FIRST (real-time), then sync to local state only on success
+        const { deleteFaqFromMongoDB } = await import('../services/faqService');
+        await deleteFaqFromMongoDB(mongoId);
+        
+        // MongoDB delete succeeded - NOW delete from local state
         setFaqItems(prev => {
           const updated = prev.filter(f => f.id !== id);
           saveFaqs(updated);
@@ -1975,14 +2032,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         });
         addToast('FAQ deleted successfully', 'success');
       } catch (error) {
-        console.error('Failed to delete FAQ:', error);
-        // Still delete locally
-        setFaqItems(prev => {
-          const updated = prev.filter(f => f.id !== id);
-          saveFaqs(updated);
-          return updated;
-        });
-        addToast('FAQ deleted locally (MongoDB sync failed)', 'warning');
+        console.error('❌ Failed to delete FAQ from MongoDB:', error);
+        addToast('FAQ deletion failed. Please try again.', 'error');
+        // Don't delete locally - MongoDB delete failed
+        throw error;
       }
     },
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => {
@@ -2338,68 +2391,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                              window.location.hostname.includes('localhost') ||
                              window.location.hostname.includes('127.0.0.1');
         
-        // First update local state for immediate UI response
         // CRITICAL: Never allow role to be updated via this function (security)
         const safeUpdates = { ...updates };
         delete safeUpdates.role; // Prevent role changes through profile updates
         
-        setUsers(prev => prev.map(user => 
-          user.email === email ? { ...user, ...safeUpdates } : user
-        ));
-        
-        // Also update currentUser if it's the same user
-        if (currentUser && currentUser.email === email) {
-          // CRITICAL: Always preserve role when updating currentUser
-          setCurrentUser(prev => {
-            if (!prev) return null;
-            const updated = { ...prev, ...safeUpdates };
-            // Ensure role is always preserved
-            updated.role = prev.role || 'customer';
-            return updated;
-          });
-          
-          // Update localStorage as well
-          try {
-            // CRITICAL: Preserve role in localStorage update
-            const updatedUser = { 
-              ...currentUser, 
-              ...safeUpdates,
-              role: currentUser.role || 'customer' // Always preserve role
-            };
-            localStorage.setItem('reRideCurrentUser', JSON.stringify(updatedUser));
-            sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
-          } catch (error) {
-            console.error('Failed to update user in localStorage:', error);
-          }
-        }
-        
-        // Always update the localStorage users array (both dev and production)
-        // This is critical for password updates to persist, especially when API fails
+        // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state/localStorage only on success
+        // This ensures password changes are persisted to MongoDB immediately, not just locally
+        // This ensures password changes are persisted to MongoDB immediately, not just locally
         try {
-          const { updateUser: updateUserService } = await import('../services/userService');
-          await updateUserService({ email, ...updates });
-          console.log('✅ User updated in localStorage users array');
-        } catch (localError) {
-          console.warn('⚠️ Failed to update user in localStorage users array:', localError);
-          // Try manual update as fallback
-          try {
-            const usersJson = localStorage.getItem('reRideUsers');
-            if (usersJson) {
-              const users = JSON.parse(usersJson);
-              const updatedUsers = users.map((user: User) => 
-                user.email === email ? { ...user, ...updates } : user
-              );
-              localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
-              console.log('✅ User updated in localStorage (manual fallback)');
-            }
-          } catch (fallbackError) {
-            console.error('❌ Failed to update user in localStorage (fallback):', fallbackError);
-          }
-        }
-        
-        // Now update MongoDB via API call (production or when API is available)
-        try {
-          console.log('📡 Sending user update request to API...', { email, hasPassword: !!updates.password });
+          console.log('📡 Sending user update request to API (real-time MongoDB update)...', { email, hasPassword: !!updates.password });
           
           // Use authenticated fetch with automatic token refresh
           const { authenticatedFetch } = await import('../utils/authenticatedFetch');
@@ -2407,7 +2407,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             method: 'PUT',
             body: JSON.stringify({
               email: email,
-              ...updates
+              ...safeUpdates
             })
           });
           
@@ -2420,37 +2420,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           if (!apiResult.success) {
             console.error('❌ API error response:', { status: response.status, error: apiResult.error, reason: apiResult.reason });
             
-            // Handle 401 Unauthorized - token might be expired
+            // Handle 401 Unauthorized - token refresh should have been attempted by authenticatedFetch
+            // If we still get 401, it means token refresh failed - user needs to re-login
             if (response.status === 401) {
-              console.warn('⚠️ 401 Unauthorized - Token may be expired. Update saved locally only.');
-              // Don't throw - allow local update to proceed (already updated above)
+              console.error('❌ 401 Unauthorized - Token refresh failed. MongoDB update NOT saved.');
               if (updates.password) {
-                addToast('Password updated locally. Please log in again to sync with server.', 'warning');
+                addToast('Password update failed: Authentication expired. Please log in again and try again.', 'error');
               } else {
-                addToast('Profile updated locally. Please log in again to sync with server.', 'warning');
+                addToast('Profile update failed: Authentication expired. Please log in again and try again.', 'error');
               }
-              return; // Local update already completed above
+              // Don't update localStorage - MongoDB update failed, so we shouldn't save locally
+              throw new Error('Authentication failed. Please log in again.');
             }
             
             // Handle 500 Internal Server Error - server issue
             if (response.status === 500) {
-              console.warn('⚠️ 500 Server Error - Update saved locally only.');
+              console.error('❌ 500 Server Error - MongoDB update failed.');
               if (updates.password) {
-                addToast('Password updated locally. Server error - changes will sync when server is available.', 'warning');
+                addToast('Password update failed: Server error. Please try again.', 'error');
               } else {
-                addToast('Profile updated locally. Server error - changes will sync when server is available.', 'warning');
+                addToast('Profile update failed: Server error. Please try again.', 'error');
               }
-              return; // Local update already completed above
+              // Don't update localStorage - MongoDB update failed
+              throw new Error('Server error. Please try again.');
             }
             
-            // For other errors, still throw but with better message
+            // For other errors, throw to prevent local update
             throw new Error(apiResult.reason || apiResult.error || `API call failed: ${response.status}`);
           }
           
           const result = apiResult.data || {};
-          console.log('✅ User updated in MongoDB:', { success: result?.success, hasUser: !!result?.user });
+          console.log('✅ User updated in MongoDB successfully:', { success: result?.success, hasUser: !!result?.user });
           
-          // Update local state with the returned user data if available
+          // MongoDB update succeeded - NOW update local state and localStorage
           if (result?.user) {
             // CRITICAL: Preserve role if not in API response (shouldn't happen, but safety check)
             const updatedUserData = {
@@ -2458,6 +2460,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               role: result.user.role || currentUser?.role || 'customer' // Preserve existing role
             };
             
+            // Update React state
             setUsers(prev => prev.map(user => 
               user.email === email ? { ...user, ...updatedUserData } : user
             ));
@@ -2471,7 +2474,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               };
               
               setCurrentUser(mergedUser);
-              // Update localStorage
+              // Update localStorage after MongoDB success
               try {
                 localStorage.setItem('reRideCurrentUser', JSON.stringify(mergedUser));
                 sessionStorage.setItem('currentUser', JSON.stringify(mergedUser));
@@ -2481,16 +2484,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             }
           }
           
+          // Also update the localStorage users array after MongoDB success
+          try {
+            const { updateUser: updateUserService } = await import('../services/userService');
+            await updateUserService({ email, ...safeUpdates });
+            console.log('✅ User updated in localStorage users array (after MongoDB success)');
+          } catch (localError) {
+            console.warn('⚠️ Failed to update user in localStorage users array:', localError);
+            // Try manual update as fallback
+            try {
+              const usersJson = localStorage.getItem('reRideUsers');
+              if (usersJson) {
+                const users = JSON.parse(usersJson);
+                const updatedUsers = users.map((user: User) => 
+                  user.email === email ? { ...user, ...safeUpdates } : user
+                );
+                localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
+                console.log('✅ User updated in localStorage (manual fallback)');
+              }
+            } catch (fallbackError) {
+              console.error('❌ Failed to update user in localStorage (fallback):', fallbackError);
+            }
+          }
+          
+          // Show success message
           if (updates.password) {
-            addToast('Password updated successfully!', 'success');
+            addToast('Password updated successfully in MongoDB!', 'success');
           } else {
             addToast('Profile updated successfully!', 'success');
           }
           
         } catch (apiError) {
-          console.error('❌ API error during user update:', apiError);
+          console.error('❌ API error during user update - MongoDB update FAILED:', apiError);
           
-          // Determine the type of error and show appropriate message
+          // CRITICAL: Don't save locally when MongoDB fails - user wants real-time updates
+          // Only show error messages, don't update any local state
+          
           if (apiError instanceof Error) {
             const errorMsg = apiError.message;
             
@@ -2498,94 +2527,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             if (errorMsg.includes('503') || errorMsg.includes('Database connection failed') || errorMsg.includes('MONGODB_URI')) {
               console.error('❌ MongoDB connection failed:', errorMsg);
               if (updates.password) {
-                addToast('Password updated locally. MongoDB connection failed - please configure MONGODB_URI in Vercel.', 'error');
+                addToast('Password update failed: MongoDB connection error. Please try again.', 'error');
               } else {
-                addToast('Profile updated locally. MongoDB connection failed - please check server configuration.', 'error');
+                addToast('Profile update failed: MongoDB connection error. Please try again.', 'error');
               }
             } else if (errorMsg.includes('fetch') || 
                 errorMsg.includes('network') ||
                 errorMsg.includes('Failed to fetch') ||
                 errorMsg.includes('CORS')) {
-              // Network errors - expected in development
-              console.warn('⚠️ Network error updating user:', errorMsg);
-              if (isDevelopment) {
-                if (updates.password) {
-                  addToast('Password updated successfully (saved locally)', 'success');
-                } else {
-                  addToast('Profile updated locally', 'success');
-                }
+              // Network errors
+              console.error('❌ Network error updating user:', errorMsg);
+              if (updates.password) {
+                addToast('Password update failed: Network error. Please check your connection and try again.', 'error');
               } else {
-                addToast('Network error. Please check your connection and try again.', 'error');
+                addToast('Profile update failed: Network error. Please check your connection and try again.', 'error');
               }
             } else if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
-              // 404 errors - expected when API endpoint doesn't exist (dev mode)
-              console.warn('⚠️ API endpoint not found (dev mode): Profile updated locally');
-              if (isDevelopment) {
-                if (updates.password) {
-                  addToast('Password updated successfully (saved locally)', 'success');
-                } else {
-                  addToast('Profile updated locally', 'success');
-                }
+              // 404 errors
+              console.error('❌ API endpoint not found:', errorMsg);
+              if (updates.password) {
+                addToast('Password update failed: API endpoint not found. Please check deployment.', 'error');
               } else {
-                addToast('API endpoint not found. Please check deployment.', 'error');
+                addToast('Profile update failed: API endpoint not found. Please check deployment.', 'error');
               }
             } else if (errorMsg.includes('400')) {
               console.error('❌ Invalid profile data:', apiError);
-              addToast(`Invalid data: ${errorMsg.replace('400: ', '')}`, 'error');
-            } else if (errorMsg.includes('503') || errorMsg.includes('Database connection') || errorMsg.includes('MongoDB connection')) {
-              console.error('❌ Database connection error:', apiError);
+              addToast(`Update failed: Invalid data - ${errorMsg.replace('400: ', '')}`, 'error');
+            } else if (errorMsg.includes('Authentication failed') || errorMsg.includes('Please log in again')) {
+              // Authentication errors - already handled above, but catch here for safety
+              console.error('❌ Authentication error:', errorMsg);
               if (updates.password) {
-                if (isDevelopment) {
-                  addToast('Password updated successfully (saved locally)', 'success');
-                } else {
-                  addToast('Database connection error. Please try again in a moment.', 'error');
-                }
+                addToast('Password update failed: Please log in again and try again.', 'error');
               } else {
-                addToast('Database connection error. Please try again.', 'error');
+                addToast('Profile update failed: Please log in again and try again.', 'error');
               }
-            } else if (errorMsg.includes('500') || errorMsg.includes('Database error') || errorMsg.includes('Internal server')) {
+            } else if (errorMsg.includes('500') || errorMsg.includes('Database error') || errorMsg.includes('Internal server') || errorMsg.includes('Server error')) {
               console.error('❌ Server/Database error updating user:', apiError);
-              // For password updates, provide specific feedback
-              // Password was already saved locally above, so show appropriate message
               if (updates.password) {
-                // Password is saved locally - show warning that it will sync when server is available
-                addToast('Password updated locally. Server error - changes will sync when server is available.', 'warning');
+                addToast('Password update failed: Server error. Please try again.', 'error');
               } else {
-                addToast('Server error. Profile updated locally, will retry later.', 'warning');
+                addToast('Profile update failed: Server error. Please try again.', 'error');
               }
             } else {
-              console.warn('⚠️ Failed to sync profile with server:', errorMsg);
-              // For password updates specifically
+              console.warn('⚠️ Failed to update profile in MongoDB:', errorMsg);
+              // Show the actual error message
+              const displayError = errorMsg.replace(/^\d+:\s*/, ''); // Remove status code prefix
               if (updates.password) {
-                if (isDevelopment) {
-                  addToast('Password updated successfully (saved locally)', 'success');
-                } else {
-                  // Show the actual error message if available
-                  const displayError = errorMsg.replace(/^\d+:\s*/, ''); // Remove status code prefix
-                  addToast(`Password update failed: ${displayError}`, 'error');
-                }
+                addToast(`Password update failed: ${displayError}`, 'error');
               } else {
-                addToast(`Profile update failed: ${errorMsg.replace(/^\d+:\s*/, '')}`, 'warning');
+                addToast(`Profile update failed: ${displayError}`, 'error');
               }
             }
           } else {
-            console.warn('⚠️ Failed to sync profile with server - unknown error type');
-            // For password updates specifically
+            console.warn('⚠️ Failed to update profile in MongoDB - unknown error type');
             if (updates.password) {
-              if (isDevelopment) {
-                addToast('Password updated successfully (saved locally)', 'success');
-              } else {
-                addToast('Password update failed. Please try again or check server logs.', 'error');
-              }
+              addToast('Password update failed. Please try again or check server logs.', 'error');
             } else {
-              addToast('Profile update failed. Please try again.', 'warning');
+              addToast('Profile update failed. Please try again.', 'error');
             }
           }
+          
+          // Re-throw to prevent any local updates
+          throw apiError;
         }
         
       } catch (error) {
+        // Error already handled with specific toast messages in inner catch block
+        // Only log here to avoid duplicate error toasts
         console.error('Failed to update user:', error);
-        addToast('Failed to update profile', 'error');
+        // Don't show generic toast - inner catch already showed specific error message
       }
     },
     deleteUser: (email: string) => {
