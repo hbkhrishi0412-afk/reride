@@ -86,18 +86,62 @@ const clearTokens = () => {
   }
 };
 
-const handleResponse = async (response: Response) => {
+const handleResponse = async (response: Response): Promise<any> => {
     if (!response.ok) {
-        // Handle 401 Unauthorized - clear tokens and stop retry loop
+        // Handle 401 Unauthorized - try to refresh token first
         if (response.status === 401) {
-            console.warn('401 Unauthorized detected, clearing tokens');
-            clearTokens();
-            // Optionally redirect to login page
-            if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-                window.location.href = '/login';
+            console.warn('401 Unauthorized detected, attempting token refresh...');
+            
+            // Try to refresh token before giving up
+            try {
+                const refreshToken = localStorage.getItem('reRideRefreshToken');
+                if (refreshToken) {
+                    const refreshResponse = await fetch('/api/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'refresh-token', refreshToken })
+                    });
+                    
+                    if (refreshResponse.ok) {
+                        const refreshData = await refreshResponse.json();
+                        if (refreshData.success && refreshData.accessToken) {
+                            storeTokens(refreshData.accessToken, refreshData.refreshToken || refreshToken);
+                            console.log('✅ Token refreshed successfully, retrying original request');
+                            // Return a special indicator that token was refreshed
+                            // The caller should retry the original request
+                            throw new Error('TOKEN_REFRESHED');
+                        }
+                    }
+                }
+            } catch (refreshError) {
+                if (refreshError instanceof Error && refreshError.message === 'TOKEN_REFRESHED') {
+                    // Re-throw to indicate caller should retry
+                    throw refreshError;
+                }
+                // Refresh failed, continue with clearing tokens
             }
-            const error = await response.json().catch(() => ({ error: 'Unauthorized. Please login again.' }));
-            throw new Error(error.error || 'Unauthorized. Please login again.');
+            
+            // Token refresh failed or no refresh token - clear tokens and redirect
+            console.warn('Token refresh failed or no refresh token, clearing tokens');
+            clearTokens();
+            
+            const error = await response.json().catch(() => ({ error: 'Authentication expired. Please log in again and try again.' }));
+            const errorMessage = error.error || error.reason || 'Authentication expired. Please log in again and try again.';
+            
+            // Show user-friendly error message
+            if (typeof window !== 'undefined') {
+                // Don't redirect immediately - let the component handle the error
+                // Only redirect if we're not already on a page that can handle the error
+                const currentPath = window.location.pathname;
+                if (!currentPath.includes('/profile') && !currentPath.includes('/dashboard')) {
+                    // Small delay to allow error message to be shown
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 2000);
+                }
+            }
+            
+            throw new Error(errorMessage);
         }
         // For 500 errors, don't throw - let the fallback mechanism handle it
         if (response.status >= 500) {
@@ -363,11 +407,31 @@ const getUsersApi = async (): Promise<User[]> => {
 };
 
 const updateUserApi = async (userData: Partial<User> & { email: string }): Promise<User> => {
-    const response = await fetch('/api/users', {
+    let response = await fetch('/api/users', {
         method: 'PUT',
         headers: getAuthHeader(),
         body: JSON.stringify(userData),
     });
+    
+    // If we get 401, try refreshing token and retry once
+    if (response.status === 401) {
+        try {
+            await handleResponse(response); // This will attempt token refresh
+        } catch (error) {
+            if (error instanceof Error && error.message === 'TOKEN_REFRESHED') {
+                // Token was refreshed, retry the request with new token
+                response = await fetch('/api/users', {
+                    method: 'PUT',
+                    headers: getAuthHeader(),
+                    body: JSON.stringify(userData),
+                });
+            } else {
+                // Token refresh failed, re-throw the error
+                throw error;
+            }
+        }
+    }
+    
     return handleResponse(response);
 };
 

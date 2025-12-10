@@ -478,7 +478,14 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       setIsEditing(false);
     } catch (error) {
       console.error('Failed to save profile:', error);
-      setFormErrors(prev => ({ ...prev, general: 'Failed to save changes. Please try again.' }));
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save changes. Please try again.';
+      
+      // Check if it's an authentication error
+      if (errorMessage.includes('Authentication expired') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+        setFormErrors(prev => ({ ...prev, general: 'Authentication expired. Please log in again and try again.' }));
+      } else {
+        setFormErrors(prev => ({ ...prev, general: errorMessage }));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -524,7 +531,14 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       }
     } catch (error) {
       console.error('Failed to update password:', error);
-      setPasswordError('Failed to update password. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update password. Please try again.';
+      
+      // Check if it's an authentication error
+      if (errorMessage.includes('Authentication expired') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+        setPasswordError('Authentication expired. Please log in again and try again.');
+      } else {
+        setPasswordError(errorMessage);
+      }
     } finally {
       setIsChangingPassword(false);
     }
