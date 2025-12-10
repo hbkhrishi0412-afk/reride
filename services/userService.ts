@@ -46,6 +46,10 @@ const FALLBACK_USERS: User[] = [
   }
 ];
 
+// --- Request Deduplication ---
+// Track ongoing requests to prevent duplicate simultaneous requests
+const pendingRequests = new Map<string, Promise<any>>();
+
 // --- API Helpers ---
 const getAuthHeader = (): Record<string, string> => {
   try {
@@ -88,6 +92,20 @@ const clearTokens = () => {
 
 const handleResponse = async (response: Response): Promise<any> => {
     if (!response.ok) {
+        // Handle rate limiting (429) - don't retry, use fallback immediately
+        if (response.status === 429) {
+            const retryAfter = response.headers.get('Retry-After');
+            const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
+            console.warn(`⚠️ Rate limited (429). Server requested wait time: ${waitTime}ms. Using fallback.`);
+            throw new Error('Too many requests. Please wait a moment and try again.');
+        }
+        
+        // Handle service unavailable (503) - don't retry, use fallback immediately
+        if (response.status === 503) {
+            console.warn('⚠️ Service unavailable (503). Using fallback mechanism.');
+            throw new Error('Service temporarily unavailable. Please try again later.');
+        }
+        
         // Handle 401 Unauthorized - try to refresh token first
         if (response.status === 401) {
             console.warn('401 Unauthorized detected, attempting token refresh...');
@@ -101,6 +119,13 @@ const handleResponse = async (response: Response): Promise<any> => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'refresh-token', refreshToken })
                     });
+                    
+                    // Don't retry if we get rate limited or service unavailable
+                    if (refreshResponse.status === 429 || refreshResponse.status === 503) {
+                        console.warn('⚠️ Token refresh rate limited or service unavailable. Clearing tokens.');
+                        clearTokens();
+                        throw new Error('Service temporarily unavailable. Please log in again.');
+                    }
                     
                     if (refreshResponse.ok) {
                         const refreshData = await refreshResponse.json();
@@ -449,42 +474,90 @@ const deleteUserApi = async (email: string): Promise<{ success: boolean, email: 
     return handleResponse(response);
 };
 
-const authApi = async (body: any): Promise<any> => {
-    const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-    });
+const authApi = async (body: any, retryCount = 0): Promise<any> => {
+    // Create a unique key for request deduplication based on action and credentials
+    const requestKey = body.action === 'login' 
+        ? `auth-${body.action}-${body.email}-${body.role || ''}`
+        : body.action === 'register'
+        ? `auth-${body.action}-${body.email}`
+        : `auth-${body.action}-${JSON.stringify(body)}`;
     
-    // Check if response is ok first
-    if (!response.ok) {
-        // Try to parse error response, but handle cases where response might be empty
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    // Check if there's already a pending request with the same key
+    if (pendingRequests.has(requestKey)) {
+        console.log('⏳ Duplicate request detected, reusing pending request:', requestKey);
+        return pendingRequests.get(requestKey)!;
+    }
+    
+    // Create the request promise
+    const requestPromise = (async () => {
         try {
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-                const errorData = await response.json();
-                errorMessage = errorData.reason || errorData.error || errorMessage;
+            const response = await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            
+            // Handle rate limiting (429) - don't retry immediately, wait and use fallback
+            if (response.status === 429) {
+                const retryAfter = response.headers.get('Retry-After');
+                const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
+                console.warn(`⚠️ Rate limited (429). Server requested wait time: ${waitTime}ms`);
+                
+                // For rate limiting, don't retry - use fallback immediately
+                throw new Error('Too many requests. Please wait a moment and try again.');
             }
-        } catch (parseError) {
-            // If we can't parse the error response, use the default error message
-            console.warn('Could not parse error response:', parseError);
+            
+            // Handle service unavailable (503) - use fallback, don't retry
+            if (response.status === 503) {
+                console.warn('⚠️ Service unavailable (503). Using fallback mechanism.');
+                throw new Error('Service temporarily unavailable. Please try again later.');
+            }
+            
+            // Handle other 5xx errors - use fallback
+            if (response.status >= 500 && response.status < 600) {
+                console.warn(`⚠️ Server error (${response.status}). Using fallback mechanism.`);
+                throw new Error(`Server error (${response.status}). Please try again later.`);
+            }
+            
+            // Check if response is ok first
+            if (!response.ok) {
+                // Try to parse error response, but handle cases where response might be empty
+                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        errorMessage = errorData.reason || errorData.error || errorMessage;
+                    }
+                } catch (parseError) {
+                    // If we can't parse the error response, use the default error message
+                    console.warn('Could not parse error response:', parseError);
+                }
+                throw new Error(errorMessage);
+            }
+            
+            // Parse successful response
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response');
+            }
+            
+            try {
+                const result = await response.json();
+                return result;
+            } catch (parseError) {
+                throw new Error('Failed to parse server response as JSON');
+            }
+        } finally {
+            // Remove from pending requests after completion
+            pendingRequests.delete(requestKey);
         }
-        throw new Error(errorMessage);
-    }
+    })();
     
-    // Parse successful response
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Server returned non-JSON response');
-    }
+    // Store the pending request
+    pendingRequests.set(requestKey, requestPromise);
     
-    try {
-        const result = await response.json();
-        return result;
-    } catch (parseError) {
-        throw new Error('Failed to parse server response as JSON');
-    }
+    return requestPromise;
 };
 
 
@@ -643,9 +716,12 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
                              errorMessage.includes('500') ||
                              errorMessage.includes('503') ||
                              errorMessage.includes('502') ||
-                             errorMessage.includes('504');
+                             errorMessage.includes('504') ||
+                             errorMessage.includes('429') ||
+                             errorMessage.includes('Too many requests') ||
+                             errorMessage.includes('Service temporarily unavailable');
       
-      // If it's a network/server error, fallback to local storage
+      // If it's a network/server error, fallback to local storage immediately
       // If it's "Invalid credentials" from API, also try local storage as fallback
       // (in case password was updated locally but server sync failed)
       if (isNetworkError || errorMessage.includes('Invalid credentials')) {
@@ -726,9 +802,20 @@ export const logout = (): void => {
   console.log('✅ User logged out and tokens cleared');
 };
 
-// Token refresh function
+// Token refresh function with rate limiting protection
+let lastTokenRefreshTime = 0;
+const TOKEN_REFRESH_COOLDOWN = 5000; // 5 seconds cooldown between refresh attempts
+
 export const refreshAccessToken = async (): Promise<{ success: boolean; accessToken?: string; reason?: string }> => {
   try {
+    // Prevent too frequent token refresh attempts
+    const now = Date.now();
+    if (now - lastTokenRefreshTime < TOKEN_REFRESH_COOLDOWN) {
+      console.warn('⚠️ Token refresh cooldown active. Skipping refresh attempt.');
+      return { success: false, reason: 'Token refresh cooldown active' };
+    }
+    lastTokenRefreshTime = now;
+
     const refreshToken = localStorage.getItem('reRideRefreshToken');
     if (!refreshToken) {
       return { success: false, reason: 'No refresh token available' };
@@ -745,6 +832,19 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
       console.warn('⚠️ Session expired. Clearing tokens to prevent loop.');
       clearTokens(); 
       return { success: false, reason: 'Session expired' };
+    }
+
+    // Handle rate limiting - don't retry immediately
+    if (response.status === 429) {
+      console.warn('⚠️ Rate limited during token refresh. Clearing tokens to prevent loop.');
+      clearTokens();
+      return { success: false, reason: 'Rate limited' };
+    }
+
+    // Handle service unavailable - don't retry
+    if (response.status === 503) {
+      console.warn('⚠️ Service unavailable during token refresh.');
+      return { success: false, reason: 'Service unavailable' };
     }
 
     if (!response.ok) {

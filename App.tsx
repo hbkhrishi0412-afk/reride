@@ -214,6 +214,18 @@ const AppContent: React.FC = React.memo(() => {
     onOfferResponse,
   } = useApp();
 
+  // Debug: Log when activeChat changes (must be after destructuring)
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 activeChat state changed:', { 
+        hasActiveChat: !!activeChat,
+        activeChatId: activeChat?.id,
+        hasCurrentUser: !!currentUser,
+        shouldRenderChatWidget: !!(currentUser && activeChat)
+      });
+    }
+  }, [activeChat, currentUser]);
+
   // Debug logging (only in development)
   if (process.env.NODE_ENV === 'development') {
     console.log('🔧 AppContent Debug:', {
@@ -540,8 +552,10 @@ const AppContent: React.FC = React.memo(() => {
               }
               
               // Set active chat to open the chat widget
+              console.log('🔧 Setting active chat:', conversation);
               setActiveChat(conversation);
               addToast('Chat started with seller', 'success');
+              console.log('🔧 Active chat set, ChatWidget should render now');
             }}
             recommendations={recommendations}
             onSelectVehicle={selectVehicle}
@@ -1877,7 +1891,11 @@ const AppContent: React.FC = React.memo(() => {
               <ChatWidget
                 conversation={activeChat}
                 currentUserRole={currentUser.role as 'customer' | 'seller'}
-                otherUserName={currentUser?.role === 'customer' ? activeChat.sellerId : activeChat.customerName}
+                otherUserName={currentUser?.role === 'customer' ? 
+                  (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
+                   users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
+                   'Seller') : 
+                  activeChat.customerName}
                 onClose={() => setActiveChat(null)}
                 onSendMessage={(messageText, _type, _payload) => {
                   sendMessage(activeChat.id, messageText);
@@ -1949,7 +1967,11 @@ const AppContent: React.FC = React.memo(() => {
             <ChatWidget
               conversation={activeChat}
               currentUserRole={currentUser.role as 'customer' | 'seller'}
-              otherUserName={currentUser?.role === 'customer' ? activeChat.sellerId : activeChat.customerName}
+              otherUserName={currentUser?.role === 'customer' ? 
+                (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
+                 users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
+                 'Seller') : 
+                activeChat.customerName}
               onClose={() => setActiveChat(null)}
               onSendMessage={(messageText, _type, _payload) => {
                 sendMessage(activeChat.id, messageText);
@@ -2025,7 +2047,11 @@ const AppContent: React.FC = React.memo(() => {
         <ChatWidget
           conversation={activeChat}
           currentUserRole={currentUser.role as 'customer' | 'seller'}
-          otherUserName={currentUser?.role === 'customer' ? activeChat.sellerId : activeChat.customerName}
+          otherUserName={currentUser?.role === 'customer' ? 
+            (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
+             users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
+             'Seller') : 
+            activeChat.customerName}
           onClose={() => setActiveChat(null)}
           onSendMessage={(messageText, _type, _payload) => {
             sendMessage(activeChat.id, messageText);

@@ -165,10 +165,53 @@ export const syncWithBackend = async (
       })
     });
     
+    // Handle rate limiting (429) - return error without retry
+    if (response.status === 429) {
+      console.warn('⚠️ Rate limited during OAuth sync (429)');
+      return {
+        success: false,
+        reason: 'Too many requests. Please wait a moment and try again.'
+      };
+    }
+    
+    // Handle service unavailable (503) - return error without retry
+    if (response.status === 503) {
+      console.warn('⚠️ Service unavailable during OAuth sync (503)');
+      return {
+        success: false,
+        reason: 'Service temporarily unavailable. Please try again later.'
+      };
+    }
+    
+    // Handle other server errors
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ 
+        error: `HTTP ${response.status}: ${response.statusText}` 
+      }));
+      return {
+        success: false,
+        reason: errorData.reason || errorData.error || 'Failed to sync with backend'
+      };
+    }
+    
     const data = await response.json();
     return data;
   } catch (error: any) {
     console.error('Backend sync error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Check if it's a network/server error
+    if (errorMessage.includes('429') || errorMessage.includes('503') || 
+        errorMessage.includes('Too many requests') || 
+        errorMessage.includes('Service temporarily unavailable')) {
+      return {
+        success: false,
+        reason: errorMessage.includes('429') || errorMessage.includes('Too many requests')
+          ? 'Too many requests. Please wait a moment and try again.'
+          : 'Service temporarily unavailable. Please try again later.'
+      };
+    }
+    
     return {
       success: false,
       reason: 'Failed to sync with backend'

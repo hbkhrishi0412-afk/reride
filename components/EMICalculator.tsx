@@ -18,7 +18,7 @@ const EMICalculator: React.FC<EMICalculatorProps> = ({ price }) => {
     const maxLoanAmount = price - minDownPayment;
 
     const [loanAmount, setLoanAmount] = useState(Math.round(price * 0.8));
-    const [interestRate, setInterestRate] = useState(10.75);
+    const [interestRate, setInterestRate] = useState(10.5);
     const [tenure, setTenure] = useState(60); // in months
 
     const downPayment = useMemo(() => price - loanAmount, [price, loanAmount]);
@@ -55,42 +55,87 @@ const EMICalculator: React.FC<EMICalculatorProps> = ({ price }) => {
     };
     
     return (
-        <div className="bg-white rounded-xl shadow-soft-lg p-6">
-            <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">EMI Calculator</h3>
-            <div className="space-y-4">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-5">EMI Calculator</h3>
+            <div className="space-y-5">
                 <div>
-                    <div className="flex justify-between items-center text-sm mb-1">
-                        <label htmlFor="loanAmount" className="font-medium text-brand-gray-600 dark:text-spinny-text-dark">Loan Amount</label>
-                        <span className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{formatCurrency(loanAmount)}</span>
+                    <div className="flex justify-between items-center text-sm mb-2">
+                        <label htmlFor="loanAmount" className="font-medium text-gray-700">Loan Amount</label>
+                        <span className="font-bold text-gray-900">{formatCurrency(loanAmount)}</span>
                     </div>
-                    <input id="loanAmount" type="range" min="0" max={maxLoanAmount} step="1000" value={loanAmount} onChange={handleLoanAmountChange} className="w-full h-2 bg-spinny-light-gray rounded-lg appearance-none cursor-pointer dark:bg-brand-gray-700" />
+                    <input 
+                        id="loanAmount" 
+                        type="range" 
+                        min="0" 
+                        max={maxLoanAmount} 
+                        step="1000" 
+                        value={loanAmount} 
+                        onChange={handleLoanAmountChange} 
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600" 
+                        style={{
+                            background: `linear-gradient(to right, #9333ea 0%, #9333ea ${(loanAmount / maxLoanAmount) * 100}%, #e5e7eb ${(loanAmount / maxLoanAmount) * 100}%, #e5e7eb 100%)`
+                        }}
+                    />
                 </div>
                  <div>
-                    <div className="flex justify-between items-center text-sm mb-1">
-                        <label htmlFor="downPayment" className="font-medium text-brand-gray-600 dark:text-spinny-text-dark">Down Payment</label>
-                        <span className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{formatCurrency(downPayment)}</span>
+                    <div className="flex justify-between items-center text-sm mb-2">
+                        <label htmlFor="downPayment" className="font-medium text-gray-700">Down Payment</label>
+                        <span className="font-bold text-gray-900">{formatCurrency(downPayment)}</span>
                     </div>
-                    <input id="downPayment" type="range" min={minDownPayment} max={price} step="1000" value={downPayment} onChange={handleDownPaymentChange} className="w-full h-2 bg-spinny-light-gray rounded-lg appearance-none cursor-pointer dark:bg-brand-gray-700" />
+                    <input 
+                        id="downPayment" 
+                        type="range" 
+                        min={minDownPayment} 
+                        max={price} 
+                        step="1000" 
+                        value={downPayment} 
+                        onChange={handleDownPaymentChange} 
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                        style={{
+                            background: `linear-gradient(to right, #9333ea 0%, #9333ea ${((downPayment - minDownPayment) / (price - minDownPayment)) * 100}%, #e5e7eb ${((downPayment - minDownPayment) / (price - minDownPayment)) * 100}%, #e5e7eb 100%)`
+                        }}
+                    />
                 </div>
                 <div>
-                    <div className="flex justify-between items-center text-sm mb-1">
-                        <label htmlFor="tenure" className="font-medium text-brand-gray-600 dark:text-spinny-text-dark">Loan Tenure</label>
-                        <span className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{tenure} months ({Math.round(tenure/12 * 10)/10} years)</span>
+                    <div className="flex justify-between items-center text-sm mb-2">
+                        <label htmlFor="tenure" className="font-medium text-gray-700">Loan Tenure</label>
+                        <span className="font-bold text-gray-900">{tenure} months ({Math.round(tenure/12 * 10)/10} years)</span>
                     </div>
-                    <input id="tenure" type="range" min="12" max={maxTenure} step="1" value={tenure} onChange={e => setTenure(Number(e.target.value))} className="w-full h-2 bg-spinny-light-gray rounded-lg appearance-none cursor-pointer dark:bg-brand-gray-700" />
+                    <input 
+                        id="tenure" 
+                        type="range" 
+                        min="12" 
+                        max={maxTenure} 
+                        step="1" 
+                        value={tenure} 
+                        onChange={e => setTenure(Number(e.target.value))} 
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                        style={{
+                            background: `linear-gradient(to right, #9333ea 0%, #9333ea ${((tenure - 12) / (maxTenure - 12)) * 100}%, #e5e7eb ${((tenure - 12) / (maxTenure - 12)) * 100}%, #e5e7eb 100%)`
+                        }}
+                    />
                 </div>
-                <div>
-                    <div className="flex justify-between items-center text-sm mb-1">
-                        <label htmlFor="interestRate" className="font-medium text-brand-gray-600 dark:text-spinny-text-dark">Interest Rate</label>
-                        <span className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{interestRate.toFixed(2)} %</span>
+                <div className="opacity-50">
+                    <div className="flex justify-between items-center text-sm mb-2">
+                        <label htmlFor="interestRate" className="font-medium text-gray-700">Interest Rate</label>
+                        <span className="font-bold text-gray-900">{interestRate.toFixed(2)} %</span>
                     </div>
-                    <input id="interestRate" type="range" min="7" max="20" step="0.05" value={interestRate} onChange={e => setInterestRate(Number(e.target.value))} className="w-full h-2 bg-spinny-light-gray rounded-lg appearance-none cursor-pointer dark:bg-brand-gray-700" />
+                    <input 
+                        id="interestRate" 
+                        type="range" 
+                        min="7" 
+                        max="20" 
+                        step="0.05" 
+                        value={interestRate} 
+                        onChange={e => setInterestRate(Number(e.target.value))} 
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                    />
                 </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-gray-200-200 dark:border-gray-200-200 text-center">
-                 <p className="text-sm text-brand-gray-600 dark:text-spinny-text">Your EMI starts at</p>
-                 <p className="text-3xl font-extrabold" style={{ color: '#FF6B35' }}>{formatCurrency(emi)}/month</p>
-                 <p className="text-xs text-gray-400 mt-2">This is an estimate. Final EMI may vary.</p>
+            <div className="mt-6 pt-5 border-t border-gray-200 text-center">
+                 <p className="text-sm text-gray-600 mb-1">Your EMI starts at</p>
+                 <p className="text-3xl font-extrabold text-purple-600">{formatCurrency(emi)}/month</p>
+                 <p className="text-xs text-gray-500 mt-2">This is an estimate. Final EMI may vary.</p>
             </div>
         </div>
     );
