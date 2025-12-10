@@ -1480,12 +1480,38 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     );
   }
 
-  // Safety checks: Ensure arrays are initialized
-  const safeSellerVehicles = sellerVehicles || [];
-  const safeConversations = conversations || [];
-  const safeVehicleData = vehicleData || {};
-  const safeAllVehicles = allVehicles || [];
-  const safeReportedVehicles = reportedVehicles || [];
+  // Safety checks: Ensure arrays are initialized and validate all props
+  const safeSellerVehicles = Array.isArray(sellerVehicles) ? sellerVehicles : [];
+  const safeConversations = Array.isArray(conversations) ? conversations : [];
+  const safeVehicleData = vehicleData && typeof vehicleData === 'object' ? vehicleData : {};
+  const safeAllVehicles = Array.isArray(allVehicles) ? allVehicles : [];
+  const safeReportedVehicles = Array.isArray(reportedVehicles) ? reportedVehicles : [];
+  
+  // Validate critical props and provide safe defaults
+  const safeOnTestDriveResponse = onTestDriveResponse || (() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️ onTestDriveResponse not provided, using no-op handler');
+    }
+  });
+  
+  // Ensure all callback functions are defined
+  if (!onAddVehicle || !onUpdateVehicle || !onDeleteVehicle || !onMarkAsSold) {
+    console.error('❌ Dashboard: Missing required callback functions');
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Configuration Error</h2>
+          <p className="text-gray-600 mb-6">Dashboard is missing required functions. Please contact support.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const [activeView, setActiveView] = useState<DashboardView>('overview');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -1521,6 +1547,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       }
       
       try {
+        // Validate seller object before making API call
+        if (!seller || !seller.email || typeof seller.email !== 'string') {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Invalid seller object, skipping user data refresh');
+          }
+          return;
+        }
         // Use authenticatedFetch to include JWT token for production API
         const response = await authenticatedFetch('/api/users');
         
@@ -1679,22 +1712,48 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     if (activeView === 'form' || editingVehicle) {
       const refreshVehicleData = async () => {
         try {
+          // Validate that we have a valid seller before fetching data
+          if (!seller || !seller.email) {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('⚠️ Cannot refresh vehicle data: seller information missing');
+            }
+            return;
+          }
+
           const { getVehicleData } = await import('../services/vehicleDataService');
           const freshData = await getVehicleData();
-          if (freshData && Object.keys(freshData).length > 0) {
-            // Update localStorage to trigger storage event for other tabs
-            localStorage.setItem('reRideVehicleData', JSON.stringify(freshData));
-            // Dispatch custom event for same-tab sync
-            window.dispatchEvent(new CustomEvent('vehicleDataUpdated', { detail: { vehicleData: freshData } }));
-            console.log('✅ Vehicle data refreshed when opening form');
+          
+          // Validate the data before using it
+          if (freshData && typeof freshData === 'object' && Object.keys(freshData).length > 0) {
+            try {
+              // Update localStorage to trigger storage event for other tabs
+              localStorage.setItem('reRideVehicleData', JSON.stringify(freshData));
+              // Dispatch custom event for same-tab sync
+              window.dispatchEvent(new CustomEvent('vehicleDataUpdated', { detail: { vehicleData: freshData } }));
+              if (process.env.NODE_ENV === 'development') {
+                console.log('✅ Vehicle data refreshed when opening form');
+              }
+            } catch (storageError) {
+              // Silently handle storage errors - don't crash the component
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('⚠️ Failed to save vehicle data to localStorage:', storageError);
+              }
+            }
+          } else {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('⚠️ Vehicle data refresh returned invalid data');
+            }
           }
         } catch (error) {
-          console.warn('Failed to refresh vehicle data when opening form:', error);
+          // Silently handle errors to prevent dashboard crashes
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Failed to refresh vehicle data when opening form:', error);
+          }
         }
       };
       refreshVehicleData();
     }
-  }, [activeView, editingVehicle]);
+  }, [activeView, editingVehicle, seller]);
 
   useEffect(() => {
     // FIXED: Added safety checks to prevent crashes
@@ -2833,7 +2892,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               onMarkConversationAsReadBySeller={onMarkConversationAsReadBySeller} 
               onMarkMessagesAsRead={onMarkMessagesAsRead}
               onSelectConv={setSelectedConv}
-              onTestDriveResponse={onTestDriveResponse}
+              onTestDriveResponse={safeOnTestDriveResponse}
               onSellerSendMessage={onSellerSendMessage}
             />
             {selectedConv && (

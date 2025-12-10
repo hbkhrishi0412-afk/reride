@@ -1020,8 +1020,64 @@ const AppContent: React.FC = React.memo(() => {
                 }
               }}
               onNavigate={navigate}
-              onTestDriveResponse={() => {}}
-              allVehicles={vehicles}
+              onTestDriveResponse={async (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => {
+                try {
+                  // Find the conversation and message
+                  const conversation = conversations.find(c => c && c.id === conversationId);
+                  if (!conversation) {
+                    console.warn('⚠️ Conversation not found for test drive response:', conversationId);
+                    return;
+                  }
+
+                  const message = conversation.messages?.find(m => m && m.id === messageId);
+                  if (!message || message.type !== 'test_drive_request') {
+                    console.warn('⚠️ Test drive message not found:', messageId);
+                    return;
+                  }
+
+                  // Update the message status
+                  const updatedMessage = {
+                    ...message,
+                    testDriveStatus: newStatus,
+                    updatedAt: new Date().toISOString()
+                  };
+
+                  // Send response message
+                  const responseText = newStatus === 'confirmed' 
+                    ? `Test drive confirmed for ${message.vehicleName || 'the vehicle'}. We'll contact you shortly.`
+                    : `Test drive request declined for ${message.vehicleName || 'the vehicle'}.`;
+
+                  await sendMessage(conversationId, responseText, 'test_drive_response', {
+                    originalMessageId: messageId,
+                    status: newStatus
+                  });
+
+                  // Update conversation in local state
+                  setConversations((prev: Conversation[]) =>
+                    prev.map((conv: Conversation) =>
+                      conv.id === conversationId
+                        ? {
+                            ...conv,
+                            messages: conv.messages?.map((msg: ChatMessage) =>
+                              msg.id === messageId ? updatedMessage : msg
+                            ) || []
+                          }
+                        : conv
+                    )
+                  );
+
+                  addToast(
+                    newStatus === 'confirmed' 
+                      ? 'Test drive confirmed successfully' 
+                      : 'Test drive request declined',
+                    'success'
+                  );
+                } catch (error) {
+                  console.error('❌ Failed to respond to test drive request:', error);
+                  addToast('Failed to respond to test drive request. Please try again.', 'error');
+                }
+              }}
+              allVehicles={vehicles || []}
               onOfferResponse={onOfferResponse}
               onViewVehicle={selectVehicle}
             />

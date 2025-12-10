@@ -3563,31 +3563,88 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + process.env.GEMINI_API_KEY, {
+    // Extract model, contents, and config from payload
+    const model = payload.model || 'gemini-2.5-flash';
+    const contents = payload.contents || payload.prompt || '';
+    const config = payload.config || {};
+
+    // Build the request body for Gemini API
+    const requestBody: any = {
+      contents: typeof contents === 'string' 
+        ? [{ parts: [{ text: contents }] }]
+        : contents
+    };
+
+    // Add generation config if provided
+    if (config.responseMimeType) {
+      requestBody.generationConfig = {
+        responseMimeType: config.responseMimeType
+      };
+    }
+
+    // Add response schema if provided
+    if (config.responseSchema) {
+      if (!requestBody.generationConfig) {
+        requestBody.generationConfig = {};
+      }
+      requestBody.generationConfig.responseSchema = config.responseSchema;
+    }
+
+    // Add thinking config if provided
+    if (config.thinkingConfig) {
+      requestBody.generationConfig = requestBody.generationConfig || {};
+      requestBody.generationConfig.thinkingConfig = config.thinkingConfig;
+    }
+
+    // Use the new Gemini API endpoint format
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: payload.prompt || JSON.stringify(payload)
-          }]
-        }]
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(errorBody || `API error: ${response.statusText}`);
+      let errorMessage = `API error: ${response.statusText}`;
+      try {
+        const errorJson = JSON.parse(errorBody);
+        errorMessage = errorJson.error?.message || errorJson.error || errorBody || errorMessage;
+      } catch {
+        errorMessage = errorBody || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated';
+    
+    // Extract response text - handle both text and JSON responses
+    let generatedText = '';
+    if (data.candidates && data.candidates[0]) {
+      const candidate = data.candidates[0];
+      if (candidate.content && candidate.content.parts) {
+        // For JSON responses, the text might be in parts[0].text
+        generatedText = candidate.content.parts[0]?.text || '';
+      }
+    }
+
+    // If no text found, try alternative paths
+    if (!generatedText && data.text) {
+      generatedText = data.text;
+    }
+
+    // If still no text, return the full response for debugging
+    if (!generatedText) {
+      generatedText = JSON.stringify(data);
+    }
 
     return res.status(200).json({
       success: true,
       response: generatedText,
+      result: generatedText, // Alias for compatibility
       timestamp: new Date().toISOString()
     });
 
