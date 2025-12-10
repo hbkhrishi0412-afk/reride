@@ -36,7 +36,7 @@ if (!cached) {
 
 // Connection health check
 export function isConnectionHealthy(): boolean {
-  return mongoose.connection.readyState === 1;
+  return mongoose.connection.readyState === 1 && cached.conn !== null;
 }
 
 // Get connection state
@@ -271,6 +271,11 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
         }
 
         // Set up connection event handlers for monitoring
+        // Remove any existing listeners to prevent duplicates on retries
+        mongooseInstance.connection.removeAllListeners('error');
+        mongooseInstance.connection.removeAllListeners('disconnected');
+        mongooseInstance.connection.removeAllListeners('reconnected');
+        
         mongooseInstance.connection.on('error', (err) => {
           console.error('❌ MongoDB connection error:', err);
           cached.conn = null;
@@ -290,6 +295,9 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
           cached.conn = mongooseInstance;
         });
 
+        // Assign cached.conn immediately when connection is ready
+        // This prevents the window where readyState === 1 but cached.conn is null
+        cached.conn = mongooseInstance;
         cached.isConnecting = false;
         cached.retryCount = 0;
         return mongooseInstance;

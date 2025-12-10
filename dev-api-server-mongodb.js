@@ -76,6 +76,11 @@ async function connectToDatabase(retryCount = 0) {
         console.log(`✅ Connected to MongoDB database: ${dbName}`);
         
         // Set up connection event handlers
+        // Remove any existing listeners to prevent duplicates on retries
+        mongoose.connection.removeAllListeners('error');
+        mongoose.connection.removeAllListeners('disconnected');
+        mongoose.connection.removeAllListeners('reconnected');
+        
         mongoose.connection.on('error', (err) => {
             console.error('❌ MongoDB connection error:', err.message);
         });
