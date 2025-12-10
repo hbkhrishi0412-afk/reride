@@ -36,7 +36,9 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
-    "test:e2e:install": "playwright install"
+    "test:e2e:install": "playwright install",
+    "db:diagnose": "node diagnose-db-connection.js",
+    "db:test": "node test-connection.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

@@ -372,12 +372,35 @@ async function mainHandler(
         }
       } catch (dbError) {
         mongoAvailable = false;
-        mongoFailureReason = dbError instanceof MongoConfigError
-          ? 'MongoDB is not configured. Set MONGODB_URL or MONGODB_URI in your environment.'
-          : 'Database temporarily unavailable. Please try again later.';
+        
+        // Provide more helpful error messages
+        if (dbError instanceof MongoConfigError) {
+          mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL or MONGODB_URI in your environment.';
+        } else if (dbError instanceof Error) {
+          const errorMsg = dbError.message.toLowerCase();
+          // Provide specific guidance based on error type (only in development)
+          if (process.env.NODE_ENV !== 'production') {
+            if (errorMsg.includes('authentication') || errorMsg.includes('bad auth')) {
+              mongoFailureReason = 'Database authentication failed. Check your username and password. Special characters in password must be URL-encoded.';
+            } else if (errorMsg.includes('network') || errorMsg.includes('timeout') || errorMsg.includes('enotfound')) {
+              mongoFailureReason = 'Database connection failed. Check network access settings in MongoDB Atlas and ensure your IP is whitelisted.';
+            } else if (errorMsg.includes('not configured') || errorMsg.includes('not defined')) {
+              mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL or MONGODB_URI in your environment.';
+            } else {
+              mongoFailureReason = `Database temporarily unavailable: ${dbError.message}. Please check your connection settings.`;
+            }
+          } else {
+            // Production: generic message to avoid information leakage
+            mongoFailureReason = 'Database temporarily unavailable. Please try again later.';
+          }
+        } else {
+          mongoFailureReason = 'Database temporarily unavailable. Please try again later.';
+        }
+        
         // Only log in development to avoid information leakage
         if (process.env.NODE_ENV !== 'production') {
           logWarn('Database connection issue:', dbError instanceof Error ? dbError.message : dbError);
+          logWarn('💡 Run "npm run db:diagnose" to diagnose the connection issue.');
         }
         if (req.method !== 'GET') {
           return res.status(503).json({
