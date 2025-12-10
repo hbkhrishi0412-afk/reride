@@ -416,7 +416,9 @@ const updateUserApi = async (userData: Partial<User> & { email: string }): Promi
     // If we get 401, try refreshing token and retry once
     if (response.status === 401) {
         try {
-            await handleResponse(response); // This will attempt token refresh
+            // Clone response before consuming it
+            const responseClone = response.clone();
+            await handleResponse(responseClone); // This will attempt token refresh
         } catch (error) {
             if (error instanceof Error && error.message === 'TOKEN_REFRESHED') {
                 // Token was refreshed, retry the request with new token
@@ -426,8 +428,11 @@ const updateUserApi = async (userData: Partial<User> & { email: string }): Promi
                     body: JSON.stringify(userData),
                 });
             } else {
-                // Token refresh failed, re-throw the error
-                throw error;
+                // Token refresh failed, get error from original response
+                const errorData = await response.json().catch(() => ({ 
+                    error: 'Authentication expired. Please log in again and try again.' 
+                }));
+                throw new Error(errorData.error || errorData.reason || 'Authentication expired. Please log in again and try again.');
             }
         }
     }

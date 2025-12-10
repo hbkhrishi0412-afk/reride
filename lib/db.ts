@@ -167,9 +167,22 @@ function getRetryDelay(retryCount: number): number {
 }
 
 async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
-  // Return existing healthy connection if available
+  // Return existing healthy connection if available - verify with ping
   if (cached.conn && mongoose.connection.readyState === 1) {
-    return cached.conn;
+    try {
+      // Verify connection is actually working with a ping
+      await mongoose.connection.db.admin().ping();
+      return cached.conn;
+    } catch (error) {
+      // Connection is stale, clear it and reconnect
+      console.warn('⚠️ Stale connection detected, reconnecting...');
+      cached.conn = null;
+      try {
+        await mongoose.connection.close();
+      } catch (closeError) {
+        // Ignore close errors
+      }
+    }
   }
 
   // Prevent multiple simultaneous connection attempts
@@ -205,15 +218,18 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
     const opts = {
       bufferCommands: false,
       maxPoolSize: 10,
+      minPoolSize: 1, // Keep at least 1 connection alive
       // Increased timeouts for serverless cold starts
-      serverSelectionTimeoutMS: 15000, // Increased from 10s to 15s
+      serverSelectionTimeoutMS: 20000, // Increased to 20s for serverless
       socketTimeoutMS: 45000,
-      connectTimeoutMS: 15000, // Added explicit connect timeout
+      connectTimeoutMS: 20000, // Increased to 20s
       family: 4, // Use IPv4, skip trying IPv6
       dbName: 'reride', // Explicitly specify database name
       // Retry configuration
       retryWrites: true,
-      retryReads: true
+      retryReads: true,
+      autoIndex: true,
+      autoCreate: false,
     };
 
     // Check MONGODB_URL first (preferred), then fallback to MONGODB_URI for backward compatibility
@@ -284,7 +300,7 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
         });
 
         mongooseInstance.connection.on('disconnected', () => {
-          console.warn('⚠️ MongoDB disconnected');
+          console.warn('⚠️ MongoDB disconnected - will reconnect on next request');
           cached.conn = null;
           cached.promise = null;
           cached.isConnecting = false;
@@ -294,6 +310,14 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
           console.log('✅ MongoDB reconnected');
           cached.conn = mongooseInstance;
         });
+
+        // Test connection with ping before marking as ready
+        try {
+          await mongooseInstance.connection.db.admin().ping();
+          console.log('✅ MongoDB connection verified with ping');
+        } catch (pingError) {
+          console.warn('⚠️ MongoDB ping failed:', pingError instanceof Error ? pingError.message : pingError);
+        }
 
         // Assign cached.conn immediately when connection is ready
         // This prevents the window where readyState === 1 but cached.conn is null
@@ -314,8 +338,10 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
             error.message.includes('ENOTFOUND') ||
             error.message.includes('ECONNREFUSED') ||
             error.message.includes('network') ||
+            error.message.includes('authentication') ||
             error.name === 'MongoNetworkError' ||
-            error.name === 'MongoTimeoutError';
+            error.name === 'MongoTimeoutError' ||
+            error.name === 'MongoServerSelectionError';
 
           if (isTransientError) {
             const delay = getRetryDelay(retryCount);
@@ -343,8 +369,10 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
           error.message.includes('ENOTFOUND') ||
           error.message.includes('ECONNREFUSED') ||
           error.message.includes('network') ||
+          error.message.includes('authentication') ||
           error.name === 'MongoNetworkError' ||
-          error.name === 'MongoTimeoutError'
+          error.name === 'MongoTimeoutError' ||
+          error.name === 'MongoServerSelectionError'
         );
 
       if (isTransientError) {
@@ -361,11 +389,37 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
 export async function ensureConnection(): Promise<Mongoose> {
   // Check if connection is healthy
   if (isConnectionHealthy()) {
-    return cached.conn!;
+    // Verify with ping to ensure it's actually working
+    try {
+      await mongoose.connection.db.admin().ping();
+      return cached.conn!;
+    } catch (error) {
+      // Connection is stale, reconnect
+      console.warn('⚠️ Connection health check failed, reconnecting...');
+      cached.conn = null;
+      try {
+        await mongoose.connection.close();
+      } catch (closeError) {
+        // Ignore close errors
+      }
+    }
   }
 
   // Attempt to connect
-  return await connectToDatabase();
+  try {
+    return await connectToDatabase();
+  } catch (error) {
+    // Log detailed error in development
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('❌ MongoDB connection failed:', error);
+      const mongoUri = process.env.MONGODB_URL || process.env.MONGODB_URI;
+      if (mongoUri) {
+        const masked = mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:***@');
+        console.error('   Connection string:', masked);
+      }
+    }
+    throw error;
+  }
 }
 
 export { MongoConfigError };

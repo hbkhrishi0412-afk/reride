@@ -370,6 +370,13 @@ async function mainHandler(
           const state = getConnectionState();
           throw new Error(`Connection not ready: ${state.stateName} (${state.state})`);
         }
+        
+        // Verify connection works with a ping
+        try {
+          await mongoose.connection.db.admin().ping();
+        } catch (pingError) {
+          throw new Error('Connection ping failed - database not responding');
+        }
       } catch (dbError) {
         mongoAvailable = false;
         
@@ -383,7 +390,7 @@ async function mainHandler(
             if (errorMsg.includes('authentication') || errorMsg.includes('bad auth')) {
               mongoFailureReason = 'Database authentication failed. Check your username and password. Special characters in password must be URL-encoded.';
             } else if (errorMsg.includes('network') || errorMsg.includes('timeout') || errorMsg.includes('enotfound')) {
-              mongoFailureReason = 'Database connection failed. Check network access settings in MongoDB Atlas and ensure your IP is whitelisted.';
+              mongoFailureReason = 'Database connection failed. Check network access settings in MongoDB Atlas and ensure your IP is whitelisted (add 0.0.0.0/0 for all IPs).';
             } else if (errorMsg.includes('not configured') || errorMsg.includes('not defined')) {
               mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL (or MONGODB_URI) in your environment.';
             } else {
