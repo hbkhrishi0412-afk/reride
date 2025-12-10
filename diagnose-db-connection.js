@@ -39,6 +39,7 @@ async function diagnoseConnection() {
   // Step 1: Check environment variables
   logSection('Step 1: Checking Environment Variables');
   
+  // MONGODB_URL is preferred, MONGODB_URI for backward compatibility
   const mongoUri = process.env.MONGODB_URL || process.env.MONGODB_URI;
   
   if (!mongoUri) {
@@ -119,7 +120,7 @@ async function diagnoseConnection() {
     log('\n📊 Connection Details:', 'bright');
     log(`   Database: ${mongoose.connection.name}`, 'cyan');
     log(`   Host: ${mongoose.connection.host}`, 'cyan');
-    log(`   Port: ${mongoose.connection.port || 'N/A (Atlas)}`, 'cyan');
+    log(`   Port: ${mongoose.connection.port || 'N/A (Atlas)'}`, 'cyan');
     log(`   Ready State: ${mongoose.connection.readyState} (1 = connected)`, 'cyan');
     
     // List collections

@@ -375,7 +375,7 @@ async function mainHandler(
         
         // Provide more helpful error messages
         if (dbError instanceof MongoConfigError) {
-          mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL or MONGODB_URI in your environment.';
+          mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL (or MONGODB_URI) in your environment.';
         } else if (dbError instanceof Error) {
           const errorMsg = dbError.message.toLowerCase();
           // Provide specific guidance based on error type (only in development)
@@ -385,7 +385,7 @@ async function mainHandler(
             } else if (errorMsg.includes('network') || errorMsg.includes('timeout') || errorMsg.includes('enotfound')) {
               mongoFailureReason = 'Database connection failed. Check network access settings in MongoDB Atlas and ensure your IP is whitelisted.';
             } else if (errorMsg.includes('not configured') || errorMsg.includes('not defined')) {
-              mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL or MONGODB_URI in your environment.';
+              mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL (or MONGODB_URI) in your environment.';
             } else {
               mongoFailureReason = `Database temporarily unavailable: ${dbError.message}. Please check your connection settings.`;
             }
@@ -712,7 +712,7 @@ async function mainHandler(
       if (error instanceof Error && (error.message.includes('MONGODB_URI') || error.message.includes('MONGODB_URL'))) {
         return res.status(503).json({ 
           success: false, 
-          reason: 'Database configuration error. Please check MONGODB_URL or MONGODB_URI environment variable.',
+          reason: 'Database configuration error. Please check MONGODB_URL (or MONGODB_URI) environment variable.',
           details: 'The application is configured to use MongoDB but the connection string is not properly configured.'
         });
       }
@@ -871,7 +871,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         logError('❌ Database connection error during registration:', dbError);
         return res.status(503).json({ 
           success: false, 
-          reason: 'Database connection failed. Please check MONGODB_URL or MONGODB_URI configuration.',
+          reason: 'Database connection failed. Please check MONGODB_URL (or MONGODB_URI) configuration.',
           error: dbError instanceof Error ? dbError.message : 'Connection error'
         });
       }
@@ -2897,10 +2897,10 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
       if (!hasMongoUri) {
         return res.status(200).json({
           success: false,
-          message: 'MONGODB_URL or MONGODB_URI environment variable is not configured',
-          details: 'Please add MONGODB_URL or MONGODB_URI in Vercel dashboard under Environment Variables',
+          message: 'MONGODB_URL (or MONGODB_URI) environment variable is not configured',
+          details: 'Please add MONGODB_URL in Vercel dashboard under Environment Variables (MONGODB_URI also works)',
           checks: [
-            { name: 'MongoDB URL/URI Configuration', status: 'FAIL', details: 'MONGODB_URL or MONGODB_URI environment variable not found' }
+            { name: 'MongoDB URL/URI Configuration', status: 'FAIL', details: 'MONGODB_URL (or MONGODB_URI) environment variable not found' }
           ]
         });
       }
@@ -2925,7 +2925,7 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
         message: 'Database connected successfully',
         collections: collections.map(c => c.name),
           checks: [
-            { name: 'MongoDB URL/URI Configuration', status: 'PASS', details: 'MONGODB_URL or MONGODB_URI is set' },
+            { name: 'MongoDB URL/URI Configuration', status: 'PASS', details: 'MONGODB_URL (or MONGODB_URI) is set' },
             { name: 'Database Connection', status: 'PASS', details: 'Successfully connected to MongoDB' }
           ]
       });
@@ -2991,7 +2991,7 @@ async function handleHealth(_req: VercelRequest, res: VercelResponse) {
     
     if (error instanceof Error) {
       if (error.message.includes('MONGODB_URI') || error.message.includes('MONGODB_URL')) {
-        errorMessage += ' - Check MONGODB_URL or MONGODB_URI environment variable in Vercel dashboard';
+        errorMessage += ' - Check MONGODB_URL (or MONGODB_URI) environment variable in Vercel dashboard';
       } else if (error.message.includes('connect') || error.message.includes('timeout')) {
         errorMessage += ' - Check database server status and network connectivity';
       }

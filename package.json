@@ -38,7 +38,11 @@
     "test:e2e:report": "playwright show-report",
     "test:e2e:install": "playwright install",
     "db:diagnose": "node diagnose-db-connection.js",
-    "db:test": "node test-connection.js"
+    "db:test": "node test-connection.js",
+    "db:check-prod": "node check-production-db.js",
+    "db:verify": "node verify-production-setup.js",
+    "db:check": "node test-mongodb-simple.js",
+    "test:prod": "node test-production-api.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

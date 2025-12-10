@@ -216,22 +216,22 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
       retryReads: true
     };
 
-    // Check MONGODB_URL first, then fallback to MONGODB_URI for backward compatibility
+    // Check MONGODB_URL first (preferred), then fallback to MONGODB_URI for backward compatibility
     const mongoUri = process.env.MONGODB_URL || process.env.MONGODB_URI;
     
     if (!mongoUri) {
       cached.isConnecting = false;
       cached.promise = null;
       const errorMessage = [
-        '❌ MONGODB_URL or MONGODB_URI environment variable is not defined.',
+        '❌ MONGODB_URL (or MONGODB_URI) environment variable is not defined.',
         '',
         'To fix this:',
-        '1. Create a .env file in your project root (copy from .env.example)',
+        '1. Create a .env.local file in your project root',
         '2. Add: MONGODB_URL=mongodb://localhost:27017/reride?retryWrites=true&w=majority',
         '   Or for MongoDB Atlas: MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/reride?retryWrites=true&w=majority',
         '3. For Vercel deployment: Add MONGODB_URL in Vercel dashboard → Settings → Environment Variables',
         '',
-        'See .env.example for all required environment variables.'
+        'Note: MONGODB_URL is preferred, but MONGODB_URI will also work for backward compatibility.'
       ].join('\n');
       throw new MongoConfigError(errorMessage);
     }
@@ -267,7 +267,7 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
         // Verify database name matches expected
         if (actualDbName.toLowerCase() !== 'reride') {
           console.warn(`⚠️ WARNING: Connected to database "${actualDbName}" but expected "reride"`);
-          console.warn(`   This may cause data retrieval issues. Please verify your MONGODB_URL or MONGODB_URI.`);
+          console.warn(`   This may cause data retrieval issues. Please verify your MONGODB_URL (or MONGODB_URI).`);
         }
 
         // Set up connection event handlers for monitoring
