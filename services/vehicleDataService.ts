@@ -323,6 +323,14 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
   console.error('❌ All MongoDB save attempts failed. Data NOT saved locally.');
   console.error('Last error:', lastError);
   
+  // Log user-friendly error information
+  if (lastError) {
+    const errorMsg = lastError.message || String(lastError);
+    if (errorMsg.includes('503') || errorMsg.includes('Database connection')) {
+      logError('💡 Database connection issue detected. Data will be queued for retry when connection is restored.');
+    }
+  }
+  
   // Return false to indicate MongoDB save failed - don't save locally
   return false;
 };

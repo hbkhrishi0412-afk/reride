@@ -10,16 +10,78 @@ class MongoConfigError extends Error {
   }
 }
 
+// Connection state tracking
+interface ConnectionCache {
+  conn: Mongoose | null;
+  promise: Promise<Mongoose> | null;
+  lastAttempt: number;
+  retryCount: number;
+  isConnecting: boolean;
+}
+
 // Connection caching logic to prevent multiple connections in a serverless environment.
 // FIX: Replace 'global' with 'globalThis' for broader environment compatibility.
-let cached = (globalThis as any).mongoose;
+let cached: ConnectionCache = (globalThis as any).mongoose;
 
 if (!cached) {
 // FIX: Replace 'global' with 'globalThis' for broader environment compatibility.
-  cached = (globalThis as any).mongoose = { conn: null, promise: null };
+  cached = (globalThis as any).mongoose = { 
+    conn: null, 
+    promise: null,
+    lastAttempt: 0,
+    retryCount: 0,
+    isConnecting: false
+  };
+}
+
+// Connection health check
+export function isConnectionHealthy(): boolean {
+  return mongoose.connection.readyState === 1;
+}
+
+// Get connection state
+export function getConnectionState(): {
+  ready: boolean;
+  state: number;
+  stateName: string;
+} {
+  const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  return {
+    ready: mongoose.connection.readyState === 1,
+    state: mongoose.connection.readyState,
+    stateName: states[mongoose.connection.readyState] || 'unknown'
+  };
+}
+
+// Validate MongoDB URI format
+export function validateMongoUri(uri: string): { valid: boolean; error?: string } {
+  if (!uri || typeof uri !== 'string' || uri.trim().length === 0) {
+    return { valid: false, error: 'MongoDB URI is empty or invalid' };
+  }
+
+  // Check for basic MongoDB URI patterns
+  const uriPattern = /^mongodb(\+srv)?:\/\//i;
+  if (!uriPattern.test(uri)) {
+    return { valid: false, error: 'MongoDB URI must start with mongodb:// or mongodb+srv://' };
+  }
+
+  // Check for special characters that need URL encoding
+  try {
+    new URL(uri);
+  } catch (error) {
+    return { valid: false, error: 'MongoDB URI format is invalid. Check for special characters that need URL encoding.' };
+  }
+
+  return { valid: true };
 }
 
 export function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
+  // Validate URI first
+  const validation = validateMongoUri(uri);
+  if (!validation.valid) {
+    throw new MongoConfigError(`Invalid MongoDB URI: ${validation.error}`);
+  }
+
   try {
     const parsed = new URL(uri);
     
@@ -89,39 +151,97 @@ export function ensureDatabaseInUri(uri: string, dbName = 'reride'): string {
   }
 }
 
-async function connectToDatabase(): Promise<Mongoose> {
-  // Return existing connection if available
+// Retry configuration
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000; // 1 second
+const MAX_RETRY_DELAY = 10000; // 10 seconds
+const CONNECTION_COOLDOWN = 5000; // 5 seconds between connection attempts
+
+// Exponential backoff delay calculation
+function getRetryDelay(retryCount: number): number {
+  const delay = Math.min(
+    INITIAL_RETRY_DELAY * Math.pow(2, retryCount),
+    MAX_RETRY_DELAY
+  );
+  return delay;
+}
+
+async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
+  // Return existing healthy connection if available
   if (cached.conn && mongoose.connection.readyState === 1) {
-    console.log('✅ Using existing MongoDB connection');
     return cached.conn;
   }
 
+  // Prevent multiple simultaneous connection attempts
+  if (cached.isConnecting && cached.promise) {
+    const now = Date.now();
+    // If connection attempt is recent (within cooldown), wait for existing promise
+    if (now - cached.lastAttempt < CONNECTION_COOLDOWN) {
+      try {
+        return await cached.promise;
+      } catch (error) {
+        // If existing promise fails, continue with new attempt
+        cached.promise = null;
+        cached.isConnecting = false;
+      }
+    }
+  }
+
+  // Check if we should retry
+  if (retryCount >= MAX_RETRIES) {
+    cached.promise = null;
+    cached.isConnecting = false;
+    throw new MongoConfigError(
+      `Failed to connect to MongoDB after ${MAX_RETRIES} attempts. Please check your connection string and network connectivity.`
+    );
+  }
+
+  // Create new connection promise
   if (!cached.promise) {
+    cached.isConnecting = true;
+    cached.lastAttempt = Date.now();
+    cached.retryCount = retryCount;
+
     const opts = {
       bufferCommands: false,
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 10000,
+      // Increased timeouts for serverless cold starts
+      serverSelectionTimeoutMS: 15000, // Increased from 10s to 15s
       socketTimeoutMS: 45000,
+      connectTimeoutMS: 15000, // Added explicit connect timeout
       family: 4, // Use IPv4, skip trying IPv6
-      dbName: 'reride' // Explicitly specify database name
+      dbName: 'reride', // Explicitly specify database name
+      // Retry configuration
+      retryWrites: true,
+      retryReads: true
     };
 
     // Check MONGODB_URL first, then fallback to MONGODB_URI for backward compatibility
     const mongoUri = process.env.MONGODB_URL || process.env.MONGODB_URI;
     
     if (!mongoUri) {
-        const errorMessage = [
-          '❌ MONGODB_URL or MONGODB_URI environment variable is not defined.',
-          '',
-          'To fix this:',
-          '1. Create a .env file in your project root (copy from .env.example)',
-          '2. Add: MONGODB_URL=mongodb://localhost:27017/reride?retryWrites=true&w=majority',
-          '   Or for MongoDB Atlas: MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/reride?retryWrites=true&w=majority',
-          '3. For Vercel deployment: Add MONGODB_URL in Vercel dashboard → Settings → Environment Variables',
-          '',
-          'See .env.example for all required environment variables.'
-        ].join('\n');
-        throw new MongoConfigError(errorMessage);
+      cached.isConnecting = false;
+      cached.promise = null;
+      const errorMessage = [
+        '❌ MONGODB_URL or MONGODB_URI environment variable is not defined.',
+        '',
+        'To fix this:',
+        '1. Create a .env file in your project root (copy from .env.example)',
+        '2. Add: MONGODB_URL=mongodb://localhost:27017/reride?retryWrites=true&w=majority',
+        '   Or for MongoDB Atlas: MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/reride?retryWrites=true&w=majority',
+        '3. For Vercel deployment: Add MONGODB_URL in Vercel dashboard → Settings → Environment Variables',
+        '',
+        'See .env.example for all required environment variables.'
+      ].join('\n');
+      throw new MongoConfigError(errorMessage);
+    }
+
+    // Validate URI format
+    const validation = validateMongoUri(mongoUri);
+    if (!validation.valid) {
+      cached.isConnecting = false;
+      cached.promise = null;
+      throw new MongoConfigError(`Invalid MongoDB URI: ${validation.error}`);
     }
 
     let normalizedUri = ensureDatabaseInUri(mongoUri);
@@ -132,8 +252,13 @@ async function connectToDatabase(): Promise<Mongoose> {
       normalizedUri = `${normalizedUri}${separator}retryWrites=true&w=majority`;
     }
 
-    console.log('🔄 Creating new MongoDB connection...');
+    if (retryCount === 0) {
+      console.log('🔄 Creating new MongoDB connection...');
+    } else {
+      console.log(`🔄 Retrying MongoDB connection (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+    }
     console.log(`📡 Database name in connection options: ${opts.dbName}`);
+
     cached.promise = mongoose.connect(normalizedUri, opts)
       .then(async (mongooseInstance) => {
         const actualDbName = mongooseInstance.connection.name;
@@ -144,12 +269,54 @@ async function connectToDatabase(): Promise<Mongoose> {
           console.warn(`⚠️ WARNING: Connected to database "${actualDbName}" but expected "reride"`);
           console.warn(`   This may cause data retrieval issues. Please verify your MONGODB_URL or MONGODB_URI.`);
         }
-        
+
+        // Set up connection event handlers for monitoring
+        mongooseInstance.connection.on('error', (err) => {
+          console.error('❌ MongoDB connection error:', err);
+          cached.conn = null;
+          cached.promise = null;
+          cached.isConnecting = false;
+        });
+
+        mongooseInstance.connection.on('disconnected', () => {
+          console.warn('⚠️ MongoDB disconnected');
+          cached.conn = null;
+          cached.promise = null;
+          cached.isConnecting = false;
+        });
+
+        mongooseInstance.connection.on('reconnected', () => {
+          console.log('✅ MongoDB reconnected');
+          cached.conn = mongooseInstance;
+        });
+
+        cached.isConnecting = false;
+        cached.retryCount = 0;
         return mongooseInstance;
       })
-      .catch((error) => {
-        console.error('❌ MongoDB connection error:', error);
-        cached.promise = null; // Reset on error
+      .catch(async (error) => {
+        console.error(`❌ MongoDB connection error (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error.message);
+        cached.promise = null;
+        cached.isConnecting = false;
+
+        // Retry with exponential backoff for transient errors
+        if (retryCount < MAX_RETRIES - 1) {
+          const isTransientError = 
+            error.message.includes('timeout') ||
+            error.message.includes('ENOTFOUND') ||
+            error.message.includes('ECONNREFUSED') ||
+            error.message.includes('network') ||
+            error.name === 'MongoNetworkError' ||
+            error.name === 'MongoTimeoutError';
+
+          if (isTransientError) {
+            const delay = getRetryDelay(retryCount);
+            console.log(`⏳ Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return connectToDatabase(retryCount + 1);
+          }
+        }
+
         throw error;
       });
   }
@@ -158,9 +325,39 @@ async function connectToDatabase(): Promise<Mongoose> {
     cached.conn = await cached.promise;
     return cached.conn;
   } catch (error) {
-    cached.promise = null; // Reset promise on error
+    cached.promise = null;
+    cached.isConnecting = false;
+    // If it's a transient error and we haven't exhausted retries, retry
+    if (retryCount < MAX_RETRIES - 1) {
+      const isTransientError = 
+        error instanceof Error && (
+          error.message.includes('timeout') ||
+          error.message.includes('ENOTFOUND') ||
+          error.message.includes('ECONNREFUSED') ||
+          error.message.includes('network') ||
+          error.name === 'MongoNetworkError' ||
+          error.name === 'MongoTimeoutError'
+        );
+
+      if (isTransientError) {
+        const delay = getRetryDelay(retryCount);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return connectToDatabase(retryCount + 1);
+      }
+    }
     throw error;
   }
+}
+
+// Helper function to ensure connection is ready before operations
+export async function ensureConnection(): Promise<Mongoose> {
+  // Check if connection is healthy
+  if (isConnectionHealthy()) {
+    return cached.conn!;
+  }
+
+  // Attempt to connect
+  return await connectToDatabase();
 }
 
 export { MongoConfigError };

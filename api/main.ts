@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import mongoose from 'mongoose';
 import { randomBytes } from 'crypto';
-import connectToDatabase, { MongoConfigError } from '../lib/db.js';
+import connectToDatabase, { MongoConfigError, ensureConnection, isConnectionHealthy, getConnectionState } from '../lib/db.js';
 import User from '../models/User.js';
 import Vehicle from '../models/Vehicle.js';
 import VehicleDataModel from '../models/VehicleData.js';
@@ -283,6 +283,19 @@ const checkRateLimit = async (identifier: string, mongoAvailable: boolean): Prom
   }
 };
 
+// Helper function to ensure MongoDB connection is ready
+// This replaces all the redundant connection checks throughout the code
+async function ensureMongoConnection(): Promise<void> {
+  if (!isConnectionHealthy()) {
+    await ensureConnection();
+    // Double-check after connection attempt
+    if (!isConnectionHealthy()) {
+      const state = getConnectionState();
+      throw new Error(`MongoDB connection not ready: ${state.stateName} (${state.state})`);
+    }
+  }
+}
+
 // Main handler with comprehensive error handling
 async function mainHandler(
   req: VercelRequest,
@@ -349,7 +362,14 @@ async function mainHandler(
 
     const connectWithGracefulFallback = async () => {
       try {
-        await connectToDatabase();
+        // Use ensureConnection which handles retries and connection state
+        await ensureConnection();
+        
+        // Double-check connection is actually ready
+        if (!isConnectionHealthy()) {
+          const state = getConnectionState();
+          throw new Error(`Connection not ready: ${state.stateName} (${state.state})`);
+        }
       } catch (dbError) {
         mongoAvailable = false;
         mongoFailureReason = dbError instanceof MongoConfigError
@@ -357,7 +377,7 @@ async function mainHandler(
           : 'Database temporarily unavailable. Please try again later.';
         // Only log in development to avoid information leakage
         if (process.env.NODE_ENV !== 'production') {
-          logWarn('Database connection issue:', dbError);
+          logWarn('Database connection issue:', dbError instanceof Error ? dbError.message : dbError);
         }
         if (req.method !== 'GET') {
           return res.status(503).json({
@@ -822,13 +842,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
       // Ensure database connection before proceeding
       try {
-        if (mongoose.connection.readyState !== 1) {
-          // Only log in development to avoid information leakage
-          if (process.env.NODE_ENV !== 'production') {
-            logInfo('🔄 Connecting to database for user registration...');
-          }
-          await connectToDatabase();
-        }
+        // Ensure connection is ready before registration
+        await ensureMongoConnection();
       } catch (dbError) {
         logError('❌ Database connection error during registration:', dbError);
         return res.status(503).json({ 
@@ -1125,9 +1140,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     try {
       // Ensure database connection before querying
       let isMongoAvailable: boolean = mongoAvailable;
-      if (mongoose.connection.readyState !== 1 && isMongoAvailable) {
+      // Ensure connection is ready if MongoDB is available
+      if (isMongoAvailable) {
         try {
-          await connectToDatabase();
+          await ensureMongoConnection();
         } catch (connError) {
           logWarn('⚠️ Database connection failed during GET /users, using fallback');
           isMongoAvailable = false;
@@ -1171,17 +1187,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       return unavailableResponse();
     }
     try {
-      // Ensure database connection is established first
-      logInfo('🔌 Connecting to database for user update...');
-      await connectToDatabase();
-      
-      // Ensure mongoose connection is ready
-      if (mongoose.connection.readyState !== 1) {
-        logWarn('⚠️ MongoDB connection not ready, reconnecting...');
-        await connectToDatabase();
-      }
-      
-      logInfo('✅ Database connected for user update, readyState:', mongoose.connection.readyState);
+      // Ensure database connection is established and ready
+      logInfo('🔌 Ensuring database connection for user update...');
+      await ensureMongoConnection();
+      const state = getConnectionState();
+      logInfo('✅ Database ready for user update, state:', state.stateName);
       
       const { email, ...updateData } = req.body;
       
@@ -1298,10 +1308,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       });
 
       // Double-check connection before update
-      if (mongoose.connection.readyState !== 1) {
-        logWarn('⚠️ Connection not ready before update, reconnecting...');
-        await connectToDatabase();
-      }
+      // Ensure connection is ready before update
+      await ensureMongoConnection();
 
       // Sanitize and normalize email to prevent NoSQL injection
       const sanitizedEmail = await sanitizeString(String(email));
@@ -1318,18 +1326,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       if (updateFields.password) {
         try {
           // Ensure MongoDB connection is active before update
-          if (mongoose.connection.readyState !== 1) {
-            logWarn('⚠️ MongoDB connection not ready, attempting to reconnect...');
-            try {
-              await connectToDatabase();
-            } catch (reconnectError) {
-              logError('❌ Failed to reconnect to MongoDB:', reconnectError);
-              return res.status(503).json({ 
-                success: false, 
-                reason: 'Database connection lost. Please try again later.',
-                error: 'MongoDB connection unavailable'
-              });
-            }
+          try {
+            await ensureMongoConnection();
+          } catch (reconnectError) {
+            logError('❌ Failed to ensure MongoDB connection:', reconnectError);
+            return res.status(503).json({ 
+              success: false, 
+              reason: 'Database connection lost. Please try again later.',
+              error: 'MongoDB connection unavailable'
+            });
           }
 
           // Use findOneAndUpdate - it already persists changes to the database
@@ -1781,7 +1786,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           return res.status(200).json(defaultData);
         }
         try {
-          await connectToDatabase();
+          await ensureMongoConnection();
           console.log('📡 Connected to database for vehicles data fetch operation');
           
           let vehicleDataDoc = await VehicleDataModel.findOne();
@@ -1814,7 +1819,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           });
         }
         try {
-          await connectToDatabase();
+          await ensureMongoConnection();
           console.log('📡 Connected to database for vehicles data save operation');
           
           const vehicleData = await VehicleDataModel.findOneAndUpdate(
@@ -1913,7 +1918,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
 
     try {
       // Ensure database connection is established
-      await connectToDatabase();
+      await ensureMongoConnection();
       
       if (action === 'city-stats' && req.query.city) {
         // Sanitize city input to prevent NoSQL injection
@@ -2147,7 +2152,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           return unavailableResponse();
         }
 
-        await connectToDatabase();
+        await ensureMongoConnection();
         const vehicle = await Vehicle.findOne({ id: vehicleIdNum });
         if (!vehicle) {
           return res.status(404).json({ success: false, reason: 'Vehicle not found' });
@@ -2183,7 +2188,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         const sanitizedEmail = await sanitizeString(String(sellerEmail));
         const normalizedEmail = sanitizedEmail.toLowerCase().trim();
         // Ensure DB connection for safety
-        await connectToDatabase();
+        await ensureMongoConnection();
         // Load seller
         const seller = await User.findOne({ email: normalizedEmail });
         if (!seller) {
@@ -2311,7 +2316,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          await connectToDatabase();
+          await ensureMongoConnection();
           const vehicle = await Vehicle.findOne({ id: vehicleId });
           
           if (!vehicle) {
@@ -2388,7 +2393,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          await connectToDatabase();
+          await ensureMongoConnection();
           const vehicle = await Vehicle.findOne({ id: vehicleId });
           
           if (!vehicle) {
@@ -2488,9 +2493,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           }
 
           // Ensure database connection is established
-          console.log('🔌 Connecting to database...');
-          await connectToDatabase();
-          console.log('✅ Database connected, readyState:', mongoose.connection.readyState);
+          console.log('🔌 Ensuring database connection...');
+          await ensureMongoConnection();
+          const state = getConnectionState();
+          console.log('✅ Database ready, state:', state.stateName);
           
           console.log('🔍 Finding vehicle with id:', vehicleIdNum);
           const vehicle = await Vehicle.findOne({ id: vehicleIdNum });
@@ -2534,7 +2540,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          await connectToDatabase();
+          await ensureMongoConnection();
           const vehicle = await Vehicle.findOne({ id: vehicleId });
           
           if (!vehicle) {
@@ -2642,7 +2648,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     }
     try {
       // Ensure database connection
-      await connectToDatabase();
+      await ensureMongoConnection();
       
       const { id, ...updateData } = req.body;
       if (!id) {
@@ -2713,7 +2719,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     }
     try {
       // Ensure database connection
-      await connectToDatabase();
+      await ensureMongoConnection();
       
       const { id } = req.body;
       if (!id) {
@@ -2887,7 +2893,7 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
         });
       }
 
-      await connectToDatabase();
+      await ensureMongoConnection();
       const db = Vehicle.db?.db;
       const collections = db ? await db.listCollections().toArray() : [];
       
@@ -2949,10 +2955,12 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
 // Health handler - preserves exact functionality from db-health.ts
 async function handleHealth(_req: VercelRequest, res: VercelResponse) {
   try {
-    await connectToDatabase();
+    await ensureMongoConnection();
+    const state = getConnectionState();
     return res.status(200).json({
       status: 'ok',
       message: 'Database connected successfully.',
+      connectionState: state,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -2998,7 +3006,7 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, options: Hand
   }
 
   try {
-    await connectToDatabase();
+    await ensureMongoConnection();
     
     const users = await seedUsers();
     const vehicles = await seedVehicles();
@@ -3051,7 +3059,7 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
       }
 
       try {
-        await connectToDatabase();
+        await ensureMongoConnection();
         logInfo('📡 Connected to database for vehicle-data fetch operation');
         
         let vehicleDataDoc = await VehicleDataModel.findOne();
@@ -3084,7 +3092,7 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
       }
 
       try {
-        await connectToDatabase();
+        await ensureMongoConnection();
         logInfo('📡 Connected to database for vehicle-data save operation');
         
         const vehicleData = await VehicleDataModel.findOneAndUpdate(
@@ -3448,7 +3456,7 @@ async function handleTestConnection(_req: VercelRequest, res: VercelResponse) {
   try {
     console.log('🔍 Testing MongoDB connection and collection...');
     
-    await connectToDatabase();
+    await ensureMongoConnection();
     
     return res.status(200).json({
       success: true,
@@ -3583,6 +3591,7 @@ async function handleContent(req: VercelRequest, res: VercelResponse, options: H
   }
 
   try {
+    await ensureMongoConnection();
     const mongoose = await connectToDatabase();
     const db = mongoose.connection.db;
     
@@ -4285,7 +4294,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, options: 
       });
     }
 
-    await connectToDatabase();
+    await ensureMongoConnection();
 
     const { action } = req.query;
 

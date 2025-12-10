@@ -7,13 +7,29 @@ import { hashPassword, validatePassword, generateAccessToken, generateRefreshTok
 
 dotenv.config();
 
+// Validate MongoDB configuration on startup
+const mongoUrl = process.env.MONGODB_URL || process.env.MONGODB_URI;
+if (!mongoUrl) {
+  console.error('❌ MONGODB_URL or MONGODB_URI environment variable is not set.');
+  console.error('   Please set it in your .env file or environment before starting the server.');
+  process.exit(1);
+}
+
+if (!mongoUrl.match(/^mongodb(\+srv)?:\/\//i)) {
+  console.error('❌ Invalid MongoDB URI format. Must start with mongodb:// or mongodb+srv://');
+  process.exit(1);
+}
+
 const app = express();
 const PORT = 3001;
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI;
+// MongoDB connection - Standardize to check MONGODB_URL first, then MONGODB_URI
+const MONGODB_URI = process.env.MONGODB_URL || process.env.MONGODB_URI;
 if (!MONGODB_URI) {
-    console.warn('⚠️  MONGODB_URI is not defined. Set it in your .env file or shell before starting dev-api-server-mongodb.');
+    console.error('❌ MONGODB_URL or MONGODB_URI is not defined.');
+    console.error('   Set it in your .env file or shell before starting dev-api-server-mongodb.');
+    console.error('   Example: MONGODB_URL=mongodb://localhost:27017/reride');
+    process.exit(1);
 }
 
 // Enable CORS for all routes
@@ -21,24 +37,86 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Connect to MongoDB
-async function connectToDatabase() {
+// Connect to MongoDB with retry logic
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000;
+
+async function connectToDatabase(retryCount = 0) {
     try {
         if (!MONGODB_URI) {
             throw new Error('MONGODB_URI is not configured');
         }
 
-        await mongoose.connect(MONGODB_URI, {
+        // Validate URI format
+        if (!MONGODB_URI.match(/^mongodb(\+srv)?:\/\//i)) {
+            throw new Error('Invalid MongoDB URI format. Must start with mongodb:// or mongodb+srv://');
+        }
+
+        const opts = {
             bufferCommands: false,
             maxPoolSize: 10,
-            serverSelectionTimeoutMS: 10000,
+            serverSelectionTimeoutMS: 15000, // Increased for better reliability
             socketTimeoutMS: 45000,
+            connectTimeoutMS: 15000,
             family: 4,
-            dbName: 'reride'
+            dbName: 'reride',
+            retryWrites: true,
+            retryReads: true
+        };
+
+        if (retryCount > 0) {
+            console.log(`🔄 Retrying MongoDB connection (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+        } else {
+            console.log('🔄 Connecting to MongoDB...');
+        }
+
+        await mongoose.connect(MONGODB_URI, opts);
+        
+        const dbName = mongoose.connection.name;
+        console.log(`✅ Connected to MongoDB database: ${dbName}`);
+        
+        // Set up connection event handlers
+        mongoose.connection.on('error', (err) => {
+            console.error('❌ MongoDB connection error:', err.message);
         });
-        console.log('✅ Connected to MongoDB');
+
+        mongoose.connection.on('disconnected', () => {
+            console.warn('⚠️ MongoDB disconnected. Attempting to reconnect...');
+            // Auto-reconnect after delay
+            setTimeout(() => {
+                if (mongoose.connection.readyState === 0) {
+                    connectToDatabase().catch(err => {
+                        console.error('❌ Reconnection failed:', err.message);
+                    });
+                }
+            }, 5000);
+        });
+
+        mongoose.connection.on('reconnected', () => {
+            console.log('✅ MongoDB reconnected');
+        });
+
     } catch (error) {
-        console.error('❌ MongoDB connection failed:', error.message);
+        console.error(`❌ MongoDB connection failed (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error.message);
+        
+        // Retry with exponential backoff for transient errors
+        if (retryCount < MAX_RETRIES - 1) {
+            const isTransientError = 
+                error.message.includes('timeout') ||
+                error.message.includes('ENOTFOUND') ||
+                error.message.includes('ECONNREFUSED') ||
+                error.message.includes('network');
+            
+            if (isTransientError) {
+                const delay = Math.min(INITIAL_RETRY_DELAY * Math.pow(2, retryCount), 10000);
+                console.log(`⏳ Retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return connectToDatabase(retryCount + 1);
+            }
+        }
+        
+        console.error('❌ Failed to connect to MongoDB after all retries. Exiting...');
+        process.exit(1);
     }
 }
 
