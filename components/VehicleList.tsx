@@ -216,6 +216,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     selectedFeatures: [] as string[],
     featureSearch: ''
   });
+  const [initialStateFilter, setInitialStateFilter] = useState('');
+  const [initialIsStateFilterUserSet, setInitialIsStateFilterUserSet] = useState(false);
   const [isMobileFeaturesOpen, setIsMobileFeaturesOpen] = useState(false);
 
   // Mobile app detection
@@ -440,6 +442,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   // Mobile Modal Filter Logic
   const handleOpenFilterModal = () => {
+    // Store the initial state filter value and user-set flag when opening the modal
+    setInitialStateFilter(stateFilter);
+    setInitialIsStateFilterUserSet(isStateFilterUserSet);
     setTempFilters({
       categoryFilter,
       makeFilter,
@@ -470,8 +475,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     setYearFilter(tempFilters.yearFilter || '0');
     setColorFilter(tempFilters.colorFilter?.trim() || '');
     setStateFilter(tempFilters.stateFilter?.trim() || '');
-    // Mark state filter as user-set if it has a value (user explicitly set it in the modal)
-    setIsStateFilterUserSet(!!(tempFilters.stateFilter && tempFilters.stateFilter.trim() !== ''));
+    // Only mark state filter as user-set if it was actually changed in the modal
+    // Preserve the original isStateFilterUserSet flag if the value hasn't changed
+    const newStateFilter = tempFilters.stateFilter?.trim() || '';
+    const stateFilterChanged = newStateFilter !== initialStateFilter;
+    setIsStateFilterUserSet(stateFilterChanged ? !!(newStateFilter && newStateFilter !== '') : initialIsStateFilterUserSet);
     setSelectedFeatures(tempFilters.selectedFeatures || []);
     setFeatureSearch(''); // Clear feature search when applying filters
     setCurrentPage(1); // Reset to first page when filters are applied

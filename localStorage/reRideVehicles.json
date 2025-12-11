@@ -1102,7 +1102,7 @@
     "fuelType": "CNG",
     "transmission": "Automatic",
     "location": "Ahmedabad",
-    "sellerEmail": "seller2@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://picsum.photos/seed/ToyotaInnova27/800/600"
     ],
@@ -1270,7 +1270,7 @@
     "fuelType": "CNG",
     "transmission": "Automatic",
     "location": "Hyderabad",
-    "sellerEmail": "seller3@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://picsum.photos/seed/TataTiago31/800/600"
     ],
@@ -1396,7 +1396,7 @@
     "fuelType": "Electric",
     "transmission": "Manual",
     "location": "Ahmedabad",
-    "sellerEmail": "seller1@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://picsum.photos/seed/Maruti SuzukiErtiga34/800/600"
     ],
@@ -1942,7 +1942,7 @@
     "fuelType": "Diesel",
     "transmission": "Automatic",
     "location": "Kolkata",
-    "sellerEmail": "seller5@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://picsum.photos/seed/NissanMicra47/800/600"
     ],
@@ -2026,7 +2026,7 @@
     "fuelType": "CNG",
     "transmission": "CVT",
     "location": "Pune",
-    "sellerEmail": "seller4@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://picsum.photos/seed/NissanMagnite49/800/600"
     ],

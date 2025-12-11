@@ -10,7 +10,6 @@
  */
 
 import mongoose from 'mongoose';
-import { validateMongoUri, ensureDatabaseInUri } from './lib/db.js';
 
 // Color codes for terminal output
 const colors = {
@@ -31,6 +30,87 @@ function logSection(title) {
   console.log('\n' + '='.repeat(60));
   log(title, 'bright');
   console.log('='.repeat(60) + '\n');
+}
+
+// Validate MongoDB URI format (standalone version)
+function validateMongoUri(uri) {
+  if (!uri || typeof uri !== 'string' || uri.trim().length === 0) {
+    return { valid: false, error: 'MongoDB URI is empty or invalid' };
+  }
+
+  // Check for basic MongoDB URI patterns
+  const uriPattern = /^mongodb(\+srv)?:\/\//i;
+  if (!uriPattern.test(uri)) {
+    return { valid: false, error: 'MongoDB URI must start with mongodb:// or mongodb+srv://' };
+  }
+
+  // Check for special characters that need URL encoding
+  try {
+    new URL(uri);
+  } catch (error) {
+    return { valid: false, error: 'MongoDB URI format is invalid. Check for special characters that need URL encoding.' };
+  }
+
+  return { valid: true };
+}
+
+// Ensure database name is in URI (standalone version)
+function ensureDatabaseInUri(uri, dbName = 'reride') {
+  const validation = validateMongoUri(uri);
+  if (!validation.valid) {
+    throw new Error(`Invalid MongoDB URI: ${validation.error}`);
+  }
+
+  try {
+    const parsed = new URL(uri);
+    const pathname = parsed.pathname || '';
+    const currentDbName = pathname.length > 1 ? pathname.slice(1).split('/')[0] : null;
+    
+    const hasDatabase = currentDbName && currentDbName.length > 0 && !currentDbName.match(/^[\/\?]+$/);
+    
+    if (!hasDatabase) {
+      parsed.pathname = `/${dbName}`;
+      return parsed.toString();
+    }
+    
+    const normalizedCurrentDbName = currentDbName.toLowerCase();
+    if (normalizedCurrentDbName !== dbName.toLowerCase()) {
+      parsed.pathname = `/${dbName}`;
+      return parsed.toString();
+    }
+    
+    if (currentDbName !== dbName) {
+      parsed.pathname = `/${dbName}`;
+    }
+    
+    return parsed.toString();
+  } catch (error) {
+    // Fallback handling
+    const lowerUri = uri.toLowerCase();
+    const dbNamePattern = /(mongodb\+?srv?:\/\/[^\/]+)\/([^?\/\s]+)/i;
+    const match = uri.match(dbNamePattern);
+    
+    if (match) {
+      const existingDbName = match[2];
+      if (existingDbName.toLowerCase() !== dbName.toLowerCase()) {
+        return uri.replace(dbNamePattern, `$1/${dbName}`);
+      }
+      return uri;
+    }
+    
+    const hasRerideVariation = lowerUri.includes('/re-ride') || lowerUri.includes('/re_ride') || lowerUri.includes('/reride');
+    if (hasRerideVariation) {
+      return uri.replace(/\/re-ride/i, `/${dbName}`).replace(/\/re_ride/i, `/${dbName}`).replace(/\/reride/i, `/${dbName}`);
+    }
+    
+    if (uri.includes('?')) {
+      const [base, query] = uri.split('?');
+      const sanitizedBase = base.endsWith('/') ? base.slice(0, -1) : base;
+      return `${sanitizedBase}/${dbName}?${query}`;
+    }
+    
+    return uri.endsWith('/') ? `${uri}${dbName}` : `${uri}/${dbName}`;
+  }
 }
 
 async function diagnoseConnection() {
@@ -107,13 +187,25 @@ async function diagnoseConnection() {
   try {
     log('🔄 Attempting to connect...', 'blue');
     
+    // Use the normalized URI
+    const normalizedUri = ensureDatabaseInUri(mongoUri);
+    
+    // Add retryWrites if not present
+    let finalUri = normalizedUri;
+    if (!finalUri.includes('retryWrites')) {
+      const separator = finalUri.includes('?') ? '&' : '?';
+      finalUri = `${finalUri}${separator}retryWrites=true&w=majority`;
+    }
+    
     const connectionOptions = {
-      serverSelectionTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 20000,
       socketTimeoutMS: 45000,
-      connectTimeoutMS: 10000,
+      connectTimeoutMS: 20000,
+      dbName: 'reride',
+      retryWrites: true,
     };
     
-    await mongoose.connect(mongoUri, connectionOptions);
+    await mongoose.connect(finalUri, connectionOptions);
     log('✅ Connection successful!', 'green');
     
     // Test basic operations
@@ -122,6 +214,14 @@ async function diagnoseConnection() {
     log(`   Host: ${mongoose.connection.host}`, 'cyan');
     log(`   Port: ${mongoose.connection.port || 'N/A (Atlas)'}`, 'cyan');
     log(`   Ready State: ${mongoose.connection.readyState} (1 = connected)`, 'cyan');
+    
+    // Test ping
+    try {
+      await mongoose.connection.db.admin().ping();
+      log('   Ping: ✅ Success', 'green');
+    } catch (pingError) {
+      log(`   Ping: ❌ Failed - ${pingError.message}`, 'red');
+    }
     
     // List collections
     try {
@@ -133,6 +233,7 @@ async function diagnoseConnection() {
         });
       } else {
         log('   (No collections found - database may be empty)', 'yellow');
+        log('   💡 Run: node seed-database.js to populate the database', 'yellow');
       }
     } catch (err) {
       log(`⚠️  Could not list collections: ${err.message}`, 'yellow');
@@ -143,6 +244,9 @@ async function diagnoseConnection() {
     
     logSection('✅ All Checks Passed!');
     console.log('Your database connection is working correctly.\n');
+    console.log('💡 Next steps:');
+    console.log('   1. Try logging in again');
+    console.log('   2. If database is empty, run: node seed-database.js\n');
     return true;
     
   } catch (error) {
@@ -207,4 +311,3 @@ diagnoseConnection()
     console.error(error);
     process.exit(1);
   });
-

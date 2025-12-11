@@ -35,6 +35,7 @@ const refreshToken = async (): Promise<string | null> => {
   try {
     const refreshTokenValue = localStorage.getItem('reRideRefreshToken');
     if (!refreshTokenValue) {
+      console.warn('⚠️ No refresh token available');
       return null;
     }
 
@@ -47,11 +48,14 @@ const refreshToken = async (): Promise<string | null> => {
 
     if (response.status === 401 || response.status === 400) {
       // Refresh token expired or invalid - clear all tokens
+      console.warn('⚠️ Refresh token expired or invalid');
       clearAuthTokens();
       return null;
     }
 
     if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.warn('⚠️ Token refresh request failed:', response.status, errorText);
       return null;
     }
 
@@ -59,12 +63,17 @@ const refreshToken = async (): Promise<string | null> => {
     
     if (result.success && result.accessToken) {
       localStorage.setItem('reRideAccessToken', result.accessToken);
+      if (result.refreshToken) {
+        localStorage.setItem('reRideRefreshToken', result.refreshToken);
+      }
+      console.log('✅ Token refreshed successfully');
       return result.accessToken;
     }
 
+    console.warn('⚠️ Token refresh response missing access token');
     return null;
   } catch (error) {
-    console.warn('Token refresh failed:', error);
+    console.error('❌ Token refresh failed:', error);
     return null;
   }
 };
@@ -84,6 +93,36 @@ const clearAuthTokens = () => {
 };
 
 /**
+ * Check if current access token is valid (not expired)
+ * This is a simple check - actual validation happens on server
+ */
+const isTokenLikelyValid = (): boolean => {
+  try {
+    const token = localStorage.getItem('reRideAccessToken');
+    if (!token) return false;
+    
+    // Try to decode token to check expiration (without verification)
+    // JWT tokens have 3 parts separated by dots
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    
+    try {
+      const payload = JSON.parse(atob(parts[1]));
+      const exp = payload.exp;
+      if (!exp) return true; // No expiration claim, assume valid
+      
+      // Check if token expires in next 30 seconds (buffer time)
+      const now = Math.floor(Date.now() / 1000);
+      return exp > (now + 30);
+    } catch {
+      return true; // If we can't parse, let server decide
+    }
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Authenticated fetch with automatic token refresh on 401
  * 
  * @param url - The URL to fetch
@@ -95,6 +134,15 @@ export const authenticatedFetch = async (
   options: FetchOptions = {}
 ): Promise<Response> => {
   const { skipAuth = false, retryOn401 = true, ...fetchOptions } = options;
+
+  // Proactively refresh token if it's likely expired (for critical operations like password updates)
+  if (!skipAuth && retryOn401 && !isTokenLikelyValid()) {
+    console.log('🔄 Token appears expired, proactively refreshing...');
+    const newToken = await refreshToken();
+    if (newToken) {
+      console.log('✅ Token refreshed proactively');
+    }
+  }
 
   // Prepare headers
   const headers = skipAuth

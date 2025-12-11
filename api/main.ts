@@ -754,7 +754,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
   // Handle authentication actions (POST with action parameter)
   if (req.method === 'POST') {
     if (!mongoAvailable) {
-      return unavailableResponse();
+      // Provide more detailed error message for login failures
+      const detailedReason = mongoFailureReason || 'Database is currently unavailable. Please try again later.';
+      logWarn('⚠️ Login attempt failed due to MongoDB unavailability:', detailedReason);
+      return res.status(503).json({
+        success: false,
+        reason: detailedReason,
+        fallback: true,
+        // Include helpful message in development
+        ...(process.env.NODE_ENV !== 'production' && {
+          hint: 'Check MONGODB_URL or MONGODB_URI environment variable. Run "npm run db:diagnose" to diagnose connection issues.'
+        })
+      });
     }
 
     const { action, email, password, role, name, mobile, firebaseUid, authProvider, avatarUrl } = req.body;
@@ -1088,21 +1099,33 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const { refreshToken } = req.body;
       
       if (!refreshToken) {
-        return res.status(400).json({ success: false, reason: 'Refresh token is required.' });
+        logWarn('⚠️ Refresh token request missing token');
+        return res.status(400).json({ 
+          success: false, 
+          reason: 'Refresh token is required.',
+          error: 'No refresh token provided in request body'
+        });
       }
 
       try {
         // FIX: Use the utility to verify and refresh the token properly
         // This recovers the original user data from the refresh token
+        logInfo('🔄 Refreshing access token...');
         const newAccessToken = refreshAccessToken(refreshToken);
+        logInfo('✅ Access token refreshed successfully');
         
         return res.status(200).json({ 
           success: true, 
           accessToken: newAccessToken 
         });
       } catch (error) {
-        logWarn('Refresh token failed:', error);
-        return res.status(401).json({ success: false, reason: 'Invalid or expired refresh token.' });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logWarn('❌ Refresh token failed:', errorMessage);
+        return res.status(401).json({ 
+          success: false, 
+          reason: 'Invalid or expired refresh token. Please log in again.',
+          error: errorMessage
+        });
       }
     }
 
@@ -1211,7 +1234,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     // SECURITY FIX: Verify Auth
     const auth = authenticateRequest(req);
     if (!auth.isValid) {
-      return res.status(401).json({ success: false, reason: auth.error });
+      logWarn('⚠️ PUT /users - Authentication failed:', auth.error);
+      return res.status(401).json({ 
+        success: false, 
+        reason: auth.error || 'Authentication failed. Please log in again.',
+        error: 'Invalid or expired authentication token'
+      });
     }
     if (!mongoAvailable) {
       return unavailableResponse();

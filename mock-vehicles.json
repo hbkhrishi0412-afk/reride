@@ -1075,7 +1075,7 @@
     "fuelType": "CNG",
     "transmission": "Automatic",
     "location": "Ahmedabad",
-    "sellerEmail": "seller2@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://images.pexels.com/photos/3802514/pexels-photo-3802514.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
@@ -1239,7 +1239,7 @@
     "fuelType": "CNG",
     "transmission": "Automatic",
     "location": "Hyderabad",
-    "sellerEmail": "seller3@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://images.pexels.com/photos/3802511/pexels-photo-3802511.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
@@ -1362,7 +1362,7 @@
     "fuelType": "Electric",
     "transmission": "Manual",
     "location": "Ahmedabad",
-    "sellerEmail": "seller1@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://images.pexels.com/photos/3802511/pexels-photo-3802511.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
@@ -1895,7 +1895,7 @@
     "fuelType": "Diesel",
     "transmission": "Automatic",
     "location": "Kolkata",
-    "sellerEmail": "seller5@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://images.pexels.com/photos/1166757/pexels-photo-1166757.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],
@@ -1977,7 +1977,7 @@
     "fuelType": "CNG",
     "transmission": "CVT",
     "location": "Pune",
-    "sellerEmail": "seller4@test.com",
+    "sellerEmail": "seller@test.com",
     "images": [
       "https://images.pexels.com/photos/3802508/pexels-photo-3802508.jpeg?auto=compress&cs=tinysrgb&w=800&h=600&fit=crop"
     ],

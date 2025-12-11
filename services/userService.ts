@@ -523,16 +523,31 @@ const authApi = async (body: any, retryCount = 0): Promise<any> => {
             if (!response.ok) {
                 // Try to parse error response, but handle cases where response might be empty
                 let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                let errorDetails: any = null;
                 try {
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('application/json')) {
                         const errorData = await response.json();
                         errorMessage = errorData.reason || errorData.error || errorMessage;
+                        errorDetails = errorData;
+                        
+                        // Include hint if available (for development/debugging)
+                        if (errorData.hint && process.env.NODE_ENV !== 'production') {
+                            console.info('💡 Server hint:', errorData.hint);
+                        }
                     }
                 } catch (parseError) {
                     // If we can't parse the error response, use the default error message
                     console.warn('Could not parse error response:', parseError);
                 }
+                
+                // For 503 errors (Service Unavailable), provide more context
+                if (response.status === 503 && errorDetails?.fallback) {
+                    // This is a database connection issue
+                    console.error('❌ Database connection failed:', errorMessage);
+                    throw new Error(errorMessage);
+                }
+                
                 throw new Error(errorMessage);
             }
             

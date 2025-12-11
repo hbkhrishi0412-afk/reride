@@ -269,7 +269,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                                         phoneVerified: user.verificationStatus?.phoneVerified || false,
                                                         emailVerified: user.verificationStatus?.emailVerified || false,
                                                         govtIdVerified: user.verificationStatus?.govtIdVerified || false,
-                                                        ...user.verificationStatus,
+                                                        ...(user.verificationStatus || {}),
                                                         phoneVerified: newStatus
                                                     },
                                                     phoneVerified: newStatus
@@ -311,7 +311,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                                         phoneVerified: user.verificationStatus?.phoneVerified || false,
                                                         emailVerified: user.verificationStatus?.emailVerified || false,
                                                         govtIdVerified: user.verificationStatus?.govtIdVerified || false,
-                                                        ...user.verificationStatus,
+                                                        ...(user.verificationStatus || {}),
                                                         emailVerified: newStatus
                                                     },
                                                     emailVerified: newStatus
@@ -353,7 +353,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                                         phoneVerified: user.verificationStatus?.phoneVerified || false,
                                                         emailVerified: user.verificationStatus?.emailVerified || false,
                                                         govtIdVerified: user.verificationStatus?.govtIdVerified || false,
-                                                        ...user.verificationStatus,
+                                                        ...(user.verificationStatus || {}),
                                                         govtIdVerified: newStatus
                                                     },
                                                     govtIdVerified: newStatus

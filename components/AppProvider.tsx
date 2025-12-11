@@ -2457,10 +2457,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             // If we still get 401, it means token refresh failed - user needs to re-login
             if (response.status === 401) {
               console.error('❌ 401 Unauthorized - Token refresh failed. MongoDB update NOT saved.');
+              const errorReason = apiResult.reason || apiResult.error || 'Authentication expired';
               if (updates.password) {
-                addToast('Password update failed: Authentication expired. Please log in again and try again.', 'error');
+                addToast(`Password update failed: ${errorReason}. Please log in again and try again.`, 'error');
               } else {
-                addToast('Profile update failed: Authentication expired. Please log in again and try again.', 'error');
+                addToast(`Profile update failed: ${errorReason}. Please log in again and try again.`, 'error');
               }
               // Don't update localStorage - MongoDB update failed, so we shouldn't save locally
               throw new Error('Authentication failed. Please log in again.');
