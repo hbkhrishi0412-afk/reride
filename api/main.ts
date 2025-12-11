@@ -373,6 +373,9 @@ async function mainHandler(
         
         // Verify connection works with a ping
         try {
+          if (!mongoose.connection.db) {
+            throw new Error('Database connection not initialized');
+          }
           await mongoose.connection.db.admin().ping();
         } catch (pingError) {
           throw new Error('Connection ping failed - database not responding');

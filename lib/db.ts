@@ -171,6 +171,9 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
   if (cached.conn && mongoose.connection.readyState === 1) {
     try {
       // Verify connection is actually working with a ping
+      if (!mongoose.connection.db) {
+        throw new Error('Database connection not initialized');
+      }
       await mongoose.connection.db.admin().ping();
       return cached.conn;
     } catch (error) {
@@ -313,6 +316,9 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
 
         // Test connection with ping before marking as ready
         try {
+          if (!mongooseInstance.connection.db) {
+            throw new Error('Database connection not initialized');
+          }
           await mongooseInstance.connection.db.admin().ping();
           console.log('✅ MongoDB connection verified with ping');
         } catch (pingError) {
@@ -391,6 +397,9 @@ export async function ensureConnection(): Promise<Mongoose> {
   if (isConnectionHealthy()) {
     // Verify with ping to ensure it's actually working
     try {
+      if (!mongoose.connection.db) {
+        throw new Error('Database connection not initialized');
+      }
       await mongoose.connection.db.admin().ping();
       return cached.conn!;
     } catch (error) {

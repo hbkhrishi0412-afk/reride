@@ -119,7 +119,7 @@ export const planService = {
                 .limit(4 - basePlans.length);
             
             const customPlanDetails = await Promise.all(
-                customPlans.map(plan => planService.getCustomPlanDetails(plan.planId))
+                customPlans.map((plan: any) => planService.getCustomPlanDetails(plan.planId))
             );
             
             const validCustomPlans = customPlanDetails.filter((plan): plan is PlanDetails => plan !== null);

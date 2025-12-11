@@ -20,7 +20,7 @@ import CommandPalette from './components/CommandPalette';
 import { ChatWidget } from './components/ChatWidget';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
-import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation } from './types';
+import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage } from './types';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { isDevelopmentEnvironment } from './utils/environment';
@@ -1060,18 +1060,20 @@ const AppContent: React.FC = React.memo(() => {
                   }
 
                   // Update the message status
-                  const updatedMessage = {
+                  const updatedMessage: ChatMessage = {
                     ...message,
-                    testDriveStatus: newStatus,
-                    updatedAt: new Date().toISOString()
+                    payload: {
+                      ...message.payload,
+                      status: newStatus as 'pending' | 'accepted' | 'rejected' | 'countered' | 'confirmed'
+                    }
                   };
 
                   // Send response message
                   const responseText = newStatus === 'confirmed' 
-                    ? `Test drive confirmed for ${message.vehicleName || 'the vehicle'}. We'll contact you shortly.`
-                    : `Test drive request declined for ${message.vehicleName || 'the vehicle'}.`;
+                    ? `Test drive confirmed for ${conversation.vehicleName || 'the vehicle'}. We'll contact you shortly.`
+                    : `Test drive request declined for ${conversation.vehicleName || 'the vehicle'}.`;
 
-                  await sendMessage(conversationId, responseText, 'test_drive_response', {
+                  await sendMessageWithType(conversationId, responseText, 'text', {
                     originalMessageId: messageId,
                     status: newStatus
                   });
@@ -1874,10 +1876,9 @@ const AppContent: React.FC = React.memo(() => {
               try {
                 await updateUser(currentUser.email || currentUser.id?.toString() || '', profileData);
                 // Update current user state
-                setCurrentUser((prev: User | null) => {
-                  if (!prev) return prev;
-                  return { ...prev, ...profileData };
-                });
+                if (currentUser) {
+                  setCurrentUser({ ...currentUser, ...profileData } as User);
+                }
                 addToast('Profile updated successfully!', 'success');
               } catch (error) {
                 console.error('Failed to update profile:', error);

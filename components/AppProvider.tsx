@@ -2458,13 +2458,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             if (response.status === 401) {
               console.error('❌ 401 Unauthorized - Token refresh failed. MongoDB update NOT saved.');
               const errorReason = apiResult.reason || apiResult.error || 'Authentication expired';
+              // Avoid duplicate "log in again" messages
+              const cleanReason = errorReason.includes('log in again') 
+                ? errorReason 
+                : `${errorReason}. Please log in again and try again.`;
               if (updates.password) {
-                addToast(`Password update failed: ${errorReason}. Please log in again and try again.`, 'error');
+                addToast(`Password update failed: ${cleanReason}`, 'error');
               } else {
-                addToast(`Profile update failed: ${errorReason}. Please log in again and try again.`, 'error');
+                addToast(`Profile update failed: ${cleanReason}`, 'error');
               }
               // Don't update localStorage - MongoDB update failed, so we shouldn't save locally
-              throw new Error('Authentication failed. Please log in again.');
+              // Throw a specific error that we can check in catch block to avoid duplicate messages
+              throw new Error('AUTH_401_ALREADY_HANDLED');
             }
             
             // Handle 500 Internal Server Error - server issue
@@ -2557,6 +2562,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           if (apiError instanceof Error) {
             const errorMsg = apiError.message;
             
+            // Skip if error was already handled (e.g., 401 with toast already shown)
+            if (errorMsg === 'AUTH_401_ALREADY_HANDLED') {
+              return; // Error already shown, don't show duplicate
+            }
+            
             // Check for database connection errors (503)
             if (errorMsg.includes('503') || errorMsg.includes('Database connection failed') || errorMsg.includes('MONGODB_URI')) {
               console.error('❌ MongoDB connection failed:', errorMsg);
@@ -2587,13 +2597,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             } else if (errorMsg.includes('400')) {
               console.error('❌ Invalid profile data:', apiError);
               addToast(`Update failed: Invalid data - ${errorMsg.replace('400: ', '')}`, 'error');
-            } else if (errorMsg.includes('Authentication failed') || errorMsg.includes('Please log in again')) {
+            } else if (errorMsg.includes('Authentication failed') || errorMsg.includes('Please log in again') || errorMsg.includes('session has expired')) {
               // Authentication errors - already handled above, but catch here for safety
+              // Avoid duplicate messages - check if we already showed an error
               console.error('❌ Authentication error:', errorMsg);
-              if (updates.password) {
-                addToast('Password update failed: Please log in again and try again.', 'error');
-              } else {
-                addToast('Profile update failed: Please log in again and try again.', 'error');
+              // Only show if not already handled by the 401 handler above
+              if (!errorMsg.includes('401') && !errorMsg.includes('Unauthorized')) {
+                const cleanMsg = errorMsg.includes('log in again') 
+                  ? errorMsg 
+                  : `${errorMsg}. Please log in again and try again.`;
+                if (updates.password) {
+                  addToast(`Password update failed: ${cleanMsg}`, 'error');
+                } else {
+                  addToast(`Profile update failed: ${cleanMsg}`, 'error');
+                }
               }
             } else if (errorMsg.includes('500') || errorMsg.includes('Database error') || errorMsg.includes('Internal server') || errorMsg.includes('Server error')) {
               console.error('❌ Server/Database error updating user:', apiError);

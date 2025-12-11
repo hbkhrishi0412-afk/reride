@@ -974,7 +974,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     };
 
     const applyAiSpec = (specKey: keyof typeof aiSuggestions.structuredSpecs) => {
-        if (aiSuggestions?.structuredSpecs?.[specKey]) {
+        if (aiSuggestions && aiSuggestions.structuredSpecs && aiSuggestions.structuredSpecs[specKey]) {
             setFormData(prev => ({ ...prev, [specKey]: aiSuggestions.structuredSpecs[specKey] }));
         }
     };

@@ -266,9 +266,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                                 const newStatus = !(user.verificationStatus?.phoneVerified || user.phoneVerified);
                                                 onSave(user.email, {
                                                     verificationStatus: {
-                                                        phoneVerified: user.verificationStatus?.phoneVerified || false,
-                                                        emailVerified: user.verificationStatus?.emailVerified || false,
-                                                        govtIdVerified: user.verificationStatus?.govtIdVerified || false,
                                                         ...(user.verificationStatus || {}),
                                                         phoneVerified: newStatus
                                                     },
@@ -308,9 +305,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                                 const newStatus = !(user.verificationStatus?.emailVerified || user.emailVerified);
                                                 onSave(user.email, {
                                                     verificationStatus: {
-                                                        phoneVerified: user.verificationStatus?.phoneVerified || false,
-                                                        emailVerified: user.verificationStatus?.emailVerified || false,
-                                                        govtIdVerified: user.verificationStatus?.govtIdVerified || false,
                                                         ...(user.verificationStatus || {}),
                                                         emailVerified: newStatus
                                                     },
@@ -350,9 +344,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                                 const newStatus = !(user.verificationStatus?.govtIdVerified || user.govtIdVerified);
                                                 onSave(user.email, {
                                                     verificationStatus: {
-                                                        phoneVerified: user.verificationStatus?.phoneVerified || false,
-                                                        emailVerified: user.verificationStatus?.emailVerified || false,
-                                                        govtIdVerified: user.verificationStatus?.govtIdVerified || false,
                                                         ...(user.verificationStatus || {}),
                                                         govtIdVerified: newStatus
                                                     },
