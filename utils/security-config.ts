@@ -34,7 +34,7 @@ export const SECURITY_CONFIG = {
   // Rate Limiting
   RATE_LIMIT: {
     WINDOW_MS: 15 * 60 * 1000, // 15 minutes
-    MAX_REQUESTS: 100,
+    MAX_REQUESTS: process.env.NODE_ENV === 'production' ? 1000 : 100, // 1000 requests/15min in production, 100 in dev
     LOGIN_MAX_ATTEMPTS: 5,
     LOGIN_LOCKOUT_TIME: 30 * 60 * 1000 // 30 minutes
   },

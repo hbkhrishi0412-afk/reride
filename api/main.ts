@@ -182,18 +182,63 @@ type HandlerOptions = {
   mongoFailureReason?: string;
 };
 
-// Extract client IP from request headers (handles proxies)
+// Extract client IP from request headers (handles proxies and Vercel)
+// Improved for Vercel to prevent all requests from being counted as the same user
 const getClientIP = (req: VercelRequest): string => {
+  // Vercel-specific headers (check these first for better IP detection)
+  const vercelForwardedFor = req.headers['x-vercel-forwarded-for'];
+  if (vercelForwardedFor) {
+    const ips = Array.isArray(vercelForwardedFor) ? vercelForwardedFor[0] : vercelForwardedFor;
+    // Take the first IP (original client IP) from the comma-separated list
+    const clientIP = ips.split(',')[0].trim();
+    if (clientIP && clientIP !== '::1' && clientIP !== '127.0.0.1') {
+      return clientIP;
+    }
+  }
+  
+  // Cloudflare header (if behind Cloudflare)
+  const cfConnectingIP = req.headers['cf-connecting-ip'];
+  if (cfConnectingIP) {
+    const ip = Array.isArray(cfConnectingIP) ? cfConnectingIP[0] : cfConnectingIP;
+    if (ip && ip !== '::1' && ip !== '127.0.0.1') {
+      return ip;
+    }
+  }
+  
+  // Standard x-forwarded-for header
   const forwardedFor = req.headers['x-forwarded-for'];
   if (forwardedFor) {
     const ips = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-    return ips.split(',')[0].trim();
+    // x-forwarded-for can contain multiple IPs: client, proxy1, proxy2
+    // The first IP is usually the original client IP
+    const clientIP = ips.split(',')[0].trim();
+    if (clientIP && clientIP !== '::1' && clientIP !== '127.0.0.1') {
+      return clientIP;
+    }
   }
+  
+  // x-real-ip header (some proxies use this)
   const realIP = req.headers['x-real-ip'];
   if (realIP) {
-    return Array.isArray(realIP) ? realIP[0] : realIP;
+    const ip = Array.isArray(realIP) ? realIP[0] : realIP;
+    if (ip && ip !== '::1' && ip !== '127.0.0.1') {
+      return ip;
+    }
   }
-  return req.socket?.remoteAddress || 'unknown';
+  
+  // Fallback to socket remote address
+  const socketIP = req.socket?.remoteAddress;
+  if (socketIP && socketIP !== '::1' && socketIP !== '127.0.0.1') {
+    return socketIP;
+  }
+  
+  // Last resort: use a combination of headers to create a unique identifier
+  // This helps when all requests appear to come from the same IP (Vercel edge)
+  const userAgent = req.headers['user-agent'] || 'unknown';
+  const acceptLanguage = req.headers['accept-language'] || 'unknown';
+  // Create a hash-like identifier from headers (not perfect but better than 'unknown')
+  const fallbackId = `${socketIP || 'fallback'}-${userAgent.substring(0, 20)}-${acceptLanguage.substring(0, 10)}`;
+  return fallbackId;
 };
 
 // In-memory rate limit cache for fallback (with TTL)
@@ -429,22 +474,7 @@ async function mainHandler(
       return earlyResponse;
     }
 
-    // Rate limiting (after database connection check)
-    const clientIP = getClientIP(req);
-    const rateLimitResult = await checkRateLimit(clientIP, mongoAvailable);
-    
-    if (!rateLimitResult.allowed) {
-      return res.status(429).json({
-        success: false,
-        reason: 'Too many requests. Please try again later.',
-        retryAfter: Math.ceil(config.RATE_LIMIT.WINDOW_MS / 1000)
-      });
-    }
-    
-    res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-    res.setHeader('X-RateLimit-Limit', config.RATE_LIMIT.MAX_REQUESTS.toString());
-
-    // Route based on the path
+    // Extract pathname early to check for rate limit exemptions
     // Handle Vercel rewrites - check original path if available
     let pathname = '/';
     try {
@@ -488,6 +518,36 @@ async function mainHandler(
       }
       // Only log in development to avoid information leakage
       logInfo(`📍 Fallback pathname: ${pathname}, req.url: ${req.url}`);
+    }
+
+    // Check if this is a health check endpoint or HEAD request (exempt from rate limiting)
+    const isHealthEndpoint = pathname.includes('/db-health') || 
+                             pathname.includes('/health') || 
+                             pathname.endsWith('/db-health') || 
+                             pathname.endsWith('/health');
+    const isHeadRequest = req.method === 'HEAD';
+    const shouldExemptFromRateLimit = isHealthEndpoint || isHeadRequest;
+
+    // Rate limiting (after database connection check and pathname extraction)
+    // Exempt health check endpoints and HEAD requests
+    if (!shouldExemptFromRateLimit) {
+      const clientIP = getClientIP(req);
+      const rateLimitResult = await checkRateLimit(clientIP, mongoAvailable);
+      
+      if (!rateLimitResult.allowed) {
+        return res.status(429).json({
+          success: false,
+          reason: 'Too many requests. Please try again later.',
+          retryAfter: Math.ceil(config.RATE_LIMIT.WINDOW_MS / 1000)
+        });
+      }
+      
+      res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
+      res.setHeader('X-RateLimit-Limit', config.RATE_LIMIT.MAX_REQUESTS.toString());
+    } else {
+      // Set rate limit headers even for exempted requests (with max values)
+      res.setHeader('X-RateLimit-Remaining', config.RATE_LIMIT.MAX_REQUESTS.toString());
+      res.setHeader('X-RateLimit-Limit', config.RATE_LIMIT.MAX_REQUESTS.toString());
     }
 
     // Early detection: If this is a PUT/POST request and we can't determine the route,
