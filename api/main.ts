@@ -234,8 +234,18 @@ const getClientIP = (req: VercelRequest): string => {
   
   // Last resort: use a combination of headers to create a unique identifier
   // This helps when all requests appear to come from the same IP (Vercel edge)
-  const userAgent = req.headers['user-agent'] || 'unknown';
-  const acceptLanguage = req.headers['accept-language'] || 'unknown';
+  const userAgentHeader = req.headers['user-agent'];
+  const acceptLanguageHeader = req.headers['accept-language'];
+  
+  // Handle arrays properly (headers can be string | string[] | undefined)
+  // Also handle empty arrays by defaulting to 'unknown'
+  const userAgent = Array.isArray(userAgentHeader) 
+    ? (userAgentHeader[0] || 'unknown')
+    : (userAgentHeader || 'unknown');
+  const acceptLanguage = Array.isArray(acceptLanguageHeader)
+    ? (acceptLanguageHeader[0] || 'unknown')
+    : (acceptLanguageHeader || 'unknown');
+  
   // Create a hash-like identifier from headers (not perfect but better than 'unknown')
   const fallbackId = `${socketIP || 'fallback'}-${userAgent.substring(0, 20)}-${acceptLanguage.substring(0, 10)}`;
   return fallbackId;
@@ -531,10 +541,30 @@ async function mainHandler(
     // Rate limiting (after database connection check and pathname extraction)
     // Exempt health check endpoints and HEAD requests
     if (!shouldExemptFromRateLimit) {
-      const clientIP = getClientIP(req);
-      const rateLimitResult = await checkRateLimit(clientIP, mongoAvailable);
+      // For authenticated requests, use user email as identifier (prevents shared rate limits)
+      // This is critical for serverless where all requests might share the same IP
+      let rateLimitIdentifier = getClientIP(req);
+      
+      // Try to get user from token for authenticated requests
+      try {
+        const auth = authenticateRequest(req);
+        if (auth.isValid && auth.user?.email) {
+          // Use user email as identifier for authenticated requests
+          // This gives each user their own rate limit bucket
+          rateLimitIdentifier = `user:${auth.user.email.toLowerCase().trim()}`;
+        }
+      } catch (authError) {
+        // If auth fails or throws, fall back to IP-based limiting
+        // This is fine for unauthenticated requests
+      }
+      
+      const rateLimitResult = await checkRateLimit(rateLimitIdentifier, mongoAvailable);
       
       if (!rateLimitResult.allowed) {
+        // Only log in development to avoid information leakage
+        if (process.env.NODE_ENV !== 'production') {
+          logWarn(`⚠️ Rate limit exceeded for ${rateLimitIdentifier} on ${pathname}`);
+        }
         return res.status(429).json({
           success: false,
           reason: 'Too many requests. Please try again later.',
