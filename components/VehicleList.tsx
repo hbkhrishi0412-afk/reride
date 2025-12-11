@@ -611,18 +611,19 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         if (modelFilter && modelFilter.trim() !== '') {
           if (vehicle.model?.toLowerCase().trim() !== modelFilter.toLowerCase().trim()) return false;
         }
-        // Price range filter - ensure vehicle has valid price
+        // Price range filter - only apply if vehicle has valid price
+        // If price is outside range, exclude the vehicle
         if (vehicle.price != null && typeof vehicle.price === 'number') {
           if (vehicle.price < priceRange.min || vehicle.price > priceRange.max) return false;
-        } else {
-          return false; // Exclude vehicles without valid price
         }
-        // Mileage range filter - ensure vehicle has valid mileage
+        // Note: Vehicles without price are still shown (they just don't match price filters)
+        
+        // Mileage range filter - only apply if vehicle has valid mileage
+        // If mileage is outside range, exclude the vehicle
         if (vehicle.mileage != null && typeof vehicle.mileage === 'number') {
           if (vehicle.mileage < mileageRange.min || vehicle.mileage > mileageRange.max) return false;
-        } else {
-          return false; // Exclude vehicles without valid mileage
         }
+        // Note: Vehicles without mileage are still shown (they just don't match mileage filters)
         // Fuel type filter - case-insensitive comparison
         if (fuelTypeFilter && fuelTypeFilter.trim() !== '') {
           if (vehicle.fuelType?.toLowerCase().trim() !== fuelTypeFilter.toLowerCase().trim()) return false;
@@ -636,8 +637,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         if (colorFilter && colorFilter.trim() !== '') {
           if (vehicle.color?.toLowerCase().trim() !== colorFilter.toLowerCase().trim()) return false;
         }
-        // State filter - exact match (state codes are case-sensitive)
-        if (stateFilter && stateFilter.trim() !== '') {
+        // State filter - only apply if explicitly set by user (not auto-set from location)
+        if (stateFilter && stateFilter.trim() !== '' && isStateFilterUserSet) {
           if (vehicle.state?.trim() !== stateFilter.trim()) return false;
         }
         // Features filter - vehicle must have all selected features

@@ -239,6 +239,139 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                             )}
                         </div>
 
+                        {/* Verification Status Section */}
+                        <div className="mt-6 pt-6 border-t border-gray-200">
+                            <h3 className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-4">Verification Status</h3>
+                            
+                            <div className="space-y-3">
+                                {/* Phone Verification */}
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                        <span className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Phone Verification</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                            user.verificationStatus?.phoneVerified || user.phoneVerified
+                                                ? 'bg-green-100 text-green-800'
+                                                : 'bg-gray-100 text-gray-600'
+                                        }`}>
+                                            {user.verificationStatus?.phoneVerified || user.phoneVerified ? 'Verified' : 'Not Verified'}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newStatus = !(user.verificationStatus?.phoneVerified || user.phoneVerified);
+                                                onSave(user.email, {
+                                                    verificationStatus: {
+                                                        phoneVerified: user.verificationStatus?.phoneVerified || false,
+                                                        emailVerified: user.verificationStatus?.emailVerified || false,
+                                                        govtIdVerified: user.verificationStatus?.govtIdVerified || false,
+                                                        ...user.verificationStatus,
+                                                        phoneVerified: newStatus
+                                                    },
+                                                    phoneVerified: newStatus
+                                                });
+                                            }}
+                                            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                                user.verificationStatus?.phoneVerified || user.phoneVerified
+                                                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                            }`}
+                                        >
+                                            {user.verificationStatus?.phoneVerified || user.phoneVerified ? 'Mark Unverified' : 'Verify'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Email Verification */}
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Email Verification</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                            user.verificationStatus?.emailVerified || user.emailVerified
+                                                ? 'bg-green-100 text-green-800'
+                                                : 'bg-gray-100 text-gray-600'
+                                        }`}>
+                                            {user.verificationStatus?.emailVerified || user.emailVerified ? 'Verified' : 'Not Verified'}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newStatus = !(user.verificationStatus?.emailVerified || user.emailVerified);
+                                                onSave(user.email, {
+                                                    verificationStatus: {
+                                                        phoneVerified: user.verificationStatus?.phoneVerified || false,
+                                                        emailVerified: user.verificationStatus?.emailVerified || false,
+                                                        govtIdVerified: user.verificationStatus?.govtIdVerified || false,
+                                                        ...user.verificationStatus,
+                                                        emailVerified: newStatus
+                                                    },
+                                                    emailVerified: newStatus
+                                                });
+                                            }}
+                                            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                                user.verificationStatus?.emailVerified || user.emailVerified
+                                                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                            }`}
+                                        >
+                                            {user.verificationStatus?.emailVerified || user.emailVerified ? 'Mark Unverified' : 'Verify'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* ID Verification */}
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                        <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                                        </svg>
+                                        <span className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">ID Verification</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                            user.verificationStatus?.govtIdVerified || user.govtIdVerified
+                                                ? 'bg-green-100 text-green-800'
+                                                : 'bg-gray-100 text-gray-600'
+                                        }`}>
+                                            {user.verificationStatus?.govtIdVerified || user.govtIdVerified ? 'Verified' : 'Not Verified'}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newStatus = !(user.verificationStatus?.govtIdVerified || user.govtIdVerified);
+                                                onSave(user.email, {
+                                                    verificationStatus: {
+                                                        phoneVerified: user.verificationStatus?.phoneVerified || false,
+                                                        emailVerified: user.verificationStatus?.emailVerified || false,
+                                                        govtIdVerified: user.verificationStatus?.govtIdVerified || false,
+                                                        ...user.verificationStatus,
+                                                        govtIdVerified: newStatus
+                                                    },
+                                                    govtIdVerified: newStatus
+                                                });
+                                            }}
+                                            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                                user.verificationStatus?.govtIdVerified || user.govtIdVerified
+                                                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                            }`}
+                                        >
+                                            {user.verificationStatus?.govtIdVerified || user.govtIdVerified ? 'Mark Unverified' : 'Verify'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Document Verification Section */}
                         <div className="mt-6 pt-6 border-t border-gray-200">
                             <h3 className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-4">Document Verification</h3>

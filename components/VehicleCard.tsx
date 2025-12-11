@@ -60,47 +60,49 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   return (
     <div 
       onClick={handleCardClick}
-      className="group cursor-pointer bg-white overflow-hidden flex flex-col"
+      className="group cursor-pointer bg-white dark:bg-gray-800 overflow-hidden flex flex-col rounded-2xl border border-gray-100 dark:border-gray-700"
       style={{
-        borderRadius: '12px',
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
         fontFamily: "'Poppins', sans-serif",
-        transition: 'all 0.3s ease'
+        transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
       }}
       data-testid="vehicle-card"
       onMouseEnter={(e) => {
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+        e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+        e.currentTarget.style.borderColor = '#1E88E5';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
-        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+        e.currentTarget.style.transform = 'translateY(0) scale(1)';
+        e.currentTarget.style.borderColor = '';
       }}
     >
-      {/* Image Section - Top 50-60% of card */}
-      <div className="relative overflow-hidden flex-shrink-0" style={{ height: '55%', minHeight: '200px' }}>
+      {/* Premium Image Section - Top 50-60% of card */}
+      <div className="relative overflow-hidden flex-shrink-0 bg-gradient-to-br from-gray-100 to-gray-200" style={{ height: '55%', minHeight: '200px' }}>
         <LazyImage
           src={getFirstValidImage(vehicle.images)}
           alt={`${vehicle.make} ${vehicle.model}`}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           width={800}
           quality={80}
           data-testid="vehicle-image"
         />
+        {/* Gradient Overlay on Hover */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         
-        {/* Featured Badge - Top Left */}
+        {/* Premium Featured Badge - Top Left */}
         {isFeatured && (
           <div 
-            className="absolute top-3 left-3 flex items-center gap-1 px-2.5 py-1 rounded-full"
+            className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm z-10"
             style={{
-              background: '#FF7F47',
-              borderRadius: '20px',
+              background: 'linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%)',
               fontFamily: "'Poppins', sans-serif"
             }}
           >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              className="h-3.5 w-3.5 text-white" 
+              className="h-4 w-4 text-white" 
               viewBox="0 0 20 20" 
               fill="currentColor"
             >
@@ -108,7 +110,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             </svg>
             <span 
               className="text-white font-bold"
-              style={{ fontSize: '11px' }}
+              style={{ fontSize: '12px', letterSpacing: '0.5px' }}
             >
               Featured
             </span>

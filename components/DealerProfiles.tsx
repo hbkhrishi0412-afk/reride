@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import type { User } from '../types.js';
+import type { User, Vehicle } from '../types.js';
 import StarRating from './StarRating.js';
 import BadgeDisplay from './BadgeDisplay.js';
 import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
@@ -7,6 +7,7 @@ import { isUserVerified } from './VerifiedBadge.js';
 
 interface DealerProfilesProps {
   sellers: User[];
+  vehicles?: Vehicle[];
   onViewProfile: (sellerEmail: string) => void;
 }
 
@@ -14,14 +15,25 @@ type SortOption = 'name' | 'rating' | 'reviews' | 'followers' | 'newest';
 
 const DealerCard: React.FC<{ 
   seller: User; 
+  vehicles?: Vehicle[];
   onViewProfile: (sellerEmail: string) => void;
   index: number;
-}> = ({ seller, onViewProfile, index }) => {
+}> = ({ seller, vehicles = [], onViewProfile, index }) => {
   const followersCount = getFollowersCount(seller.email);
   const followingCount = getFollowingCount(seller.email);
   const isVerified = isUserVerified(seller);
   const rating = seller.averageRating || 0;
   const reviewCount = seller.ratingCount || 0;
+  
+  // Calculate vehicle count for this seller
+  const vehicleCount = useMemo(() => {
+    if (!vehicles || vehicles.length === 0) return 0;
+    const normalizedSellerEmail = seller.email?.toLowerCase().trim() || '';
+    return vehicles.filter(v => 
+      v.sellerEmail?.toLowerCase().trim() === normalizedSellerEmail && 
+      v.status === 'published'
+    ).length;
+  }, [vehicles, seller.email]);
 
   return (
     <div
@@ -77,28 +89,46 @@ const DealerCard: React.FC<{
         )}
 
         {/* Rating */}
-        <div className="flex items-center justify-center gap-2 mb-2">
+        <div className="flex items-center justify-center gap-2 mb-3">
           <StarRating rating={rating} readOnly size="sm" />
           <span className="text-sm font-semibold text-gray-700">{rating > 0 ? rating.toFixed(1) : 'N/A'}</span>
           <span className="text-xs text-gray-500">({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})</span>
         </div>
 
+        {/* Vehicle Count - Compact Display */}
+        <div className="w-full mb-2.5 px-2 py-1.5 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-100 group-hover:from-green-100 group-hover:to-emerald-100 transition-all duration-300">
+          <div className="flex items-center justify-center gap-2">
+            <div className="p-1 bg-green-500 rounded-md shadow-sm">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+              </svg>
+            </div>
+            <div className="flex flex-col items-start">
+              <span className="text-lg font-bold text-gray-900 leading-none">{vehicleCount}</span>
+              <span className="text-[10px] font-medium text-gray-600 uppercase tracking-wide mt-0.5">
+                {vehicleCount === 1 ? 'Vehicle Listed' : 'Vehicles Listed'}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Social Stats */}
-        <div className="flex items-center justify-center gap-4 mb-3 text-sm">
-          <div className="flex items-center gap-1.5 text-gray-600">
-            <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex items-center justify-center gap-3 mb-3 text-xs">
+          <div className="flex items-center gap-1 text-gray-600">
+            <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            <span className="font-medium">{followersCount}</span>
-            <span className="text-gray-400">Followers</span>
+            <span className="font-semibold text-gray-700">{followersCount}</span>
+            <span className="text-gray-500">Followers</span>
           </div>
-          <div className="w-px h-4 bg-gray-300"></div>
-          <div className="flex items-center gap-1.5 text-gray-600">
-            <svg className="w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-px h-3 bg-gray-300"></div>
+          <div className="flex items-center gap-1 text-gray-600">
+            <svg className="w-3.5 h-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
-            <span className="font-medium">{followingCount}</span>
-            <span className="text-gray-400">Following</span>
+            <span className="font-semibold text-gray-700">{followingCount}</span>
+            <span className="text-gray-500">Following</span>
           </div>
         </div>
 
@@ -122,7 +152,7 @@ const DealerCard: React.FC<{
   );
 };
 
-const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile }) => {
+const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, vehicles = [], onViewProfile }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('name');
   const [showFilters, setShowFilters] = useState(false);
@@ -335,6 +365,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, onViewProfile 
             <DealerCard 
               key={seller.email} 
               seller={seller} 
+              vehicles={vehicles}
               onViewProfile={onViewProfile}
               index={index}
             />

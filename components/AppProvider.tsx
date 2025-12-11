@@ -1484,11 +1484,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       setUsers(prev =>
         prev.map(user => {
           if (user.email === email) {
-            const updatedUser = { ...user, ...updateFields };
+            // Deep merge verificationStatus if it exists in updateFields
+            let updatedUser = { ...user };
+            
+            if (updateFields.verificationStatus) {
+              // Merge verificationStatus whether it exists in user or not
+              updatedUser = {
+                ...updatedUser,
+                ...updateFields,
+                verificationStatus: {
+                  ...(user.verificationStatus || {}),
+                  ...updateFields.verificationStatus
+                }
+              };
+            } else {
+              updatedUser = { ...updatedUser, ...updateFields };
+            }
+            
+            // Also merge individual verification fields if they exist in updateFields
+            if (updateFields.phoneVerified !== undefined) {
+              updatedUser.phoneVerified = updateFields.phoneVerified;
+            }
+            if (updateFields.emailVerified !== undefined) {
+              updatedUser.emailVerified = updateFields.emailVerified;
+            }
+            if (updateFields.govtIdVerified !== undefined) {
+              updatedUser.govtIdVerified = updateFields.govtIdVerified;
+            }
+            
             // Remove fields that are set to null
             fieldsToRemove.forEach(key => {
               delete (updatedUser as any)[key];
             });
+            
+            // Also update publicSellerProfile if this is the currently viewed seller
+            if (publicSellerProfile?.email === email) {
+              setPublicSellerProfile(updatedUser);
+            }
+            
             return updatedUser;
           }
           return user;

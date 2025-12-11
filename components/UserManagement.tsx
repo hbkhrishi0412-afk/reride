@@ -149,18 +149,34 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, currentUser, onT
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Email</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Role</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase">Member Since</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium uppercase">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
                             {filteredUsers.map(user => {
                                 const isCurrentUser = user.email === currentUser.email;
+                                const memberSince = user.createdAt || user.joinedDate;
+                                const formattedDate = memberSince 
+                                    ? (() => {
+                                        try {
+                                            const date = new Date(memberSince);
+                                            if (!isNaN(date.getTime())) {
+                                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                                            }
+                                        } catch (e) {
+                                            // Invalid date
+                                        }
+                                        return 'N/A';
+                                    })()
+                                    : 'N/A';
                                 return (
                                     <tr key={user.email}>
                                         <td className="px-6 py-4">{user.name}</td>
                                         <td className="px-6 py-4">{user.email}</td>
                                         <td className="px-6 py-4"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === 'admin' ? 'bg-spinny-orange-light text-spinny-orange' : user.role === 'seller' ? 'brand-badge-orange' : 'bg-spinny-orange-light text-spinny-orange'}`}>{user.role}</span></td>
                                         <td className="px-6 py-4"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.status === 'active' ? 'bg-spinny-orange-light text-spinny-orange' : 'bg-white-dark text-spinny-text-dark'}`}>{user.status}</span></td>
+                                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{formattedDate}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             <button 
                                                 onClick={() => onToggleUserStatus(user.email)} 

@@ -426,15 +426,25 @@ const AppContent: React.FC = React.memo(() => {
 
       case ViewEnum.USED_CARS:
         // Filter vehicles for buy/sale (exclude rental vehicles)
+        // Only filter by status and listingType here - let VehicleList handle all other filters
         const filteredVehicles = vehicles.filter(v => {
+          if (!v) return false;
           const isPublished = v.status === 'published';
           // Exclude rental vehicles from buy/sale listings
-          const isNotRental = v.listingType !== 'rental';
-          // Apply city filter if selected
-          const matchesCity = !selectedCity || v.city === selectedCity;
+          const isNotRental = v.listingType !== 'rental' || v.listingType === undefined;
           
-          return isPublished && (isNotRental || v.listingType === undefined) && matchesCity;
+          return isPublished && isNotRental;
         });
+        
+        // Debug logging in development
+        if (process.env.NODE_ENV === 'development') {
+          console.log('USED_CARS filter results:', {
+            totalVehicles: vehicles.length,
+            publishedVehicles: vehicles.filter(v => v.status === 'published').length,
+            rentalVehicles: vehicles.filter(v => v.listingType === 'rental').length,
+            filteredVehicles: filteredVehicles.length
+          });
+        }
         
         return (
           <VehicleListErrorBoundary>
@@ -1314,16 +1324,21 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.SELLER_PROFILE:
-        return publicSellerProfile ? (
-          <SellerProfilePage 
-            seller={publicSellerProfile}
-            vehicles={enrichVehiclesWithSellerInfo(
-              (vehicles || []).filter(v => {
-                if (!v || !v.sellerEmail || !publicSellerProfile?.email) return false;
-                return v.sellerEmail.toLowerCase().trim() === publicSellerProfile.email.toLowerCase().trim();
-              }), 
-              users || []
-            )}
+        return publicSellerProfile ? (() => {
+          // Always get the latest seller data from users array to ensure verification status is up-to-date
+          const normalizedSellerEmail = publicSellerProfile.email?.toLowerCase().trim() || '';
+          const latestSeller = users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) || publicSellerProfile;
+          
+          return (
+            <SellerProfilePage 
+              seller={latestSeller}
+              vehicles={enrichVehiclesWithSellerInfo(
+                (vehicles || []).filter(v => {
+                  if (!v || !v.sellerEmail || !latestSeller?.email) return false;
+                  return v.sellerEmail.toLowerCase().trim() === latestSeller.email.toLowerCase().trim();
+                }), 
+                users || []
+              )}
             onSelectVehicle={selectVehicle}
             comparisonList={comparisonList}
             onToggleCompare={toggleCompare}
@@ -1340,7 +1355,8 @@ const AppContent: React.FC = React.memo(() => {
               }
             }}
           />
-        ) : (
+          );
+        })() : (
           <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-600 mb-4">Seller Not Found</h2>
@@ -1358,6 +1374,7 @@ const AppContent: React.FC = React.memo(() => {
         return (
           <DealerProfiles 
             sellers={users.filter(user => user.role === 'seller')} 
+            vehicles={vehicles}
             onViewProfile={(sellerEmail) => {
               setPublicProfile({ email: sellerEmail } as any);
               navigate(ViewEnum.SELLER_PROFILE);

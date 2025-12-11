@@ -182,13 +182,15 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
 );
 
 const TableContainer: React.FC<{ title: string; children: React.ReactNode; actions?: React.ReactNode }> = ({ title, children, actions }) => (
-    <div className="bg-white p-6 rounded-lg shadow-md">
+    <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
             <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">{title}</h2>
             {actions && <div className="w-full sm:w-auto">{actions}</div>}
         </div>
-        <div className="overflow-x-auto">
-            {children}
+        <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+            <div className="inline-block min-w-full align-middle">
+                {children}
+            </div>
         </div>
     </div>
 );
@@ -1131,25 +1133,41 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             </button>
                         </div>
                         <TableContainer title={`User Management (${filteredUsers.length} users)`}>
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <table className="w-full divide-y divide-gray-200 dark:divide-gray-700" style={{ minWidth: '800px' }}>
                                 <thead className="bg-white dark:bg-white">
                                     <tr>
                                         <SortableHeader title="Name" sortKey="name" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Mobile</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Role</th>
+                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Email</th>
+                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Mobile</th>
+                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Role</th>
                                         <SortableHeader title="Status" sortKey="status" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Documents</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Member Since</th>
+                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Documents</th>
+                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Actions</th>
                                     </tr>
                                 </thead>
                         <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
-                                    {filteredUsers.map(user => (
+                                    {filteredUsers.map(user => {
+                                        const memberSince = user.createdAt || user.joinedDate;
+                                        const formattedDate = memberSince 
+                                            ? (() => {
+                                                try {
+                                                    const date = new Date(memberSince);
+                                                    if (!isNaN(date.getTime())) {
+                                                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                                                    }
+                                                } catch (e) {
+                                                    // Invalid date
+                                                }
+                                                return 'N/A';
+                                            })()
+                                            : 'N/A';
+                                        return (
                                         <tr key={user.email}>
-                                            <td className="px-6 py-4 whitespace-nowrap font-medium">{user.name}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{user.email}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">{user.mobile}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap font-medium text-sm">{user.name}</td>
+                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">{user.email}</td>
+                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">{user.mobile || 'N/A'}</td>
+                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                                                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                                     user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                                                     user.role === 'seller' ? 'bg-blue-100 text-blue-800' :
@@ -1158,14 +1176,15 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     {user.role}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                                                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                                     user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                                                 }`}>
                                                     {user.status}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-600 dark:text-gray-400">{formattedDate}</td>
+                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                                                 <div className="flex flex-col gap-1">
                                                     {user.aadharCard?.documentUrl && (
                                                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
@@ -1190,55 +1209,58 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        setEditingUser(user);
-                                                    }} 
-                                                    className="text-blue-600 hover:text-blue-800 cursor-pointer"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        const action = user.status === 'active' ? 'suspend' : 'activate';
-                                                        if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
-                                                            handleActionWithLoading(`toggle-user-${user.email}`, () => onToggleUserStatus(user.email));
-                                                        }
-                                                    }} 
-                                                    disabled={loadingActions.has(`toggle-user-${user.email}`)}
-                                                    className={`cursor-pointer ${
-                                                        loadingActions.has(`toggle-user-${user.email}`)
-                                                            ? 'text-gray-400 cursor-not-allowed'
-                                                            : 'text-yellow-600 hover:text-yellow-800'
-                                                    }`}
-                                                >
-                                                    {loadingActions.has(`toggle-user-${user.email}`) ? '...' : (user.status === 'active' ? 'Suspend' : 'Activate')}
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        if (window.confirm(`Are you sure you want to delete user ${user.email}? This action cannot be undone.`)) {
-                                                            handleActionWithLoading(`delete-user-${user.email}`, () => onDeleteUser(user.email));
-                                                        }
-                                                    }} 
-                                                    disabled={loadingActions.has(`delete-user-${user.email}`)}
-                                                    className={`cursor-pointer ${
-                                                        loadingActions.has(`delete-user-${user.email}`)
-                                                            ? 'text-gray-400 cursor-not-allowed'
-                                                            : 'text-red-600 hover:text-red-800'
-                                                    }`}
-                                                >
-                                                    {loadingActions.has(`delete-user-${user.email}`) ? '...' : 'Delete'}
-                                                </button>
+                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium">
+                                                <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            setEditingUser(user);
+                                                        }} 
+                                                        className="text-blue-600 hover:text-blue-800 cursor-pointer"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            const action = user.status === 'active' ? 'suspend' : 'activate';
+                                                            if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
+                                                                handleActionWithLoading(`toggle-user-${user.email}`, () => onToggleUserStatus(user.email));
+                                                            }
+                                                        }} 
+                                                        disabled={loadingActions.has(`toggle-user-${user.email}`)}
+                                                        className={`cursor-pointer ${
+                                                            loadingActions.has(`toggle-user-${user.email}`)
+                                                                ? 'text-gray-400 cursor-not-allowed'
+                                                                : 'text-yellow-600 hover:text-yellow-800'
+                                                        }`}
+                                                    >
+                                                        {loadingActions.has(`toggle-user-${user.email}`) ? '...' : (user.status === 'active' ? 'Suspend' : 'Activate')}
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            if (window.confirm(`Are you sure you want to delete user ${user.email}? This action cannot be undone.`)) {
+                                                                handleActionWithLoading(`delete-user-${user.email}`, () => onDeleteUser(user.email));
+                                                            }
+                                                        }} 
+                                                        disabled={loadingActions.has(`delete-user-${user.email}`)}
+                                                        className={`cursor-pointer ${
+                                                            loadingActions.has(`delete-user-${user.email}`)
+                                                                ? 'text-gray-400 cursor-not-allowed'
+                                                                : 'text-red-600 hover:text-red-800'
+                                                        }`}
+                                                    >
+                                                        {loadingActions.has(`delete-user-${user.email}`) ? '...' : 'Delete'}
+                                                    </button>
+                                                </div>
                                     </td>
                                 </tr>
-                            ))}
+                                        );
+                                    })}
                         </tbody>
                     </table>
             </TableContainer>
