@@ -22,7 +22,13 @@ import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController);
+// Safely register Chart.js components - wrap in try-catch to prevent crashes if Chart.js fails to load
+try {
+  ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController);
+} catch (error) {
+  console.error('❌ Failed to register Chart.js components:', error);
+  // Don't throw - allow component to render without charts
+}
 
 
 interface DashboardProps {
@@ -973,8 +979,8 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         images: formData.images.length > 0 ? formData.images : [getPlaceholderImage(formData.make, formData.model)],
     };
 
-    const applyAiSpec = (specKey: keyof typeof aiSuggestions.structuredSpecs) => {
-        if (aiSuggestions && aiSuggestions.structuredSpecs && aiSuggestions.structuredSpecs[specKey]) {
+    const applyAiSpec = (specKey: 'engine' | 'transmission' | 'fuelType' | 'fuelEfficiency' | 'displacement' | 'groundClearance' | 'bootSpace') => {
+        if (aiSuggestions?.structuredSpecs?.[specKey]) {
             setFormData(prev => ({ ...prev, [specKey]: aiSuggestions.structuredSpecs[specKey] }));
         }
     };
@@ -1294,10 +1300,8 @@ const InquiriesView: React.FC<{
   onMarkConversationAsReadBySeller: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onSelectConv: (conv: Conversation) => void;
-  onTestDriveResponse?: (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => void;
-  onSellerSendMessage: (conversationId: string, messageText: string) => void;
 
-}> = memo(({ conversations, sellerEmail, onMarkConversationAsReadBySeller, onMarkMessagesAsRead, onSelectConv, onTestDriveResponse, onSellerSendMessage }) => {
+}> = memo(({ conversations, sellerEmail, onMarkConversationAsReadBySeller, onMarkMessagesAsRead, onSelectConv }) => {
 
     const handleSelectConversation = (conv: Conversation) => {
       onSelectConv(conv);
@@ -1368,34 +1372,6 @@ const InquiriesView: React.FC<{
     );
 });
 
-const ProfileInput: React.FC<{ label: string; name: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; }> = ({ label, name, value, onChange }) => (
-    <div>
-        <label htmlFor={name} className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">{label}</label>
-        <input
-            type="text"
-            name={name}
-            id={name}
-            value={value}
-            onChange={onChange}
-            className="mt-1 block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg shadow-sm sm:text-sm bg-white dark:text-spinny-text-dark" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--spinny-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
-        />
-    </div>
-);
-
-const ProfileTextarea: React.FC<{ label: string; name: string; value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void; placeholder?: string; }> = ({ label, name, value, onChange, placeholder }) => (
-     <div>
-        <label htmlFor={name} className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">{label}</label>
-        <textarea
-            name={name}
-            id={name}
-            rows={4}
-            value={value}
-            onChange={onChange}
-            className="mt-1 block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg shadow-sm sm:text-sm bg-white dark:text-spinny-text-dark" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--spinny-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
-            placeholder={placeholder}
-        />
-    </div>
-);
 
 
 
@@ -1461,7 +1437,7 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
   // Guard against missing seller
   if (!seller || !seller.email) {
     return (
@@ -1483,16 +1459,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // Safety checks: Ensure arrays are initialized and validate all props
   const safeSellerVehicles = Array.isArray(sellerVehicles) ? sellerVehicles : [];
   const safeConversations = Array.isArray(conversations) ? conversations : [];
-  const safeVehicleData = vehicleData && typeof vehicleData === 'object' ? vehicleData : {};
-  const safeAllVehicles = Array.isArray(allVehicles) ? allVehicles : [];
   const safeReportedVehicles = Array.isArray(reportedVehicles) ? reportedVehicles : [];
-  
-  // Validate critical props and provide safe defaults
-  const safeOnTestDriveResponse = onTestDriveResponse || (() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('⚠️ onTestDriveResponse not provided, using no-op handler');
-    }
-  });
   
   // Ensure all callback functions are defined
   if (!onAddVehicle || !onUpdateVehicle || !onDeleteVehicle || !onMarkAsSold) {
@@ -1526,9 +1493,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // Month selector state for analytics
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   
-  // Real-time update state for expiry dates
-  const [currentTime, setCurrentTime] = useState(new Date());
-  
   // Refresh user data from API to get updated plan expiry date
   // FIXED: Removed window.location.reload() to prevent crashes - now uses localStorage update only
   useEffect(() => {
@@ -1554,11 +1518,31 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           }
           return;
         }
-        // Use authenticatedFetch to include JWT token for production API
-        const response = await authenticatedFetch('/api/users');
+        
+        // Wrap authenticatedFetch in additional error handling to catch network errors
+        let response: Response;
+        try {
+          // Use authenticatedFetch to include JWT token for production API
+          response = await authenticatedFetch('/api/users');
+        } catch (fetchError) {
+          // Catch network errors, CORS errors, or any other fetch-related errors
+          // Don't throw - just silently fail to prevent ErrorBoundary from catching
+          if (process.env.NODE_ENV === 'development' && isMounted) {
+            console.warn('⚠️ Network error during user data refresh:', fetchError);
+          }
+          return; // Exit early on fetch errors
+        }
         
         // Check if component is still mounted after async operation
         if (!isMounted) {
+          return;
+        }
+        
+        // Validate response object exists
+        if (!response || typeof response !== 'object') {
+          if (process.env.NODE_ENV === 'development' && isMounted) {
+            console.warn('⚠️ Invalid response object from authenticatedFetch');
+          }
           return;
         }
         
@@ -1572,7 +1556,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         
         if (response.ok) {
           // Check content type before parsing
-          const contentType = response.headers.get('content-type');
+          const contentType = response.headers?.get('content-type');
           if (!contentType || !contentType.includes('application/json')) {
             if (process.env.NODE_ENV === 'development') {
               console.warn('⚠️ API returned non-JSON response, skipping user refresh');
@@ -1641,11 +1625,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           }
         }
       } catch (error) {
+        // Catch any unexpected errors - prevent them from propagating to ErrorBoundary
         // Silently fail - don't disrupt user experience
         // Only log in development to avoid console noise in production
         if (process.env.NODE_ENV === 'development' && isMounted) {
           console.warn('⚠️ Failed to refresh user data:', error);
         }
+        // Ensure error doesn't propagate - return early
+        return;
       }
     };
 
@@ -1698,14 +1685,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     return months;
   }, []);
 
-  // Real-time expiry date updates - update every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000); // Update every minute (60000ms)
-    
-    return () => clearInterval(interval);
-  }, []);
 
   // Refresh vehicle data from API when form view is opened or when editing a vehicle
   useEffect(() => {
@@ -2733,7 +2712,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             pages.push(totalPages);
                           }
                           
-                          return pages.map((page, index) => {
+                          return pages.map((page) => {
                             if (typeof page === 'string') {
                               return (
                                 <span key={page} className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
@@ -2892,8 +2871,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               onMarkConversationAsReadBySeller={onMarkConversationAsReadBySeller} 
               onMarkMessagesAsRead={onMarkMessagesAsRead}
               onSelectConv={setSelectedConv}
-              onTestDriveResponse={safeOnTestDriveResponse}
-              onSellerSendMessage={onSellerSendMessage}
             />
             {selectedConv && (
               <div className="bg-white p-6 rounded-lg shadow-md">
