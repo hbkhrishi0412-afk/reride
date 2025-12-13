@@ -133,69 +133,124 @@ export const authenticatedFetch = async (
   url: string,
   options: FetchOptions = {}
 ): Promise<Response> => {
-  const { skipAuth = false, retryOn401 = true, ...fetchOptions } = options;
+  try {
+    const { skipAuth = false, retryOn401 = true, ...fetchOptions } = options;
 
-  // Proactively refresh token if it's likely expired (for critical operations like password updates)
-  if (!skipAuth && retryOn401 && !isTokenLikelyValid()) {
-    console.log('🔄 Token appears expired, proactively refreshing...');
-    const newToken = await refreshToken();
-    if (newToken) {
-      console.log('✅ Token refreshed proactively');
+    // Proactively refresh token if it's likely expired (for critical operations like password updates)
+    if (!skipAuth && retryOn401 && !isTokenLikelyValid()) {
+      try {
+        console.log('🔄 Token appears expired, proactively refreshing...');
+        const newToken = await refreshToken();
+        if (newToken) {
+          console.log('✅ Token refreshed proactively');
+        }
+      } catch (refreshError) {
+        // Silently handle token refresh errors - don't block the main request
+        console.warn('⚠️ Proactive token refresh failed:', refreshError);
+      }
     }
-  }
 
-  // Prepare headers
-  const headers = skipAuth
-    ? { 'Content-Type': 'application/json' }
-    : getAuthHeaders();
+    // Prepare headers
+    const headers = skipAuth
+      ? { 'Content-Type': 'application/json' }
+      : getAuthHeaders();
 
-  // Merge with any existing headers
-  const mergedHeaders = {
-    ...headers,
-    ...(fetchOptions.headers || {}),
-  };
+    // Merge with any existing headers
+    const mergedHeaders = {
+      ...headers,
+      ...(fetchOptions.headers || {}),
+    };
 
-  // First attempt
-  let response = await fetch(url, {
-    ...fetchOptions,
-    headers: mergedHeaders,
-    credentials: 'include', // Always include cookies for session-based auth
-  });
-
-  // Handle 401 Unauthorized - try to refresh token and retry
-  if (response.status === 401 && retryOn401 && !skipAuth) {
-    console.log('🔄 401 received, attempting token refresh...');
-    
-    const newToken = await refreshToken();
-    
-    if (newToken) {
-      console.log('✅ Token refreshed, retrying request...');
-      // Retry with new token
+    // First attempt - wrap in try-catch to handle network errors
+    let response: Response;
+    try {
       response = await fetch(url, {
         ...fetchOptions,
-        headers: {
-          ...mergedHeaders,
-          'Authorization': `Bearer ${newToken}`,
-        },
-        credentials: 'include',
+        headers: mergedHeaders,
+        credentials: 'include', // Always include cookies for session-based auth
       });
-      
-      // If retry still returns 401, token refresh didn't help (maybe different issue)
-      if (response.status === 401) {
-        console.warn('⚠️ Request still returns 401 after token refresh - authentication issue persists');
-        clearAuthTokens();
-        // Don't redirect immediately - let the caller handle the error first
-        // The redirect will happen when the error is shown to the user
-      }
-    } else {
-      console.warn('⚠️ Token refresh failed, clearing auth tokens');
-      clearAuthTokens();
-      // Don't redirect immediately - let the caller handle the error and show message first
-      // The error handler in AppProvider will show the error, then user can manually navigate to login
+    } catch (fetchError) {
+      // Network error, CORS error, or other fetch failures
+      // Return a Response-like object that indicates failure
+      // This prevents the error from propagating to ErrorBoundary
+      console.warn('⚠️ Fetch error in authenticatedFetch:', fetchError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Network error', 
+          reason: 'Unable to connect to server. Please check your internet connection.' 
+        }),
+        { 
+          status: 0, // Status 0 indicates network error
+          statusText: 'Network Error',
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
-  }
 
-  return response;
+    // Handle 401 Unauthorized - try to refresh token and retry
+    if (response.status === 401 && retryOn401 && !skipAuth) {
+      try {
+        console.log('🔄 401 received, attempting token refresh...');
+        
+        const newToken = await refreshToken();
+        
+        if (newToken) {
+          console.log('✅ Token refreshed, retrying request...');
+          // Retry with new token - wrap in try-catch
+          try {
+            response = await fetch(url, {
+              ...fetchOptions,
+              headers: {
+                ...mergedHeaders,
+                'Authorization': `Bearer ${newToken}`,
+              },
+              credentials: 'include',
+            });
+          } catch (retryError) {
+            // Network error on retry - return original 401 response
+            console.warn('⚠️ Network error on retry after token refresh:', retryError);
+            return response; // Return original 401 response
+          }
+          
+          // If retry still returns 401, token refresh didn't help (maybe different issue)
+          if (response.status === 401) {
+            console.warn('⚠️ Request still returns 401 after token refresh - authentication issue persists');
+            clearAuthTokens();
+            // Don't redirect immediately - let the caller handle the error first
+            // The redirect will happen when the error is shown to the user
+          }
+        } else {
+          console.warn('⚠️ Token refresh failed, clearing auth tokens');
+          clearAuthTokens();
+          // Don't redirect immediately - let the caller handle the error and show message first
+          // The error handler in AppProvider will show the error, then user can manually navigate to login
+        }
+      } catch (refreshError) {
+        // Error during token refresh - return original 401 response
+        console.warn('⚠️ Error during token refresh:', refreshError);
+        return response; // Return original 401 response
+      }
+    }
+
+    return response;
+  } catch (error) {
+    // Catch any unexpected errors and return a safe Response object
+    // This prevents errors from propagating to ErrorBoundary
+    console.error('❌ Unexpected error in authenticatedFetch:', error);
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: 'Request failed', 
+        reason: 'An unexpected error occurred. Please try again.' 
+      }),
+      { 
+        status: 500,
+        statusText: 'Internal Error',
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  }
 };
 
 /**
