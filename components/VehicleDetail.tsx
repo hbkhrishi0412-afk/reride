@@ -311,8 +311,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
           } catch {}
           // Update global vehicles state via context so dashboards reflect the change
           try {
-            // Call asynchronously; ignore errors
-            updateVehicle(vehicleId, { views: data.views }).catch(() => {});
+          // Skip toast notification for view count updates (silent background update)
+            updateVehicle(vehicleId, { views: data.views }, { skipToast: true }).catch(() => {});
           } catch {}
         }
       } catch (_err) {
