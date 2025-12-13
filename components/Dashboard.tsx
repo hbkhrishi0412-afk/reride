@@ -1523,7 +1523,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         let response: Response;
         try {
           // Use authenticatedFetch to include JWT token for production API
-          response = await authenticatedFetch('/api/users');
+          response = await authenticatedFetch('/api/users', { skipAuth: true });
         } catch (fetchError) {
           // Catch network errors, CORS errors, or any other fetch-related errors
           // Don't throw - just silently fail to prevent ErrorBoundary from catching
