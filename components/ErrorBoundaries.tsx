@@ -145,7 +145,22 @@ export const ChatErrorBoundary: React.FC<{ children: ReactNode }> = ({ children 
 export const DashboardErrorBoundary: React.FC<{ children: ReactNode }> = ({ children }) => (
   <ErrorBoundary 
     context="Dashboard"
-    onError={(error) => console.error('Dashboard Error:', error)}
+    onError={(error, errorInfo) => {
+      // Enhanced error logging for production debugging
+      const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
+      console.error('Dashboard Error:', error);
+      if (isProduction) {
+        // Log detailed error information for production debugging
+        console.error('Dashboard Error Details:', {
+          message: error.message,
+          stack: error.stack,
+          componentStack: errorInfo.componentStack,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+          url: window.location.href
+        });
+      }
+    }}
   >
     {children}
   </ErrorBoundary>

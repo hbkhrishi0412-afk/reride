@@ -40,7 +40,25 @@ const LoadingSpinner: React.FC = () => (
 const Home = React.lazy(() => import('./components/Home'));
 const VehicleList = React.lazy(() => import('./components/VehicleList'));
 const VehicleDetail = React.lazy(() => import('./components/VehicleDetail'));
-const Dashboard = React.lazy(() => import('./components/Dashboard'));
+// Enhanced lazy loading with error handling for production
+const Dashboard = React.lazy(() => 
+  import('./components/Dashboard').catch((error) => {
+    // Log the error for debugging in production
+    const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
+    if (isProduction) {
+      console.error('[Production] Failed to load Dashboard component:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      console.error('Failed to load Dashboard component:', error);
+    }
+    // Re-throw to let ErrorBoundary handle it, or return a fallback
+    // React.lazy expects a promise, so we need to return a module-like object
+    throw error; // Let the ErrorBoundary handle it
+  })
+);
 const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 const Comparison = React.lazy(() => import('./components/Comparison'));
 const Profile = React.lazy(() => import('./components/Profile'));
@@ -757,7 +775,8 @@ const AppContent: React.FC = React.memo(() => {
         
         return (
           <DashboardErrorBoundary>
-            <Dashboard
+            <Suspense fallback={<LoadingSpinner />}>
+              <Dashboard
               seller={currentUser}
               sellerVehicles={enrichVehiclesWithSellerInfo(
                 (vehicles || []).filter(v => {
@@ -1107,6 +1126,7 @@ const AppContent: React.FC = React.memo(() => {
               onOfferResponse={onOfferResponse}
               onViewVehicle={selectVehicle}
             />
+            </Suspense>
           </DashboardErrorBoundary>
         );
 
