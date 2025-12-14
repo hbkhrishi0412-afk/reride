@@ -1438,8 +1438,29 @@ const ReportsView: React.FC<{
 
 // Main Dashboard Component
 const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
-  // Production error logging helper
-  const logProductionError = (error: Error | unknown, context: string) => {
+  // Note: onUpdateSellerProfile, onRequestCertification, and onTestDriveResponse are part of the interface contract
+  // but are not currently used in this component. They may be used in future features or passed to child components.
+  void onUpdateSellerProfile;
+  void onRequestCertification;
+  void onTestDriveResponse;
+  
+  // CRITICAL: All hooks must be called before any conditional returns (React Rules of Hooks)
+  // Initialize all state hooks first
+  const [activeView, setActiveView] = useState<DashboardView>('overview');
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  // NEW: Boost listing feature
+  const [showBoostModal, setShowBoostModal] = useState(false);
+  const [vehicleToBoost, setVehicleToBoost] = useState<Vehicle | null>(null);
+  // Pagination state for Active Listings
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  // Month selector state for analytics
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  
+  // Production error logging helper (must be after hooks)
+  const logProductionError = useCallback((error: Error | unknown, context: string) => {
     const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
     if (isProduction) {
       console.error(`[Dashboard Error] ${context}:`, {
@@ -1451,9 +1472,24 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     } else if (process.env.NODE_ENV === 'development') {
       console.warn(`⚠️ ${context}:`, error);
     }
-  };
+  }, [seller?.email]);
 
-  // Guard against missing seller
+  // Safety checks: Ensure arrays are initialized and validate all props (must be after hooks)
+  const safeSellerVehicles = useMemo(() => Array.isArray(sellerVehicles) ? sellerVehicles : [], [sellerVehicles]);
+  const safeConversations = useMemo(() => Array.isArray(conversations) ? conversations : [], [conversations]);
+  const safeReportedVehicles = useMemo(() => Array.isArray(reportedVehicles) ? reportedVehicles : [], [reportedVehicles]);
+  const safeVehicleData = useMemo(() => {
+    const result = vehicleData && typeof vehicleData === 'object' && Object.keys(vehicleData).length > 0 
+      ? vehicleData 
+      : {
+          'four-wheeler': [],
+          'two-wheeler': [],
+          'three-wheeler': []
+        };
+    return result;
+  }, [vehicleData]);
+
+  // Guard against missing seller (AFTER all hooks)
   if (!seller || !seller.email) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -1470,13 +1506,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       </div>
     );
   }
-
-  // Safety checks: Ensure arrays are initialized and validate all props
-  const safeSellerVehicles = Array.isArray(sellerVehicles) ? sellerVehicles : [];
-  const safeConversations = Array.isArray(conversations) ? conversations : [];
-  const safeReportedVehicles = Array.isArray(reportedVehicles) ? reportedVehicles : [];
   
-  // Ensure all callback functions are defined
+  // Ensure all callback functions are defined (AFTER all hooks)
   if (!onAddVehicle || !onUpdateVehicle || !onDeleteVehicle || !onMarkAsSold) {
     console.error('❌ Dashboard: Missing required callback functions');
     return (
@@ -1494,19 +1525,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       </div>
     );
   }
-
-  const [activeView, setActiveView] = useState<DashboardView>('overview');
-  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
-  const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
-  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
-  // NEW: Boost listing feature
-  const [showBoostModal, setShowBoostModal] = useState(false);
-  const [vehicleToBoost, setVehicleToBoost] = useState<Vehicle | null>(null);
-  // Pagination state for Active Listings
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  // Month selector state for analytics
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
   
   // Refresh user data from API to get updated plan expiry date
   // FIXED: Removed window.location.reload() to prevent crashes - now uses localStorage update only
@@ -1538,7 +1556,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         let response: Response;
         try {
           // Use authenticatedFetch to include JWT token for production API
-          response = await authenticatedFetch('/api/users', { skipAuth: true });
+          response = await authenticatedFetch('/api/users');
         } catch (fetchError) {
           // Catch network errors, CORS errors, or any other fetch-related errors
           // Don't throw - just silently fail to prevent ErrorBoundary from catching
@@ -2864,7 +2882,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             onAddVehicle={onAddVehicle} 
             onUpdateVehicle={onUpdateVehicle} 
             onCancel={handleFormCancel} 
-            vehicleData={vehicleData} 
+            vehicleData={safeVehicleData} 
             onFeatureListing={onFeatureListing}
             allVehicles={allVehicles}
         />;

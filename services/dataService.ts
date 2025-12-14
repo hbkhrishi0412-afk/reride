@@ -213,13 +213,20 @@ class DataService {
       if (!Array.isArray(vehicles)) {
         throw new Error('Invalid response format: expected array');
       }
-      // Cache the API data locally for offline use
-      this.setLocalStorageData('reRideVehicles', vehicles);
+      // Cache the API data locally for offline use (use production cache key)
+      this.setLocalStorageData('reRideVehicles_prod', vehicles);
       return vehicles;
     } catch (error) {
-      console.warn('API failed, falling back to local storage:', error);
-      // Always return local data as fallback, even if empty
-      return this.getVehiclesLocal();
+      console.error('❌ Production API failed to load vehicles:', error);
+      // In production, try to use cached API data (not mock data)
+      const cachedVehicles = this.getLocalStorageData<Vehicle[]>('reRideVehicles_prod', []);
+      if (cachedVehicles.length > 0) {
+        console.warn('⚠️ Using cached production data due to API failure');
+        return cachedVehicles;
+      }
+      // If no cached data, return empty array (don't use mock data in production)
+      console.error('❌ No cached production data available, returning empty array');
+      return [];
     }
   }
 
@@ -296,10 +303,16 @@ class DataService {
         body: JSON.stringify(vehicleData),
       });
       
-      // Update local cache
-      const vehicles = await this.getVehiclesLocal();
-      vehicles.unshift(vehicle);
-      this.setLocalStorageData('reRideVehicles', vehicles);
+      // Update local cache (use production cache key in production)
+      if (this.isDevelopment) {
+        const vehicles = await this.getVehiclesLocal();
+        vehicles.unshift(vehicle);
+        this.setLocalStorageData('reRideVehicles', vehicles);
+      } else {
+        const cachedVehicles = this.getLocalStorageData<Vehicle[]>('reRideVehicles_prod', []);
+        cachedVehicles.unshift(vehicle);
+        this.setLocalStorageData('reRideVehicles_prod', cachedVehicles);
+      }
       
       return vehicle;
     } catch (error) {
@@ -326,10 +339,16 @@ class DataService {
         body: JSON.stringify(vehicleData),
       });
       
-      // Update local cache
-      const vehicles = await this.getVehiclesLocal();
-      const updatedVehicles = vehicles.map(v => v.id === vehicleData.id ? vehicle : v);
-      this.setLocalStorageData('reRideVehicles', updatedVehicles);
+      // Update local cache (use production cache key in production)
+      if (this.isDevelopment) {
+        const vehicles = await this.getVehiclesLocal();
+        const updatedVehicles = vehicles.map(v => v.id === vehicleData.id ? vehicle : v);
+        this.setLocalStorageData('reRideVehicles', updatedVehicles);
+      } else {
+        const cachedVehicles = this.getLocalStorageData<Vehicle[]>('reRideVehicles_prod', []);
+        const updatedVehicles = cachedVehicles.map(v => v.id === vehicleData.id ? vehicle : v);
+        this.setLocalStorageData('reRideVehicles_prod', updatedVehicles);
+      }
       
       return vehicle;
     } catch (error) {
@@ -356,10 +375,16 @@ class DataService {
         body: JSON.stringify({ id: vehicleId }),
       });
       
-      // Update local cache
-      const vehicles = await this.getVehiclesLocal();
-      const filteredVehicles = vehicles.filter(v => v.id !== vehicleId);
-      this.setLocalStorageData('reRideVehicles', filteredVehicles);
+      // Update local cache (use production cache key in production)
+      if (this.isDevelopment) {
+        const vehicles = await this.getVehiclesLocal();
+        const filteredVehicles = vehicles.filter(v => v.id !== vehicleId);
+        this.setLocalStorageData('reRideVehicles', filteredVehicles);
+      } else {
+        const cachedVehicles = this.getLocalStorageData<Vehicle[]>('reRideVehicles_prod', []);
+        const filteredVehicles = cachedVehicles.filter(v => v.id !== vehicleId);
+        this.setLocalStorageData('reRideVehicles_prod', filteredVehicles);
+      }
       
       return result;
     } catch (error) {
@@ -387,12 +412,20 @@ class DataService {
       if (!Array.isArray(users)) {
         throw new Error('Invalid response format: expected array');
       }
-      this.setLocalStorageData('reRideUsers', users);
+      // Cache the API data locally for offline use (use production cache key)
+      this.setLocalStorageData('reRideUsers_prod', users);
       return users;
     } catch (error) {
-      console.warn('API failed, falling back to local storage:', error);
-      // Always return local data as fallback, even if empty
-      return this.getUsersLocal();
+      console.error('❌ Production API failed to load users:', error);
+      // In production, try to use cached API data (not mock data)
+      const cachedUsers = this.getLocalStorageData<User[]>('reRideUsers_prod', []);
+      if (cachedUsers.length > 0) {
+        console.warn('⚠️ Using cached production data due to API failure');
+        return cachedUsers;
+      }
+      // If no cached data, return empty array (don't use mock data in production)
+      console.error('❌ No cached production data available, returning empty array');
+      return [];
     }
   }
 
@@ -489,10 +522,16 @@ class DataService {
       });
       
       if (result.success && result.user) {
-        // Update local cache
-        const users = await this.getUsersLocal();
-        users.push(result.user as User);
-        this.setLocalStorageData('reRideUsers', users);
+        // Update local cache (use production cache key in production)
+        if (this.isDevelopment) {
+          const users = await this.getUsersLocal();
+          users.push(result.user as User);
+          this.setLocalStorageData('reRideUsers', users);
+        } else {
+          const cachedUsers = this.getLocalStorageData<User[]>('reRideUsers_prod', []);
+          cachedUsers.push(result.user as User);
+          this.setLocalStorageData('reRideUsers_prod', cachedUsers);
+        }
         
         // Store user session
         localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
@@ -624,21 +663,23 @@ class DataService {
     }
 
     try {
-      // Sync vehicles
-      const localVehicles = this.getLocalStorageData<Vehicle[]>('reRideVehicles', []);
+      // Sync vehicles (use production cache key)
+      const cacheKey = this.isDevelopment ? 'reRideVehicles' : 'reRideVehicles_prod';
+      const localVehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
       if (localVehicles.length > 0) {
         const apiVehicles = await this.makeApiRequest<Vehicle[]>('/vehicles');
         // Merge local changes with API data
         const mergedVehicles = this.mergeVehicleData(localVehicles, apiVehicles);
-        this.setLocalStorageData('reRideVehicles', mergedVehicles);
+        this.setLocalStorageData(cacheKey, mergedVehicles);
       }
 
-      // Sync users
-      const localUsers = this.getLocalStorageData<User[]>('reRideUsers', []);
+      // Sync users (use production cache key)
+      const usersCacheKey = this.isDevelopment ? 'reRideUsers' : 'reRideUsers_prod';
+      const localUsers = this.getLocalStorageData<User[]>(usersCacheKey, []);
       if (localUsers.length > 0) {
         const apiUsers = await this.makeApiRequest<User[]>('/users');
         const mergedUsers = this.mergeUserData(localUsers, apiUsers);
-        this.setLocalStorageData('reRideUsers', mergedUsers);
+        this.setLocalStorageData(usersCacheKey, mergedUsers);
       }
     } catch (error) {
       console.warn('Failed to sync data:', error);

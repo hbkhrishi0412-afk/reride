@@ -303,11 +303,31 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
         console.log('getVehicles: Trying API...');
         const result = await getVehiclesApi();
         console.log('getVehicles: API success, loaded', result.length, 'vehicles');
+        // Cache production data (not mock data)
+        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+          localStorage.setItem('reRideVehicles_prod', JSON.stringify(result));
+        }
         return result;
       } catch (error) {
-        console.warn('getVehicles: API failed, falling back to local storage:', error);
-        // Fallback to local storage if API fails
-        return await getVehiclesLocal();
+        console.error('❌ getVehicles: Production API failed:', error);
+        // In production, try to use cached API data (not mock data)
+        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+          try {
+            const cachedVehiclesJson = localStorage.getItem('reRideVehicles_prod');
+            if (cachedVehiclesJson) {
+              const cachedVehicles = JSON.parse(cachedVehiclesJson);
+              if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
+                console.warn('⚠️ getVehicles: Using cached production data due to API failure');
+                return cachedVehicles;
+              }
+            }
+          } catch (cacheError) {
+            console.error('Failed to load cached production data:', cacheError);
+          }
+        }
+        // If no cached data, return empty array (don't use mock data in production)
+        console.error('❌ getVehicles: No cached production data available, returning empty array');
+        return [];
       }
     } else {
       // Development mode - use local storage
@@ -315,8 +335,12 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
       return await getVehiclesLocal();
     }
   } catch (error) {
-    console.error('getVehicles: Critical error, returning fallback:', error);
-    // Last resort fallback
+    console.error('getVehicles: Critical error:', error);
+    // In production, return empty array instead of fallback vehicles
+    if (!isDevelopment()) {
+      return [];
+    }
+    // Last resort fallback only in development
     return FALLBACK_VEHICLES;
   }
 };

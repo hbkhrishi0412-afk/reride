@@ -9,8 +9,6 @@ import {
   AdminPanelErrorBoundary
 } from './components/ErrorBoundaries';
 import Header from './components/Header';
-import MobileHeader from './components/MobileHeader';
-import MobileBottomNav from './components/MobileBottomNav';
 import MobileDashboard from './components/MobileDashboard';
 import MobileSearch from './components/MobileSearch';
 import MobileLayout from './components/MobileLayout';
@@ -23,7 +21,6 @@ import useIsMobileApp from './hooks/useIsMobileApp';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage } from './types';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
-import { isDevelopmentEnvironment } from './utils/environment';
 import { resetViewportZoom } from './utils/viewportZoom';
 
 // Simple loading component
@@ -41,24 +38,41 @@ const Home = React.lazy(() => import('./components/Home'));
 const VehicleList = React.lazy(() => import('./components/VehicleList'));
 const VehicleDetail = React.lazy(() => import('./components/VehicleDetail'));
 // Enhanced lazy loading with error handling for production
-const Dashboard = React.lazy(() => 
-  import('./components/Dashboard').catch((error) => {
+const Dashboard = React.lazy(() => {
+  return import('./components/Dashboard').then(module => {
+    return module;
+  }).catch((error) => {
     // Log the error for debugging in production
     const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
     if (isProduction) {
       console.error('[Production] Failed to load Dashboard component:', {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        url: window.location.href
       });
     } else {
       console.error('Failed to load Dashboard component:', error);
     }
-    // Re-throw to let ErrorBoundary handle it, or return a fallback
-    // React.lazy expects a promise, so we need to return a module-like object
-    throw error; // Let the ErrorBoundary handle it
-  })
-);
+    // Return a fallback component module instead of throwing
+    return {
+      default: () => (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Failed to Load Dashboard</h2>
+            <p className="text-gray-600 mb-6">There was an error loading the dashboard. Please refresh the page.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      )
+    };
+  });
+});
 const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 const Comparison = React.lazy(() => import('./components/Comparison'));
 const Profile = React.lazy(() => import('./components/Profile'));
@@ -379,7 +393,9 @@ const AppContent: React.FC = React.memo(() => {
       const params = new URLSearchParams(window.location.search);
       const sellerParam = params.get('seller');
       if (sellerParam) {
-        const seller = users.find(u => u.email.toLowerCase() === sellerParam.toLowerCase());
+        const seller = users.find(u => {
+          return u && u.email && u.email.toLowerCase() === sellerParam.toLowerCase();
+        });
         if (seller) {
           setPublicProfile(seller);
           navigate(ViewEnum.SELLER_PROFILE);
@@ -388,7 +404,7 @@ const AppContent: React.FC = React.memo(() => {
     } catch (e) {
       console.warn('Failed to process deep link params', e);
     }
-  }, [users]);
+  }, [users, navigate, setPublicProfile]);
 
 
   // Memoize renderView to prevent unnecessary re-renders
@@ -562,7 +578,6 @@ const AppContent: React.FC = React.memo(() => {
                   isReadByCustomer: true,
                   isFlagged: false
                 };
-                
                 // Add to conversations
                 setConversations([...conversations, newConversation]);
                 
@@ -773,16 +788,17 @@ const AppContent: React.FC = React.memo(() => {
           );
         }
         
+        const sellerVehiclesFiltered = (vehicles || []).filter(v => {
+          if (!v || !v.sellerEmail || !currentUser?.email) return false;
+          return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+        });
         return (
           <DashboardErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
               <Dashboard
               seller={currentUser}
               sellerVehicles={enrichVehiclesWithSellerInfo(
-                (vehicles || []).filter(v => {
-                  if (!v || !v.sellerEmail || !currentUser?.email) return false;
-                  return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-                }), 
+                sellerVehiclesFiltered, 
                 users || []
               )}
               reportedVehicles={[]}
@@ -1608,7 +1624,7 @@ const AppContent: React.FC = React.memo(() => {
         }
       }
     }
-  }, [conversations, currentUser, navigate, setActiveChat]);
+  }, [conversations, currentUser, navigate, setActiveChat, setConversations]);
 
   const persistNotifications = React.useCallback((updated: Notification[]) => {
     try {
@@ -1929,11 +1945,14 @@ const AppContent: React.FC = React.memo(() => {
               <ChatWidget
                 conversation={activeChat}
                 currentUserRole={currentUser.role as 'customer' | 'seller'}
-                otherUserName={currentUser?.role === 'customer' ? 
-                  (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
-                   users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
-                   'Seller') : 
-                  activeChat.customerName}
+                otherUserName={(() => {
+                  if (currentUser?.role === 'customer') {
+                    const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
+                    return seller?.name || seller?.dealershipName || 'Seller';
+                  } else {
+                    return activeChat.customerName;
+                  }
+                })()}
                 onClose={() => setActiveChat(null)}
                 onSendMessage={(messageText, _type, _payload) => {
                   sendMessage(activeChat.id, messageText);
@@ -2005,11 +2024,14 @@ const AppContent: React.FC = React.memo(() => {
             <ChatWidget
               conversation={activeChat}
               currentUserRole={currentUser.role as 'customer' | 'seller'}
-              otherUserName={currentUser?.role === 'customer' ? 
-                (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
-                 users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
-                 'Seller') : 
-                activeChat.customerName}
+              otherUserName={(() => {
+                if (currentUser?.role === 'customer') {
+                  const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
+                  return seller?.name || seller?.dealershipName || 'Seller';
+                } else {
+                  return activeChat.customerName;
+                }
+              })()}
               onClose={() => setActiveChat(null)}
               onSendMessage={(messageText, _type, _payload) => {
                 sendMessage(activeChat.id, messageText);

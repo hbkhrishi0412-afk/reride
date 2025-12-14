@@ -614,15 +614,31 @@ export const getUsers = async (): Promise<User[]> => {
         console.log('getUsers: Trying API...');
         const result = await getUsersApi();
         console.log('getUsers: API success, loaded', result.length, 'users');
+        // Cache production data (not mock data)
+        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+          localStorage.setItem('reRideUsers_prod', JSON.stringify(result));
+        }
         return result;
       } catch (error) {
-        console.warn('getUsers: API failed, falling back to local storage:', error);
-        // Show user-friendly notification for API failures
-        if (error instanceof Error && error.message.includes('API Error: 5')) {
-          console.info('getUsers: Using cached data due to server issues');
+        console.error('❌ getUsers: Production API failed:', error);
+        // In production, try to use cached API data (not mock data)
+        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+          try {
+            const cachedUsersJson = localStorage.getItem('reRideUsers_prod');
+            if (cachedUsersJson) {
+              const cachedUsers = JSON.parse(cachedUsersJson);
+              if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
+                console.warn('⚠️ getUsers: Using cached production data due to API failure');
+                return cachedUsers;
+              }
+            }
+          } catch (cacheError) {
+            console.error('Failed to load cached production data:', cacheError);
+          }
         }
-        // Fallback to local storage if API fails
-        return await getUsersLocal();
+        // If no cached data, return empty array (don't use mock data in production)
+        console.error('❌ getUsers: No cached production data available, returning empty array');
+        return [];
       }
     } else {
       // Development mode - use local storage
@@ -630,8 +646,12 @@ export const getUsers = async (): Promise<User[]> => {
       return await getUsersLocal();
     }
   } catch (error) {
-    console.error('getUsers: Critical error, returning FALLBACK_USERS:', error);
-    // Last resort fallback
+    console.error('getUsers: Critical error:', error);
+    // In production, return empty array instead of fallback users
+    if (!isDevelopment) {
+      return [];
+    }
+    // Last resort fallback only in development
     return FALLBACK_USERS;
   }
 };
