@@ -191,3 +191,6 @@ After seeding the database, you can use:
 - **Seller:** `seller@test.com` / `password`
 - **Customer:** `customer@test.com` / `password`
 
+
+
+
