@@ -322,9 +322,11 @@ class DataService {
   }
 
   private async addVehicleLocal(vehicleData: Vehicle): Promise<Vehicle> {
-    const vehicles = await this.getVehiclesLocal();
+    // Use production cache key in production, dev key in development
+    const cacheKey = this.isDevelopment ? 'reRideVehicles' : 'reRideVehicles_prod';
+    const vehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
     vehicles.unshift(vehicleData);
-    this.setLocalStorageData('reRideVehicles', vehicles);
+    this.setLocalStorageData(cacheKey, vehicles);
     return vehicleData;
   }
 
@@ -358,9 +360,11 @@ class DataService {
   }
 
   private async updateVehicleLocal(vehicleData: Vehicle): Promise<Vehicle> {
-    const vehicles = await this.getVehiclesLocal();
+    // Use production cache key in production, dev key in development
+    const cacheKey = this.isDevelopment ? 'reRideVehicles' : 'reRideVehicles_prod';
+    const vehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
     const updatedVehicles = vehicles.map(v => v.id === vehicleData.id ? vehicleData : v);
-    this.setLocalStorageData('reRideVehicles', updatedVehicles);
+    this.setLocalStorageData(cacheKey, updatedVehicles);
     return vehicleData;
   }
 
@@ -394,9 +398,11 @@ class DataService {
   }
 
   private async deleteVehicleLocal(vehicleId: number): Promise<{ success: boolean, id: number }> {
-    const vehicles = await this.getVehiclesLocal();
+    // Use production cache key in production, dev key in development
+    const cacheKey = this.isDevelopment ? 'reRideVehicles' : 'reRideVehicles_prod';
+    const vehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
     const filteredVehicles = vehicles.filter(v => v.id !== vehicleId);
-    this.setLocalStorageData('reRideVehicles', filteredVehicles);
+    this.setLocalStorageData(cacheKey, filteredVehicles);
     return { success: true, id: vehicleId };
   }
 
