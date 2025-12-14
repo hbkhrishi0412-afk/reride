@@ -1437,7 +1437,22 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
+  // Production error logging helper
+  const logProductionError = (error: Error | unknown, context: string) => {
+    const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
+    if (isProduction) {
+      console.error(`[Dashboard Error] ${context}:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        sellerEmail: seller?.email,
+        timestamp: new Date().toISOString()
+      });
+    } else if (process.env.NODE_ENV === 'development') {
+      console.warn(`⚠️ ${context}:`, error);
+    }
+  };
+
   // Guard against missing seller
   if (!seller || !seller.email) {
     return (
@@ -1625,14 +1640,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           }
         }
       } catch (error) {
-        // Catch any unexpected errors - prevent them from propagating to ErrorBoundary
-        // Silently fail - don't disrupt user experience
-        // Only log in development to avoid console noise in production
-        if (process.env.NODE_ENV === 'development' && isMounted) {
-          console.warn('⚠️ Failed to refresh user data:', error);
+        // Log errors in production for debugging
+        if (isMounted) {
+          logProductionError(error, 'Failed to refresh user data');
         }
-        // Ensure error doesn't propagate - return early
-        return;
+        // Don't throw - silently fail to prevent dashboard crash
       }
     };
 
@@ -1713,21 +1725,15 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 console.log('✅ Vehicle data refreshed when opening form');
               }
             } catch (storageError) {
-              // Silently handle storage errors - don't crash the component
-              if (process.env.NODE_ENV === 'development') {
-                console.warn('⚠️ Failed to save vehicle data to localStorage:', storageError);
-              }
+              // Log storage errors but don't crash
+              logProductionError(storageError, 'Failed to save vehicle data to localStorage');
             }
           } else {
-            if (process.env.NODE_ENV === 'development') {
-              console.warn('⚠️ Vehicle data refresh returned invalid data');
-            }
+            logProductionError(new Error('Invalid vehicle data structure'), 'Vehicle data refresh returned invalid data');
           }
         } catch (error) {
-          // Silently handle errors to prevent dashboard crashes
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ Failed to refresh vehicle data when opening form:', error);
-          }
+          // Log errors but don't crash the dashboard
+          logProductionError(error, 'Failed to refresh vehicle data when opening form');
         }
       };
       refreshVehicleData();
