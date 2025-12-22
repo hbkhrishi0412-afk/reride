@@ -1556,8 +1556,10 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         let response: Response;
         try {
           // Use authenticatedFetch to include JWT token for production API
-          // skipAuth: true allows refreshing user data without token renewal
-          response = await authenticatedFetch('/api/users', { skipAuth: true });
+          // Include token if available (user is logged in, so token should exist)
+          // This prevents 401 errors from middleware/proxy layers in production
+          // GET /api/users doesn't validate the token, but including it prevents proxy rejection
+          response = await authenticatedFetch('/api/users');
         } catch (fetchError) {
           // Catch network errors, CORS errors, or any other fetch-related errors
           // Don't throw - just silently fail to prevent ErrorBoundary from catching
