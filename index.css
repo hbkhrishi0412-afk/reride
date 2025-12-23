@@ -514,6 +514,9 @@ input:invalid::-webkit-validation-bubble {
   overflow: hidden;
   background: linear-gradient(180deg, #FAFAFA 0%, #FFFFFF 100%);
   position: relative;
+  transform: translateZ(0); /* Hardware acceleration */
+  -webkit-transform: translateZ(0);
+  will-change: transform;
 }
 
 .native-app::before {
@@ -630,6 +633,12 @@ input, textarea, select {
   -ms-overflow-style: none;
   overscroll-behavior: contain;
   will-change: scroll-position;
+  transform: translateZ(0); /* Hardware acceleration */
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 1000px;
+  -webkit-perspective: 1000px;
 }
 
 .native-scroll::-webkit-scrollbar {

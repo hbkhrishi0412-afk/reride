@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 
@@ -13,15 +13,16 @@ interface MobileBottomNavProps {
 /**
  * Mobile Bottom Navigation - Native app style navigation
  * Fixed at bottom, compact icons, active state indicators
+ * Optimized with React.memo and useMemo for performance
  */
-const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
+const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
   currentView,
   onNavigate,
   currentUser,
   wishlistCount = 0,
   inboxCount = 0
 }) => {
-  const navItems = [
+  const navItems = useMemo(() => [
     {
       id: 'home',
       label: 'Home',
@@ -78,7 +79,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         </svg>
       )
     }
-  ];
+  ], [currentUser, wishlistCount, inboxCount]);
 
   return (
     <>
@@ -167,7 +168,9 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       </nav>
     </>
   );
-};
+});
+
+MobileBottomNav.displayName = 'MobileBottomNav';
 
 export default MobileBottomNav;
 

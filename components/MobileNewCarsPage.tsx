@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { NEW_CARS_DATA, NewCarModel } from '../data/newCarsData';
 import { getSafeImageSrc } from '../utils/imageUtils';
 
@@ -13,13 +13,13 @@ interface MobileNewCarsPageProps {
  * - Touch-friendly filters
  * - Expandable variant details
  */
-export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCar }) => {
+export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = React.memo(({ onSelectCar }) => {
   const [selectedState, setSelectedState] = useState('Maharashtra');
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedBodyType, setSelectedBodyType] = useState<string>('');
   const [expandedCars, setExpandedCars] = useState<Set<number>>(new Set());
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = useCallback((value: number) => {
     if (value === Infinity || !value) return 'Price not available';
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -27,7 +27,7 @@ export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCa
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
-  };
+  }, []);
 
   const filteredCars = useMemo(() => {
     let filtered = NEW_CARS_DATA;
@@ -51,7 +51,7 @@ export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCa
     return Array.from(new Set(NEW_CARS_DATA.map(car => car.body_type))).sort();
   }, []);
 
-  const toggleCarExpansion = (carId: number) => {
+  const toggleCarExpansion = useCallback((carId: number) => {
     setExpandedCars(prev => {
       const newSet = new Set(prev);
       if (newSet.has(carId)) {
@@ -61,7 +61,11 @@ export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCa
       }
       return newSet;
     });
-  };
+  }, []);
+
+  const handleVariantClick = useCallback((car: NewCarModel) => {
+    onSelectCar?.(car);
+  }, [onSelectCar]);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -166,7 +170,7 @@ export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCa
                         {car.variants.map((variant, idx) => (
                           <button
                             key={idx}
-                            onClick={() => onSelectCar?.(car)}
+                            onClick={() => handleVariantClick(car)}
                             className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
                           >
                             <div className="flex-1">
@@ -191,7 +195,9 @@ export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCa
       </div>
     </div>
   );
-};
+});
+
+MobileNewCarsPage.displayName = 'MobileNewCarsPage';
 
 export default MobileNewCarsPage;
 

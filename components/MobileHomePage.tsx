@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Vehicle, VehicleCategory } from '../types';
 import { View as ViewEnum } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
@@ -29,7 +29,7 @@ interface MobileHomePageProps {
  * - Pull-to-refresh ready
  * - Optimized for mobile performance
  */
-export const MobileHomePage: React.FC<MobileHomePageProps> = ({
+export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   onSearch,
   onSelectCategory,
   featuredVehicles,
@@ -47,55 +47,69 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = ({
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
 
-  const cities = [
+  // Memoize static data to prevent recreation on every render
+  const cities = useMemo(() => [
     { name: 'Delhi NCR', abbr: 'DN', count: 0 },
     { name: 'Hyderabad', abbr: 'HY', count: 0 },
     { name: 'Bangalore', abbr: 'BA', count: 0 },
     { name: 'Pune', abbr: 'PU', count: 0 },
     { name: 'Mumbai', abbr: 'MU', count: 0 },
-  ];
+  ], []);
 
-  const categories = [
+  const categories = useMemo(() => [
     { name: 'Four Wheeler', icon: '🚗', id: 'four_wheeler' as VehicleCategory },
     { name: 'Two Wheeler', icon: '🏍️', id: 'two_wheeler' as VehicleCategory },
     { name: 'Three Wheeler', icon: '🛺', id: 'three_wheeler' as VehicleCategory },
     { name: 'Commercial', icon: '🚚', id: 'commercial' as VehicleCategory },
     { name: 'Farm', icon: '🚜', id: 'farm' as VehicleCategory },
-  ];
+  ], []);
 
-  // Track carousel scroll position
+  // Track carousel scroll position with throttling for performance
   useEffect(() => {
     const carousel = carouselRef.current;
     if (!carousel) return;
 
+    let ticking = false;
     const handleScroll = () => {
-      const scrollLeft = carousel.scrollLeft;
-      const itemWidth = carousel.clientWidth;
-      const currentIndex = Math.round(scrollLeft / itemWidth);
-      setCarouselIndex(currentIndex);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollLeft = carousel.scrollLeft;
+          const itemWidth = carousel.clientWidth;
+          const currentIndex = Math.round(scrollLeft / itemWidth);
+          setCarouselIndex(currentIndex);
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
 
-    carousel.addEventListener('scroll', handleScroll);
+    carousel.addEventListener('scroll', handleScroll, { passive: true });
     return () => carousel.removeEventListener('scroll', handleScroll);
   }, [featuredVehicles.length]);
 
-  const handleSearch = () => {
+  const handleSearch = useCallback(() => {
     if (searchQuery.trim()) {
       onSearch(searchQuery);
       onNavigate(ViewEnum.USED_CARS);
     } else {
       onNavigate(ViewEnum.USED_CARS);
     }
-  };
+  }, [searchQuery, onSearch, onNavigate]);
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = useCallback((value: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
-  };
+  }, []);
+
+  // Memoize featured vehicles slice to prevent unnecessary re-renders
+  const displayedFeaturedVehicles = useMemo(
+    () => featuredVehicles.slice(0, 4),
+    [featuredVehicles]
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -192,7 +206,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = ({
             className="flex overflow-x-auto snap-x snap-mandatory gap-4 -mx-4 px-4"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
           >
-            {featuredVehicles.slice(0, 4).map((vehicle) => (
+            {displayedFeaturedVehicles.map((vehicle) => (
               <div
                 key={vehicle.id}
                 className="flex-shrink-0 w-[calc(100%-2rem)] snap-center"
@@ -253,9 +267,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = ({
           </div>
 
           {/* Carousel Indicators */}
-          {featuredVehicles.length > 1 && (
+          {displayedFeaturedVehicles.length > 1 && (
             <div className="flex items-center justify-center gap-2 mt-4">
-              {featuredVehicles.slice(0, 4).map((_, idx) => (
+              {displayedFeaturedVehicles.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => {
@@ -369,7 +383,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = ({
       </div>
     </div>
   );
-};
+});
+
+MobileHomePage.displayName = 'MobileHomePage';
 
 export default MobileHomePage;
 
