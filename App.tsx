@@ -2814,81 +2814,80 @@ const AppContent: React.FC = React.memo(() => {
         onNavigate={navigate}
       />
       <OfflineIndicator />
-    <div className="min-h-screen bg-gray-50">
-      <main id="main-content" tabIndex={-1}>
-      <Header 
-        onNavigate={navigate}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        compareCount={comparisonList.length}
-        wishlistCount={wishlist.length}
-        inboxCount={conversations.filter(c => !c.isReadByCustomer).length}
-        notifications={notifications.filter(n => n.recipientEmail === currentUser?.email)}
-        onNotificationClick={handleNotificationClick}
-        onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
-        onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
-        onOpenCommandPalette={handleOpenCommandPalette}
-        userLocation={userLocation}
-        onLocationChange={setUserLocation}
-        addToast={addToast}
-        allVehicles={vehicles}
-      />
-      <main className="min-h-[calc(100vh-140px)]">
-        <ErrorBoundary>
-          <Suspense fallback={<LoadingSpinner />}>
-            <PageTransition currentView={currentView}>
-              {renderView()}
-            </PageTransition>
-          </Suspense>
-        </ErrorBoundary>
-      </main>
-      <Footer onNavigate={navigate} />
-      
-      {/* Desktop Global Components */}
-      <PWAInstallPrompt />
-      <ToastContainer 
-        toasts={toasts} 
-        onRemove={removeToast} 
-      />
-      <CommandPalette 
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        onNavigate={navigate}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-      />
-      {currentUser && activeChat && (
-        <ChatWidget
-          conversation={activeChat}
-          currentUserRole={currentUser.role as 'customer' | 'seller'}
-          otherUserName={currentUser?.role === 'customer' ? 
-            (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
-             users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
-             'Seller') : 
-            activeChat.customerName}
-          onClose={() => setActiveChat(null)}
-          onSendMessage={(messageText, _type, _payload) => {
-            sendMessage(activeChat.id, messageText);
-          }}
-          typingStatus={typingStatus}
-          onUserTyping={(conversationId, _userRole) => {
-            toggleTyping(conversationId, true);
-          }}
-          onMarkMessagesAsRead={(conversationId, _readerRole) => {
-            markAsRead(conversationId);
-          }}
-          onFlagContent={(type, id, _reason) => {
-            flagContent(type, id);
-          }}
-          onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-            console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
-            onOfferResponse(conversationId, messageId, response, counterPrice);
-            addToast(`Offer ${response}`, 'success');
-          }}
+      <div className="min-h-screen bg-gray-50">
+        <Header 
+          onNavigate={navigate}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          compareCount={comparisonList.length}
+          wishlistCount={wishlist.length}
+          inboxCount={conversations.filter(c => !c.isReadByCustomer).length}
+          notifications={notifications.filter(n => n.recipientEmail === currentUser?.email)}
+          onNotificationClick={handleNotificationClick}
+          onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+          onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
+          onOpenCommandPalette={handleOpenCommandPalette}
+          userLocation={userLocation}
+          onLocationChange={setUserLocation}
+          addToast={addToast}
+          allVehicles={vehicles}
         />
-      )}
-      </main>
-    </div>
+        <main id="main-content" className="min-h-[calc(100vh-140px)]" tabIndex={-1}>
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingSpinner />}>
+              <PageTransition currentView={currentView}>
+                {renderView()}
+              </PageTransition>
+            </Suspense>
+          </ErrorBoundary>
+        </main>
+        <Footer onNavigate={navigate} />
+        
+        {/* Desktop Global Components */}
+        <PWAInstallPrompt />
+        <ToastContainer 
+          toasts={toasts} 
+          onRemove={removeToast} 
+        />
+        <CommandPalette 
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigate={navigate}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+        />
+        {currentUser && activeChat && (
+          <ChatWidget
+            conversation={activeChat}
+            currentUserRole={currentUser.role as 'customer' | 'seller'}
+            otherUserName={currentUser?.role === 'customer' ? 
+              (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
+               users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
+               'Seller') : 
+              activeChat.customerName}
+            onClose={() => setActiveChat(null)}
+            onSendMessage={(messageText, _type, _payload) => {
+              sendMessage(activeChat.id, messageText);
+            }}
+            typingStatus={typingStatus}
+            onUserTyping={(conversationId, _userRole) => {
+              toggleTyping(conversationId, true);
+            }}
+            onMarkMessagesAsRead={(conversationId, _readerRole) => {
+              markAsRead(conversationId);
+            }}
+            onFlagContent={(type, id, _reason) => {
+              flagContent(type, id);
+            }}
+            onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+              console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+              onOfferResponse(conversationId, messageId, response, counterPrice);
+              addToast(`Offer ${response}`, 'success');
+            }}
+          />
+        )}
+      </div>
+    </>
   );
 });
 

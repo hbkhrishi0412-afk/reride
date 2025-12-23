@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import type { Vehicle } from '../types';
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import LazyImage from './LazyImage';
@@ -16,8 +16,9 @@ interface MobileVehicleCardProps {
 /**
  * Mobile-Optimized Vehicle Card
  * Designed specifically for mobile app with touch-friendly interactions
+ * Optimized with React.memo for performance
  */
-export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = ({
+export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   vehicle,
   onSelect,
   onToggleWishlist,
@@ -26,21 +27,26 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = ({
   isInCompare = false,
   showActions = true
 }) => {
-  const handleWishlistClick = (e: React.MouseEvent) => {
+  const handleWishlistClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (onToggleWishlist) {
       onToggleWishlist(vehicle.id);
     }
-  };
+  }, [onToggleWishlist, vehicle.id]);
 
-  const handleCompareClick = (e: React.MouseEvent) => {
+  const handleCompareClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (onToggleCompare) {
       onToggleCompare(vehicle.id);
     }
-  };
+  }, [onToggleCompare, vehicle.id]);
 
-  const formatPrice = (price: number) => {
+  const handleSelect = useCallback(() => {
+    onSelect(vehicle);
+  }, [onSelect, vehicle]);
+
+  const formattedPrice = useMemo(() => {
+    const price = vehicle.price;
     if (price >= 10000000) {
       return `₹${(price / 10000000).toFixed(2)}Cr`;
     } else if (price >= 100000) {
@@ -48,11 +54,13 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = ({
     } else {
       return `₹${price.toLocaleString('en-IN')}`;
     }
-  };
+  }, [vehicle.price]);
+
+  const imageSrc = useMemo(() => getFirstValidImage(vehicle.images), [vehicle.images]);
 
   return (
     <div
-      onClick={() => onSelect(vehicle)}
+      onClick={handleSelect}
       className="cursor-pointer"
       style={{
         background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%)',
@@ -75,7 +83,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = ({
       {/* Image Section */}
       <div className="relative w-full" style={{ aspectRatio: '16/10' }}>
         <LazyImage
-          src={getFirstValidImage(vehicle.images)}
+          src={imageSrc}
           alt={`${vehicle.make} ${vehicle.model}`}
           className="w-full h-full object-cover"
           width={800}
@@ -159,7 +167,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = ({
             }}
           >
             <span className="text-sm font-bold text-white tracking-tight" style={{ letterSpacing: '-0.01em' }}>
-              {formatPrice(vehicle.price)}
+              {formattedPrice}
             </span>
           </div>
         </div>
@@ -222,7 +230,9 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = ({
       </div>
     </div>
   );
-};
+});
+
+MobileVehicleCard.displayName = 'MobileVehicleCard';
 
 export default MobileVehicleCard;
 
