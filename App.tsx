@@ -18,6 +18,24 @@ import CommandPalette from './components/CommandPalette';
 import { ChatWidget } from './components/ChatWidget';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
+// Mobile components
+import MobileVehicleDetail from './components/MobileVehicleDetail';
+import MobileInbox from './components/MobileInbox';
+import MobileProfile from './components/MobileProfile';
+import MobileWishlist from './components/MobileWishlist';
+import MobileComparison from './components/MobileComparison';
+import MobileNotifications from './components/MobileNotifications';
+import MobileSellerProfilePage from './components/MobileSellerProfilePage';
+import MobileSellCarPage from './components/MobileSellCarPage';
+import MobileNewCarsPage from './components/MobileNewCarsPage';
+import MobilePricingPage from './components/MobilePricingPage';
+import MobileSupportPage from './components/MobileSupportPage';
+import MobileFAQPage from './components/MobileFAQPage';
+import MobileBuyerDashboard from './components/MobileBuyerDashboard';
+import MobileRentalPage from './components/MobileRentalPage';
+import MobileDealerProfilesPage from './components/MobileDealerProfilesPage';
+import MobileCityLandingPage from './components/MobileCityLandingPage';
+import MobileHomePage from './components/MobileHomePage';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage } from './types';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
@@ -411,6 +429,53 @@ const AppContent: React.FC = React.memo(() => {
   const renderView = React.useCallback(() => {
     switch (currentView) {
       case ViewEnum.HOME:
+        if (isMobileApp) {
+          return (
+            <MobileHomePage
+              onSearch={(query) => {
+                setInitialSearchQuery(query);
+                navigate(ViewEnum.USED_CARS);
+              }}
+              onSelectCategory={(category) => {
+                setSelectedCategory(category);
+                navigate(ViewEnum.USED_CARS);
+              }}
+              featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4)}
+              onSelectVehicle={selectVehicle}
+              onToggleCompare={(id) => {
+                setComparisonList(prev => 
+                  prev.includes(id) 
+                    ? prev.filter(vId => vId !== id)
+                    : [...prev, id]
+                );
+              }}
+              comparisonList={comparisonList}
+              onToggleWishlist={(id) => {
+                setWishlist(prev => 
+                  prev.includes(id) 
+                    ? prev.filter(vId => vId !== id)
+                    : [...prev, id]
+                );
+              }}
+              wishlist={wishlist}
+              onViewSellerProfile={(sellerEmail) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+              recommendations={recommendations}
+              allVehicles={vehicles.filter(v => v.status === 'published')}
+              onNavigate={navigate}
+              onSelectCity={(city) => {
+                setSelectedCity(city);
+                navigate(ViewEnum.USED_CARS);
+              }}
+            />
+          );
+        }
         return (
           <Home 
             onSearch={(query) => {
@@ -525,7 +590,95 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.DETAIL:
-        return selectedVehicle ? (
+        if (!selectedVehicle) {
+          return (
+            <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-600 mb-4">Vehicle Not Found</h2>
+                <p className="text-gray-500 mb-4">Please select a vehicle to view details.</p>
+                <button 
+                  onClick={() => navigate(ViewEnum.USED_CARS)}
+                  className="btn-brand-primary"
+                >
+                  Browse Vehicles
+                </button>
+              </div>
+            </div>
+          );
+        }
+        
+        // Use MobileVehicleDetail for mobile app, VehicleDetail for desktop
+        if (isMobileApp) {
+          return (
+            <MobileVehicleDetail
+              vehicle={selectedVehicle}
+              onBack={() => navigate(ViewEnum.USED_CARS)}
+              comparisonList={comparisonList}
+              onToggleCompare={toggleCompare}
+              wishlist={wishlist}
+              onToggleWishlist={toggleWishlist}
+              currentUser={currentUser}
+              users={users}
+              onViewSellerProfile={(sellerEmail: string) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+              onStartChat={(vehicle) => {
+                if (!currentUser) {
+                  addToast('Please login to start a chat', 'info');
+                  navigate(ViewEnum.LOGIN_PORTAL);
+                  return;
+                }
+                
+                const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+                let conversation = normalizedCustomerEmail ? conversations.find(c => {
+                  if (!c || !c.customerId) return false;
+                  return c.vehicleId === vehicle.id && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
+                }) : undefined;
+                
+                if (!conversation) {
+                  const newConversation = {
+                    id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    customerId: currentUser.email,
+                    customerName: currentUser.name,
+                    sellerId: vehicle.sellerEmail,
+                    vehicleId: vehicle.id,
+                    vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+                    vehiclePrice: vehicle.price,
+                    messages: [],
+                    lastMessageAt: new Date().toISOString(),
+                    isReadBySeller: false,
+                    isReadByCustomer: true,
+                    isFlagged: false
+                  };
+                  setConversations([...conversations, newConversation]);
+                  
+                  (async () => {
+                    try {
+                      const { saveConversationToMongoDB } = await import('./services/conversationService');
+                      await saveConversationToMongoDB(newConversation);
+                    } catch (error) {
+                      console.warn('Failed to save conversation to MongoDB:', error);
+                    }
+                  })();
+                  
+                  conversation = newConversation;
+                }
+                
+                setActiveChat(conversation);
+                addToast('Chat started with seller', 'success');
+              }}
+              recommendations={recommendations}
+              onSelectVehicle={selectVehicle}
+            />
+          );
+        }
+        
+        return (
           <VehicleDetail
             vehicle={selectedVehicle}
             onBack={() => navigate(ViewEnum.USED_CARS)}
@@ -538,7 +691,6 @@ const AppContent: React.FC = React.memo(() => {
             onFlagContent={(type, id, _reason) => flagContent(type, id)}
             users={users}
             onViewSellerProfile={(sellerEmail: string) => {
-              // Normalize emails for comparison (critical for production)
               const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
               const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
               if (seller) {
@@ -547,15 +699,12 @@ const AppContent: React.FC = React.memo(() => {
               }
             }}
             onStartChat={(vehicle) => {
-              // Start chat with seller
               if (!currentUser) {
                 addToast('Please login to start a chat', 'info');
                 navigate(ViewEnum.LOGIN_PORTAL);
                 return;
               }
               
-              // Find or create conversation
-              // Normalize emails for comparison (critical for production)
               const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
               let conversation = normalizedCustomerEmail ? conversations.find(c => {
                 if (!c || !c.customerId) return false;
@@ -563,7 +712,6 @@ const AppContent: React.FC = React.memo(() => {
               }) : undefined;
               
               if (!conversation) {
-                // Create new conversation
                 const newConversation = {
                   id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                   customerId: currentUser.email,
@@ -578,10 +726,8 @@ const AppContent: React.FC = React.memo(() => {
                   isReadByCustomer: true,
                   isFlagged: false
                 };
-                // Add to conversations
                 setConversations([...conversations, newConversation]);
                 
-                // Save to MongoDB (async, don't block)
                 (async () => {
                   try {
                     const { saveConversationToMongoDB } = await import('./services/conversationService');
@@ -594,36 +740,52 @@ const AppContent: React.FC = React.memo(() => {
                 conversation = newConversation;
               }
               
-              // Set active chat to open the chat widget
-              console.log('🔧 Setting active chat:', conversation);
               setActiveChat(conversation);
               addToast('Chat started with seller', 'success');
-              console.log('🔧 Active chat set, ChatWidget should render now');
             }}
             recommendations={recommendations}
             onSelectVehicle={selectVehicle}
           />
-        ) : (
-          <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-600 mb-4">Vehicle Not Found</h2>
-              <p className="text-gray-500 mb-4">Please select a vehicle to view details.</p>
-              <button 
-                onClick={() => navigate(ViewEnum.USED_CARS)}
-                className="btn-brand-primary"
-              >
-                Browse Vehicles
-              </button>
-            </div>
-          </div>
         );
 
       case ViewEnum.NEW_CARS:
+        if (isMobileApp) {
+          return (
+            <MobileNewCarsPage />
+          );
+        }
         return (
           <NewCars />
         );
 
       case ViewEnum.RENTAL:
+        if (isMobileApp) {
+          const rentalVehicles = vehicles.filter(v => {
+            const isRental = v.listingType === 'rental';
+            const isPublished = v.status === 'published';
+            const matchesCity = !selectedCity || v.city === selectedCity;
+            return isRental && isPublished && matchesCity;
+          });
+          return (
+            <MobileRentalPage
+              vehicles={rentalVehicles}
+              onSelectVehicle={selectVehicle}
+              comparisonList={comparisonList}
+              onToggleCompare={toggleCompare}
+              wishlist={wishlist}
+              onToggleWishlist={toggleWishlist}
+              currentUser={currentUser}
+              onViewSellerProfile={(sellerEmail: string) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+            />
+          );
+        }
         // Filter vehicles specifically marked for rental
         const rentalVehicles = vehicles.filter(v => {
           // Only show vehicles explicitly marked as rental
@@ -680,6 +842,19 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.COMPARISON:
+        if (isMobileApp) {
+          return (
+            <MobileComparison
+              vehicles={vehicles}
+              comparisonList={comparisonList}
+              onRemoveFromCompare={(id) => {
+                setComparisonList(prev => prev.filter(vId => vId !== id));
+              }}
+              onSelectVehicle={selectVehicle}
+              onBack={() => navigate(ViewEnum.USED_CARS)}
+            />
+          );
+        }
         return (
           <Comparison 
             vehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => comparisonList.includes(v.id)), users)}
@@ -695,6 +870,28 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.WISHLIST:
+        if (isMobileApp) {
+          return (
+            <MobileWishlist
+              vehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => wishlist.includes(v.id)), users)}
+              wishlist={wishlist}
+              onToggleWishlist={toggleWishlist}
+              onSelectVehicle={selectVehicle}
+              onToggleCompare={toggleCompare}
+              comparisonList={comparisonList}
+              currentUser={currentUser}
+              onViewSellerProfile={(sellerEmail) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+              onNavigate={navigate}
+            />
+          );
+        }
         return (
           <VehicleList
             vehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => wishlist.includes(v.id)), users)}
@@ -792,6 +989,170 @@ const AppContent: React.FC = React.memo(() => {
           if (!v || !v.sellerEmail || !currentUser?.email) return false;
           return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
         });
+
+        // Use MobileDashboard for mobile app, Dashboard for desktop
+        if (isMobileApp) {
+          return (
+            <DashboardErrorBoundary>
+              <MobileLayout
+                showHeader={false}
+                showBottomNav={true}
+                headerTitle={getPageTitle()}
+                currentUser={currentUser}
+                onLogout={handleLogout}
+                onNavigate={navigate}
+                currentView={currentView}
+                wishlistCount={wishlist.length}
+                inboxCount={conversations.filter(c => {
+                  if (!c || !c.sellerId || !currentUser?.email || c.isReadBySeller) return false;
+                  return c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+                }).length}
+              >
+                <MobileDashboard
+                  currentUser={currentUser}
+                  userVehicles={enrichVehiclesWithSellerInfo(
+                    sellerVehiclesFiltered,
+                    users || []
+                  )}
+                  conversations={(conversations || []).filter(c => c && c.sellerId && currentUser?.email && c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim())}
+                  onNavigate={navigate}
+                  onEditVehicle={(vehicle) => {
+                    // MobileDashboard handles editing internally
+                    console.log('Edit vehicle:', vehicle);
+                  }}
+                  onDeleteVehicle={async (vehicleId) => {
+                    await deleteVehicle(vehicleId);
+                  }}
+                  onMarkAsSold={async (vehicleId) => {
+                    const vehicle = vehicles.find(v => v.id === vehicleId);
+                    if (vehicle) {
+                      await updateVehicle(vehicleId, { status: 'sold', soldAt: new Date().toISOString(), listingStatus: 'sold' });
+                    }
+                  }}
+                  onFeatureListing={async (vehicleId) => {
+                    try {
+                      const { authenticatedFetch } = await import('./utils/authenticatedFetch');
+                      const response = await authenticatedFetch('/api/vehicles?action=feature', {
+                        method: 'POST',
+                        body: JSON.stringify({ vehicleId })
+                      });
+
+                      const responseText = await response.text();
+                      let result: any = {};
+                      if (responseText) {
+                        try {
+                          result = JSON.parse(responseText);
+                        } catch (parseError) {
+                          console.warn('⚠️ Failed to parse feature response JSON:', parseError);
+                          result = {};
+                        }
+                      }
+
+                      if (!response.ok) {
+                        const errorMessage = result?.reason || result?.error || `Failed to feature vehicle (HTTP ${response.status})`;
+                        addToast(errorMessage, response.status === 403 ? 'warning' : 'error');
+                        return;
+                      }
+
+                      if (result?.alreadyFeatured) {
+                        addToast('This vehicle is already featured.', 'info');
+                        return;
+                      }
+
+                      if (result?.success && result.vehicle) {
+                        await updateVehicle(vehicleId, result.vehicle);
+
+                        if (typeof result.remainingCredits === 'number') {
+                          const sellerEmail = result.vehicle?.sellerEmail || currentUser?.email;
+                          const remainingCredits = result.remainingCredits;
+
+                          if (sellerEmail) {
+                            if (currentUser?.email && currentUser.email.toLowerCase().trim() === sellerEmail.toLowerCase().trim()) {
+                              setCurrentUser({
+                                ...currentUser,
+                                featuredCredits: remainingCredits
+                              });
+                            }
+                            await updateUser(sellerEmail, { featuredCredits: remainingCredits });
+                          }
+
+                          addToast(`Featured credits remaining: ${remainingCredits}`, 'info');
+                        }
+                      } else {
+                        addToast('Failed to feature vehicle. Please try again.', 'error');
+                      }
+                    } catch (error) {
+                      console.error('❌ Failed to feature vehicle:', error);
+                      addToast('Failed to feature vehicle. Please try again.', 'error');
+                    }
+                  }}
+                  onSendMessage={sendMessage}
+                  onMarkConversationAsRead={markAsRead}
+                  onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                    onOfferResponse(conversationId, parseInt(messageId), response as "accepted" | "rejected" | "countered", counterPrice);
+                  }}
+                  typingStatus={typingStatus}
+                  onUserTyping={(conversationId, _userRole) => {
+                    toggleTyping(conversationId, true);
+                  }}
+                  onMarkMessagesAsRead={(conversationId, _readerRole) => {
+                    markAsRead(conversationId);
+                  }}
+                  onFlagContent={flagContent}
+                  onLogout={handleLogout}
+                  onViewVehicle={selectVehicle}
+                  onAddVehicle={async (vehicleData, isFeaturing = false) => {
+                    try {
+                      // Set listingExpiresAt based on subscription plan expiry date
+                      let listingExpiresAt: string | undefined;
+                      if (currentUser.subscriptionPlan === 'premium' && currentUser.planExpiryDate) {
+                        listingExpiresAt = currentUser.planExpiryDate;
+                      } else if (currentUser.subscriptionPlan !== 'premium') {
+                        const expiryDate = new Date();
+                        expiryDate.setDate(expiryDate.getDate() + 30);
+                        listingExpiresAt = expiryDate.toISOString();
+                      }
+                      
+                      const { addVehicle } = await import('./services/vehicleService');
+                      const vehicleToAdd = {
+                        ...vehicleData,
+                        id: Date.now() + Math.floor(Math.random() * 1000),
+                        sellerEmail: currentUser.email,
+                        averageRating: 0,
+                        ratingCount: 0,
+                        isFeatured: isFeaturing,
+                        status: 'published',
+                        createdAt: new Date().toISOString(),
+                        listingExpiresAt,
+                      } as Vehicle;
+                      
+                      const newVehicle = await addVehicle(vehicleToAdd);
+                      setVehicles(prev => [...prev, newVehicle]);
+                      addToast('Vehicle added successfully!', 'success');
+                    } catch (error) {
+                      console.error('❌ Failed to add vehicle:', error);
+                      addToast('Failed to add vehicle. Please try again.', 'error');
+                    }
+                  }}
+                  onUpdateVehicle={async (vehicleData) => {
+                    await updateVehicle(vehicleData.id, vehicleData);
+                  }}
+                  vehicleData={vehicleData}
+                  onUpdateProfile={async (profileData: Partial<User>) => {
+                    if (currentUser) {
+                      await updateUser(currentUser.email, profileData);
+                      setCurrentUser({ ...currentUser, ...profileData } as User);
+                    }
+                  }}
+                  notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
+                  onNotificationClick={handleNotificationClick}
+                  onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+                />
+              </MobileLayout>
+            </DashboardErrorBoundary>
+          );
+        }
+
         return (
           <DashboardErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
@@ -1147,6 +1508,45 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.BUYER_DASHBOARD:
+        if (isMobileApp && currentUser?.role === 'customer') {
+          return (
+            <MobileBuyerDashboard
+              currentUser={currentUser}
+              vehicles={vehicles.filter(v => v.status === 'published')}
+              wishlist={wishlist}
+              conversations={conversations.filter(c => {
+                if (!c || !c.customerId || !currentUser?.email) return false;
+                return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+              })}
+              onNavigate={navigate}
+              onSelectVehicle={selectVehicle}
+              onToggleWishlist={(id) => {
+                setWishlist(prev => 
+                  prev.includes(id) 
+                    ? prev.filter(vId => vId !== id)
+                    : [...prev, id]
+                );
+              }}
+              onToggleCompare={(id) => {
+                setComparisonList(prev => 
+                  prev.includes(id) 
+                    ? prev.filter(vId => vId !== id)
+                    : [...prev, id]
+                );
+              }}
+              comparisonList={comparisonList}
+              onViewSellerProfile={(sellerEmail) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+              onLogout={handleLogout}
+            />
+          );
+        }
         return currentUser?.role === 'customer' ? (
           <BuyerDashboard
             currentUser={currentUser}
@@ -1255,6 +1655,21 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.PROFILE:
+        if (isMobileApp && currentUser) {
+          return (
+            <MobileProfile
+              currentUser={currentUser}
+              onUpdateProfile={async (details) => {
+                await updateUser(currentUser.id, details);
+              }}
+              onUpdatePassword={async (passwords) => {
+                // This would need to be implemented in the API
+                return false;
+              }}
+              onBack={() => navigate(ViewEnum.HOME)}
+            />
+          );
+        }
         return currentUser ? (
           <Profile 
             currentUser={currentUser}
@@ -1313,6 +1728,39 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.INBOX:
+        if (isMobileApp && currentUser) {
+          return (
+            <MobileInbox
+              conversations={conversations.filter(c => {
+                if (!c || !c.customerId || !currentUser?.email) return false;
+                return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+              })}
+              onSendMessage={(vehicleId, messageText, type, payload) => {
+                const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+                const conversation = normalizedCustomerEmail ? conversations.find(c => {
+                  if (!c || !c.customerId) return false;
+                  return c.vehicleId === vehicleId && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
+                }) : undefined;
+                if (conversation) {
+                  sendMessageWithType(conversation.id, messageText, type, payload);
+                }
+              }}
+              onMarkAsRead={markAsRead}
+              users={users}
+              typingStatus={typingStatus}
+              onUserTyping={(conversationId: string, _userRole: 'customer' | 'seller') => {
+                toggleTyping(conversationId, true);
+              }}
+              onMarkMessagesAsRead={markAsRead}
+              onFlagContent={(type, id, _reason) => flagContent(type, id)}
+              onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                onOfferResponse(conversationId, messageId, response, counterPrice);
+              }}
+              currentUser={currentUser}
+              onNavigate={navigate}
+            />
+          );
+        }
         return currentUser ? (
           <CustomerInbox 
             conversations={conversations.filter(c => {
@@ -1362,6 +1810,36 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.SELLER_PROFILE:
+        if (isMobileApp && publicSellerProfile) {
+          const normalizedSellerEmail = publicSellerProfile.email?.toLowerCase().trim() || '';
+          const latestSeller = users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) || publicSellerProfile;
+          return (
+            <MobileSellerProfilePage
+              seller={latestSeller}
+              vehicles={enrichVehiclesWithSellerInfo(
+                (vehicles || []).filter(v => {
+                  if (!v || !v.sellerEmail || !latestSeller?.email) return false;
+                  return v.sellerEmail.toLowerCase().trim() === latestSeller.email.toLowerCase().trim();
+                }),
+                users || []
+              )}
+              onSelectVehicle={selectVehicle}
+              comparisonList={comparisonList}
+              onToggleCompare={toggleCompare}
+              wishlist={wishlist}
+              onToggleWishlist={toggleWishlist}
+              onBack={() => navigate(ViewEnum.HOME)}
+              onViewSellerProfile={(sellerEmail) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+            />
+          );
+        }
         return publicSellerProfile ? (() => {
           // Always get the latest seller data from users array to ensure verification status is up-to-date
           const normalizedSellerEmail = publicSellerProfile.email?.toLowerCase().trim() || '';
@@ -1409,6 +1887,25 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.DEALER_PROFILES:
+        if (isMobileApp) {
+          return (
+            <MobileDealerProfilesPage
+              sellers={users.filter(user => user.role === 'seller')}
+              vehicles={vehicles}
+              onViewProfile={(sellerEmail) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                } else {
+                  setPublicProfile({ email: sellerEmail } as any);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+            />
+          );
+        }
         return (
           <DealerProfiles 
             sellers={users.filter(user => user.role === 'seller')} 
@@ -1421,6 +1918,34 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.PRICING:
+        if (isMobileApp) {
+          return (
+            <MobilePricingPage
+              currentUser={currentUser}
+              onSelectPlan={async (planId) => {
+                if (!currentUser || currentUser.role !== 'seller') return;
+                if (planId === 'free') {
+                  const updatedUser = { ...currentUser, subscriptionPlan: planId };
+                  try {
+                    const userService = await import('./services/userService');
+                    const savedUser = await userService.updateUser(updatedUser);
+                    setUsers(prev => prev.map(u => u.email === currentUser.email ? savedUser : u));
+                    setCurrentUser(savedUser);
+                    const userJson = JSON.stringify(savedUser);
+                    sessionStorage.setItem('currentUser', userJson);
+                    localStorage.setItem('reRideCurrentUser', userJson);
+                    addToast(`Successfully switched to the Free plan!`, 'success');
+                    navigate(ViewEnum.SELLER_DASHBOARD);
+                  } catch (error) {
+                    console.error('Failed to update plan:', error);
+                    addToast('Failed to update plan', 'error');
+                  }
+                }
+              }}
+              onNavigate={navigate}
+            />
+          );
+        }
         return (
           <PricingPage 
             currentUser={currentUser}
@@ -1432,6 +1957,19 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.SUPPORT:
+        if (isMobileApp) {
+          return (
+            <MobileSupportPage
+              currentUser={currentUser}
+              onSubmitTicket={(ticket) => {
+                // Handle support ticket submission
+                addToast('Support ticket submitted!', 'success');
+                navigate(ViewEnum.HOME);
+              }}
+              onNavigate={navigate}
+            />
+          );
+        }
         return (
           <SupportPage 
             currentUser={currentUser}
@@ -1443,6 +1981,11 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.FAQ:
+        if (isMobileApp) {
+          return (
+            <MobileFAQPage faqItems={faqItems} />
+          );
+        }
         return (
           <FAQPage 
             faqItems={faqItems}
@@ -1450,6 +1993,27 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.CITY_LANDING:
+        if (isMobileApp) {
+          return (
+            <MobileCityLandingPage
+              city={selectedCity || ''}
+              vehicles={vehicles}
+              onSelectVehicle={selectVehicle}
+              onToggleWishlist={toggleWishlist}
+              onToggleCompare={toggleCompare}
+              wishlist={wishlist}
+              comparisonList={comparisonList}
+              onViewSellerProfile={(sellerEmail) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+            />
+          );
+        }
         return (
           <CityLandingPage 
             city={selectedCity}
@@ -1546,6 +2110,11 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.SELL_CAR:
+        if (isMobileApp) {
+          return (
+            <MobileSellCarPage onNavigate={navigate} />
+          );
+        }
         return (
           <SellCarPage 
             onNavigate={navigate}
@@ -1788,66 +2357,67 @@ const AppContent: React.FC = React.memo(() => {
         );
       }
       
-      // For seller/customer users, show MobileDashboard
-      return (
-        <>
-        <MobileLayout
-          showHeader={false}
-          showBottomNav={true}
-          headerTitle={getPageTitle()}
-          currentUser={currentUser}
-          onLogout={handleLogout}
-          onNavigate={navigate}
-          currentView={currentView}
-          wishlistCount={wishlist.length}
-          inboxCount={conversations.filter(c => {
-            if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
-            return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-          }).length}
-        >
-          <MobileDashboard
+      // For seller users, show MobileDashboard (seller-focused)
+      if (currentUser.role === 'seller') {
+        return (
+          <>
+          <MobileLayout
+            showHeader={false}
+            showBottomNav={true}
+            headerTitle={getPageTitle()}
             currentUser={currentUser}
-            userVehicles={enrichVehiclesWithSellerInfo(
-              (vehicles || []).filter(v => {
-                if (!v || !v.sellerEmail || !currentUser?.email) return false;
-                return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-              }), 
-              users || []
-            )}
-            conversations={(conversations || []).filter(c => c && c.sellerId && currentUser?.email && c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim())}
-            onNavigate={navigate}
-            onEditVehicle={(vehicle) => {
-              // Handle edit vehicle
-              console.log('Edit vehicle:', vehicle);
-            }}
-            onDeleteVehicle={(vehicleId) => {
-              // Handle delete vehicle
-              console.log('Delete vehicle:', vehicleId);
-            }}
-            onMarkAsSold={(vehicleId) => {
-              // Handle mark as sold
-              console.log('Mark as sold:', vehicleId);
-            }}
-            onFeatureListing={(vehicleId) => {
-              // Handle feature listing
-              console.log('Feature listing:', vehicleId);
-            }}
-            onSendMessage={sendMessage}
-            onMarkConversationAsRead={markAsRead}
-            onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-              onOfferResponse(conversationId, parseInt(messageId), response as "accepted" | "rejected" | "countered", counterPrice);
-            }}
-            typingStatus={typingStatus}
-            onUserTyping={(conversationId, _userRole) => {
-              toggleTyping(conversationId, true);
-            }}
-            onMarkMessagesAsRead={(conversationId, _readerRole) => {
-              markAsRead(conversationId);
-            }}
-            onFlagContent={flagContent}
             onLogout={handleLogout}
-            onViewVehicle={selectVehicle}
-            onAddVehicle={async (vehicleData, isFeaturing = false) => {
+            onNavigate={navigate}
+            currentView={currentView}
+            wishlistCount={wishlist.length}
+            inboxCount={conversations.filter(c => {
+              if (!c || !c.sellerId || !currentUser?.email || c.isReadBySeller) return false;
+              return c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+            }).length}
+          >
+            <MobileDashboard
+              currentUser={currentUser}
+              userVehicles={enrichVehiclesWithSellerInfo(
+                (vehicles || []).filter(v => {
+                  if (!v || !v.sellerEmail || !currentUser?.email) return false;
+                  return v.sellerEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+                }), 
+                users || []
+              )}
+              conversations={(conversations || []).filter(c => c && c.sellerId && currentUser?.email && c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim())}
+              onNavigate={navigate}
+              onEditVehicle={(vehicle) => {
+                // Handle edit vehicle
+                console.log('Edit vehicle:', vehicle);
+              }}
+              onDeleteVehicle={(vehicleId) => {
+                // Handle delete vehicle
+                console.log('Delete vehicle:', vehicleId);
+              }}
+              onMarkAsSold={(vehicleId) => {
+                // Handle mark as sold
+                console.log('Mark as sold:', vehicleId);
+              }}
+              onFeatureListing={(vehicleId) => {
+                // Handle feature listing
+                console.log('Feature listing:', vehicleId);
+              }}
+              onSendMessage={sendMessage}
+              onMarkConversationAsRead={markAsRead}
+              onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                onOfferResponse(conversationId, parseInt(messageId), response as "accepted" | "rejected" | "countered", counterPrice);
+              }}
+              typingStatus={typingStatus}
+              onUserTyping={(conversationId, _userRole) => {
+                toggleTyping(conversationId, true);
+              }}
+              onMarkMessagesAsRead={(conversationId, _readerRole) => {
+                markAsRead(conversationId);
+              }}
+              onFlagContent={flagContent}
+              onLogout={handleLogout}
+              onViewVehicle={selectVehicle}
+              onAddVehicle={async (vehicleData, isFeaturing = false) => {
               try {
                 if (process.env.NODE_ENV === 'development') {
                 console.log('🚀 Mobile Add Vehicle called with:', vehicleData);
@@ -1979,12 +2549,118 @@ const AppContent: React.FC = React.memo(() => {
           )}
         </>
       );
+      }
+      
+      // For customer users, show MobileBuyerDashboard (buyer-focused)
+      if (currentUser.role === 'customer') {
+        return (
+          <>
+          <MobileLayout
+            showHeader={false}
+            showBottomNav={true}
+            headerTitle={getPageTitle()}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            onNavigate={navigate}
+            currentView={currentView}
+            wishlistCount={wishlist.length}
+            inboxCount={conversations.filter(c => {
+              if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
+              return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+            }).length}
+          >
+            <MobileBuyerDashboard
+              currentUser={currentUser}
+              vehicles={vehicles.filter(v => v.status === 'published')}
+              wishlist={wishlist}
+              conversations={conversations.filter(c => {
+                if (!c || !c.customerId || !currentUser?.email) return false;
+                return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+              })}
+              onNavigate={navigate}
+              onSelectVehicle={selectVehicle}
+              onToggleWishlist={(id) => {
+                setWishlist(prev => 
+                  prev.includes(id) 
+                    ? prev.filter(vId => vId !== id)
+                    : [...prev, id]
+                );
+              }}
+              onToggleCompare={(id) => {
+                setComparisonList(prev => 
+                  prev.includes(id) 
+                    ? prev.filter(vId => vId !== id)
+                    : [...prev, id]
+                );
+              }}
+              comparisonList={comparisonList}
+              onViewSellerProfile={(sellerEmail) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+            />
+          </MobileLayout>
+          
+          {/* Mobile Global Components */}
+          <MobileSearch 
+              onNavigate={navigate}
+              onSearch={(query) => {
+                setInitialSearchQuery(query);
+                navigate(ViewEnum.USED_CARS);
+              }}
+            />
+            <ToastContainer 
+              toasts={toasts} 
+              onRemove={removeToast} 
+            />
+            {currentUser && activeChat && (
+              <ChatErrorBoundary>
+                <ChatWidget
+                  conversation={activeChat}
+                  currentUserRole={currentUser.role as 'customer' | 'seller'}
+                  otherUserName={(() => {
+                    const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
+                    return seller?.name || seller?.dealershipName || 'Seller';
+                  })()}
+                  onClose={() => setActiveChat(null)}
+                  onSendMessage={(messageText, _type, _payload) => {
+                    sendMessage(activeChat.id, messageText);
+                  }}
+                  typingStatus={typingStatus}
+                  onUserTyping={(conversationId, _userRole) => {
+                    toggleTyping(conversationId, true);
+                  }}
+                  onMarkMessagesAsRead={(conversationId, _readerRole) => {
+                    markAsRead(conversationId);
+                  }}
+                  onFlagContent={(type, id, _reason) => {
+                    flagContent(type, id);
+                  }}
+                  onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                    }
+                    onOfferResponse(conversationId, messageId, response, counterPrice);
+                    addToast(`Offer ${response}`, 'success');
+                  }}
+                />
+              </ChatErrorBoundary>
+            )}
+          </>
+        );
+      }
     }
 
     // For ALL other views (Home, Browse, Detail, etc.), show mobile UI using MobileLayout
+    // Hide header for HOME view since it has its own hero section
+    const shouldHideHeader = currentView === ViewEnum.HOME;
     return (
       <MobileLayout
-        showHeader={true}
+        showHeader={!shouldHideHeader}
         showBottomNav={true}
         headerTitle={getPageTitle()}
         showBack={currentView === ViewEnum.DETAIL}
