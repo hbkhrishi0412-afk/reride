@@ -1660,7 +1660,9 @@ const AppContent: React.FC = React.memo(() => {
             <MobileProfile
               currentUser={currentUser}
               onUpdateProfile={async (details) => {
-                await updateUser(currentUser.id, details);
+                if (currentUser) {
+                  await updateUser(currentUser.email, details);
+                }
               }}
               onUpdatePassword={async (passwords) => {
                 // This would need to be implemented in the API
@@ -2602,6 +2604,7 @@ const AppContent: React.FC = React.memo(() => {
                   navigate(ViewEnum.SELLER_PROFILE);
                 }
               }}
+              onLogout={handleLogout}
             />
           </MobileLayout>
           
