@@ -588,82 +588,257 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     </div>
   );
 
-  const renderAnalytics = () => (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900">Analytics</h3>
-      
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Total Views</p>
-              <p className="text-2xl font-bold text-gray-900">{totalViews}</p>
+  const renderAnalytics = () => {
+    // Calculate additional metrics
+    const averageViewsPerListing = activeListings > 0 ? Math.round(totalViews / activeListings) : 0;
+    const conversionRate = totalViews > 0 ? ((totalInquiries / totalViews) * 100).toFixed(1) : '0.0';
+    const responseRate = totalInquiries > 0 ? ((safeConversations.filter(c => c.messages && c.messages.length > 0).length / totalInquiries) * 100).toFixed(0) : '0';
+    const avgPrice = safeUserVehicles.length > 0 
+      ? safeUserVehicles.reduce((sum, v) => sum + (v?.price || 0), 0) / safeUserVehicles.length 
+      : 0;
+
+    // Get top performing vehicles
+    const topVehicles = [...safeUserVehicles]
+      .sort((a, b) => (b?.views || 0) - (a?.views || 0))
+      .slice(0, 5);
+
+    // Calculate recent activity (last 7 days)
+    const recentConversations = safeConversations
+      .filter(c => {
+        if (!c?.lastMessageAt) return false;
+        const messageDate = new Date(c.lastMessageAt);
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return messageDate > weekAgo;
+      })
+      .slice(0, 5);
+
+    return (
+      <div className="space-y-5 pb-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-bold text-gray-900">Analytics</h3>
+          <div className="flex gap-2">
+            <button className="text-xs bg-orange-100 text-orange-600 px-3 py-1 rounded-full font-semibold">
+              30 Days
+            </button>
+          </div>
+        </div>
+
+        {/* Key Metrics Grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="native-card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </div>
             </div>
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-blue-600 text-lg">👁️</span>
+            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Total Views</p>
+            <p className="text-2xl font-bold text-gray-900">{totalViews.toLocaleString()}</p>
+            {averageViewsPerListing > 0 && (
+              <p className="text-xs text-gray-500 mt-1">{averageViewsPerListing} avg/listing</p>
+            )}
+          </div>
+
+          <div className="native-card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Inquiries</p>
+            <p className="text-2xl font-bold text-gray-900">{totalInquiries}</p>
+            {totalViews > 0 && (
+              <p className="text-xs text-gray-500 mt-1">{conversionRate}% conversion</p>
+            )}
+          </div>
+
+          <div className="native-card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Response Rate</p>
+            <p className="text-2xl font-bold text-gray-900">{responseRate}%</p>
+            <p className="text-xs text-gray-500 mt-1">Messages replied</p>
+          </div>
+
+          <div className="native-card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Avg. Price</p>
+            <p className="text-lg font-bold text-gray-900">
+              ₹{avgPrice >= 100000 ? `${(avgPrice / 100000).toFixed(1)}L` : avgPrice.toLocaleString()}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Per listing</p>
+          </div>
+        </div>
+
+        {/* Performance Trends */}
+        <div className="native-card p-4">
+          <h4 className="font-bold text-gray-900 mb-4">Performance Trends</h4>
+          
+          {/* Simple bar chart representation */}
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">Views</span>
+                <span className="text-xs text-gray-500">{totalViews}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full"
+                  style={{ width: `${Math.min((totalViews / 1000) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">Inquiries</span>
+                <span className="text-xs text-gray-500">{totalInquiries}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div 
+                  className="bg-green-500 h-2 rounded-full"
+                  style={{ width: `${Math.min((totalInquiries / 100) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">Active Listings</span>
+                <span className="text-xs text-gray-500">{activeListings}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div 
+                  className="bg-orange-500 h-2 rounded-full"
+                  style={{ width: `${Math.min((activeListings / 20) * 100, 100)}%` }}
+                ></div>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Inquiries</p>
-              <p className="text-2xl font-bold text-gray-900">{totalInquiries}</p>
+        {/* Top Performing Listings */}
+        {topVehicles.length > 0 && (
+          <div className="native-card p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-bold text-gray-900">Top Performers</h4>
+              <button 
+                onClick={() => setActiveTab('listings')}
+                className="text-xs text-orange-500 font-semibold"
+              >
+                View All
+              </button>
             </div>
-            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-lg">📞</span>
+            <div className="space-y-3">
+              {topVehicles.map((vehicle, idx) => (
+                <div
+                  key={vehicle.id}
+                  onClick={() => onViewVehicle && onViewVehicle(vehicle)}
+                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl active:scale-[0.98] transition-transform cursor-pointer"
+                >
+                  <div className="flex items-center justify-center w-8 h-8 bg-orange-100 rounded-lg flex-shrink-0">
+                    <span className="text-orange-600 font-bold text-sm">#{idx + 1}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm truncate">
+                      {vehicle.year} {vehicle.make} {vehicle.model}
+                    </p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        {vehicle.views || 0} views
+                      </span>
+                      {vehicle.inquiriesCount > 0 && (
+                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          {vehicle.inquiriesCount} inquiries
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              ))}
             </div>
           </div>
+        )}
+
+        {/* Recent Activity */}
+        <div className="native-card p-4">
+          <h4 className="font-bold text-gray-900 mb-4">Recent Activity</h4>
+          {recentConversations.length > 0 ? (
+            <div className="space-y-3">
+              {recentConversations.map((conv) => (
+                <div key={conv.id} className="flex items-start gap-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      New inquiry: {conv.vehicleName || 'Vehicle'}
+                    </p>
+                    {conv.messages && conv.messages.length > 0 && (
+                      <p className="text-xs text-gray-500 truncate mt-1">
+                        {conv.messages[conv.messages.length - 1]?.text?.substring(0, 50) || 'New message'}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      {conv.lastMessageAt ? new Date(conv.lastMessageAt).toLocaleDateString() : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-500 text-sm">No recent activity</p>
+              <p className="text-gray-400 text-xs mt-1">Activity will appear here</p>
+            </div>
+          )}
         </div>
 
-        <div className="bg-white rounded-lg p-4 shadow-sm">
+        {/* Quick Stats Summary */}
+        <div className="native-card p-4 bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Active Listings</p>
-              <p className="text-2xl font-bold text-gray-900">{activeListings}</p>
+              <p className="text-xs text-orange-700 font-semibold uppercase tracking-wide mb-1">Success Rate</p>
+              <p className="text-2xl font-bold text-orange-900">
+                {totalListings > 0 ? Math.round((soldListings / totalListings) * 100) : 0}%
+              </p>
+              <p className="text-xs text-orange-600 mt-1">{soldListings} sold out of {totalListings} listings</p>
             </div>
-            <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-              <span className="text-orange-600 text-lg">🚗</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Sold</p>
-              <p className="text-2xl font-bold text-gray-900">{soldListings}</p>
-            </div>
-            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-              <span className="text-purple-600 text-lg">✅</span>
+            <div className="w-16 h-16 bg-orange-200 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
           </div>
         </div>
       </div>
-
-      <div className="bg-white rounded-lg p-4 shadow-sm">
-        <h4 className="font-medium text-gray-900 mb-3">Recent Activity</h4>
-        <div className="space-y-2">
-          <div className="flex items-center gap-3 text-sm">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-gray-600">New inquiry received</span>
-            <span className="text-gray-400 text-xs ml-auto">2h ago</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            <span className="text-gray-600">Vehicle viewed 5 times</span>
-            <span className="text-gray-400 text-xs ml-auto">4h ago</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-            <span className="text-gray-600">New listing published</span>
-            <span className="text-gray-400 text-xs ml-auto">1d ago</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
