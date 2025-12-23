@@ -471,14 +471,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     return () => clearTimeout(emergencyTimeout);
   }, [addToast]); // Now addToast is defined, so this is safe
 
-  const handleLogout = useCallback(() => {
-    setCurrentUser(null);
-    sessionStorage.removeItem('currentUser');
-    localStorage.removeItem('reRideCurrentUser');
-    setCurrentView(View.HOME);
-    setActiveChat(null);
-    addToast('You have been logged out.', 'info');
-  }, [addToast]);
+  const handleLogout = useCallback(async () => {
+    try {
+      // Sign out from Firebase if authenticated
+      try {
+        const { signOut } = await import('firebase/auth');
+        const { auth } = await import('../lib/firebase');
+        if (auth?.currentUser) {
+          await signOut(auth);
+        }
+      } catch (firebaseError) {
+        // Firebase may not be initialized or user may not be using Firebase auth
+        console.log('Firebase sign out skipped:', firebaseError);
+      }
+
+      // Clear tokens via logout service
+      try {
+        const { logout: logoutService } = await import('../services/userService');
+        logoutService();
+      } catch (logoutError) {
+        console.warn('Logout service error:', logoutError);
+      }
+
+      // Clear user state
+      setCurrentUser(null);
+      
+      // Clear storage
+      sessionStorage.removeItem('currentUser');
+      localStorage.removeItem('reRideCurrentUser');
+      localStorage.removeItem('reRideAccessToken');
+      localStorage.removeItem('reRideRefreshToken');
+      localStorage.removeItem('rememberedCustomerEmail');
+      localStorage.removeItem('rememberedSellerEmail');
+      
+      // Clear user-specific data
+      setActiveChat(null);
+      setComparisonList([]);
+      setWishlist([]);
+      
+      // Navigate to home
+      setCurrentView(View.HOME);
+      
+      // Show success message
+      addToast('You have been logged out.', 'info');
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Even if there's an error, clear local state
+      setCurrentUser(null);
+      sessionStorage.removeItem('currentUser');
+      localStorage.removeItem('reRideCurrentUser');
+      setCurrentView(View.HOME);
+      setActiveChat(null);
+      addToast('You have been logged out.', 'info');
+    }
+  }, [addToast, setComparisonList, setWishlist]);
 
   // Listen for userDataUpdated events to sync currentUser state when plan expiry changes
   useEffect(() => {
