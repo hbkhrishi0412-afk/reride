@@ -1,10 +1,13 @@
 import React from 'react';
 import { MobileFilterSheet } from './MobileFilterSheet';
+import { useShare } from '../hooks/useMobileFeatures';
+import type { Vehicle } from '../types';
 
 interface MobileShareSheetProps {
   url: string;
   title: string;
   onClose: () => void;
+  vehicle?: Vehicle; // Optional vehicle for enhanced sharing
 }
 
 /**
@@ -14,8 +17,11 @@ interface MobileShareSheetProps {
 export const MobileShareSheet: React.FC<MobileShareSheetProps> = ({
   url,
   title,
-  onClose
+  onClose,
+  vehicle
 }) => {
+  const { share, shareVehicleListing, isSharing } = useShare();
+
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(url);
@@ -27,21 +33,32 @@ export const MobileShareSheet: React.FC<MobileShareSheetProps> = ({
   };
 
   const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title,
-          text: `Check out this vehicle: ${title}`,
-          url
-        });
+    // Use enhanced shareVehicleListing if vehicle is provided
+    if (vehicle) {
+      const success = await shareVehicleListing({
+        id: vehicle.id,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        price: vehicle.price,
+        images: vehicle.images
+      });
+      if (success) {
         onClose();
-      } catch (error) {
-        // User cancelled or error occurred
-        console.log('Share cancelled or failed:', error);
       }
     } else {
-      // Fallback to copy link
-      handleCopyLink();
+      // Fallback to basic share
+      const success = await share({
+        title,
+        text: `Check out this vehicle: ${title}`,
+        url
+      });
+      if (success) {
+        onClose();
+      } else {
+        // Fallback to copy link if share fails
+        handleCopyLink();
+      }
     }
   };
 
@@ -134,4 +151,5 @@ export const MobileShareSheet: React.FC<MobileShareSheetProps> = ({
 };
 
 export default MobileShareSheet;
+
 

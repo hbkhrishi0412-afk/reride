@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
 import { fetchCarDataFromSpinny, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/spinnyScraper';
 import { sellCarAPI } from '../services/sellCarService';
+import { useCamera } from '../hooks/useMobileFeatures';
 
 interface MobileSellCarPageProps {
   onNavigate: (view: ViewEnum) => void;
@@ -44,8 +45,11 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   const [isVerifying, setIsVerifying] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
   const [customerContact, setCustomerContact] = useState('');
+  const [vehicleImages, setVehicleImages] = useState<string[]>([]);
 
-  const totalSteps = 8;
+  const { capture, captureMultiple, compress, isCapturing } = useCamera();
+
+  const totalSteps = 9;
   const districts = getIndianDistricts();
   const years = getCarYears();
   const ownershipOptions = getOwnershipOptions();
@@ -416,7 +420,100 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </div>
         );
 
-      case 6: // Contact
+      case 6: // Photos
+        return (
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Add Photos</h2>
+            <p className="text-gray-600 mb-4">Add up to 10 photos of your vehicle</p>
+            
+            {/* Photo Grid */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {vehicleImages.map((image, index) => (
+                <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
+                  <img src={image} alt={`Vehicle ${index + 1}`} className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => setVehicleImages(prev => prev.filter((_, i) => i !== index))}
+                    className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
+                    style={{ minWidth: '24px', minHeight: '24px' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {vehicleImages.length < 10 && (
+                <button
+                  onClick={async () => {
+                    const photos = await captureMultiple(10 - vehicleImages.length, { sourceType: 'both' });
+                    if (photos && photos.length > 0) {
+                      // Compress images
+                      const compressedPhotos = await Promise.all(
+                        photos.map(photo => compress(photo, 1920, 1920, 0.8))
+                      );
+                      setVehicleImages(prev => [...prev, ...compressedPhotos]);
+                    }
+                  }}
+                  disabled={isCapturing}
+                  className="aspect-square rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center bg-gray-50 active:scale-[0.98] transition-transform"
+                  style={{ minHeight: '100px' }}
+                >
+                  {isCapturing ? (
+                    <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <svg className="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span className="text-xs text-gray-500">Add Photo</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  const photo = await capture({ sourceType: 'camera' });
+                  if (photo) {
+                    const compressed = await compress(photo, 1920, 1920, 0.8);
+                    setVehicleImages(prev => [...prev, compressed]);
+                  }
+                }}
+                disabled={isCapturing || vehicleImages.length >= 10}
+                className="flex-1 py-3 bg-orange-500 text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                style={{ minHeight: '56px' }}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Camera
+              </button>
+              <button
+                onClick={async () => {
+                  const photo = await capture({ sourceType: 'library' });
+                  if (photo) {
+                    const compressed = await compress(photo, 1920, 1920, 0.8);
+                    setVehicleImages(prev => [...prev, compressed]);
+                  }
+                }}
+                disabled={isCapturing || vehicleImages.length >= 10}
+                className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                style={{ minHeight: '56px' }}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Gallery
+              </button>
+            </div>
+            {vehicleImages.length === 0 && (
+              <p className="text-sm text-orange-600 mt-2">⚠️ At least one photo is recommended</p>
+            )}
+          </div>
+        );
+
+      case 7: // Contact
         return (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Contact Information</h2>
@@ -435,7 +532,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           </div>
         );
 
-      case 7: // Success
+      case 8: // Success
         return (
           <div className="text-center py-8">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -500,7 +597,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
       </div>
 
       {/* Navigation Buttons */}
-      {currentStep > 0 && currentStep < 6 && (
+      {currentStep > 0 && currentStep < 7 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 safe-bottom z-20">
           <button
             onClick={handleNextStep}

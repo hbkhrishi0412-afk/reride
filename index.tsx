@@ -41,32 +41,45 @@ root.render(
   )
 );
 
-// Service worker disabled to prevent caching issues
-// Uncomment when caching strategy is fully tested
-/*
-if ('serviceWorker' in navigator && !isDev) {
+// Register service worker with advanced caching
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { scope: '/' })
       .then((registration) => {
-        console.log('SW registered:', registration);
-        // Force update
-        registration.update();
+        console.log('[SW] Service worker registered:', registration.scope);
+        
+        // Check for updates periodically
+        setInterval(() => {
+          registration.update();
+        }, 60000); // Check every minute
+        
+        // Handle updates
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // New service worker available, prompt user to refresh
+                console.log('[SW] New service worker available');
+                // Optionally show a toast notification to user
+                if (window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('sw-update-available'));
+                }
+              }
+            });
+          }
+        });
       })
       .catch((error) => {
-        console.log('SW registration failed:', error);
+        console.error('[SW] Service worker registration failed:', error);
       });
   });
-}
-*/
 
-// Unregister any existing service workers to clear cache (also in development)
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(function(registrations) {
-    for (let registration of registrations) {
-      registration.unregister();
-      console.log('Unregistered service worker');
-    }
+  // Listen for service worker controller changes
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    console.log('[SW] Service worker controller changed, reloading page');
+    window.location.reload();
   });
 }
 

@@ -189,3 +189,4 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
 
 export default MobileComparison;
 
+

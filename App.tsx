@@ -36,7 +36,11 @@ import MobileRentalPage from './components/MobileRentalPage';
 import MobileDealerProfilesPage from './components/MobileDealerProfilesPage';
 import MobileCityLandingPage from './components/MobileCityLandingPage';
 import MobileHomePage from './components/MobileHomePage';
+import MobilePushNotificationManager from './components/MobilePushNotificationManager';
+import ShareTargetHandler from './components/ShareTargetHandler';
+import OfflineIndicator from './components/OfflineIndicator';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage } from './types';
+import { parseDeepLink, handleDeepLink as handleDeepLinkUtil } from './utils/mobileFeatures';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
@@ -288,6 +292,38 @@ const AppContent: React.FC = React.memo(() => {
     });
   }
   
+  // Handle deep linking on mount and URL changes
+  useEffect(() => {
+    const handleDeepLink = () => {
+      const params = parseDeepLink();
+      if (params.view) {
+        // Convert string view to ViewEnum
+        const viewEnum = Object.values(ViewEnum).find(v => v === params.view) as ViewEnum | undefined;
+        if (viewEnum) {
+          setCurrentView(viewEnum);
+          // Handle additional params
+          if (params.id && viewEnum === ViewEnum.DETAIL) {
+            const vehicleId = typeof params.id === 'string' ? parseInt(params.id, 10) : params.id;
+            const vehicle = vehicles.find(v => v.id === vehicleId);
+            if (vehicle) {
+              selectVehicle(vehicle);
+            }
+          }
+        }
+      }
+    };
+
+    // Handle initial deep link
+    handleDeepLink();
+
+    // Listen for URL changes (e.g., browser back/forward)
+    window.addEventListener('popstate', handleDeepLink);
+    
+    return () => {
+      window.removeEventListener('popstate', handleDeepLink);
+    };
+  }, [vehicles, setCurrentView, selectVehicle]);
+
   // Restore persisted session on first load
   useEffect(() => {
     if (currentUser) {
@@ -2679,12 +2715,23 @@ const AppContent: React.FC = React.memo(() => {
     // Hide header for HOME view since it has its own hero section
     const shouldHideHeader = currentView === ViewEnum.HOME;
     return (
-      <MobileLayout
-        showHeader={!shouldHideHeader}
-        showBottomNav={true}
-        headerTitle={getPageTitle()}
-        showBack={currentView === ViewEnum.DETAIL}
-        onBack={() => navigate(ViewEnum.USED_CARS)}
+      <>
+        {/* Mobile Feature Managers */}
+        <MobilePushNotificationManager
+          notifications={notifications}
+          onNotificationClick={handleNotificationClick}
+        />
+        <ShareTargetHandler
+          onNavigate={navigate}
+        />
+        <OfflineIndicator />
+        
+        <MobileLayout
+          showHeader={!shouldHideHeader}
+          showBottomNav={true}
+          headerTitle={getPageTitle()}
+          showBack={currentView === ViewEnum.DETAIL}
+          onBack={() => navigate(ViewEnum.USED_CARS)}
         currentView={currentView}
         onNavigate={navigate}
         currentUser={currentUser}
@@ -2750,12 +2797,23 @@ const AppContent: React.FC = React.memo(() => {
             />
           </ChatErrorBoundary>
         )}
-      </MobileLayout>
+        </MobileLayout>
+      </>
     );
   }
   
   // Render Desktop/Website Layout
   return (
+    <>
+      {/* Mobile Feature Managers (also work on desktop) */}
+      <MobilePushNotificationManager
+        notifications={notifications}
+        onNotificationClick={handleNotificationClick}
+      />
+      <ShareTargetHandler
+        onNavigate={navigate}
+      />
+      <OfflineIndicator />
     <div className="min-h-screen bg-gray-50">
       <main id="main-content" tabIndex={-1}>
       <Header 
