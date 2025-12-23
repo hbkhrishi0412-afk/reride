@@ -8,6 +8,7 @@ interface MobileProfileProps {
   onUpdatePassword: (passwords: { current: string; new: string }) => Promise<boolean>;
   onBack?: () => void;
   onLogout?: () => void;
+  addToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
 interface FormErrors {
@@ -30,7 +31,8 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   onUpdateProfile,
   onUpdatePassword,
   onBack,
-  onLogout
+  onLogout,
+  addToast
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
@@ -97,6 +99,49 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
       setFormData(prev => ({ ...prev, avatarUrl: reader.result as string }));
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleDownloadQRCode = async () => {
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
+      
+      // Fetch the QR code image
+      const response = await fetch(qrUrl);
+      if (!response.ok) {
+        throw new Error('Failed to fetch QR code');
+      }
+      
+      const blob = await response.blob();
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const fileName = `seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\s+/g, '-')}.png`;
+      
+      link.href = url;
+      link.download = fileName;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      addToast?.('QR code downloaded successfully!', 'success');
+    } catch (error) {
+      console.error('Failed to download QR code:', error);
+      addToast?.('Failed to download QR code. Please try again.', 'error');
+      // Fallback: open in new tab if download fails
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
+      window.open(qrUrl, '_blank');
+    }
   };
 
   const validateProfile = (): boolean => {
@@ -366,6 +411,78 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
                 {formData.bio.length}/500
               </p>
             </div>
+
+            {/* Seller QR Code Section */}
+            {currentUser.role === 'seller' && !isEditing && (() => {
+              const origin = typeof window !== 'undefined' ? window.location.origin : '';
+              const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
+              const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}`;
+              
+              return (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Seller Share Link & QR Code</h3>
+                  
+                  {/* Share URL */}
+                  <div className="mb-4">
+                    <label className="block text-xs text-gray-600 mb-2">Public seller URL</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={shareUrl}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(shareUrl);
+                            addToast?.('Link copied to clipboard!', 'success');
+                          } catch (err) {
+                            // Fallback for browsers that don't support clipboard API
+                            const textArea = document.createElement('textarea');
+                            textArea.value = shareUrl;
+                            textArea.style.position = 'fixed';
+                            textArea.style.left = '-999999px';
+                            document.body.appendChild(textArea);
+                            textArea.select();
+                            try {
+                              document.execCommand('copy');
+                              addToast?.('Link copied to clipboard!', 'success');
+                            } catch (e) {
+                              addToast?.('Failed to copy link. Please copy manually.', 'error');
+                            }
+                            document.body.removeChild(textArea);
+                          }
+                        }}
+                        className="px-4 py-2 text-xs font-semibold bg-blue-600 text-white rounded-lg active:scale-95 transition-transform"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">Share this link or QR code to showcase your seller profile and listings.</p>
+                  </div>
+
+                  {/* QR Code */}
+                  <div className="flex flex-col items-center">
+                    <img 
+                      src={qrUrl} 
+                      alt="Seller QR code" 
+                      className="w-48 h-48 border-2 border-white rounded-xl bg-white shadow-sm"
+                    />
+                    <button
+                      onClick={handleDownloadQRCode}
+                      className="mt-3 px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold active:scale-95 transition-transform flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Download QR Code
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {isEditing && (
               <div className="flex gap-3 pt-4">
