@@ -161,7 +161,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     }
   }, [activeTab, currentUser.email]);
 
-  const isSeller = currentUser.role === 'seller';
+  // Check if user is a seller
+  const isSeller = currentUser?.role === 'seller';
   const isAdmin = currentUser.role === 'admin';
   // Removed unused isCustomer variable
 
