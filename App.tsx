@@ -431,49 +431,64 @@ const AppContent: React.FC = React.memo(() => {
       case ViewEnum.HOME:
         if (isMobileApp) {
           return (
-            <MobileHomePage
-              onSearch={(query) => {
-                setInitialSearchQuery(query);
-                navigate(ViewEnum.USED_CARS);
-              }}
-              onSelectCategory={(category) => {
-                setSelectedCategory(category);
-                navigate(ViewEnum.USED_CARS);
-              }}
-              featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4)}
-              onSelectVehicle={selectVehicle}
-              onToggleCompare={(id) => {
-                setComparisonList(prev => 
-                  prev.includes(id) 
-                    ? prev.filter(vId => vId !== id)
-                    : [...prev, id]
-                );
-              }}
-              comparisonList={comparisonList}
-              onToggleWishlist={(id) => {
-                setWishlist(prev => 
-                  prev.includes(id) 
-                    ? prev.filter(vId => vId !== id)
-                    : [...prev, id]
-                );
-              }}
-              wishlist={wishlist}
-              onViewSellerProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
-              recommendations={recommendations}
-              allVehicles={vehicles.filter(v => v.status === 'published')}
+            <MobileLayout
+              showHeader={true}
+              showBottomNav={true}
+              headerTitle={getPageTitle()}
+              currentUser={currentUser}
+              onLogout={handleLogout}
               onNavigate={navigate}
-              onSelectCity={(city) => {
-                setSelectedCity(city);
-                navigate(ViewEnum.USED_CARS);
-              }}
-            />
+              currentView={currentView}
+              wishlistCount={wishlist.length}
+              inboxCount={conversations.filter(c => {
+                if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
+                return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+              }).length}
+            >
+              <MobileHomePage
+                onSearch={(query) => {
+                  setInitialSearchQuery(query);
+                  navigate(ViewEnum.USED_CARS);
+                }}
+                onSelectCategory={(category) => {
+                  setSelectedCategory(category);
+                  navigate(ViewEnum.USED_CARS);
+                }}
+                featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4)}
+                onSelectVehicle={selectVehicle}
+                onToggleCompare={(id) => {
+                  setComparisonList(prev => 
+                    prev.includes(id) 
+                      ? prev.filter(vId => vId !== id)
+                      : [...prev, id]
+                  );
+                }}
+                comparisonList={comparisonList}
+                onToggleWishlist={(id) => {
+                  setWishlist(prev => 
+                    prev.includes(id) 
+                      ? prev.filter(vId => vId !== id)
+                      : [...prev, id]
+                  );
+                }}
+                wishlist={wishlist}
+                onViewSellerProfile={(sellerEmail) => {
+                  const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                  const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                  if (seller) {
+                    setPublicProfile(seller);
+                    navigate(ViewEnum.SELLER_PROFILE);
+                  }
+                }}
+                recommendations={recommendations}
+                allVehicles={vehicles.filter(v => v.status === 'published')}
+                onNavigate={navigate}
+                onSelectCity={(city) => {
+                  setSelectedCity(city);
+                  navigate(ViewEnum.USED_CARS);
+                }}
+              />
+            </MobileLayout>
           );
         }
         return (
