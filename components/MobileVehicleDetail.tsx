@@ -481,6 +481,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
         <MobileShareSheet
           url={window.location.href}
           title={`${safeVehicle.year} ${safeVehicle.make} ${safeVehicle.model}`}
+          vehicle={vehicle}
           onClose={() => setShowShareSheet(false)}
         />
       )}

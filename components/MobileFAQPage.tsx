@@ -112,3 +112,4 @@ export const MobileFAQPage: React.FC<MobileFAQPageProps> = ({ faqItems }) => {
 
 export default MobileFAQPage;
 
+

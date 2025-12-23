@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { NEW_CARS_DATA, NewCarModel, NewCarVariant } from '../data/newCarsData';
+import React, { useState, useMemo } from 'react';
+import { NEW_CARS_DATA, NewCarModel } from '../data/newCarsData';
 import { getSafeImageSrc } from '../utils/imageUtils';
 
 interface MobileNewCarsPageProps {
@@ -164,9 +164,10 @@ export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCa
                     <div className="px-4 pb-4 border-t border-gray-200 pt-4">
                       <div className="space-y-3">
                         {car.variants.map((variant, idx) => (
-                          <div
+                          <button
                             key={idx}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                            onClick={() => onSelectCar?.(car)}
+                            className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
                           >
                             <div className="flex-1">
                               <p className="font-semibold text-gray-900">{variant.variant_name}</p>
@@ -177,7 +178,7 @@ export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCa
                                 {formatCurrency(variant.on_road_prices[selectedState])}
                               </p>
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -193,4 +194,5 @@ export const MobileNewCarsPage: React.FC<MobileNewCarsPageProps> = ({ onSelectCa
 };
 
 export default MobileNewCarsPage;
+
 
