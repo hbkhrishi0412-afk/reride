@@ -1162,6 +1162,7 @@ const AppContent: React.FC = React.memo(() => {
                   notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
                   onNotificationClick={handleNotificationClick}
                   onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+                  addToast={addToast}
                 />
               </MobileLayout>
             </DashboardErrorBoundary>
@@ -1684,6 +1685,7 @@ const AppContent: React.FC = React.memo(() => {
                 return false;
               }}
               onBack={() => navigate(ViewEnum.HOME)}
+              addToast={addToast}
             />
           );
         }
