@@ -96,6 +96,131 @@ const KeySpec: React.FC<{ label: string; value: string | number; icon?: React.Re
     </div>
 ));
 
+// Helper function to get bank logo URL
+const getBankLogoUrl = (bankName: string): string => {
+  // Normalize bank name for matching
+  const normalizedName = bankName.toLowerCase().trim();
+  
+  // Bank logo URLs - using high-quality sources (PNG for better clarity)
+  const bankLogos: Record<string, string> = {
+    'hdfc': 'https://logos-world.net/wp-content/uploads/2021/02/HDFC-Bank-Logo.png',
+    'hdfc bank': 'https://logos-world.net/wp-content/uploads/2021/02/HDFC-Bank-Logo.png',
+    'icici': 'https://logos-world.net/wp-content/uploads/2021/02/ICICI-Bank-Logo.png',
+    'icici bank': 'https://logos-world.net/wp-content/uploads/2021/02/ICICI-Bank-Logo.png',
+    'sbi': 'https://logos-world.net/wp-content/uploads/2021/02/State-Bank-of-India-SBI-Logo.png',
+    'state bank of india': 'https://logos-world.net/wp-content/uploads/2021/02/State-Bank-of-India-SBI-Logo.png',
+    'axis': 'https://logos-world.net/wp-content/uploads/2021/02/Axis-Bank-Logo.png',
+    'axis bank': 'https://logos-world.net/wp-content/uploads/2021/02/Axis-Bank-Logo.png',
+    'kotak': 'https://logos-world.net/wp-content/uploads/2021/02/Kotak-Mahindra-Bank-Logo.png',
+    'kotak mahindra': 'https://logos-world.net/wp-content/uploads/2021/02/Kotak-Mahindra-Bank-Logo.png',
+    'kotak mahindra bank': 'https://logos-world.net/wp-content/uploads/2021/02/Kotak-Mahindra-Bank-Logo.png',
+    'bajaj finserv': 'https://logos-world.net/wp-content/uploads/2021/02/Bajaj-Finserv-Logo.png',
+    'bajaj': 'https://logos-world.net/wp-content/uploads/2021/02/Bajaj-Finserv-Logo.png',
+    'tata capital': 'https://logos-world.net/wp-content/uploads/2021/02/Tata-Capital-Logo.png',
+    'mahindra finance': 'https://logos-world.net/wp-content/uploads/2021/02/Mahindra-Finance-Logo.png',
+    'yes bank': 'https://logos-world.net/wp-content/uploads/2021/02/Yes-Bank-Logo.png',
+    'yes': 'https://logos-world.net/wp-content/uploads/2021/02/Yes-Bank-Logo.png',
+    'idfc': 'https://logos-world.net/wp-content/uploads/2021/02/IDFC-First-Bank-Logo.png',
+    'idfc first': 'https://logos-world.net/wp-content/uploads/2021/02/IDFC-First-Bank-Logo.png',
+    'idfc first bank': 'https://logos-world.net/wp-content/uploads/2021/02/IDFC-First-Bank-Logo.png',
+    'bank of baroda': 'https://logos-world.net/wp-content/uploads/2021/02/Bank-of-Baroda-Logo.png',
+    'baroda': 'https://logos-world.net/wp-content/uploads/2021/02/Bank-of-Baroda-Logo.png',
+    'pnb': 'https://logos-world.net/wp-content/uploads/2021/02/Punjab-National-Bank-PNB-Logo.png',
+    'punjab national bank': 'https://logos-world.net/wp-content/uploads/2021/02/Punjab-National-Bank-PNB-Logo.png',
+    'union bank': 'https://logos-world.net/wp-content/uploads/2021/02/Union-Bank-of-India-Logo.png',
+    'union bank of india': 'https://logos-world.net/wp-content/uploads/2021/02/Union-Bank-of-India-Logo.png',
+    'canara bank': 'https://logos-world.net/wp-content/uploads/2021/02/Canara-Bank-Logo.png',
+    'canara': 'https://logos-world.net/wp-content/uploads/2021/02/Canara-Bank-Logo.png',
+    'indian bank': 'https://logos-world.net/wp-content/uploads/2021/02/Indian-Bank-Logo.png'
+  };
+  
+  // Try to find exact match or partial match
+  const logoKey = Object.keys(bankLogos).find(key => 
+    normalizedName.includes(key) || key.includes(normalizedName)
+  );
+  
+  return logoKey ? bankLogos[logoKey] : '';
+};
+
+// Bank Logo Component with fallback
+const BankLogo: React.FC<{ bankName: string; size?: 'sm' | 'md' | 'lg' }> = ({ bankName, size = 'md' }) => {
+  const [imageError, setImageError] = useState(false);
+  const logoUrl = getBankLogoUrl(bankName);
+  
+  const sizeClasses = {
+    sm: 'w-10 h-10 min-w-[40px] min-h-[40px]',
+    md: 'w-16 h-16 min-w-[64px] min-h-[64px]',
+    lg: 'w-20 h-20 min-w-[80px] min-h-[80px]'
+  };
+  const containerClasses = {
+    sm: 'w-10 h-10',
+    md: 'w-16 h-16',
+    lg: 'w-20 h-20'
+  };
+  const emojiSizes = {
+    sm: 'text-xl',
+    md: 'text-3xl',
+    lg: 'text-4xl'
+  };
+  
+  if (!logoUrl || imageError) {
+    return (
+      <div className={`${containerClasses[size]} flex items-center justify-center`}>
+        <span className={`${emojiSizes[size]} block text-center`} role="img" aria-label={bankName}>
+          🏦
+        </span>
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`${containerClasses[size]} flex items-center justify-center bg-white rounded p-1.5 shadow-sm border border-gray-100`}>
+      <img 
+        src={logoUrl} 
+        alt={bankName}
+        className={`${sizeClasses[size]} object-contain max-w-full max-h-full`}
+        style={{ 
+          filter: 'contrast(1.05)',
+          WebkitFilter: 'contrast(1.05)'
+        }}
+        onError={() => setImageError(true)}
+        loading="eager"
+      />
+    </div>
+  );
+};
+
+// Helper function to get bank logo component (for backward compatibility)
+const getBankLogo = (bankName: string, size: 'sm' | 'md' | 'lg' = 'md'): React.ReactNode => {
+  return <BankLogo bankName={bankName} size={size} />;
+};
+
+// Finance Partners Card Component
+const FinancePartnersCard: React.FC<{ partnerBanks: string[] }> = memo(({ partnerBanks }) => (
+  <div className="flex flex-col gap-2 p-4 bg-gradient-to-br from-purple-50 to-blue-50 dark:bg-white rounded-lg border border-purple-200">
+    <span className="text-sm font-medium text-brand-gray-600 dark:text-spinny-text text-center">Finance Partners</span>
+    {partnerBanks && partnerBanks.length > 0 ? (
+      <div className="flex flex-col gap-2 items-center">
+        <div className="flex flex-wrap justify-center gap-2">
+          {partnerBanks.slice(0, 4).map((bank, index) => (
+            <div key={index} className="flex flex-col items-center gap-1">
+              {getBankLogo(bank)}
+              <span className="text-xs font-semibold text-purple-700 text-center leading-tight max-w-[60px] truncate" title={bank}>
+                {bank.split(' ')[0]}
+              </span>
+            </div>
+          ))}
+        </div>
+        {partnerBanks.length > 4 && (
+          <span className="text-xs text-purple-600 font-medium">+{partnerBanks.length - 4} more</span>
+        )}
+      </div>
+    ) : (
+      <span className="text-xs text-gray-500 italic text-center">Not available</span>
+    )}
+  </div>
+));
+
 const SpecDetail: React.FC<{ label: string; value: string | number | undefined }> = ({ label, value }) => (
     <div className="flex justify-between py-2 border-b border-gray-200-100 dark:border-gray-200-200 last:border-b-0">
         <dt className="text-sm text-brand-gray-600 dark:text-spinny-text">{label}</dt>
@@ -160,8 +285,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   // ✅ FIX: Call useApp() at the top level (React hooks rule)
   const { updateVehicle } = useApp();
   
-  // Lightweight safety check - only essential properties
-  const safeVehicle = {
+  // ✅ FIX: Memoize safeVehicle to prevent unnecessary re-renders
+  const safeVehicle = useMemo(() => ({
     ...vehicle,
     images: vehicle.images || [],
     features: vehicle.features || [],
@@ -187,8 +312,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     status: vehicle.status || 'published',
     isFeatured: vehicle.isFeatured || false,
     views: vehicle.views || 0,
-    inquiriesCount: vehicle.inquiriesCount || 0
-  };
+    inquiriesCount: vehicle.inquiriesCount || 0,
+    mileage: typeof vehicle.mileage === 'number' ? vehicle.mileage : 0
+  }), [vehicle]);
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeMediaTab, setActiveMediaTab] = useState<'images' | 'video'>('images');
@@ -202,14 +328,17 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const emiCalculatorRef = useRef<HTMLDivElement>(null);
   const trackedViewRef = useRef<Set<number>>(new Set());
 
+  // ✅ FIX: Optimize useEffect dependency - only depend on vehicle.id and videoUrl
   useEffect(() => {
     setCurrentIndex(0);
     setProsAndCons(null);
     setIsGeneratingProsCons(false);
     setShowEMICalculator(false);
-    setActiveMediaTab(safeVehicle.videoUrl ? 'video' : 'images');
+    setActiveMediaTab(vehicle.videoUrl ? 'video' : 'images');
     window.scrollTo(0, 0);
-  }, [safeVehicle]);
+    // Reset tracked views when vehicle changes
+    trackedViewRef.current.clear();
+  }, [vehicle.id, vehicle.videoUrl]);
 
   // Cleanup timeout on unmount to prevent memory leaks
   useEffect(() => {
@@ -220,14 +349,21 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     };
   }, []);
   
+  // ✅ FIX: Use valid images for navigation to prevent index errors
+  const validImages = useMemo(() => getValidImages(safeVehicle.images), [safeVehicle.images]);
+  
   const handlePrevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIndex((prevIndex) => (prevIndex - 1 + safeVehicle.images.length) % safeVehicle.images.length);
+    if (validImages.length > 0) {
+      setCurrentIndex((prevIndex) => (prevIndex - 1 + validImages.length) % validImages.length);
+    }
   };
   
   const handleNextImage = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIndex((prevIndex) => (prevIndex + 1) % safeVehicle.images.length);
+    if (validImages.length > 0) {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % validImages.length);
+    }
   };
 
   const handleGenerateProsCons = async () => {
@@ -270,6 +406,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
       return u.email.toLowerCase().trim() === normalizedSellerEmail;
     });
   }, [users, safeVehicle.sellerEmail]);
+
+  // Debug logging after seller is defined
+  console.log('🎯 Seller data:', seller);
+  console.log('🎯 Seller partnerBanks:', seller?.partnerBanks);
 
   const filteredRecommendations = useMemo(() => {
       return recommendations.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
@@ -384,52 +524,66 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     )}
                     {activeMediaTab === 'images' ? (
                       <>
-                        <div className="relative group bg-gray-100 rounded-xl overflow-hidden">
-                            <img 
-                              key={currentIndex} 
-                              className="w-full h-[500px] object-contain rounded-xl shadow-lg animate-fade-in bg-white" 
-                              src={getValidImages(safeVehicle.images)[currentIndex] || getFirstValidImage(safeVehicle.images)} 
-                              alt={`${safeVehicle.make} ${safeVehicle.model} - Image ${currentIndex + 1}`}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = 'https://via.placeholder.com/800x600?text=Car+Image';
-                              }}
-                            />
-                            {safeVehicle.images.length > 1 && (
-                                <>
-                                    <button onClick={handlePrevImage} className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100" aria-label="Previous image">
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                      </svg>
-                                    </button>
-                                    <button onClick={handleNextImage} className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100" aria-label="Next image">
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                      </svg>
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                        {safeVehicle.images.length > 1 && (
-                            <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
-                                {getValidImages(safeVehicle.images).slice(0, 8).map((img, index) => (
-                                    <img 
-                                      key={index} 
-                                      src={getSafeImageSrc(img)} 
-                                      alt={`Thumbnail ${index + 1}`} 
-                                      className={`cursor-pointer rounded-lg border-2 h-20 w-28 object-cover flex-shrink-0 transition-all ${
-                                        currentIndex === index 
-                                          ? 'border-purple-600 shadow-md scale-105' 
-                                          : 'border-transparent hover:border-purple-300'
-                                      }`}
-                                      onClick={() => setCurrentIndex(index)}
-                                      onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.src = 'https://via.placeholder.com/112x80?text=Image';
-                                      }}
-                                    />
-                                ))}
+                        {/* ✅ FIX: Better error handling for images */}
+                        {validImages.length > 0 ? (
+                          <>
+                            <div className="relative group bg-gray-100 rounded-xl overflow-hidden">
+                                <img 
+                                  key={currentIndex} 
+                                  className="w-full h-[500px] object-contain rounded-xl shadow-lg animate-fade-in bg-white" 
+                                  src={validImages[currentIndex] || getFirstValidImage(safeVehicle.images)} 
+                                  alt={`${safeVehicle.make} ${safeVehicle.model} - Image ${currentIndex + 1}`}
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.src = 'https://via.placeholder.com/800x600?text=Car+Image';
+                                  }}
+                                />
+                                {validImages.length > 1 && (
+                                    <>
+                                        <button onClick={handlePrevImage} className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100" aria-label="Previous image">
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                          </svg>
+                                        </button>
+                                        <button onClick={handleNextImage} className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100" aria-label="Next image">
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                          </svg>
+                                        </button>
+                                    </>
+                                )}
                             </div>
+                            {validImages.length > 1 && (
+                                <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
+                                    {validImages.slice(0, 8).map((img, index) => (
+                                        <img 
+                                          key={index} 
+                                          src={getSafeImageSrc(img)} 
+                                          alt={`Thumbnail ${index + 1}`} 
+                                          className={`cursor-pointer rounded-lg border-2 h-20 w-28 object-cover flex-shrink-0 transition-all ${
+                                            currentIndex === index 
+                                              ? 'border-purple-600 shadow-md scale-105' 
+                                              : 'border-transparent hover:border-purple-300'
+                                          }`}
+                                          onClick={() => setCurrentIndex(index)}
+                                          onError={(e) => {
+                                            const target = e.target as HTMLImageElement;
+                                            target.src = 'https://via.placeholder.com/112x80?text=Image';
+                                          }}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="w-full h-[500px] bg-gray-100 rounded-xl flex items-center justify-center">
+                            <div className="text-center text-gray-500">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <p className="text-lg font-medium">No images available</p>
+                            </div>
+                          </div>
                         )}
                       </>
                     ) : (
@@ -489,23 +643,110 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                       {/* Tab Content */}
                       <div className="bg-white rounded-b-xl">
                         {activeTab === 'overview' && (
-                          <div className="p-6 space-y-6">
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                              <KeySpec label="Make Year" value={safeVehicle.year} />
-                              <KeySpec label="Registration" value={safeVehicle.registrationYear} />
-                              <KeySpec label="Fuel Type" value={safeVehicle.fuelType} />
-                              <KeySpec label="Km Driven" value={safeVehicle.mileage.toLocaleString('en-IN')} />
-                              <KeySpec label="Transmission" value={safeVehicle.transmission} />
-                              <KeySpec label="Owners" value={safeVehicle.noOfOwners} />
-                              <KeySpec label="Insurance" value={safeVehicle.insuranceValidity} />
-                              <KeySpec label="RTO" value={safeVehicle.rto} />
-                            </div>
-                            {safeVehicle.description && (
-                              <div>
-                                <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-2">Description</h4>
-                                <p className="text-spinny-text-dark dark:text-spinny-text-dark whitespace-pre-line">{safeVehicle.description}</p>
+                          <div className="p-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                              {/* Left Column - Overview Content */}
+                              <div className="lg:col-span-2 space-y-6">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                  <KeySpec label="Make Year" value={safeVehicle.year} />
+                                  <KeySpec label="Registration" value={safeVehicle.registrationYear} />
+                                  <KeySpec label="Fuel Type" value={safeVehicle.fuelType} />
+                                  <KeySpec label="Km Driven" value={typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'} />
+                                  <KeySpec label="Transmission" value={safeVehicle.transmission} />
+                                  <KeySpec label="Owners" value={safeVehicle.noOfOwners} />
+                                  <KeySpec label="Insurance" value={safeVehicle.insuranceValidity} />
+                                  <KeySpec label="RTO" value={safeVehicle.rto} />
+                                </div>
+                                {safeVehicle.description && (
+                                  <div>
+                                    <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-2">Description</h4>
+                                    <p className="text-spinny-text-dark dark:text-spinny-text-dark whitespace-pre-line">{safeVehicle.description}</p>
+                                  </div>
+                                )}
                               </div>
-                            )}
+
+                              {/* Right Column - Finance Partners Card (Desktop) */}
+                              {seller && (
+                                <div className="hidden lg:block lg:col-span-1">
+                                  <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl border border-purple-200 p-4 shadow-md h-fit">
+                                    <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                      </svg>
+                                      Finance Partners
+                                    </h3>
+                                    {seller.partnerBanks && seller.partnerBanks.length > 0 ? (
+                                      <div className="space-y-3">
+                                        <p className="text-xs text-gray-600">This seller is partnered with the following banks for vehicle financing:</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                          {seller.partnerBanks.map((bank, index) => (
+                                            <div
+                                              key={index}
+                                              className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-purple-200 shadow-sm hover:shadow-md transition-all hover:scale-[1.02]"
+                                            >
+                                              <div className="flex items-center justify-center w-full h-16">
+                                                {getBankLogo(bank, 'md')}
+                                              </div>
+                                              <span className="text-xs font-semibold text-purple-700 text-center leading-tight line-clamp-2">
+                                                {bank}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-start gap-2 text-xs text-gray-500 bg-white rounded-lg p-3 border border-gray-200">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>No finance partners available for this seller.</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Finance Partners Card - Mobile (shown below description, always visible on mobile) */}
+                            {seller ? (
+                              <div className="mt-6 w-full lg:hidden">
+                                <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl border border-purple-200 p-4 shadow-md">
+                                  <h3 className="text-base font-bold text-gray-900 mb-3 flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                    </svg>
+                                    Finance Partners
+                                  </h3>
+                                  {seller.partnerBanks && seller.partnerBanks.length > 0 ? (
+                                    <div className="space-y-3">
+                                      <p className="text-xs text-gray-600">This seller is partnered with the following banks for vehicle financing:</p>
+                                      <div className="grid grid-cols-2 gap-3">
+                                        {seller.partnerBanks.map((bank, index) => (
+                                          <div
+                                            key={index}
+                                            className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-purple-200 shadow-sm"
+                                          >
+                                            <div className="flex items-center justify-center w-full h-16">
+                                              {getBankLogo(bank, 'md')}
+                                            </div>
+                                            <span className="text-xs font-semibold text-purple-700 text-center leading-tight line-clamp-2">
+                                              {bank}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-start gap-2 text-xs text-gray-500 bg-white rounded-lg p-3 border border-gray-200">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      <span>No finance partners available for this seller.</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         )}
 
@@ -574,20 +815,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
 
                     {/* Additional Sections Below Tabs */}
                     <div className="mt-6 space-y-6">
-                    {(safeVehicle.serviceRecords || safeVehicle.accidentHistory || safeVehicle.documents) && (
-                        <CollapsibleSection title="Vehicle History & Documents">
-                            {(safeVehicle.serviceRecords || safeVehicle.accidentHistory) && (
-                                <VehicleHistory serviceRecords={safeVehicle.serviceRecords || []} accidentHistory={safeVehicle.accidentHistory || []} />
-                            )}
-                            {safeVehicle.documents && safeVehicle.documents.length > 0 && <div className="mt-6">
-                                <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Available Documents</h4>
-                                <div className="flex flex-wrap gap-4">
-                                    {safeVehicle.documents.map(doc => <DocumentChip key={doc.name} doc={doc} />)}
-                                </div>
-                            </div>}
-                        </CollapsibleSection>
-                    )}
-
+                    {/* ✅ FIX: Removed duplicate section - Vehicle History & Documents */}
                     {(safeVehicle.serviceRecords || safeVehicle.accidentHistory || safeVehicle.documents) && (
                         <CollapsibleSection title="Vehicle History & Documents">
                             {(safeVehicle.serviceRecords || safeVehicle.accidentHistory) && (
@@ -638,7 +866,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                         
                         {/* Key Specs */}
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">
-                          <span className="font-semibold">{safeVehicle.mileage.toLocaleString('en-IN')} km</span>
+                          <span className="font-semibold">{typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'} km</span>
                           <span>•</span>
                           <span>{safeVehicle.fuelType}</span>
                           <span>•</span>
@@ -799,6 +1027,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             Chat with Seller
                           </button>
                         </div>
+
                       </div>
                   </div>
               </div>
