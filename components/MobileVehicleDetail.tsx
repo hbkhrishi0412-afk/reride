@@ -114,10 +114,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   };
 
   const handleChat = () => {
-    if (!currentUser) {
-      // Navigate to login - this would need to be passed as prop
-      return;
-    }
     onStartChat(safeVehicle);
   };
 
@@ -149,53 +145,17 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           className="w-full h-full object-cover"
           onClick={() => setShowGallery(true)}
         />
-        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-4">
-          <button
-            onClick={onBack}
-            className="p-2 bg-white/20 backdrop-blur-sm rounded-full"
-            style={{ minWidth: '44px', minHeight: '44px' }}
-          >
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-        </div>
-        <div className="absolute bottom-4 right-4 flex gap-2">
-          <button
-            onClick={() => onToggleWishlist(safeVehicle.id)}
-            className="p-3 bg-white/90 backdrop-blur-sm rounded-full shadow-lg"
-            style={{ minWidth: '44px', minHeight: '44px' }}
-          >
-            <svg
-              className={`w-6 h-6 ${isInWishlist ? 'fill-red-500 text-red-500' : 'text-gray-700'}`}
-              fill={isInWishlist ? 'currentColor' : 'none'}
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-          </button>
-          <button
-            onClick={handleShare}
-            className="p-3 bg-white/90 backdrop-blur-sm rounded-full shadow-lg"
-            style={{ minWidth: '44px', minHeight: '44px' }}
-          >
-            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
-          </button>
-        </div>
         {safeVehicle.images.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm rounded-full px-4 py-2 text-white text-sm">
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm rounded-full px-4 py-2 text-white text-sm z-20">
             {safeVehicle.images.length} photos • Tap to view
           </div>
         )}
       </div>
 
-      {/* Content - Below Images */}
-      <div className="px-4 -mt-6 relative z-10 bg-white rounded-t-3xl">
-        {/* Vehicle Information */}
-        <div className="pt-6 pb-4">
+      {/* Content - Below Images with no overlap */}
+      <div className="px-4 relative z-10 space-y-4 pb-4 mt-4">
+        {/* Vehicle Details Card */}
+        <div className="bg-white rounded-2xl pt-6 pb-4 px-4 shadow-sm">
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-gray-900 mb-1">
@@ -224,32 +184,85 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                 </div>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Seller Information */}
-        {seller && (
-          <div className="border-t border-gray-200 pt-4 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                {seller.name?.charAt(0).toUpperCase() || seller.dealershipName?.charAt(0).toUpperCase() || 'S'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900">{seller.name || seller.dealershipName || 'Seller'}</h3>
-                <p className="text-sm text-gray-600">0 Followers</p>
-              </div>
+            {/* Action Icons */}
+            <div className="flex gap-2 ml-2">
               <button
-                onClick={() => onViewSellerProfile(safeVehicle.sellerEmail)}
-                className="text-sm text-orange-500 font-semibold flex-shrink-0"
+                onClick={() => onToggleWishlist(safeVehicle.id)}
+                className="p-2"
+                style={{ minWidth: '44px', minHeight: '44px' }}
               >
-                View Profile
+                <svg
+                  className={`w-6 h-6 ${isInWishlist ? 'fill-red-500 text-red-500' : 'text-gray-400'}`}
+                  fill={isInWishlist ? 'currentColor' : 'none'}
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </button>
+              <button
+                onClick={handleShare}
+                className="p-2"
+                style={{ minWidth: '44px', minHeight: '44px' }}
+              >
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
               </button>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Pricing Details */}
-        <div className="border-t border-gray-200 pt-4 pb-4">
+        {/* Seller Information Card with Chat Button */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          {(seller || safeVehicle.sellerName || safeVehicle.sellerEmail) && (
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                {seller?.name?.charAt(0).toUpperCase() || 
+                 seller?.dealershipName?.charAt(0).toUpperCase() || 
+                 safeVehicle.sellerName?.charAt(0).toUpperCase() || 
+                 safeVehicle.sellerEmail?.charAt(0).toUpperCase() || 
+                 'S'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-gray-900">
+                  {seller?.name || 
+                   seller?.dealershipName || 
+                   safeVehicle.sellerName || 
+                   'Seller'}
+                </h3>
+                <p className="text-sm text-gray-600">0 Followers</p>
+              </div>
+              {safeVehicle.sellerEmail && (
+                <button
+                  onClick={() => onViewSellerProfile(safeVehicle.sellerEmail)}
+                  className="text-sm text-orange-500 font-semibold flex-shrink-0"
+                >
+                  View Profile
+                </button>
+              )}
+            </div>
+          )}
+          {/* Chat Button - Always visible */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleChat();
+            }}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md"
+            style={{ minHeight: '48px' }}
+            type="button"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            Chat with Seller
+          </button>
+        </div>
+
+        {/* Pricing Card */}
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">Fixed on road price</span>
@@ -259,7 +272,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             </div>
           </div>
           <div className="mb-2">
-            <span className="text-3xl font-bold text-gray-900">{formatCurrency(safeVehicle.price)}</span>
+            <span className="text-3xl font-bold text-purple-600">{formatCurrency(safeVehicle.price)}</span>
           </div>
           <p className="text-xs text-gray-500 mb-4">Includes RC transfer, Insurance & more</p>
           
@@ -267,7 +280,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-sm text-gray-600 mb-1">Monthly EMI</p>
-              <p className="text-xl font-bold text-gray-900">
+              <p className="text-xl font-bold text-purple-600">
                 {formatCurrency(baseEMI)}/m
               </p>
             </div>
@@ -290,37 +303,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="border-t border-gray-200 pt-4 pb-6 flex gap-3">
-          <button
-            onClick={() => onToggleCompare(safeVehicle.id)}
-            disabled={!isComparing && comparisonList.length >= 4}
-            className={`flex-1 py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 ${
-              isComparing
-                ? 'bg-orange-500 text-white'
-                : 'bg-gray-100 text-gray-700'
-            } disabled:opacity-50`}
-            style={{ minHeight: '48px' }}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-            </svg>
-            Compare
-          </button>
-          <button
-            onClick={handleShare}
-            className="flex-1 py-3 px-4 rounded-xl font-semibold bg-gray-100 text-gray-700 flex items-center justify-center gap-2"
-            style={{ minHeight: '48px' }}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            Copy Link
-          </button>
-        </div>
-
         {/* Additional Details Section */}
-        <div className="border-t border-gray-200 pt-6 pb-4">
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
           <div className="flex border-b border-gray-200 mb-4">
             {(['overview', 'specs', 'features'] as const).map((tab) => (
               <button
@@ -428,14 +412,14 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
         {/* Recommendations */}
         {filteredRecommendations.length > 0 && (
-          <div className="mb-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4 px-2">Similar Vehicles</h2>
+          <div className="bg-white rounded-2xl p-4 shadow-sm">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Similar Vehicles</h2>
             <div className="space-y-3">
               {filteredRecommendations.map((rec) => (
                 <div
                   key={rec.id}
                   onClick={() => onSelectVehicle(rec)}
-                  className="bg-white rounded-xl shadow-md p-4 flex gap-4 active:scale-[0.98] transition-transform"
+                  className="bg-gray-50 rounded-xl p-4 flex gap-4 active:scale-[0.98] transition-transform"
                 >
                   <img
                     src={getFirstValidImage(rec.images)}
@@ -454,19 +438,6 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
         )}
       </div>
 
-      {/* Sticky Chat Button */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 p-4 safe-bottom">
-        <button
-          onClick={handleChat}
-          className="w-full bg-purple-600 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
-          style={{ minHeight: '48px' }}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          Chat with Seller
-        </button>
-      </div>
 
       {/* Modals */}
       {showGallery && (

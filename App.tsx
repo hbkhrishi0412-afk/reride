@@ -24,7 +24,6 @@ import MobileInbox from './components/MobileInbox';
 import MobileProfile from './components/MobileProfile';
 import MobileWishlist from './components/MobileWishlist';
 import MobileComparison from './components/MobileComparison';
-import MobileNotifications from './components/MobileNotifications';
 import MobileSellerProfilePage from './components/MobileSellerProfilePage';
 import MobileSellCarPage from './components/MobileSellCarPage';
 import MobileNewCarsPage from './components/MobileNewCarsPage';
@@ -40,7 +39,7 @@ import MobilePushNotificationManager from './components/MobilePushNotificationMa
 import ShareTargetHandler from './components/ShareTargetHandler';
 import OfflineIndicator from './components/OfflineIndicator';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage } from './types';
-import { parseDeepLink, handleDeepLink as handleDeepLinkUtil } from './utils/mobileFeatures';
+import { parseDeepLink } from './utils/mobileFeatures';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
@@ -802,7 +801,7 @@ const AppContent: React.FC = React.memo(() => {
       case ViewEnum.NEW_CARS:
         if (isMobileApp) {
           return (
-            <MobileNewCarsPage />
+            <MobileNewCarsPage onNavigate={navigate} />
           );
         }
         return (
@@ -1716,7 +1715,7 @@ const AppContent: React.FC = React.memo(() => {
                   await updateUser(currentUser.email, details);
                 }
               }}
-              onUpdatePassword={async (passwords) => {
+              onUpdatePassword={async (_passwords) => {
                 // This would need to be implemented in the API
                 return false;
               }}
@@ -2016,7 +2015,7 @@ const AppContent: React.FC = React.memo(() => {
           return (
             <MobileSupportPage
               currentUser={currentUser}
-              onSubmitTicket={(ticket) => {
+              onSubmitTicket={(_ticket) => {
                 // Handle support ticket submission
                 addToast('Support ticket submitted!', 'success');
                 navigate(ViewEnum.HOME);
@@ -2571,7 +2570,10 @@ const AppContent: React.FC = React.memo(() => {
                 conversation={activeChat}
                 currentUserRole={currentUser.role as 'customer' | 'seller'}
                 otherUserName={(() => {
-                  if (currentUser?.role === 'customer') {
+                  // Check role explicitly to determine other user name
+                  // ChatWidget is used for both customers and sellers
+                  const isCustomer = (currentUser.role as string) === 'customer';
+                  if (isCustomer) {
                     const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
                     return seller?.name || seller?.dealershipName || 'Seller';
                   } else {

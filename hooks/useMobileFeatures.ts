@@ -21,7 +21,6 @@ import {
   shareVehicle,
   createDeepLink,
   parseDeepLink,
-  isOnline,
   onOnlineStatusChange,
   queueOfflineAction,
   type LocationCoordinates,
@@ -282,7 +281,14 @@ export function useDeepLinking() {
 
   useEffect(() => {
     const parsed = parseDeepLink();
-    setParams(parsed);
+    // Convert DeepLinkParams to Record<string, string> (URL params are always strings)
+    const stringParams: Record<string, string> = {};
+    Object.entries(parsed).forEach(([key, value]) => {
+      if (value !== undefined) {
+        stringParams[key] = String(value);
+      }
+    });
+    setParams(stringParams);
   }, []);
 
   const createLink = useCallback((params: Record<string, string | number>) => {
@@ -333,5 +339,6 @@ export function useOfflineMode() {
     queueAction
   };
 }
+
 
 

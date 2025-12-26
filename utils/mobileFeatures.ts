@@ -54,16 +54,22 @@ export async function showNotification(options: PushNotificationOptions): Promis
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.ready;
-      await registration.showNotification(options.title, {
+      const notificationOptions: NotificationOptions & { vibrate?: number[]; actions?: Array<{ action: string; title: string; icon?: string }> } = {
         body: options.body,
         icon: options.icon || '/icon-192.png',
         badge: options.badge || '/icon-192.png',
         tag: options.tag,
         data: options.data,
-        requireInteraction: options.requireInteraction || false,
-        vibrate: options.vibrate || [200, 100, 200],
-        actions: options.actions
-      });
+        requireInteraction: options.requireInteraction || false
+      };
+      // vibrate and actions are supported in service worker notifications but not in base NotificationOptions type
+      if (options.vibrate) {
+        notificationOptions.vibrate = options.vibrate;
+      }
+      if (options.actions) {
+        notificationOptions.actions = options.actions;
+      }
+      await registration.showNotification(options.title, notificationOptions);
     } catch (error) {
       console.error('Failed to show notification via service worker:', error);
       // Fallback to regular notification
@@ -96,9 +102,14 @@ export async function subscribeToPushNotifications(): Promise<PushSubscription |
 
   try {
     const registration = await navigator.serviceWorker.ready;
+    const vapidKey = getVapidPublicKey();
+    if (!vapidKey) {
+      console.warn('VAPID public key not configured');
+      return null;
+    }
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(getVapidPublicKey())
+      applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource
     });
 
     return subscription;
@@ -185,7 +196,9 @@ export async function capturePhoto(options: CameraOptions = {}): Promise<string 
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.capture = options.sourceType === 'camera' ? 'environment' : undefined;
+    if (options.sourceType === 'camera') {
+      input.capture = 'environment';
+    }
     
     input.onchange = (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
@@ -217,7 +230,9 @@ export async function capturePhotos(count: number = 5, options: CameraOptions = 
     input.type = 'file';
     input.accept = 'image/*';
     input.multiple = true;
-    input.capture = options.sourceType === 'camera' ? 'environment' : undefined;
+    if (options.sourceType === 'camera') {
+      input.capture = 'environment';
+    }
     
     const photos: string[] = [];
     let loaded = 0;
@@ -650,5 +665,6 @@ function saveToIndexedDB(db: IDBDatabase, storeName: string, data: any): Promise
     request.onerror = () => reject(request.error);
   });
 }
+
 
 
