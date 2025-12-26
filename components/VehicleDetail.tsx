@@ -25,6 +25,7 @@ interface VehicleDetailProps {
   onStartChat: (vehicle: Vehicle) => void;
   recommendations: Vehicle[];
   onSelectVehicle: (vehicle: Vehicle) => void;
+  updateVehicle?: (id: number, updates: Partial<Vehicle>, options?: { successMessage?: string; skipToast?: boolean }) => Promise<void>;
 }
 
 // SVG icons for social media
@@ -278,12 +279,14 @@ const CertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ 
 };
 
 
-export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, recommendations, onSelectVehicle }) => {
+export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
   console.log('🎯 VehicleDetail component rendering with vehicle:', vehicle);
   console.log('🎯 Vehicle data:', { id: vehicle?.id, make: vehicle?.make, model: vehicle?.model, price: vehicle?.price });
   
-  // ✅ FIX: Call useApp() at the top level (React hooks rule)
-  const { updateVehicle } = useApp();
+  // Get updateVehicle from context (hook must be called unconditionally)
+  // Prefer prop over context if both are available
+  const context = useApp();
+  const updateVehicle = updateVehicleProp || context.updateVehicle;
   
   // ✅ FIX: Memoize safeVehicle to prevent unnecessary re-renders
   const safeVehicle = useMemo(() => ({
@@ -452,7 +455,9 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
           // Update global vehicles state via context so dashboards reflect the change
           try {
           // Skip toast notification for view count updates (silent background update)
-            updateVehicle(vehicleId, { views: data.views }, { skipToast: true }).catch(() => {});
+            if (updateVehicle) {
+              updateVehicle(vehicleId, { views: data.views }, { skipToast: true }).catch(() => {});
+            }
           } catch {}
         }
       } catch (_err) {

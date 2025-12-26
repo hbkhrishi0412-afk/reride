@@ -205,10 +205,10 @@ const SortableHeader: React.FC<{
     const direction = isSorted ? sortConfig.direction : undefined;
 
     return (
-        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-            <button onClick={() => requestSort(sortKey)} className="flex items-center gap-1.5 group">
-                <span className="group-hover:text-spinny-text-dark dark:group-hover:text-spinny-text-dark">{title}</span>
-                <span className="text-spinny-text-dark">
+        <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">
+            <button onClick={() => requestSort(sortKey)} className="flex items-center gap-1.5 group hover:text-gray-900">
+                <span className="group-hover:text-gray-900">{title}</span>
+                <span className="text-gray-500 text-xs">
                     {isSorted ? (direction === 'ascending' ? '▲' : '▼') : '↕'}
                 </span>
             </button>
@@ -1088,182 +1088,277 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     );
             case 'users':
     return (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center">
-                            <div className="flex gap-2">
+                    <div className="space-y-4">
+                        {/* Compact Header with Filters and Export */}
+                        <div className="bg-white rounded-lg border border-gray-200 p-4">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-sm font-medium text-gray-700 mr-2">Filter:</span>
+                                    <button 
+                                        onClick={() => setRoleFilter('all')}
+                                        className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
+                                            roleFilter === 'all' 
+                                                ? 'bg-blue-500 text-white shadow-sm' 
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        All ({users.length})
+                                    </button>
+                                    <button 
+                                        onClick={() => setRoleFilter('customer')}
+                                        className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
+                                            roleFilter === 'customer' 
+                                                ? 'bg-blue-500 text-white shadow-sm' 
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        Customers ({users.filter(u => u.role === 'customer').length})
+                                    </button>
+                                    <button 
+                                        onClick={() => setRoleFilter('seller')}
+                                        className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
+                                            roleFilter === 'seller' 
+                                                ? 'bg-blue-500 text-white shadow-sm' 
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        Sellers ({users.filter(u => u.role === 'seller').length})
+                                    </button>
+                                    <button 
+                                        onClick={() => setRoleFilter('admin')}
+                                        className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors ${
+                                            roleFilter === 'admin' 
+                                                ? 'bg-blue-500 text-white shadow-sm' 
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        Admins ({users.filter(u => u.role === 'admin').length})
+                                    </button>
+                                </div>
                                 <button 
-                                    onClick={() => setRoleFilter('all')}
-                                    className={`px-4 py-2 rounded-lg ${roleFilter === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleActionWithLoading('export-users', onExportUsers);
+                                    }} 
+                                    disabled={loadingActions.has('export-users')}
+                                    className={`px-4 py-1.5 text-sm rounded-md font-medium cursor-pointer transition-colors ${
+                                        loadingActions.has('export-users') 
+                                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                            : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
+                                    }`}
                                 >
-                                    All Users
-                                </button>
-                                <button 
-                                    onClick={() => setRoleFilter('customer')}
-                                    className={`px-4 py-2 rounded-lg ${roleFilter === 'customer' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-                                >
-                                    Customers
-                                </button>
-                                <button 
-                                    onClick={() => setRoleFilter('seller')}
-                                    className={`px-4 py-2 rounded-lg ${roleFilter === 'seller' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-                                >
-                                    Sellers
-                                </button>
-                                <button 
-                                    onClick={() => setRoleFilter('admin')}
-                                    className={`px-4 py-2 rounded-lg ${roleFilter === 'admin' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
-                                >
-                                    Admins
+                                    {loadingActions.has('export-users') ? 'Exporting...' : 'Export Users'}
                                 </button>
                             </div>
-                            <button 
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleActionWithLoading('export-users', onExportUsers);
-                                }} 
-                                disabled={loadingActions.has('export-users')}
-                                className={`px-4 py-2 rounded-lg cursor-pointer ${
-                                    loadingActions.has('export-users') 
-                                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
-                                        : 'bg-green-500 text-white hover:bg-green-600'
-                                }`}
-                            >
-                                {loadingActions.has('export-users') ? 'Exporting...' : 'Export Users'}
-                            </button>
                         </div>
-                        <TableContainer title={`User Management (${filteredUsers.length} users)`}>
-                    <table className="w-full divide-y divide-gray-200 dark:divide-gray-700" style={{ minWidth: '800px' }}>
-                                <thead className="bg-white dark:bg-white">
-                                    <tr>
-                                        <SortableHeader title="Name" sortKey="name" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Email</th>
-                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Mobile</th>
-                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Role</th>
-                                        <SortableHeader title="Status" sortKey="status" sortConfig={sortConfig} requestSort={requestSort} />
-                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Member Since</th>
-                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Documents</th>
-                                        <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider whitespace-nowrap">Actions</th>
-                                    </tr>
-                                </thead>
-                        <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
-                                    {filteredUsers.map(user => {
-                                        const memberSince = user.createdAt || user.joinedDate;
-                                        const formattedDate = memberSince 
-                                            ? (() => {
-                                                try {
-                                                    const date = new Date(memberSince);
-                                                    if (!isNaN(date.getTime())) {
-                                                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+                        {/* Compact Finance Partner Summary - Only for Seller/All views */}
+                        {roleFilter === 'seller' || roleFilter === 'all' ? (() => {
+                            const sellers = filteredUsers.filter(u => u.role === 'seller');
+                            const sellersWithBanks = sellers.filter(s => s.partnerBanks && s.partnerBanks.length > 0);
+                            const totalBanks = sellersWithBanks.reduce((acc, s) => acc + (s.partnerBanks?.length || 0), 0);
+                            
+                            return (
+                                <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200 p-4">
+                                    <div className="flex items-center justify-between flex-wrap gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                            </svg>
+                                            <h3 className="text-sm font-semibold text-gray-900">Finance Partner Summary</h3>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-4 text-sm">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-gray-600">Total Sellers:</span>
+                                                <span className="font-bold text-gray-900">{sellers.length}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-gray-600">With Partners:</span>
+                                                <span className="font-bold text-purple-600">{sellersWithBanks.length}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-gray-600">Total Partnerships:</span>
+                                                <span className="font-bold text-blue-600">{totalBanks}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })() : null}
+                        
+                        {/* Compact Table */}
+                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                                <h3 className="text-sm font-semibold text-gray-900">
+                                    User Management <span className="text-gray-600 font-normal">({filteredUsers.length} users)</span>
+                                </h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full divide-y divide-gray-200" style={{ minWidth: '800px' }}>
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <SortableHeader title="Name" sortKey="name" sortConfig={sortConfig} requestSort={requestSort} />
+                                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Email</th>
+                                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Mobile</th>
+                                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Role</th>
+                                            <SortableHeader title="Status" sortKey="status" sortConfig={sortConfig} requestSort={requestSort} />
+                                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Member Since</th>
+                                            {roleFilter === 'seller' || roleFilter === 'all' ? (
+                                              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Finance Partners</th>
+                                            ) : null}
+                                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Documents</th>
+                                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {filteredUsers.map(user => {
+                                            const memberSince = user.createdAt || user.joinedDate;
+                                            const formattedDate = memberSince 
+                                                ? (() => {
+                                                    try {
+                                                        const date = new Date(memberSince);
+                                                        if (!isNaN(date.getTime())) {
+                                                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                                                        }
+                                                    } catch (e) {
+                                                        // Invalid date
                                                     }
-                                                } catch (e) {
-                                                    // Invalid date
-                                                }
-                                                return 'N/A';
-                                            })()
-                                            : 'N/A';
-                                        return (
-                                        <tr key={user.email}>
-                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap font-medium text-sm">{user.name}</td>
-                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">{user.email}</td>
-                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm">{user.mobile || 'N/A'}</td>
-                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                                    user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                                                    user.role === 'seller' ? 'bg-blue-100 text-blue-800' :
-                                                    'bg-green-100 text-green-800'
-                                                }`}>
-                                                    {user.role}
-                                                </span>
-                                            </td>
-                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                                    user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                                }`}>
-                                                    {user.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-gray-600 dark:text-gray-400">{formattedDate}</td>
-                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                                                <div className="flex flex-col gap-1">
-                                                    {user.aadharCard?.documentUrl && (
-                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                                            user.aadharCard?.isVerified 
-                                                                ? 'bg-green-100 text-green-800' 
-                                                                : 'bg-yellow-100 text-yellow-800'
-                                                        }`}>
-                                                            Aadhar: {user.aadharCard.isVerified ? '✓' : 'Pending'}
-                                                        </span>
+                                                    return 'N/A';
+                                                })()
+                                                : 'N/A';
+                                            return (
+                                            <tr key={user.email} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    <div className="font-medium text-sm text-gray-900">{user.name}</div>
+                                                </td>
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600">{user.email}</td>
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600">{user.mobile || 'N/A'}</td>
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
+                                                        user.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                                                        user.role === 'seller' ? 'bg-blue-100 text-blue-700' :
+                                                        'bg-green-100 text-green-700'
+                                                    }`}>
+                                                        {user.role}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
+                                                        user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                                    }`}>
+                                                        {user.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600">{formattedDate}</td>
+                                                {(roleFilter === 'seller' || roleFilter === 'all') && (
+                                                  <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    {user.role === 'seller' && user.partnerBanks && user.partnerBanks.length > 0 ? (
+                                                      <div className="flex flex-wrap gap-1">
+                                                        {user.partnerBanks.slice(0, 2).map((bank, idx) => (
+                                                          <span
+                                                            key={idx}
+                                                            className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200"
+                                                          >
+                                                            {bank}
+                                                          </span>
+                                                        ))}
+                                                        {user.partnerBanks.length > 2 && (
+                                                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium text-gray-500">
+                                                            +{user.partnerBanks.length - 2}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    ) : user.role === 'seller' ? (
+                                                      <span className="text-xs text-gray-400">No partners</span>
+                                                    ) : (
+                                                      <span className="text-xs text-gray-400">-</span>
                                                     )}
-                                                    {user.panCard?.documentUrl && (
-                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                                            user.panCard?.isVerified 
-                                                                ? 'bg-green-100 text-green-800' 
-                                                                : 'bg-yellow-100 text-yellow-800'
-                                                        }`}>
-                                                            PAN: {user.panCard.isVerified ? '✓' : 'Pending'}
-                                                        </span>
-                                                    )}
-                                                    {(!user.aadharCard?.documentUrl && !user.panCard?.documentUrl) && (
-                                                        <span className="text-xs text-gray-400">No documents</span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm font-medium">
-                                                <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
-                                                    <button 
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            setEditingUser(user);
-                                                        }} 
-                                                        className="text-blue-600 hover:text-blue-800 cursor-pointer"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button 
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            const action = user.status === 'active' ? 'suspend' : 'activate';
-                                                            if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
-                                                                handleActionWithLoading(`toggle-user-${user.email}`, () => onToggleUserStatus(user.email));
-                                                            }
-                                                        }} 
-                                                        disabled={loadingActions.has(`toggle-user-${user.email}`)}
-                                                        className={`cursor-pointer ${
-                                                            loadingActions.has(`toggle-user-${user.email}`)
-                                                                ? 'text-gray-400 cursor-not-allowed'
-                                                                : 'text-yellow-600 hover:text-yellow-800'
-                                                        }`}
-                                                    >
-                                                        {loadingActions.has(`toggle-user-${user.email}`) ? '...' : (user.status === 'active' ? 'Suspend' : 'Activate')}
-                                                    </button>
-                                                    <button 
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            if (window.confirm(`Are you sure you want to delete user ${user.email}? This action cannot be undone.`)) {
-                                                                handleActionWithLoading(`delete-user-${user.email}`, () => onDeleteUser(user.email));
-                                                            }
-                                                        }} 
-                                                        disabled={loadingActions.has(`delete-user-${user.email}`)}
-                                                        className={`cursor-pointer ${
-                                                            loadingActions.has(`delete-user-${user.email}`)
-                                                                ? 'text-gray-400 cursor-not-allowed'
-                                                                : 'text-red-600 hover:text-red-800'
-                                                        }`}
-                                                    >
-                                                        {loadingActions.has(`delete-user-${user.email}`) ? '...' : 'Delete'}
-                                                    </button>
-                                                </div>
-                                    </td>
-                                </tr>
-                                        );
-                                    })}
-                        </tbody>
-                    </table>
-            </TableContainer>
+                                                  </td>
+                                                )}
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {user.aadharCard?.documentUrl && (
+                                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                                                                user.aadharCard?.isVerified 
+                                                                    ? 'bg-green-100 text-green-700' 
+                                                                    : 'bg-yellow-100 text-yellow-700'
+                                                            }`}>
+                                                                A{user.aadharCard.isVerified ? '✓' : '!'}
+                                                            </span>
+                                                        )}
+                                                        {user.panCard?.documentUrl && (
+                                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+                                                                user.panCard?.isVerified 
+                                                                    ? 'bg-green-100 text-green-700' 
+                                                                    : 'bg-yellow-100 text-yellow-700'
+                                                            }`}>
+                                                                P{user.panCard.isVerified ? '✓' : '!'}
+                                                            </span>
+                                                        )}
+                                                        {(!user.aadharCard?.documentUrl && !user.panCard?.documentUrl) && (
+                                                            <span className="text-xs text-gray-400">-</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setEditingUser(user);
+                                                            }} 
+                                                            className="text-blue-600 hover:text-blue-800 text-xs font-medium cursor-pointer transition-colors"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <span className="text-gray-300">|</span>
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                const action = user.status === 'active' ? 'suspend' : 'activate';
+                                                                if (window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
+                                                                    handleActionWithLoading(`toggle-user-${user.email}`, () => onToggleUserStatus(user.email));
+                                                                }
+                                                            }} 
+                                                            disabled={loadingActions.has(`toggle-user-${user.email}`)}
+                                                            className={`text-xs font-medium cursor-pointer transition-colors ${
+                                                                loadingActions.has(`toggle-user-${user.email}`)
+                                                                    ? 'text-gray-400 cursor-not-allowed'
+                                                                    : 'text-yellow-600 hover:text-yellow-800'
+                                                            }`}
+                                                        >
+                                                            {loadingActions.has(`toggle-user-${user.email}`) ? '...' : (user.status === 'active' ? 'Suspend' : 'Activate')}
+                                                        </button>
+                                                        <span className="text-gray-300">|</span>
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                if (window.confirm(`Are you sure you want to delete user ${user.email}? This action cannot be undone.`)) {
+                                                                    handleActionWithLoading(`delete-user-${user.email}`, () => onDeleteUser(user.email));
+                                                                }
+                                                            }} 
+                                                            disabled={loadingActions.has(`delete-user-${user.email}`)}
+                                                            className={`text-xs font-medium cursor-pointer transition-colors ${
+                                                                loadingActions.has(`delete-user-${user.email}`)
+                                                                    ? 'text-gray-400 cursor-not-allowed'
+                                                                    : 'text-red-600 hover:text-red-800'
+                                                            }`}
+                                                        >
+                                                            {loadingActions.has(`delete-user-${user.email}`) ? '...' : 'Delete'}
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 );
             case 'listings':

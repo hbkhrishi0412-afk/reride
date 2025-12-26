@@ -48,7 +48,7 @@ interface DashboardProps {
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
-  onUpdateSellerProfile: (details: { dealershipName: string; bio: string; logoUrl: string; }) => void;
+  onUpdateSellerProfile: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void;
   vehicleData: VehicleData;
   onFeatureListing: (vehicleId: number) => Promise<void>;
   onRequestCertification: (vehicleId: number) => void;
@@ -58,7 +58,7 @@ interface DashboardProps {
   onViewVehicle?: (vehicle: Vehicle) => void;
 }
 
-type DashboardView = 'overview' | 'listings' | 'form' | 'inquiries' | 'analytics' | 'salesHistory' | 'reports';
+type DashboardView = 'overview' | 'listings' | 'form' | 'inquiries' | 'analytics' | 'salesHistory' | 'reports' | 'settings';
 
 const HelpTooltip: React.FC<{ text: string }> = memo(({ text }) => (
     <span className="group relative ml-1">
@@ -502,6 +502,182 @@ interface VehicleFormProps {
     onCancel: () => void;
     vehicleData: VehicleData;
 }
+
+// Settings View Component for Bank Partner Selection
+const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void | Promise<void> }> = ({ seller, onUpdateSeller }) => {
+  const [selectedBanks, setSelectedBanks] = useState<string[]>(seller?.partnerBanks || []);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Update selectedBanks when seller data changes
+  useEffect(() => {
+    if (seller?.partnerBanks) {
+      setSelectedBanks(seller.partnerBanks);
+    } else {
+      setSelectedBanks([]);
+    }
+  }, [seller?.partnerBanks]);
+
+  // Safety check
+  if (!seller || !seller.email) {
+    return (
+      <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
+        <p className="text-gray-600">Unable to load seller information. Please refresh the page.</p>
+      </div>
+    );
+  }
+
+  // Common Indian banks for vehicle financing
+  const availableBanks = [
+    'HDFC Bank',
+    'ICICI Bank',
+    'State Bank of India (SBI)',
+    'Axis Bank',
+    'Kotak Mahindra Bank',
+    'Bajaj Finserv',
+    'Tata Capital',
+    'Mahindra Finance',
+    'Yes Bank',
+    'IDFC First Bank',
+    'Bank of Baroda',
+    'Punjab National Bank (PNB)',
+    'Union Bank of India',
+    'Canara Bank',
+    'Indian Bank'
+  ];
+
+  const handleBankToggle = (bankName: string) => {
+    setSelectedBanks(prev => {
+      if (prev.includes(bankName)) {
+        return prev.filter(b => b !== bankName);
+      } else {
+        return [...prev, bankName];
+      }
+    });
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveSuccess(false);
+    try {
+      await onUpdateSeller({
+        dealershipName: seller.dealershipName || seller.name,
+        bio: seller.bio || '',
+        logoUrl: seller.logoUrl || '',
+        partnerBanks: selectedBanks
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error('Failed to save bank partners:', error);
+      alert('Failed to save bank partners. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
+      <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Settings</h2>
+      
+      <div className="space-y-6">
+        {/* Finance Partner Banks Section */}
+        <div className="border border-gray-200 rounded-lg p-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+              Finance Partner Banks
+            </h3>
+            <p className="text-sm text-gray-600">
+              Select the banks you are partnered with for vehicle financing. This information will be displayed to potential buyers on your listings.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+            {availableBanks.map((bank) => {
+              const isSelected = selectedBanks.includes(bank);
+              return (
+                <label
+                  key={bank}
+                  className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                    isSelected
+                      ? 'border-purple-600 bg-purple-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleBankToggle(bank)}
+                    className="sr-only"
+                  />
+                  <div className={`flex-shrink-0 w-5 h-5 rounded border-2 mr-3 flex items-center justify-center ${
+                    isSelected ? 'border-purple-600 bg-purple-600' : 'border-gray-300'
+                  }`}>
+                    {isSelected && (
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={`text-sm font-medium ${isSelected ? 'text-purple-900' : 'text-gray-700'}`}>
+                    {bank}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
+          {selectedBanks.length > 0 && (
+            <div className="mb-4 p-3 bg-purple-50 rounded-lg">
+              <p className="text-sm font-medium text-purple-900 mb-2">Selected Partners ({selectedBanks.length}):</p>
+              <div className="flex flex-wrap gap-2">
+                {selectedBanks.map((bank) => (
+                  <span
+                    key={bank}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200"
+                  >
+                    {bank}
+                    <button
+                      onClick={() => handleBankToggle(bank)}
+                      className="ml-2 text-purple-600 hover:text-purple-800"
+                      aria-label={`Remove ${bank}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              {selectedBanks.length === 0 
+                ? 'No banks selected. Buyers won\'t see finance partner information.' 
+                : `This information will be displayed on all your vehicle listings.`}
+            </p>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+                isSaving
+                  ? 'bg-gray-400 text-white cursor-not-allowed'
+                  : saveSuccess
+                  ? 'bg-green-600 text-white'
+                  : 'bg-purple-600 text-white hover:bg-purple-700'
+              }`}
+            >
+              {isSaving ? 'Saving...' : saveSuccess ? '✓ Saved' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVehicle, onUpdateVehicle, onCancel, vehicleData, seller, onFeatureListing, allVehicles }) => {
     const [formData, setFormData] = useState(editingVehicle ? { 
@@ -1438,9 +1614,8 @@ const ReportsView: React.FC<{
 
 // Main Dashboard Component
 const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
-  // Note: onUpdateSellerProfile, onRequestCertification, and onTestDriveResponse are part of the interface contract
+  // Note: onRequestCertification, and onTestDriveResponse are part of the interface contract
   // but are not currently used in this component. They may be used in future features or passed to child components.
-  void onUpdateSellerProfile;
   void onRequestCertification;
   void onTestDriveResponse;
   
@@ -2917,6 +3092,15 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             )}
           </div>
         );
+      case 'settings':
+        if (!seller) {
+          return (
+            <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
+              <p className="text-gray-600">Loading seller information...</p>
+            </div>
+          );
+        }
+        return <SettingsView seller={seller} onUpdateSeller={onUpdateSellerProfile} />;
       case 'reports':
         return <ReportsView
                     reportedVehicles={safeReportedVehicles}
@@ -3044,6 +3228,16 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                   </svg>
                   <span>Inquiries</span>
+                </div>
+              </NavItem>
+              
+              <NavItem view="settings">
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  </svg>
+                  <span>Settings</span>
                 </div>
               </NavItem>
             </div>

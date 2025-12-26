@@ -186,7 +186,8 @@ const AppContent: React.FC = React.memo(() => {
   const { 
     currentView, 
     setCurrentView,
-    navigate, 
+    navigate,
+    goBack, 
     currentUser, 
     setCurrentUser,
     handleLogout, 
@@ -292,8 +293,16 @@ const AppContent: React.FC = React.memo(() => {
   }
   
   // Handle deep linking on mount and URL changes
+  // Note: This works alongside the AppProvider's popstate handler
+  // This handler focuses on URL parameters (deep links), while AppProvider handles history state
   useEffect(() => {
     const handleDeepLink = () => {
+      // Only process deep links if there's no history state (history state takes precedence)
+      if (window.history.state && window.history.state.view) {
+        // History state is handled by AppProvider, skip deep link parsing
+        return;
+      }
+      
       const params = parseDeepLink();
       if (params.view) {
         // Convert string view to ViewEnum
@@ -312,15 +321,9 @@ const AppContent: React.FC = React.memo(() => {
       }
     };
 
-    // Handle initial deep link
+    // Handle initial deep link (only on mount, not on popstate)
+    // The popstate handler in AppProvider will handle browser back/forward
     handleDeepLink();
-
-    // Listen for URL changes (e.g., browser back/forward)
-    window.addEventListener('popstate', handleDeepLink);
-    
-    return () => {
-      window.removeEventListener('popstate', handleDeepLink);
-    };
   }, [vehicles, setCurrentView, selectVehicle]);
 
   // Restore persisted session on first load
@@ -662,7 +665,7 @@ const AppContent: React.FC = React.memo(() => {
           return (
             <MobileVehicleDetail
               vehicle={selectedVehicle}
-              onBack={() => navigate(ViewEnum.USED_CARS)}
+              onBack={() => goBack(ViewEnum.USED_CARS)}
               comparisonList={comparisonList}
               onToggleCompare={toggleCompare}
               wishlist={wishlist}
@@ -731,7 +734,7 @@ const AppContent: React.FC = React.memo(() => {
         return (
           <VehicleDetail
             vehicle={selectedVehicle}
-            onBack={() => navigate(ViewEnum.USED_CARS)}
+            onBack={() => goBack(ViewEnum.USED_CARS)}
             comparisonList={comparisonList}
             onToggleCompare={toggleCompare}
             onAddSellerRating={addSellerRating}
@@ -740,6 +743,7 @@ const AppContent: React.FC = React.memo(() => {
             currentUser={currentUser}
             onFlagContent={(type, id, _reason) => flagContent(type, id)}
             users={users}
+            updateVehicle={updateVehicle}
             onViewSellerProfile={(sellerEmail: string) => {
               const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
               const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
@@ -901,14 +905,14 @@ const AppContent: React.FC = React.memo(() => {
                 setComparisonList(prev => prev.filter(vId => vId !== id));
               }}
               onSelectVehicle={selectVehicle}
-              onBack={() => navigate(ViewEnum.USED_CARS)}
+              onBack={() => goBack(ViewEnum.USED_CARS)}
             />
           );
         }
         return (
           <Comparison 
             vehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => comparisonList.includes(v.id)), users)}
-            onBack={() => navigate(ViewEnum.USED_CARS)}
+            onBack={() => goBack(ViewEnum.USED_CARS)}
             onToggleCompare={(id: number) => {
               setComparisonList(prev => 
                 prev.includes(id) 
@@ -1719,7 +1723,7 @@ const AppContent: React.FC = React.memo(() => {
                 // This would need to be implemented in the API
                 return false;
               }}
-              onBack={() => navigate(ViewEnum.HOME)}
+              onBack={() => goBack(ViewEnum.HOME)}
               addToast={addToast}
             />
           );
@@ -1882,7 +1886,7 @@ const AppContent: React.FC = React.memo(() => {
               onToggleCompare={toggleCompare}
               wishlist={wishlist}
               onToggleWishlist={toggleWishlist}
-              onBack={() => navigate(ViewEnum.HOME)}
+              onBack={() => goBack(ViewEnum.HOME)}
               onViewSellerProfile={(sellerEmail) => {
                 const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
                 const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
@@ -1914,7 +1918,7 @@ const AppContent: React.FC = React.memo(() => {
             onToggleCompare={toggleCompare}
             wishlist={wishlist}
             onToggleWishlist={toggleWishlist}
-            onBack={() => navigate(ViewEnum.HOME)}
+            onBack={() => goBack(ViewEnum.HOME)}
             onViewSellerProfile={(sellerEmail) => {
               // Normalize emails for comparison (critical for production)
               const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
@@ -2159,7 +2163,7 @@ const AppContent: React.FC = React.memo(() => {
                 console.log('Password reset requested for:', email);
               }
             }}
-            onBack={() => navigate(ViewEnum.LOGIN_PORTAL)}
+            onBack={() => goBack(ViewEnum.LOGIN_PORTAL)}
           />
         );
 

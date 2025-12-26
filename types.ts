@@ -226,6 +226,9 @@ export interface User {
   preferredContactHours?: string;
   showEmailPublicly?: boolean;
   
+  // NEW: Finance Partner Banks
+  partnerBanks?: string[]; // Array of bank names the seller is partnered with for finance
+  
   // ENHANCED: Trust & Safety
   verificationStatus?: VerificationStatus;
   
