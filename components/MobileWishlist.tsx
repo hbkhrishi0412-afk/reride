@@ -230,3 +230,5 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
 export default MobileWishlist;
 
 
+
+

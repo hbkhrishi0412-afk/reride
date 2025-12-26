@@ -108,3 +108,5 @@ function getNotificationView(notification: Notification): string {
 
 export default MobilePushNotificationManager;
 
+
+

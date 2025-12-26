@@ -70,3 +70,5 @@ export const MobileRentalPage: React.FC<MobileRentalPageProps> = ({
 export default MobileRentalPage;
 
 
+
+

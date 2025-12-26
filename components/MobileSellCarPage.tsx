@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
 import { fetchCarDataFromSpinny, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/spinnyScraper';
-import { sellCarAPI } from '../services/sellCarService';
 import { useCamera } from '../hooks/useMobileFeatures';
 
 interface MobileSellCarPageProps {
@@ -18,10 +17,7 @@ interface MobileSellCarPageProps {
  */
 export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [sellerType, setSellerType] = useState<'individual' | 'dealer'>('individual');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [_sellerType, setSellerType] = useState<'individual' | 'dealer'>('individual');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [carDetails, setCarDetails] = useState({
     registration: '',
@@ -41,7 +37,6 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   const [carData, setCarData] = useState<ScrapedCarData | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [availableVariants, setAvailableVariants] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [registrationError, setRegistrationError] = useState('');
   const [customerContact, setCustomerContact] = useState('');
@@ -68,14 +63,11 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
 
   useEffect(() => {
     const loadCarData = async () => {
-      setIsLoading(true);
       try {
         const data = await fetchCarDataFromSpinny();
         setCarData(data);
       } catch (error) {
         console.error('Failed to load car data:', error);
-      } finally {
-        setIsLoading(false);
       }
     };
     loadCarData();
@@ -128,26 +120,21 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
     
     setIsVerifying(true);
     try {
-      const result = await sellCarAPI(registrationNumber);
-      if (result.success && result.data) {
+      // Note: Registration verification API is not yet implemented in sellCarAPI
+      // For now, we'll just proceed to manual entry
+      // TODO: Implement registration verification API endpoint
+      setTimeout(() => {
         setCarDetails(prev => ({
           ...prev,
-          registration: registrationNumber,
-          make: result.data?.make || '',
-          model: result.data?.model || '',
-          variant: result.data?.variant || '',
-          year: result.data?.year?.toString() || ''
+          registration: registrationNumber
         }));
+        setIsVerifying(false);
         handleNextStep();
-      } else {
-        setRegistrationError(result.message || 'Could not fetch car details. Please fill manually.');
-        handleNextStep();
-      }
+      }, 1000);
     } catch (error) {
       setRegistrationError('Error fetching details. Please fill manually.');
-      handleNextStep();
-    } finally {
       setIsVerifying(false);
+      handleNextStep();
     }
   };
 
@@ -249,7 +236,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
               >
                 <option value="">Select Make</option>
                 {carData?.makes.map(make => (
-                  <option key={make} value={make}>{make}</option>
+                  <option key={make.name} value={make.name}>{make.name}</option>
                 ))}
               </select>
             </div>
