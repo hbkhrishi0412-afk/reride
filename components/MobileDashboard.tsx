@@ -1,15 +1,25 @@
-import React, { useState, memo } from 'react';
+import React, { useState, memo, useMemo, useEffect, useCallback } from 'react';
 import type { User, Vehicle, Conversation, Notification } from '../types';
 import { View as ViewEnum } from '../types';
+import { planService } from '../services/planService';
+import AiAssistant from './AiAssistant';
+import BulkUploadModal from './BulkUploadModal';
+import PricingGuidance from './PricingGuidance';
+import BoostListingModal from './BoostListingModal';
+import ListingLifecycleIndicator from './ListingLifecycleIndicator';
+import PaymentStatusCard from './PaymentStatusCard';
 
 interface MobileDashboardProps {
   currentUser: User;
   userVehicles: Vehicle[];
   conversations: Conversation[];
+  allVehicles?: Vehicle[]; // For pricing guidance and analytics
+  reportedVehicles?: Vehicle[]; // For reports view
   onNavigate: (view: ViewEnum) => void;
   onEditVehicle: (vehicle: Vehicle) => void;
   onDeleteVehicle: (vehicleId: number) => void;
   onMarkAsSold: (vehicleId: number) => void;
+  onMarkAsUnsold?: (vehicleId: number) => void;
   onFeatureListing: (vehicleId: number) => void;
   onSendMessage: (conversationId: string, message: string) => void;
   onMarkConversationAsRead: (conversationId: string) => void;
@@ -21,54 +31,74 @@ interface MobileDashboardProps {
   onLogout?: () => void;
   // Add vehicle form handlers
   onAddVehicle?: (vehicleData: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, isFeaturing?: boolean) => void;
+  onAddMultipleVehicles?: (vehicles: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => void;
   onUpdateVehicle?: (vehicleData: Vehicle) => void;
   vehicleData?: any; // Vehicle data for form
   // Add prop for viewing vehicle details
   onViewVehicle?: (vehicle: Vehicle) => void;
   // Profile editing
   onUpdateProfile?: (profileData: Partial<User>) => Promise<void>;
+  onUpdateSellerProfile?: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void;
   // Notifications
   notifications?: Notification[];
   onNotificationClick?: (notification: Notification) => void;
   onMarkNotificationsAsRead?: (ids: number[]) => void;
   // Toast notifications
   addToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
+  // Boost listing
+  onBoostListing?: (vehicleId: number, packageId: string) => Promise<void>;
+  // Request certification
+  onRequestCertification?: (vehicleId: number) => void;
 }
 
-type DashboardTab = 'overview' | 'listings' | 'messages' | 'analytics' | 'profile' | 'addVehicle' | 'editVehicle' | 'notifications';
+type DashboardTab = 'overview' | 'listings' | 'messages' | 'inquiries' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'profile' | 'addVehicle' | 'editVehicle' | 'notifications';
 
 const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   currentUser,
   userVehicles,
   conversations,
+  allVehicles = [],
+  reportedVehicles = [],
   onNavigate,
-  onEditVehicle: _onEditVehicle, // Kept for interface compatibility
+  onEditVehicle: _onEditVehicle,
   onDeleteVehicle,
-  onMarkAsSold: _onMarkAsSold, // Kept for interface compatibility
-  onFeatureListing: _onFeatureListing, // Kept for interface compatibility
-  onSendMessage: _onSendMessage, // Kept for interface compatibility
-  onMarkConversationAsRead: _onMarkConversationAsRead, // Kept for interface compatibility
-  onOfferResponse: _onOfferResponse, // Kept for interface compatibility
-  typingStatus: _typingStatus, // Kept for interface compatibility
-  onUserTyping: _onUserTyping, // Kept for interface compatibility
-  onMarkMessagesAsRead: _onMarkMessagesAsRead, // Kept for interface compatibility
-  onFlagContent: _onFlagContent, // Kept for interface compatibility
+  onMarkAsSold: _onMarkAsSold,
+  onMarkAsUnsold,
+  onFeatureListing: _onFeatureListing,
+  onSendMessage: _onSendMessage,
+  onMarkConversationAsRead: _onMarkConversationAsRead,
+  onOfferResponse: _onOfferResponse,
+  typingStatus: _typingStatus,
+  onUserTyping: _onUserTyping,
+  onMarkMessagesAsRead: _onMarkMessagesAsRead,
+  onFlagContent: _onFlagContent,
   onLogout,
   onAddVehicle,
+  onAddMultipleVehicles,
   onUpdateVehicle,
-  vehicleData: _vehicleData, // Kept for interface compatibility
+  vehicleData: _vehicleData,
   onViewVehicle,
   onUpdateProfile,
+  onUpdateSellerProfile,
   notifications = [],
   onNotificationClick,
   onMarkNotificationsAsRead,
-  addToast
+  addToast,
+  onBoostListing,
+  onRequestCertification
 }) => {
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editFormData, setEditFormData] = useState<Vehicle | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const [plan, setPlan] = useState<any>(null);
+  const [planLoading, setPlanLoading] = useState(true);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [boostVehicle, setBoostVehicle] = useState<Vehicle | null>(null);
+  const [selectedBanks, setSelectedBanks] = useState<string[]>([]);
+  const [isSavingBanks, setIsSavingBanks] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   
   // Add vehicle form state
   const initialAddFormData: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'> = {
@@ -164,25 +194,56 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   // Check if user is a seller
   const isSeller = currentUser?.role === 'seller';
   const isAdmin = currentUser.role === 'admin';
-  // Removed unused isCustomer variable
+
+  // Load plan details
+  useEffect(() => {
+    if (isSeller) {
+      const loadPlan = async () => {
+        try {
+          const planDetails = await planService.getPlanDetails(currentUser.subscriptionPlan || 'free');
+          setPlan(planDetails);
+        } catch (error) {
+          console.error('Failed to load plan details:', error);
+          setPlan({ name: 'Free Plan', listingLimit: 1, price: 0 });
+        } finally {
+          setPlanLoading(false);
+        }
+      };
+      loadPlan();
+    }
+  }, [isSeller, currentUser.subscriptionPlan]);
+
+  // Initialize bank partners
+  useEffect(() => {
+    if (isSeller && (currentUser as any).partnerBanks) {
+      setSelectedBanks([...(currentUser as any).partnerBanks] || []);
+    }
+  }, [isSeller, currentUser]);
 
   // Calculate stats
-  // Safety checks
   const safeUserVehicles = userVehicles || [];
   const safeConversations = conversations || [];
+  const safeAllVehicles = allVehicles || [];
+  const safeReportedVehicles = reportedVehicles || [];
   
   const totalListings = safeUserVehicles.length;
   const activeListings = safeUserVehicles.filter(v => v && v.status === 'published').length;
   const soldListings = safeUserVehicles.filter(v => v && v.status === 'sold').length;
-  const unreadMessages = safeConversations.filter(c => c && !c.isReadByCustomer).length;
+  const unreadMessages = safeConversations.filter(c => c && !c.isReadBySeller).length;
   const totalViews = safeUserVehicles.reduce((sum, v) => sum + (v?.views || 0), 0);
   const totalInquiries = safeConversations.length;
+  const reportedCount = safeReportedVehicles.length;
+  const featuredListingsCount = safeUserVehicles.filter(v => v && v.isFeatured).length;
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '📊', count: null },
     { id: 'listings', label: 'Listings', icon: '🚗', count: totalListings },
     { id: 'messages', label: 'Messages', icon: '💬', count: unreadMessages },
+    { id: 'inquiries', label: 'Inquiries', icon: '📥', count: totalInquiries },
     { id: 'analytics', label: 'Analytics', icon: '📈', count: null },
+    { id: 'salesHistory', label: 'Sales', icon: '💰', count: soldListings },
+    { id: 'reports', label: 'Reports', icon: '🚩', count: reportedCount },
+    { id: 'settings', label: 'Settings', icon: '⚙️', count: null },
     { id: 'profile', label: 'Profile', icon: '👤', count: null },
   ];
 
@@ -294,6 +355,83 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         </div>
       </div>
 
+      {/* Plan Management Card - Premium Design */}
+      {isSeller && plan && !planLoading && (
+        <div 
+          className="rounded-2xl p-5 text-white relative overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 50%, #FF9F6B 100%)',
+            boxShadow: '0 8px 24px rgba(255, 107, 53, 0.3), 0 4px 8px rgba(255, 107, 53, 0.2)',
+            border: '0.5px solid rgba(255, 255, 255, 0.2)'
+          }}
+        >
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Your Plan: {plan.name}</h3>
+              {(plan.id !== 'premium' || (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date())) && (
+                <button
+                  onClick={() => onNavigate(ViewEnum.PRICING)}
+                  className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white font-semibold rounded-lg text-sm active:scale-95 transition-transform"
+                >
+                  {currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date() ? 'Renew' : 'Upgrade'}
+                </button>
+              )}
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="opacity-90">Active Listings:</span>
+                <span className="font-bold">{activeListings} / {plan.listingLimit === 'unlimited' ? '∞' : plan.listingLimit}</span>
+              </div>
+              <div className="w-full rounded-full h-2 bg-white/20">
+                <div
+                  className="bg-white h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${plan.listingLimit === 'unlimited' ? 0 : Math.min((activeListings / plan.listingLimit) * 100, 100)}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="opacity-90">Featured Credits:</span>
+                <span className="font-bold">{Math.max((plan.featuredCredits || 0) - featuredListingsCount, 0)} remaining</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="opacity-90">Free Certifications:</span>
+                <span className="font-bold">{Math.max((plan.freeCertifications || 0) - (currentUser.usedCertifications || 0), 0)} remaining</span>
+              </div>
+              {currentUser.planExpiryDate && (
+                <div className="pt-3 border-t border-white/20 flex justify-between items-center text-xs">
+                  <span className="opacity-90">Expiry:</span>
+                  <span className="font-semibold">
+                    {new Date(currentUser.planExpiryDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Sales Assistant */}
+      {isSeller && (
+        <div className="native-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
+              <span className="text-xl">✨</span>
+              AI Sales Assistant
+            </h3>
+          </div>
+          <AiAssistant
+            vehicles={safeUserVehicles}
+            conversations={safeConversations}
+            onNavigateToVehicle={(vehicleId) => {
+              const vehicle = safeUserVehicles.find(v => v.id === vehicleId);
+              if (vehicle && onViewVehicle) onViewVehicle(vehicle);
+            }}
+            onNavigateToInquiry={(conversationId) => {
+              setActiveTab('inquiries');
+            }}
+          />
+        </div>
+      )}
+
       {/* Premium Quick Actions */}
       <div className="native-card p-5">
         <h3 className="font-bold text-gray-900 mb-4 text-base tracking-tight" style={{ letterSpacing: '-0.01em' }}>Quick Actions</h3>
@@ -343,6 +481,22 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 <span className="text-2xl">📝</span>
                 <span className="text-sm">Manage Listings</span>
               </button>
+              {onAddMultipleVehicles && (
+                <button 
+                  onClick={() => setShowBulkUpload(true)}
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-xl font-bold native-button min-h-[80px]"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(167, 139, 250, 0.15) 100%)',
+                    border: '0.5px solid rgba(139, 92, 246, 0.2)',
+                    color: '#8B5CF6',
+                    boxShadow: '0 2px 8px rgba(139, 92, 246, 0.15)',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                  }}
+                >
+                  <span className="text-2xl">📤</span>
+                  <span className="text-sm">Bulk Upload</span>
+                </button>
+              )}
             </>
           )}
           <button 
@@ -353,7 +507,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <span className="text-sm">Messages</span>
           </button>
           <button 
-            onClick={() => setActiveTab('profile')}
+            onClick={() => setActiveTab('settings')}
             className="flex flex-col items-center justify-center gap-2 p-4 bg-gray-50 rounded-xl text-gray-700 font-semibold native-button active:opacity-70 min-h-[80px]"
           >
             <span className="text-2xl">⚙️</span>
@@ -488,6 +642,32 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                         title="Feature listing"
                       >
                         <span className="text-lg">⭐</span>
+                      </button>
+                    )}
+                    {vehicle.status === 'published' && onBoostListing && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBoostVehicle(vehicle);
+                        }}
+                        className="p-2.5 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        aria-label="Boost listing"
+                        title="Boost listing"
+                      >
+                        <span className="text-lg">🚀</span>
+                      </button>
+                    )}
+                    {vehicle.status === 'published' && onRequestCertification && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRequestCertification(vehicle.id);
+                        }}
+                        className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 active:scale-95 transition-transform min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        aria-label="Request certification"
+                        title="Request certification"
+                      >
+                        <span className="text-lg">🏆</span>
                       </button>
                     )}
                     <button 
@@ -1514,6 +1694,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   required
                 />
                 {addErrors.price && <p className="text-red-600 text-xs mt-1.5 font-medium">{addErrors.price}</p>}
+                {safeAllVehicles.length > 0 && (
+                  <div className="mt-2">
+                    <PricingGuidance vehicleDetails={addFormData} allVehicles={safeAllVehicles} />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -2060,12 +2245,392 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   );
   };
 
+  // Render Inquiries View (separate from Messages)
+  const renderInquiries = () => (
+    <div className="space-y-5 pb-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Customer Inquiries</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{safeConversations.length} total inquiries</p>
+        </div>
+      </div>
+
+      {safeConversations.length === 0 ? (
+        <div className="text-center py-12 px-4">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-4xl">📥</span>
+          </div>
+          <h4 className="text-xl font-bold text-gray-900 mb-2">No inquiries yet</h4>
+          <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
+            Customer inquiries about your vehicles will appear here
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {safeConversations.map((conversation) => {
+            const vehicle = safeUserVehicles.find(v => v.id === conversation.vehicleId);
+            return (
+              <div 
+                key={conversation.id} 
+                className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
+                onClick={() => onNavigate(ViewEnum.INBOX)}
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-orange-600 font-bold text-base">
+                      {conversation.customerName?.charAt(0).toUpperCase() || 'C'}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="font-bold text-gray-900 truncate text-base">
+                        {conversation.customerName || 'Customer'}
+                      </h4>
+                      {!conversation.isReadBySeller && (
+                        <span className="w-2.5 h-2.5 bg-orange-500 rounded-full flex-shrink-0"></span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 truncate mb-1 font-medium">
+                      {vehicle ? `${vehicle.year} ${vehicle.make} ${vehicle.model}` : conversation.vehicleName}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {conversation.messages && conversation.messages.length > 0 
+                        ? conversation.messages[conversation.messages.length - 1]?.text?.substring(0, 60) + '...'
+                        : 'New inquiry'}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-gray-400">
+                        {new Date(conversation.lastMessageAt).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          ...(new Date(conversation.lastMessageAt).getFullYear() !== new Date().getFullYear() && {
+                            year: 'numeric'
+                          })
+                        })}
+                      </span>
+                      {vehicle && (
+                        <>
+                          <span className="text-gray-300">•</span>
+                          <span className="text-xs font-semibold text-orange-600">₹{vehicle.price.toLocaleString('en-IN')}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // Render Sales History View
+  const renderSalesHistory = () => {
+    const soldVehicles = safeUserVehicles.filter(v => v && v.status === 'sold');
+    const totalSalesValue = soldVehicles.reduce((sum, v) => sum + (v?.price || 0), 0);
+
+    return (
+      <div className="space-y-5 pb-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Sales History</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{soldVehicles.length} sold vehicles</p>
+          </div>
+        </div>
+
+        {/* Sales Summary Card */}
+        <div 
+          className="rounded-2xl p-5 text-white"
+          style={{
+            background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+            boxShadow: '0 8px 24px rgba(16, 185, 129, 0.3)'
+          }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-lg font-bold">Total Sales</h4>
+            <span className="text-3xl">💰</span>
+          </div>
+          <p className="text-3xl font-bold mb-2">₹{totalSalesValue.toLocaleString('en-IN')}</p>
+          <p className="text-sm opacity-90">{soldVehicles.length} vehicles sold</p>
+        </div>
+
+        {soldVehicles.length === 0 ? (
+          <div className="text-center py-12 px-4">
+            <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-4xl">✅</span>
+            </div>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">No sales yet</h4>
+            <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
+              Vehicles marked as sold will appear here
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {soldVehicles.map((vehicle) => (
+              <div key={vehicle.id} className="native-card p-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <span className="text-3xl">🚗</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-gray-900 truncate text-base mb-1">
+                      {vehicle.year} {vehicle.make} {vehicle.model}
+                    </h4>
+                    <p className="text-lg font-bold text-green-600 mb-2">₹{vehicle.price.toLocaleString('en-IN')}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {vehicle.mileage && (
+                        <span className="text-xs text-gray-500">📏 {vehicle.mileage.toLocaleString('en-IN')} km</span>
+                      )}
+                      {vehicle.soldAt && (
+                        <span className="text-xs text-gray-500">
+                          Sold on {new Date(vehicle.soldAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {onMarkAsUnsold && (
+                    <button
+                      onClick={() => onMarkAsUnsold(vehicle.id)}
+                      className="p-2.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 active:scale-95 transition-transform"
+                      title="Mark as unsold"
+                    >
+                      <span className="text-lg">↩️</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Render Reports View
+  const renderReports = () => (
+    <div className="space-y-5 pb-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Reported Vehicles</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{safeReportedVehicles.length} flagged listings</p>
+        </div>
+      </div>
+
+      {safeReportedVehicles.length === 0 ? (
+        <div className="text-center py-12 px-4">
+          <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-4xl">✅</span>
+          </div>
+          <h4 className="text-xl font-bold text-gray-900 mb-2">No reports</h4>
+          <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
+            All your listings are in good standing
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {safeReportedVehicles.map((vehicle) => (
+            <div key={vehicle.id} className="native-card p-4 border-l-4 border-red-500">
+              <div className="flex items-start gap-4">
+                <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-red-200 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <span className="text-3xl">🚩</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-gray-900 truncate text-base mb-1">
+                    {vehicle.year} {vehicle.make} {vehicle.model}
+                  </h4>
+                  {vehicle.flagReason && (
+                    <p className="text-sm text-red-600 mb-2 font-medium">Reason: {vehicle.flagReason}</p>
+                  )}
+                  {vehicle.flaggedAt && (
+                    <p className="text-xs text-gray-500">
+                      Flagged on {new Date(vehicle.flaggedAt).toLocaleDateString('en-IN')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // Render Settings View with Bank Partners
+  const renderSettings = () => {
+    const availableBanks = [
+      'HDFC Bank', 'ICICI Bank', 'State Bank of India', 'Axis Bank', 'Kotak Mahindra Bank',
+      'Bajaj Finserv', 'Tata Capital', 'Mahindra Finance', 'Yes Bank', 'IDFC First Bank',
+      'Bank of Baroda', 'Punjab National Bank', 'Union Bank of India', 'Canara Bank', 'Indian Bank'
+    ];
+
+    const handleBankToggle = (bank: string) => {
+      setSelectedBanks(prev => 
+        prev.includes(bank) 
+          ? prev.filter(b => b !== bank)
+          : [...prev, bank]
+      );
+    };
+
+    const handleSaveBanks = async () => {
+      if (!onUpdateSellerProfile) return;
+      setIsSavingBanks(true);
+      try {
+        await onUpdateSellerProfile({
+          dealershipName: (currentUser as any).dealershipName || '',
+          bio: (currentUser as any).bio || '',
+          logoUrl: (currentUser as any).logoUrl || '',
+          partnerBanks: selectedBanks
+        });
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+        addToast?.('Bank partners updated successfully!', 'success');
+      } catch (error) {
+        addToast?.('Failed to update bank partners', 'error');
+      } finally {
+        setIsSavingBanks(false);
+      }
+    };
+
+    return (
+      <div className="space-y-5 pb-4">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Settings</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Manage your account settings</p>
+          </div>
+        </div>
+
+        {/* Bank Partners Section */}
+        <div className="native-card p-5">
+          <h4 className="font-bold text-gray-900 mb-3 text-base">Finance Partners</h4>
+          <p className="text-sm text-gray-600 mb-4">
+            Select banks you partner with for vehicle financing. This information will be displayed on your listings.
+          </p>
+          
+          <div className="grid grid-cols-2 gap-3 mb-4 max-h-[400px] overflow-y-auto">
+            {availableBanks.map((bank) => {
+              const isSelected = selectedBanks.includes(bank);
+              return (
+                <label
+                  key={bank}
+                  className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                    isSelected
+                      ? 'border-purple-600 bg-purple-50'
+                      : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleBankToggle(bank)}
+                    className="sr-only"
+                  />
+                  <div className={`flex-shrink-0 w-5 h-5 rounded border-2 mr-3 flex items-center justify-center ${
+                    isSelected ? 'border-purple-600 bg-purple-600' : 'border-gray-300'
+                  }`}>
+                    {isSelected && (
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={`text-sm font-medium ${isSelected ? 'text-purple-900' : 'text-gray-700'}`}>
+                    {bank}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
+          {selectedBanks.length > 0 && (
+            <div className="mb-4 p-3 bg-purple-50 rounded-lg">
+              <p className="text-sm font-medium text-purple-900 mb-2">Selected Partners ({selectedBanks.length}):</p>
+              <div className="flex flex-wrap gap-2">
+                {selectedBanks.map((bank) => (
+                  <span
+                    key={bank}
+                    className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200"
+                  >
+                    {bank}
+                    <button
+                      onClick={() => handleBankToggle(bank)}
+                      className="ml-2 text-purple-600 hover:text-purple-800"
+                      aria-label={`Remove ${bank}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleSaveBanks}
+            disabled={isSavingBanks}
+            className={`w-full py-3 rounded-lg font-semibold transition-all ${
+              isSavingBanks
+                ? 'bg-gray-400 text-white cursor-not-allowed'
+                : saveSuccess
+                ? 'bg-green-600 text-white'
+                : 'bg-purple-600 text-white hover:bg-purple-700'
+            }`}
+          >
+            {isSavingBanks ? 'Saving...' : saveSuccess ? '✓ Saved' : 'Save Changes'}
+          </button>
+        </div>
+
+        {/* Other Settings */}
+        <div className="native-card p-5">
+          <h4 className="font-bold text-gray-900 mb-4 text-base">Account Settings</h4>
+          <div className="space-y-2">
+            <button 
+              onClick={() => setActiveTab('profile')}
+              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">👤</span>
+                <span className="text-gray-900 font-medium">Edit Profile</span>
+              </div>
+              <span className="text-gray-400">›</span>
+            </button>
+            <button 
+              onClick={() => onNavigate(ViewEnum.SUPPORT)}
+              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🛡️</span>
+                <span className="text-gray-900 font-medium">Privacy & Security</span>
+              </div>
+              <span className="text-gray-400">›</span>
+            </button>
+            <button 
+              onClick={() => onNavigate(ViewEnum.SUPPORT)}
+              className="w-full text-left p-3.5 active:opacity-70 native-transition rounded-xl hover:bg-gray-50 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">💬</span>
+                <span className="text-gray-900 font-medium">Help & Support</span>
+              </div>
+              <span className="text-gray-400">›</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'overview': return renderOverview();
       case 'listings': return renderListings();
       case 'messages': return renderMessages();
+      case 'inquiries': return renderInquiries();
       case 'analytics': return renderAnalytics();
+      case 'salesHistory': return renderSalesHistory();
+      case 'reports': return renderReports();
+      case 'settings': return renderSettings();
       case 'profile': return renderProfile();
       case 'notifications': return renderNotifications();
       case 'addVehicle': return renderAddVehicle();
@@ -2075,93 +2640,100 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
 
   return (
-    <div className="w-full bg-white">
-      {/* Premium Dashboard Header */}
+    <div className="w-full bg-gradient-to-b from-gray-50 to-white min-h-screen">
+      {/* Premium Dashboard Header - Ultra Modern Design */}
       <div 
-        className="px-5 py-4 sticky top-0 z-20 safe-top" 
+        className="px-5 py-5 sticky top-0 z-20 safe-top relative overflow-hidden" 
         style={{ 
           top: '0px', 
-          paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))',
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          borderBottom: '0.5px solid rgba(0, 0, 0, 0.08)',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
+          paddingTop: 'max(1.25rem, env(safe-area-inset-top, 0px))',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
+          boxShadow: '0 4px 20px rgba(102, 126, 234, 0.4)'
         }}
       >
-        <div className="flex items-center justify-between">
+        {/* Animated background pattern */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 w-64 h-64 bg-white rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 right-0 w-64 h-64 bg-white rounded-full blur-3xl"></div>
+        </div>
+        
+        <div className="relative z-10 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 mb-0.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>Dashboard</h1>
-            <p className="text-xs text-gray-600 font-medium">
-              {isSeller ? 'Manage your listings' : 
-               isAdmin ? 'Platform overview' : 
-               'Your car journey'}
+            <h1 className="text-2xl font-black text-white mb-1 tracking-tight" style={{ 
+              letterSpacing: '-0.03em',
+              textShadow: '0 2px 10px rgba(0, 0, 0, 0.2)'
+            }}>
+              Dashboard
+            </h1>
+            <p className="text-sm text-white/90 font-medium">
+              {isSeller ? '✨ Manage your listings' : 
+               isAdmin ? '🔧 Platform overview' : 
+               '🚗 Your car journey'}
             </p>
           </div>
           <div 
-            className="w-12 h-12 rounded-full flex items-center justify-center"
+            className="w-14 h-14 rounded-2xl flex items-center justify-center relative"
             style={{
-              background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
-              boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3), 0 2px 4px rgba(255, 107, 53, 0.2)',
-              border: '2px solid rgba(255, 255, 255, 0.3)'
+              background: 'rgba(255, 255, 255, 0.25)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              border: '2px solid rgba(255, 255, 255, 0.3)',
+              boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
             }}
           >
-            <span className="text-white font-bold text-lg">
+            <span className="text-white font-black text-xl">
               {currentUser.name?.charAt(0).toUpperCase() || 'U'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Premium Tab Navigation */}
+      {/* Premium Tab Navigation - Ultra Modern Design */}
       <div 
-        className="px-4 py-3 sticky z-20" 
+        className="px-4 py-4 sticky z-20 bg-white" 
         style={{ 
-          top: '73px',
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          borderBottom: '0.5px solid rgba(0, 0, 0, 0.08)',
-          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)'
+          top: '88px',
+          borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)'
         }}
       >
-        <div className="flex space-x-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
+        <div className="flex space-x-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as DashboardTab)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold whitespace-nowrap transition-all min-h-[44px] ${
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all duration-300 min-h-[48px] relative ${
                 activeTab === tab.id
                   ? 'text-white'
                   : 'text-gray-700'
               }`}
               style={{
                 background: activeTab === tab.id 
-                  ? 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)'
+                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
                   : 'linear-gradient(180deg, #F9FAFB 0%, #F3F4F6 100%)',
                 boxShadow: activeTab === tab.id 
-                  ? '0 4px 12px rgba(255, 107, 53, 0.3), 0 2px 4px rgba(255, 107, 53, 0.2)'
-                  : '0 1px 2px rgba(0, 0, 0, 0.04)',
-                border: activeTab === tab.id ? 'none' : '0.5px solid rgba(0, 0, 0, 0.06)',
-                transform: activeTab === tab.id ? 'scale(1.02)' : 'scale(1)',
+                  ? '0 8px 20px rgba(102, 126, 234, 0.4), 0 4px 8px rgba(118, 75, 162, 0.3)'
+                  : '0 2px 4px rgba(0, 0, 0, 0.05)',
+                border: activeTab === tab.id ? 'none' : '1px solid rgba(0, 0, 0, 0.08)',
+                transform: activeTab === tab.id ? 'scale(1.05) translateY(-2px)' : 'scale(1)',
                 letterSpacing: '-0.01em'
               }}
               onMouseDown={(e) => {
                 if (activeTab !== tab.id) {
-                  e.currentTarget.style.transform = 'scale(0.97)';
+                  e.currentTarget.style.transform = 'scale(0.95)';
                 }
               }}
               onMouseUp={(e) => {
-                e.currentTarget.style.transform = activeTab === tab.id ? 'scale(1.02)' : 'scale(1)';
+                e.currentTarget.style.transform = activeTab === tab.id ? 'scale(1.05) translateY(-2px)' : 'scale(1)';
               }}
             >
-              <span className="text-base">{tab.icon}</span>
-              <span>{tab.label}</span>
+              <span className="text-lg">{tab.icon}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
               {tab.count !== null && tab.count > 0 && (
-                <span className={`text-xs rounded-full px-2 py-0.5 min-w-[22px] text-center font-bold ${
+                <span className={`text-xs rounded-full px-2.5 py-1 min-w-[24px] text-center font-black ${
                   activeTab === tab.id
-                    ? 'bg-white/30 text-white'
-                    : 'bg-orange-500 text-white'
+                    ? 'bg-white/30 text-white backdrop-blur-sm'
+                    : 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md'
                 }`}>
                   {tab.count > 99 ? '99+' : tab.count}
                 </span>
@@ -2175,6 +2747,31 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       <div className="px-4 pt-5 pb-24 max-w-4xl mx-auto">
         {renderContent()}
       </div>
+
+      {/* Modals */}
+      {showBulkUpload && onAddMultipleVehicles && (
+        <BulkUploadModal
+          onClose={() => setShowBulkUpload(false)}
+          onAddMultipleVehicles={onAddMultipleVehicles}
+          sellerEmail={currentUser.email}
+        />
+      )}
+
+      {boostVehicle && onBoostListing && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <BoostListingModal
+              vehicle={boostVehicle}
+              onClose={() => setBoostVehicle(null)}
+              onBoost={async (vehicleId, packageId) => {
+                await onBoostListing(vehicleId, packageId);
+                setBoostVehicle(null);
+                addToast?.('Listing boosted successfully!', 'success');
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 });
