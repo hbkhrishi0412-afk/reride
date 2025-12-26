@@ -125,6 +125,9 @@ const userSchema = new mongoose.Schema({
   preferredContactHours: String,
   showEmailPublicly: { type: Boolean, default: false },
   
+  // Finance Partner Banks (for sellers)
+  partnerBanks: [String], // Array of bank names the seller is partnered with for finance
+  
   // Ratings & Reviews
   averageRating: { type: Number, default: 0 },
   ratingCount: { type: Number, default: 0 },

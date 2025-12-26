@@ -90,6 +90,7 @@ interface AppContextType {
   handleLogin: (user: User) => void;
   handleRegister: (user: User) => void;
   navigate: (view: View, params?: { city?: string }) => void;
+  goBack: (fallbackView?: View) => void;
   
   // Admin functions
   onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
@@ -162,6 +163,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   const [currentView, setCurrentView] = useState<View>(View.HOME);
   const [previousView, setPreviousView] = useState<View>(View.HOME);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  // Flag to prevent navigation loops when handling popstate
+  const isHandlingPopStateRef = useRef(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -710,10 +713,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, []);
 
   const navigate = useCallback((view: View, params?: { city?: string }) => {
+    // Don't navigate if we're currently handling a popstate event
+    // This prevents navigation loops when browser back/forward is used
+    if (isHandlingPopStateRef.current) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⏸️ Navigation skipped - handling popstate event');
+      }
+      return;
+    }
+    
     // Prevent infinite redirect loops by checking if we're already on the target view
     if (view === currentView && !params?.city) {
       return; // Already on this view, no need to navigate
     }
+
+    // Update previous view before changing current view
+    setPreviousView(currentView);
 
     // Fixed: Preserve selectedVehicle when navigating TO DETAIL view or between DETAIL and SELLER_PROFILE
     // Calculate this early to avoid TypeScript type narrowing issues
@@ -724,7 +739,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
 
     const isNavigatingAwayFromSellerProfile = currentView === View.SELLER_PROFILE && view !== View.SELLER_PROFILE;
     if (isNavigatingAwayFromSellerProfile) { 
-      window.history.pushState({}, '', window.location.pathname); 
+      // Clear public seller profile when navigating away
+      // Don't modify history here - let the normal navigation flow handle it
       setPublicSellerProfile(null); 
     }
     setInitialSearchQuery('');
@@ -790,7 +806,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       setCurrentView(view);
     }
 
-    // Update path for friendly URLs
+    // Update path for friendly URLs and store view in history state
     try {
       let newPath = window.location.pathname;
       if (view === View.ADMIN_LOGIN) newPath = '/admin/login';
@@ -798,11 +814,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       else if (view === View.NEW_CARS_ADMIN_PANEL) newPath = '/admin/new-cars/manage';
       else if (view === View.LOGIN_PORTAL || view === View.CUSTOMER_LOGIN || view === View.SELLER_LOGIN) newPath = '/login';
       else if (view === View.HOME) newPath = '/';
+      
+      // Store view and previous view in history state for back button support
+      // Also store selectedVehicle ID if we're on DETAIL view
+      const historyState: any = {
+        view: view,
+        previousView: currentView,
+        timestamp: Date.now()
+      };
+      
+      // Store selectedVehicle ID for DETAIL view so we can restore it
+      if (view === View.DETAIL && selectedVehicle) {
+        historyState.selectedVehicleId = selectedVehicle.id;
+      }
+      
+      // CRITICAL FIX: Always use pushState to create history entries for back/forward navigation
+      // Even if the path doesn't change, we need to create a new history entry so browser back/forward works
+      // Only use replaceState on initial load, not during navigation
       if (newPath !== window.location.pathname) {
-        window.history.pushState({}, '', newPath);
+        // Path changed, use pushState
+        window.history.pushState(historyState, '', newPath);
+      } else {
+        // Path didn't change but view did - still use pushState to create history entry
+        // This ensures browser back/forward buttons work even when views share the same path
+        window.history.pushState(historyState, '', newPath);
       }
     } catch {}
-  }, [currentView, currentUser]);
+  }, [currentView, currentUser, previousView, selectedVehicle]);
+
+  // Go back using browser history, with fallback to a default view
+  // This ensures app back buttons are synced with browser back button
+  const goBack = useCallback((fallbackView?: View) => {
+    // Check if there's a previous view in our tracked state
+    // If we have a previous view that's different from current, use browser history
+    if (previousView && previousView !== currentView) {
+      // Use browser back button - this will trigger popstate event which restores the view
+      // This keeps app back button in sync with browser back button
+      window.history.back();
+    } else if (fallbackView) {
+      // No tracked history, but we have a fallback view - navigate to it
+      navigate(fallbackView);
+    } else {
+      // Ultimate fallback: go to home
+      navigate(View.HOME);
+    }
+  }, [previousView, currentView, navigate]);
 
   // Auto-navigate to appropriate dashboard after login/registration
   // This ensures the view is set correctly even if state updates are async
@@ -836,8 +892,126 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       } else if (path === '/login') {
         setCurrentView(View.LOGIN_PORTAL);
       }
+      
+      // Initialize history state with current view (only on first load)
+      if (window.history.state === null || !window.history.state.view) {
+        const currentPath = window.location.pathname;
+        let initialView = View.HOME;
+        if (currentPath === '/admin' || currentPath === '/admin/login') {
+          initialView = View.ADMIN_LOGIN;
+        } else if (currentPath === '/admin/new-cars') {
+          initialView = View.NEW_CARS_ADMIN_LOGIN;
+        } else if (currentPath === '/admin/new-cars/manage') {
+          initialView = View.NEW_CARS_ADMIN_PANEL;
+        } else if (currentPath === '/login') {
+          initialView = View.LOGIN_PORTAL;
+        }
+        const initialState: any = { 
+          view: initialView, 
+          previousView: View.HOME, 
+          timestamp: Date.now() 
+        };
+        // Store selectedVehicle ID if we're on DETAIL view (check both state and sessionStorage)
+        if (initialView === View.DETAIL) {
+          const storedVehicle = sessionStorage.getItem('selectedVehicle');
+          if (storedVehicle) {
+            try {
+              const vehicle = JSON.parse(storedVehicle);
+              if (vehicle?.id) {
+                initialState.selectedVehicleId = vehicle.id;
+              }
+            } catch {}
+          } else if (selectedVehicle?.id) {
+            initialState.selectedVehicleId = selectedVehicle.id;
+          }
+        }
+        window.history.replaceState(initialState, '', currentPath);
+      }
     } catch {}
-  }, []);
+  }, [selectedVehicle]);
+
+  // Handle browser back/forward button navigation
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      try {
+        // Set flag to prevent navigation loops
+        isHandlingPopStateRef.current = true;
+        
+        // Restore view from history state
+        if (event.state && event.state.view) {
+          const restoredView = event.state.view as View;
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔙 Browser back/forward button pressed, restoring view:', restoredView, 'state:', event.state);
+          }
+          
+          // Update previous view
+          if (event.state.previousView) {
+            setPreviousView(event.state.previousView as View);
+          }
+          
+          // Restore selectedVehicle if we're going to DETAIL view and have the ID
+          if (restoredView === View.DETAIL && event.state.selectedVehicleId) {
+            const vehicleId = event.state.selectedVehicleId;
+            const vehicleToRestore = vehicles.find(v => v.id === vehicleId);
+            if (vehicleToRestore) {
+              setSelectedVehicle(vehicleToRestore);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('🔙 Restoring selectedVehicle:', vehicleToRestore.id, vehicleToRestore.make, vehicleToRestore.model);
+              }
+            } else {
+              // Vehicle not found, clear selection
+              setSelectedVehicle(null);
+            }
+          } else if (restoredView !== View.DETAIL) {
+            // Not going to DETAIL view, clear selected vehicle
+            setSelectedVehicle(null);
+          }
+          
+          // Clear public seller profile when navigating away from seller profile
+          if (restoredView !== View.SELLER_PROFILE) {
+            setPublicSellerProfile(null);
+          }
+          
+          // Restore the view - this should trigger re-render with correct state
+          setCurrentView(restoredView);
+        } else {
+          // Fallback: try to determine view from URL path
+          const path = window.location.pathname.toLowerCase();
+          let fallbackView = View.HOME;
+          if (path === '/admin' || path === '/admin/login') {
+            fallbackView = View.ADMIN_LOGIN;
+          } else if (path === '/admin/new-cars') {
+            fallbackView = View.NEW_CARS_ADMIN_LOGIN;
+          } else if (path === '/admin/new-cars/manage') {
+            fallbackView = View.NEW_CARS_ADMIN_PANEL;
+          } else if (path === '/login') {
+            fallbackView = View.LOGIN_PORTAL;
+          }
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔙 No history state found, using fallback view from URL:', fallbackView);
+          }
+          setCurrentView(fallbackView);
+        }
+        
+        // Clear flag after a short delay to allow state updates to complete
+        setTimeout(() => {
+          isHandlingPopStateRef.current = false;
+        }, 100);
+      } catch (error) {
+        isHandlingPopStateRef.current = false;
+        if (process.env.NODE_ENV === 'development') {
+          console.error('❌ Error handling popstate:', error);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [setCurrentView, setPreviousView, setSelectedVehicle, setPublicSellerProfile, vehicles]);
 
   // CRITICAL: Listen for force loading completion event (safety mechanism)
   useEffect(() => {
@@ -1512,6 +1686,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     handleLogin,
     handleRegister,
     navigate,
+    goBack,
     
     // Admin functions
     onAdminUpdateUser: async (email: string, details: Partial<User>) => {
@@ -2474,6 +2649,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         const safeUpdates = { ...updates };
         delete safeUpdates.role; // Prevent role changes through profile updates
         
+        // Debug logging for partnerBanks updates
+        if (safeUpdates.partnerBanks !== undefined) {
+          console.log('💳 Updating partnerBanks:', { email, partnerBanks: safeUpdates.partnerBanks, count: safeUpdates.partnerBanks?.length || 0 });
+        }
+        
         // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state/localStorage only on success
         // This ensures password changes are persisted to MongoDB immediately, not just locally
         // This ensures password changes are persisted to MongoDB immediately, not just locally
@@ -2540,22 +2720,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           // MongoDB update succeeded - NOW update local state and localStorage
           if (result?.user) {
             // CRITICAL: Preserve role if not in API response (shouldn't happen, but safety check)
+            // Also ensure partnerBanks and other fields from safeUpdates are included
             const updatedUserData = {
               ...result.user,
-              role: result.user.role || currentUser?.role || 'customer' // Preserve existing role
+              role: result.user.role || currentUser?.role || 'customer', // Preserve existing role
+              // Explicitly include partnerBanks from updates if present (fallback if API response doesn't include it)
+              ...(safeUpdates.partnerBanks !== undefined && { partnerBanks: safeUpdates.partnerBanks })
             };
             
-            // Update React state
-            setUsers(prev => prev.map(user => 
-              user.email === email ? { ...user, ...updatedUserData } : user
-            ));
+            // Update React state - ensure partnerBanks is properly merged
+            setUsers(prev => prev.map(user => {
+              if (user.email === email) {
+                const merged = { ...user, ...updatedUserData };
+                // Explicitly ensure partnerBanks is included if it was in the update
+                if (safeUpdates.partnerBanks !== undefined) {
+                  merged.partnerBanks = safeUpdates.partnerBanks;
+                  console.log('✅ Updated users array with partnerBanks:', { email, partnerBanks: merged.partnerBanks });
+                }
+                return merged;
+              }
+              return user;
+            }));
             
             if (currentUser && currentUser.email === email) {
               // CRITICAL: Always preserve role when updating currentUser
               const mergedUser = { 
                 ...currentUser, 
                 ...updatedUserData,
-                role: updatedUserData.role || currentUser.role || 'customer' // Ensure role is never lost
+                role: updatedUserData.role || currentUser.role || 'customer', // Ensure role is never lost
+                // Explicitly ensure partnerBanks is included if it was in the update
+                ...(safeUpdates.partnerBanks !== undefined && { partnerBanks: safeUpdates.partnerBanks })
               };
               
               setCurrentUser(mergedUser);
@@ -2565,6 +2759,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 sessionStorage.setItem('currentUser', JSON.stringify(mergedUser));
               } catch (error) {
                 console.warn('Failed to update localStorage with API response:', error);
+              }
+            }
+          } else {
+            // Fallback: If API doesn't return user, still update local state with safeUpdates
+            // This ensures partnerBanks and other fields are saved even if API response is incomplete
+            setUsers(prev => prev.map(user => 
+              user.email === email ? { ...user, ...safeUpdates } : user
+            ));
+            
+            if (currentUser && currentUser.email === email) {
+              const mergedUser = { 
+                ...currentUser, 
+                ...safeUpdates,
+                role: currentUser.role || 'customer' // Ensure role is never lost
+              };
+              setCurrentUser(mergedUser);
+              try {
+                localStorage.setItem('reRideCurrentUser', JSON.stringify(mergedUser));
+                sessionStorage.setItem('currentUser', JSON.stringify(mergedUser));
+              } catch (error) {
+                console.warn('Failed to update localStorage with fallback update:', error);
               }
             }
           }
@@ -2850,7 +3065,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     setActiveChat, setIsAnnouncementVisible, setRecommendations, setInitialSearchQuery,
     setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
-    setNotifications, addToast, removeToast, navigate, handleLogin, handleLogout,
+    setNotifications, addToast, removeToast, navigate, goBack, handleLogin, handleLogout,
     updateVehicleHandler
   ]);
 
