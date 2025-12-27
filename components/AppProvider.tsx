@@ -1063,20 +1063,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           ]);
         };
         
-        // Use request queue to stagger API calls and prevent rate limiting
-        const { queueRequest } = await import('../utils/requestQueue');
-        
         // Load critical data sequentially with delays to prevent rate limiting
+        // dataService now uses request queue internally, so we can call it directly
         const vehiclesData = await loadWithTimeout(
-          queueRequest(
-            () => dataService.getVehicles().catch(err => {
-              if (process.env.NODE_ENV === 'development') {
-                console.warn('Failed to load vehicles, using empty array:', err);
-              }
-              return [];
-            }),
-            { priority: 10, id: 'vehicles_initial', maxRetries: 2 }
-          ),
+          dataService.getVehicles().catch(err => {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Failed to load vehicles, using empty array:', err);
+            }
+            return [];
+          }),
           10000,
           [],
           true
@@ -1086,15 +1081,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         await new Promise(resolve => setTimeout(resolve, 300));
         
         const usersData = await loadWithTimeout(
-          queueRequest(
-            () => dataService.getUsers().catch(err => {
-              if (process.env.NODE_ENV === 'development') {
-                console.warn('Failed to load users, using empty array:', err);
-              }
-              return [];
-            }),
-            { priority: 10, id: 'users_initial', maxRetries: 2 }
-          ),
+          dataService.getUsers().catch(err => {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Failed to load users, using empty array:', err);
+            }
+            return [];
+          }),
           10000,
           [],
           true
@@ -1116,13 +1108,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             // Delay before loading FAQs
             await new Promise(resolve => setTimeout(resolve, 800));
             
-            const { queueRequest } = await import('../utils/requestQueue');
             const { fetchFaqsFromMongoDB } = await import('../services/faqService');
-            
-            const faqsData = await queueRequest(
-              () => fetchFaqsFromMongoDB(),
-              { priority: 3, id: 'faqs', maxRetries: 1 }
-            );
+            const faqsData = await fetchFaqsFromMongoDB();
             
             if (isMounted) {
               setFaqItems(faqsData);
@@ -1141,17 +1128,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         })();
         
         // Load non-critical data in background sequentially to prevent rate limiting
-        // Use request queue with lower priority and delays
+        // dataService now uses request queue internally
         (async () => {
           try {
             // Delay before loading background data
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            // Load vehicle data
-            const vehicleDataData = await queueRequest(
-              () => dataService.getVehicleData().catch(() => null),
-              { priority: 5, id: 'vehicle_data', maxRetries: 1 }
-            );
+            // Load vehicle data (uses queue internally)
+            const vehicleDataData = await dataService.getVehicleData().catch(() => null);
             if (isMounted && vehicleDataData) {
               setVehicleData(vehicleDataData);
             }
@@ -1160,82 +1144,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             await new Promise(resolve => setTimeout(resolve, 300));
             
             // Load conversations
-            const conversationsData = await queueRequest(
-              async () => {
-                try {
-                  let userEmail: string | undefined;
-                  let userRole: string | undefined;
-                  try {
-                    const savedUser = localStorage.getItem('reRideCurrentUser');
-                    if (savedUser) {
-                      const user = JSON.parse(savedUser);
-                      userEmail = user?.email;
-                      userRole = user?.role;
-                    }
-                  } catch {}
-                  
-                  const { getConversationsFromMongoDB } = await import('../services/conversationService');
-                  const result = userRole === 'seller' 
-                    ? await getConversationsFromMongoDB(undefined, userEmail)
-                    : userRole === 'customer'
-                    ? await getConversationsFromMongoDB(userEmail)
-                    : await getConversationsFromMongoDB();
-                  
-                  if (result.success && result.data) {
-                    return result.data;
-                  }
-                } catch (error) {
-                  console.warn('Failed to load conversations from MongoDB, using localStorage:', error);
+            try {
+              let userEmail: string | undefined;
+              let userRole: string | undefined;
+              try {
+                const savedUser = localStorage.getItem('reRideCurrentUser');
+                if (savedUser) {
+                  const user = JSON.parse(savedUser);
+                  userEmail = user?.email;
+                  userRole = user?.role;
                 }
-                return Promise.resolve(getConversations()).catch(() => []);
-              },
-              { priority: 5, id: 'conversations', maxRetries: 1 }
-            );
-            if (isMounted) {
-              setConversations(conversationsData || []);
+              } catch {}
+              
+              const { getConversationsFromMongoDB } = await import('../services/conversationService');
+              const result = userRole === 'seller' 
+                ? await getConversationsFromMongoDB(undefined, userEmail)
+                : userRole === 'customer'
+                ? await getConversationsFromMongoDB(userEmail)
+                : await getConversationsFromMongoDB();
+              
+              if (isMounted) {
+                if (result.success && result.data) {
+                  setConversations(result.data);
+                } else {
+                  const localConversations = getConversations();
+                  setConversations(localConversations || []);
+                }
+              }
+            } catch (error) {
+              console.warn('Failed to load conversations from MongoDB, using localStorage:', error);
+              if (isMounted) {
+                const localConversations = getConversations();
+                setConversations(localConversations || []);
+              }
             }
             
             // Delay before next request
             await new Promise(resolve => setTimeout(resolve, 300));
             
             // Load notifications
-            const notificationsData = await queueRequest(
-              async () => {
-                try {
-                  let userEmail: string | undefined;
-                  try {
-                    const savedUser = localStorage.getItem('reRideCurrentUser');
-                    if (savedUser) {
-                      const user = JSON.parse(savedUser);
-                      userEmail = user?.email;
-                    }
-                  } catch {}
-                  
-                  if (userEmail) {
-                    const { getNotificationsFromMongoDB } = await import('../services/notificationService');
-                    const result = await getNotificationsFromMongoDB(userEmail);
-                    if (result.success && result.data) {
-                      return result.data;
-                    }
-                  }
-                } catch (error) {
-                  console.warn('Failed to load notifications from MongoDB, using localStorage:', error);
+            try {
+              let userEmail: string | undefined;
+              try {
+                const savedUser = localStorage.getItem('reRideCurrentUser');
+                if (savedUser) {
+                  const user = JSON.parse(savedUser);
+                  userEmail = user?.email;
                 }
+              } catch {}
+              
+              if (userEmail) {
+                const { getNotificationsFromMongoDB } = await import('../services/notificationService');
+                const result = await getNotificationsFromMongoDB(userEmail);
+                if (isMounted && result.success && result.data) {
+                  setNotifications(result.data);
+                  try {
+                    localStorage.setItem('reRideNotifications', JSON.stringify(result.data));
+                  } catch (error) {
+                    console.warn('Failed to save notifications to localStorage:', error);
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn('Failed to load notifications from MongoDB, using localStorage:', error);
+              if (isMounted) {
                 try {
                   const notificationsJson = localStorage.getItem('reRideNotifications');
-                  return notificationsJson ? JSON.parse(notificationsJson) : [];
+                  setNotifications(notificationsJson ? JSON.parse(notificationsJson) : []);
                 } catch {
-                  return [];
+                  setNotifications([]);
                 }
-              },
-              { priority: 5, id: 'notifications', maxRetries: 1 }
-            );
-            if (isMounted && notificationsData) {
-              setNotifications(notificationsData);
-              try {
-                localStorage.setItem('reRideNotifications', JSON.stringify(notificationsData));
-              } catch (error) {
-                console.warn('Failed to save notifications to localStorage:', error);
               }
             }
           } catch (error) {
@@ -1281,21 +1259,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       try {
         setIsLoading(true);
         
-        // Use request queue to prevent rate limiting
-        const { queueRequest } = await import('../utils/requestQueue');
-        
+        // dataService now uses request queue internally
         // Load sequentially with delays
-        const vehiclesData = await queueRequest(
-          () => dataService.getVehicles(),
-          { priority: 8, id: 'vehicles_sync', maxRetries: 2 }
-        );
+        const vehiclesData = await dataService.getVehicles();
         
         await new Promise(resolve => setTimeout(resolve, 300));
         
-        const usersData = await queueRequest(
-          () => dataService.getUsers(),
-          { priority: 8, id: 'users_sync', maxRetries: 2 }
-        );
+        const usersData = await dataService.getUsers();
 
         if (!isSubscribed) {
           return;

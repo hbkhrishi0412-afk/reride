@@ -1,4 +1,5 @@
 import type { Conversation } from '../types';
+import { queueRequest } from '../utils/requestQueue';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -59,31 +60,38 @@ export async function addMessageToConversation(conversationId: string, message: 
  */
 export async function getConversationsFromMongoDB(customerId?: string, sellerId?: string): Promise<{ success: boolean; data?: Conversation[]; error?: string }> {
   try {
-    const params = new URLSearchParams();
-    if (customerId) params.append('customerId', customerId);
-    if (sellerId) params.append('sellerId', sellerId);
+    const result = await queueRequest(
+      async () => {
+        const params = new URLSearchParams();
+        if (customerId) params.append('customerId', customerId);
+        if (sellerId) params.append('sellerId', sellerId);
 
-    // Only add query string if there are params, otherwise just use the base URL
-    const queryString = params.toString();
-    const url = queryString 
-      ? `${API_BASE_URL}/conversations?${queryString}`
-      : `${API_BASE_URL}/conversations`;
+        // Only add query string if there are params, otherwise just use the base URL
+        const queryString = params.toString();
+        const url = queryString 
+          ? `${API_BASE_URL}/conversations?${queryString}`
+          : `${API_BASE_URL}/conversations`;
 
-    const response = await fetch(url);
+        const response = await fetch(url);
 
-    // Handle 404 gracefully - API route might not be available in development
-    // Silently fall back to localStorage (no console error - this is expected in dev)
-    if (response.status === 404) {
-      return { success: false, error: 'API route not available' };
-    }
+        // Handle 404 gracefully - API route might not be available in development
+        // Silently fall back to localStorage (no console error - this is expected in dev)
+        if (response.status === 404) {
+          return { success: false, error: 'API route not available' };
+        }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      return { success: false, error: errorData.reason || 'Failed to get conversations' };
-    }
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
+          return { success: false, error: errorData.reason || 'Failed to get conversations' };
+        }
 
-    const result = await response.json();
-    return { success: true, data: result.data || [] };
+        const result = await response.json();
+        return { success: true, data: result.data || [] };
+      },
+      { priority: 5, id: 'conversations', maxRetries: 2 }
+    );
+    
+    return result;
   } catch (error) {
     // Network errors or other fetch failures - gracefully fall back
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {

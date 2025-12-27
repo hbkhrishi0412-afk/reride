@@ -1,41 +1,47 @@
 import type { FAQItem } from '../types';
+import { queueRequest } from '../utils/requestQueue';
 
 const FAQ_STORAGE_KEY = 'reRideFaqs';
 
 // Fetch FAQs from MongoDB API
 export const fetchFaqsFromMongoDB = async (): Promise<FAQItem[]> => {
   try {
-    const response = await fetch('/api/faqs');
+    const data = await queueRequest(
+      async () => {
+            if (!response.ok) {
+          throw new Error(`Failed to fetch FAQs: ${response.status}`);
+        }
+        
+        const responseData = await response.json();
+        
+        // Transform MongoDB documents to FAQItem format
+        // The API now returns id field, but we'll handle both cases
+        // Store _id as a property for MongoDB operations
+        const faqs: FAQItem[] = (responseData.faqs || []).map((faq: any, index: number) => {
+          const faqItem: FAQItem & { _id?: string } = {
+            id: faq.id || (faq._id ? parseInt(faq._id.toString().slice(-8), 16) : index + 1),
+            question: faq.question || '',
+            answer: faq.answer || '',
+            category: faq.category || 'General'
+          };
+          // Store MongoDB _id for update/delete operations
+          if (faq._id) {
+            (faqItem as any)._id = faq._id.toString();
+          }
+          return faqItem;
+        });
+        
+        // Save to localStorage as backup (client-side only)
+        if (faqs.length > 0 && typeof window !== 'undefined') {
+          saveFaqs(faqs);
+        }
+        
+        return faqs;
+      },
+      { priority: 3, id: 'faqs', maxRetries: 2 }
+    );
     
-    if (!response.ok) {
-      throw new Error(`Failed to fetch FAQs: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    // Transform MongoDB documents to FAQItem format
-    // The API now returns id field, but we'll handle both cases
-    // Store _id as a property for MongoDB operations
-    const faqs: FAQItem[] = (data.faqs || []).map((faq: any, index: number) => {
-      const faqItem: FAQItem & { _id?: string } = {
-        id: faq.id || (faq._id ? parseInt(faq._id.toString().slice(-8), 16) : index + 1),
-        question: faq.question || '',
-        answer: faq.answer || '',
-        category: faq.category || 'General'
-      };
-      // Store MongoDB _id for update/delete operations
-      if (faq._id) {
-        (faqItem as any)._id = faq._id.toString();
-      }
-      return faqItem;
-    });
-    
-    // Save to localStorage as backup (client-side only)
-    if (faqs.length > 0 && typeof window !== 'undefined') {
-      saveFaqs(faqs);
-    }
-    
-    return faqs;
+    return data;
   } catch (error) {
     console.error('Error fetching FAQs from MongoDB:', error);
     // Fallback to localStorage if API fails

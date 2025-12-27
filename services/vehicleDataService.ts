@@ -2,6 +2,7 @@ import type { VehicleData } from '../types';
 import { VEHICLE_DATA } from '../components/vehicleData';
 import { safeGetItem, safeSetItem, isStorageAvailable } from '../utils/safeStorage';
 import { logInfo, logWarn, logError } from '../utils/logger';
+import { queueRequest } from '../utils/requestQueue';
 
 const VEHICLE_DATA_STORAGE_KEY = 'reRideVehicleData';
 const API_BASE_URL = '/api';
@@ -11,47 +12,58 @@ const API_BASE_URL = '/api';
  * Falls back to localStorage and then default data if API fails.
  */
 export const getVehicleData = async (): Promise<VehicleData> => {
-  // Try standalone endpoint first (correct for production)
+  // Use request queue to prevent rate limiting
   try {
-    const response = await fetch(`${API_BASE_URL}/vehicle-data`);
-    if (response.ok) {
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
+    const data = await queueRequest(
+      async () => {
+        // Try standalone endpoint first (correct for production)
         try {
-          const data = await response.json();
-          logInfo('✅ Vehicle data loaded from vehicle-data endpoint');
-          safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
-          return data;
-        } catch (jsonError) {
-          logWarn("Failed to parse JSON from vehicle-data endpoint", jsonError);
+          const response = await fetch(`${API_BASE_URL}/vehicle-data`);
+          if (response.ok) {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              try {
+                const data = await response.json();
+                logInfo('✅ Vehicle data loaded from vehicle-data endpoint');
+                safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
+                return data;
+              } catch (jsonError) {
+                logWarn("Failed to parse JSON from vehicle-data endpoint", jsonError);
+              }
+            }
+          } else {
+            logWarn(`Vehicle-data endpoint returned ${response.status}: ${response.statusText}`);
+          }
+        } catch (error) {
+          logWarn("Vehicle-data endpoint failed, trying consolidated endpoint", error);
         }
-      }
-    } else {
-      logWarn(`Vehicle-data endpoint returned ${response.status}: ${response.statusText}`);
-    }
-  } catch (error) {
-    logWarn("Vehicle-data endpoint failed, trying consolidated endpoint", error);
-  }
 
-  // Try consolidated endpoint as fallback
-  try {
-    const response = await fetch(`${API_BASE_URL}/vehicles?type=data`);
-    if (response.ok) {
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        try {
-          const data = await response.json();
-          safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
-          return data;
-        } catch (jsonError) {
-          logWarn("Failed to parse JSON from standalone endpoint, falling back to localStorage", jsonError);
+        // Try consolidated endpoint as fallback
+        const response = await fetch(`${API_BASE_URL}/vehicles?type=data`);
+        if (response.ok) {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            try {
+              const data = await response.json();
+              safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
+              return data;
+            } catch (jsonError) {
+              logWarn("Failed to parse JSON from standalone endpoint, falling back to localStorage", jsonError);
+            }
+          } else {
+            logWarn(`Standalone endpoint returned non-JSON content type: ${contentType}, falling back to localStorage`);
+          }
+        } else {
+          logWarn(`Standalone endpoint returned ${response.status}: ${response.statusText}, falling back to localStorage`);
         }
-      } else {
-        logWarn(`Standalone endpoint returned non-JSON content type: ${contentType}, falling back to localStorage`);
-      }
-    } else {
-      logWarn(`Standalone endpoint returned ${response.status}: ${response.statusText}, falling back to localStorage`);
-    }
+        
+        // If both endpoints fail, throw error to trigger fallback
+        throw new Error('Both API endpoints failed');
+      },
+      { priority: 5, id: 'vehicle_data', maxRetries: 2 }
+    );
+    
+    return data;
   } catch (error) {
     logWarn("Both API endpoints failed, falling back to localStorage", error);
     if (error instanceof SyntaxError) {
