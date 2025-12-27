@@ -71,5 +71,6 @@ dist-ssr
 secrets/
 credentials/
 config/secrets.json
+firebase-service-account.json
 
 .env*.local
