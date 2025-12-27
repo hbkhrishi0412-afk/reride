@@ -6,6 +6,7 @@ class DataService {
   private apiBaseUrl: string;
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private readonly RATE_LIMIT_CACHE_DURATION = 60 * 1000; // 1 minute cache for rate-limited responses
 
   constructor() {
     this.isDevelopment = this.detectDevelopment();
@@ -66,6 +67,10 @@ class DataService {
     if (method === 'GET') {
       const cached = this.cache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+        // Return cached data immediately to avoid redundant API calls
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Using cached data for ${endpoint}`);
+        }
         return cached.data;
       }
     }
@@ -103,6 +108,25 @@ class DataService {
     }
 
     if (!response.ok) {
+      // Handle rate limiting (429) specially
+      if (response.status === 429) {
+        const errorText = await response.text();
+        let errorMessage = 'Too many requests. Please wait a moment and try again.';
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.reason || errorData.error || errorMessage;
+        } catch {
+          // Use default error message if JSON parsing fails
+        }
+        
+        // Throw error with status code for request queue to handle
+        const error: any = new Error(errorMessage);
+        error.status = 429;
+        error.code = 429;
+        throw error;
+      }
+      
       // For 404 errors in development, fail silently and let fallback handle it
       if (response.status === 404 && this.isDevelopment) {
         throw new Error('API endpoint not found (expected in development)');
