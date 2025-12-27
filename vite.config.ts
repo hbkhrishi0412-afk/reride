@@ -198,27 +198,24 @@ export default defineConfig({
     warmup: {
       clientFiles: ['./App.tsx', './components/Header.tsx', './components/Home.tsx']
     },
-    // Proxy API requests to development server
+    // Proxy API requests to development server (dev-api-server.js runs on port 3001)
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
-        ws: true,  // FIXED: Enable WebSocket proxying
+        ws: true,
         configure: (proxy, _options) => {
           proxy.on('error', (err, _req, _res) => {
-            // FIXED: Better error handling - don't crash on proxy errors
             console.error('API Proxy Error:', err.message);
-            // Allow frontend to work without API server in development
+            console.warn('⚠️ Make sure the API server is running: npm run dev:api');
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // FIXED: Only log in development
             if (process.env.NODE_ENV === 'development') {
               console.log('→ API Request:', req.method, req.url);
             }
           });
           proxy.on('proxyRes', (proxyRes, req, _res) => {
-            // FIXED: Only log in development
             if (process.env.NODE_ENV === 'development') {
               console.log('← API Response:', proxyRes.statusCode, req.url);
             }

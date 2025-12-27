@@ -810,7 +810,62 @@ app.post('/api/users', (req, res) => {
     });
   }
   
-  res.status(400).json({ success: false, reason: 'Invalid action.' });
+  if (action === 'oauth-login') {
+    const { firebaseUid, email, name, mobile, role, authProvider, avatarUrl } = req.body;
+    
+    if (!firebaseUid || !email || !name || !role) {
+      return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
+    }
+    
+    // Normalize email to lowercase
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Find existing user or create new one
+    let user = mockUsers.find(u => u.email === normalizedEmail);
+    
+    if (!user) {
+      // Create new OAuth user
+      user = {
+        id: Date.now(),
+        email: normalizedEmail,
+        name,
+        mobile: mobile || '',
+        role,
+        firebaseUid,
+        authProvider: authProvider || 'google',
+        avatarUrl: avatarUrl || '',
+        status: 'active',
+        isVerified: true,
+        subscriptionPlan: 'free',
+        createdAt: new Date().toISOString()
+      };
+      mockUsers.push(user);
+    } else {
+      // Update existing user with OAuth info if needed
+      if (!user.firebaseUid) {
+        user.firebaseUid = firebaseUid;
+      }
+      if (!user.authProvider) {
+        user.authProvider = authProvider || 'google';
+      }
+      if (avatarUrl && !user.avatarUrl) {
+        user.avatarUrl = avatarUrl;
+      }
+      user.isVerified = true; // OAuth users are verified
+    }
+    
+    // Return user without password field
+    const { password, ...userWithoutPassword } = user;
+    
+    return res.status(200).json({ 
+      success: true, 
+      user: userWithoutPassword,
+      accessToken: 'mock-token',
+      refreshToken: 'mock-refresh-token'
+    });
+  }
+  
+  res.status(400).json({ success: false, reason: 'Invalid action. Use action: login, register, or oauth-login' });
 });
 
 // PUT /api/users - Update user (THIS IS THE MISSING ENDPOINT!)
@@ -1128,7 +1183,7 @@ app.listen(PORT, () => {
   console.log(`   - PUT  /api/vehicle-data-management - Update vehicle data in admin database`);
   console.log(`   - DELETE /api/vehicle-data-management - Delete vehicle data from admin database`);
   console.log(`   - GET  /api/users - Get all users`);
-  console.log(`   - POST /api/users - Login/Register (action: login|register)`);
+  console.log(`   - POST /api/users - Login/Register/OAuth (action: login|register|oauth-login)`);
   console.log(`   - PUT  /api/users - Update user`);
   console.log(`   - DELETE /api/users - Delete user`);
   console.log(`   - GET  /api/faqs - Get all FAQs`);
