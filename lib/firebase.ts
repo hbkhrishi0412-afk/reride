@@ -14,17 +14,30 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-let app: FirebaseApp;
-let auth: Auth;
+let app: FirebaseApp | undefined;
+let auth: Auth | undefined;
 
 if (typeof window !== 'undefined') {
-  // Only initialize on client side
-  if (!getApps().length) {
-    app = initializeApp(firebaseConfig);
-  } else {
-    app = getApps()[0];
+  try {
+    // Only initialize on client side
+    if (!getApps().length) {
+      // Validate that we have proper Firebase configuration
+      if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'YOUR_API_KEY' && 
+          firebaseConfig.projectId && firebaseConfig.projectId !== 'YOUR_PROJECT_ID') {
+        app = initializeApp(firebaseConfig);
+      } else {
+        console.warn('⚠️ Firebase configuration is missing or incomplete. Please check your .env.local file.');
+      }
+    } else {
+      app = getApps()[0];
+    }
+    
+    if (app) {
+      auth = getAuth(app);
+    }
+  } catch (error) {
+    console.error('❌ Firebase initialization error:', error);
   }
-  auth = getAuth(app);
 }
 
 export { app, auth };
