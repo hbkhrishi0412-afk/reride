@@ -128,15 +128,49 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=987654321098
 VITE_FIREBASE_APP_ID=1:987654321098:web:abcdef1234567890abcdef
 ```
 
-## For Production (Vercel)
+## For Production (Vercel) - ⚠️ REQUIRED
 
-If you're deploying to Vercel, you also need to add these environment variables in Vercel Dashboard:
+**If you're seeing this error in production, you MUST configure Firebase environment variables in Vercel!**
 
-1. Go to your Vercel project
-2. Click **"Settings"** → **"Environment Variables"**
-3. Add all 6 Firebase variables (with `VITE_` prefix)
-4. Enable for **Production**, **Preview**, and **Development**
-5. Redeploy your app
+The `.env.local` file only works for local development. For production deployments on Vercel, you need to set environment variables in the Vercel Dashboard:
+
+### Step-by-Step Production Setup:
+
+1. **Go to your Vercel project dashboard**
+   - Visit [vercel.com](https://vercel.com) and log in
+   - Select your project (reride.co.in)
+
+2. **Navigate to Environment Variables**
+   - Click **"Settings"** in the top navigation
+   - Click **"Environment Variables"** in the left sidebar
+
+3. **Add all 6 Firebase variables** (one at a time):
+   - Click **"Add New"**
+   - For each variable, enter:
+     - **Key**: `VITE_FIREBASE_API_KEY` (or the variable name)
+     - **Value**: Your Firebase config value (from Firebase Console)
+     - **Environment**: Select **Production**, **Preview**, and **Development** (check all three)
+   - Click **"Save"**
+   - Repeat for all 6 variables:
+     - `VITE_FIREBASE_API_KEY`
+     - `VITE_FIREBASE_AUTH_DOMAIN`
+     - `VITE_FIREBASE_PROJECT_ID`
+     - `VITE_FIREBASE_STORAGE_BUCKET`
+     - `VITE_FIREBASE_MESSAGING_SENDER_ID`
+     - `VITE_FIREBASE_APP_ID`
+
+4. **Redeploy your app**
+   - Go to **"Deployments"** tab
+   - Click the **"..."** menu on your latest deployment
+   - Select **"Redeploy"**
+   - Or push a new commit to trigger automatic deployment
+
+### ⚠️ Important Notes:
+- Environment variables are case-sensitive
+- All variables must start with `VITE_` prefix
+- You must enable them for **Production** environment (at minimum)
+- After adding variables, you MUST redeploy for changes to take effect
+- The `.env.local` file is NOT used in production - only Vercel environment variables are used
 
 ## Quick Checklist
 

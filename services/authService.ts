@@ -6,8 +6,27 @@ import {
   ConfirmationResult,
   UserCredential
 } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { auth, getFirebaseInitError } from '../lib/firebase';
 import { User } from '../types';
+
+// Helper to get production-appropriate error message
+const getFirebaseErrorMessage = (): string => {
+  const initError = getFirebaseInitError();
+  if (initError) {
+    return initError;
+  }
+  
+  // Check if we're in production
+  const isProduction = typeof window !== 'undefined' && 
+    (window.location.hostname.includes('vercel.app') || 
+     window.location.hostname.includes('reride.co.in'));
+  
+  if (isProduction) {
+    return 'Firebase Auth is not initialized. Please configure Firebase environment variables in your Vercel project settings (Settings → Environment Variables). Add all 6 variables: VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID';
+  }
+  
+  return 'Firebase Auth is not initialized. Please check your Firebase configuration in .env.local file.';
+};
 
 // Google Sign-In
 export const signInWithGoogle = async (): Promise<{ 
@@ -19,10 +38,11 @@ export const signInWithGoogle = async (): Promise<{
   try {
     // Validate that auth is initialized
     if (!auth) {
-      console.error('❌ Firebase Auth is not initialized. Please check your Firebase configuration.');
+      const errorMessage = getFirebaseErrorMessage();
+      console.error('❌ Firebase Auth is not initialized.');
       return {
         success: false,
-        reason: 'Firebase Auth is not initialized. Please check your Firebase configuration in .env.local file.'
+        reason: errorMessage
       };
     }
 
@@ -68,7 +88,12 @@ export const signInWithGoogle = async (): Promise<{
     } else if (error.code === 'auth/network-request-failed') {
       errorMessage = 'Network error. Please check your internet connection and try again.';
     } else if (error.code === 'auth/api-key-not-valid') {
-      errorMessage = 'Firebase configuration is invalid. Please check your .env.local file.';
+      const isProduction = typeof window !== 'undefined' && 
+        (window.location.hostname.includes('vercel.app') || 
+         window.location.hostname.includes('reride.co.in'));
+      errorMessage = isProduction 
+        ? 'Firebase configuration is invalid. Please verify your Firebase environment variables in Vercel project settings.'
+        : 'Firebase configuration is invalid. Please check your .env.local file.';
     } else if (error.message) {
       errorMessage = error.message;
     }
@@ -85,7 +110,7 @@ let recaptchaVerifier: RecaptchaVerifier | null = null;
 
 export const initializeRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
   if (!auth) {
-    throw new Error('Firebase Auth is not initialized. Please check your Firebase configuration.');
+    throw new Error(getFirebaseErrorMessage());
   }
   
   if (recaptchaVerifier) {
@@ -116,7 +141,7 @@ export const sendOTP = async (phoneNumber: string): Promise<{
     if (!auth) {
       return {
         success: false,
-        reason: 'Firebase Auth is not initialized. Please check your Firebase configuration.'
+        reason: getFirebaseErrorMessage()
       };
     }
     
