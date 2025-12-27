@@ -1,4 +1,5 @@
 import type { Vehicle, User, VehicleData } from '../types';
+import { queueRequest } from '../utils/requestQueue';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
@@ -43,126 +44,140 @@ class DataService {
 
   private async makeApiRequest<T>(
     endpoint: string, 
-    options: RequestInit = {}
+    options: RequestInit = {},
+    priority: number = 5
   ): Promise<T> {
     const method = (options.method || 'GET').toUpperCase();
     const shouldSendJson = method !== 'GET' && method !== 'HEAD';
 
-    const headers: HeadersInit = {
-      Accept: 'application/json',
-      ...(shouldSendJson ? { 'Content-Type': 'application/json' } : {}),
-      ...this.getAuthHeaders(),
-      ...(options.headers || {})
-    };
+    // Use request queue to prevent rate limiting
+    // Higher priority for GET requests (read operations are more critical)
+    const requestPriority = method === 'GET' ? Math.max(priority, 7) : priority;
+    
+    return queueRequest(
+      async () => {
+        const headers: HeadersInit = {
+          Accept: 'application/json',
+          ...(shouldSendJson ? { 'Content-Type': 'application/json' } : {}),
+          ...this.getAuthHeaders(),
+          ...(options.headers || {})
+        };
 
-    const fetchOptions: RequestInit = {
-      ...options,
-      method,
-      headers,
-      credentials: 'include'
-    };
+        const fetchOptions: RequestInit = {
+          ...options,
+          method,
+          headers,
+          credentials: 'include'
+        };
 
-    // Check cache for GET requests
-    const cacheKey = `${endpoint}_${JSON.stringify(options)}`;
-    if (method === 'GET') {
-      const cached = this.cache.get(cacheKey);
-      if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-        // Return cached data immediately to avoid redundant API calls
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`✅ Using cached data for ${endpoint}`);
+        // Check cache for GET requests
+        const cacheKey = `${endpoint}_${JSON.stringify(options)}`;
+        if (method === 'GET') {
+          const cached = this.cache.get(cacheKey);
+          if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+            // Return cached data immediately to avoid redundant API calls
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`✅ Using cached data for ${endpoint}`);
+            }
+            return cached.data;
+          }
         }
-        return cached.data;
-      }
-    }
 
-    let response: Response;
-    let timeoutId: NodeJS.Timeout | null = null;
-    try {
-      // Add timeout for fetch requests - reduced to 7 seconds for faster fallback
-      const controller = new AbortController();
-      timeoutId = setTimeout(() => {
-        controller.abort();
-      }, 7000); // 7 second timeout for faster fallback
-      
-      response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
-        ...fetchOptions,
-        signal: controller.signal
-      });
-      
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-    } catch (fetchError) {
-      // Clean up timeout if still active
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      
-      // Network error or timeout - throw error to trigger fallback
-      if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
-        throw new Error('API request timeout');
-      }
-      throw new Error('Network error: Unable to reach API server');
-    }
-
-    if (!response.ok) {
-      // Handle rate limiting (429) specially
-      if (response.status === 429) {
-        const errorText = await response.text();
-        let errorMessage = 'Too many requests. Please wait a moment and try again.';
-        
+        let response: Response;
+        let timeoutId: NodeJS.Timeout | null = null;
         try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.reason || errorData.error || errorMessage;
-        } catch {
-          // Use default error message if JSON parsing fails
+          // Add timeout for fetch requests - reduced to 7 seconds for faster fallback
+          const controller = new AbortController();
+          timeoutId = setTimeout(() => {
+            controller.abort();
+          }, 7000); // 7 second timeout for faster fallback
+          
+          response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
+            ...fetchOptions,
+            signal: controller.signal
+          });
+          
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+        } catch (fetchError) {
+          // Clean up timeout if still active
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          
+          // Network error or timeout - throw error to trigger fallback
+          if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
+            throw new Error('API request timeout');
+          }
+          throw new Error('Network error: Unable to reach API server');
+        }
+
+        if (!response.ok) {
+          // Handle rate limiting (429) specially
+          if (response.status === 429) {
+            const errorText = await response.text();
+            let errorMessage = 'Too many requests. Please wait a moment and try again.';
+            
+            try {
+              const errorData = JSON.parse(errorText);
+              errorMessage = errorData.reason || errorData.error || errorMessage;
+            } catch {
+              // Use default error message if JSON parsing fails
+            }
+            
+            // Throw error with status code for request queue to handle
+            const error: any = new Error(errorMessage);
+            error.status = 429;
+            error.code = 429;
+            throw error;
+          }
+          
+          // For 404 errors in development, fail silently and let fallback handle it
+          if (response.status === 404 && this.isDevelopment) {
+            throw new Error('API endpoint not found (expected in development)');
+          }
+          
+          const errorText = await response.text();
+          let errorMessage = `API Error: ${response.status} - ${response.statusText}`;
+          
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.error || errorData.reason || errorMessage;
+          } catch {
+            // Use default error message if JSON parsing fails
+          }
+          
+          throw new Error(errorMessage);
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('Unexpected non-JSON response from API:', text.slice(0, 300));
+          if (text.includes('Authentication Required') || text.includes('Vercel Authentication')) {
+            throw new Error('Authentication is required to access the API. Please ensure the deployment protection bypass cookie is set.');
+          }
+          throw new Error('Unexpected response from server. Expected JSON but received a different format.');
+        }
+
+        const data = await response.json();
+        
+        // Cache GET requests
+        if (method === 'GET') {
+          this.cache.set(cacheKey, { data, timestamp: Date.now() });
         }
         
-        // Throw error with status code for request queue to handle
-        const error: any = new Error(errorMessage);
-        error.status = 429;
-        error.code = 429;
-        throw error;
+        return data;
+      },
+      {
+        priority: requestPriority,
+        id: `${method}_${endpoint}`,
+        maxRetries: method === 'GET' ? 2 : 1
       }
-      
-      // For 404 errors in development, fail silently and let fallback handle it
-      if (response.status === 404 && this.isDevelopment) {
-        throw new Error('API endpoint not found (expected in development)');
-      }
-      
-      const errorText = await response.text();
-      let errorMessage = `API Error: ${response.status} - ${response.statusText}`;
-      
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.error || errorData.reason || errorMessage;
-      } catch {
-        // Use default error message if JSON parsing fails
-      }
-      
-      throw new Error(errorMessage);
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      const text = await response.text();
-      console.error('Unexpected non-JSON response from API:', text.slice(0, 300));
-      if (text.includes('Authentication Required') || text.includes('Vercel Authentication')) {
-        throw new Error('Authentication is required to access the API. Please ensure the deployment protection bypass cookie is set.');
-      }
-      throw new Error('Unexpected response from server. Expected JSON but received a different format.');
-    }
-
-    const data = await response.json();
-    
-    // Cache GET requests
-    if (method === 'GET') {
-      this.cache.set(cacheKey, { data, timestamp: Date.now() });
-    }
-    
-    return data;
+    );
   }
 
   private getAuthHeaders(): Record<string, string> {

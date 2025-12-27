@@ -1,4 +1,5 @@
 import type { Notification } from '../types';
+import { queueRequest } from '../utils/requestQueue';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -33,30 +34,37 @@ export async function saveNotificationToMongoDB(notification: Notification): Pro
  */
 export async function getNotificationsFromMongoDB(recipientEmail?: string, isRead?: boolean): Promise<{ success: boolean; data?: Notification[]; error?: string }> {
   try {
-    const params = new URLSearchParams();
-    if (recipientEmail) params.append('recipientEmail', recipientEmail);
-    if (isRead !== undefined) params.append('isRead', String(isRead));
+    const result = await queueRequest(
+      async () => {
+        const params = new URLSearchParams();
+        if (recipientEmail) params.append('recipientEmail', recipientEmail);
+        if (isRead !== undefined) params.append('isRead', String(isRead));
 
-    // Only add query string if there are params
-    const queryString = params.toString();
-    const url = queryString 
-      ? `${API_BASE_URL}/notifications?${queryString}`
-      : `${API_BASE_URL}/notifications`;
+        // Only add query string if there are params
+        const queryString = params.toString();
+        const url = queryString 
+          ? `${API_BASE_URL}/notifications?${queryString}`
+          : `${API_BASE_URL}/notifications`;
 
-    const response = await fetch(url);
+        const response = await fetch(url);
 
-    // Handle 404 gracefully - silently fall back (expected in dev)
-    if (response.status === 404) {
-      return { success: false, error: 'API route not available' };
-    }
+        // Handle 404 gracefully - silently fall back (expected in dev)
+        if (response.status === 404) {
+          return { success: false, error: 'API route not available' };
+        }
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      return { success: false, error: errorData.reason || 'Failed to get notifications' };
-    }
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
+          return { success: false, error: errorData.reason || 'Failed to get notifications' };
+        }
 
-    const result = await response.json();
-    return { success: true, data: result.data || [] };
+        const result = await response.json();
+        return { success: true, data: result.data || [] };
+      },
+      { priority: 5, id: 'notifications', maxRetries: 2 }
+    );
+    
+    return result;
   } catch (error) {
     // Network errors - gracefully fall back
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
