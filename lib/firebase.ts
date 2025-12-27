@@ -15,14 +15,33 @@ const isProduction = (): boolean => {
 
 // Firebase configuration
 // Note: These are client-safe keys - they identify your Firebase project
+// IMPORTANT: Direct static access to import.meta.env is required for Vite to include these in the build
+// Vite statically analyzes the code and only includes env vars that are directly referenced
+// Using direct references ensures Vite includes them at build time
 const firebaseConfig = {
-  apiKey: getEnvValue('VITE_FIREBASE_API_KEY', 'YOUR_API_KEY'),
-  authDomain: getEnvValue('VITE_FIREBASE_AUTH_DOMAIN', 'YOUR_PROJECT_ID.firebaseapp.com'),
-  projectId: getEnvValue('VITE_FIREBASE_PROJECT_ID', 'YOUR_PROJECT_ID'),
-  storageBucket: getEnvValue('VITE_FIREBASE_STORAGE_BUCKET', 'YOUR_PROJECT_ID.appspot.com'),
-  messagingSenderId: getEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID', 'YOUR_MESSAGING_SENDER_ID'),
-  appId: getEnvValue('VITE_FIREBASE_APP_ID', 'YOUR_APP_ID')
+  // Direct static access - Vite will replace these at build time with actual values
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || getEnvValue('VITE_FIREBASE_API_KEY', 'YOUR_API_KEY'),
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || getEnvValue('VITE_FIREBASE_AUTH_DOMAIN', 'YOUR_PROJECT_ID.firebaseapp.com'),
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || getEnvValue('VITE_FIREBASE_PROJECT_ID', 'YOUR_PROJECT_ID'),
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || getEnvValue('VITE_FIREBASE_STORAGE_BUCKET', 'YOUR_PROJECT_ID.appspot.com'),
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || getEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID', 'YOUR_MESSAGING_SENDER_ID'),
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || getEnvValue('VITE_FIREBASE_APP_ID', 'YOUR_APP_ID')
 };
+
+// Debug logging in development to help troubleshoot
+if (typeof window !== 'undefined' && (import.meta.env?.MODE === 'development' || import.meta.env?.DEV)) {
+  console.log('🔍 Firebase Config Debug:', {
+    apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'MISSING',
+    authDomain: firebaseConfig.authDomain || 'MISSING',
+    projectId: firebaseConfig.projectId || 'MISSING',
+    storageBucket: firebaseConfig.storageBucket || 'MISSING',
+    messagingSenderId: firebaseConfig.messagingSenderId || 'MISSING',
+    appId: firebaseConfig.appId ? `${firebaseConfig.appId.substring(0, 10)}...` : 'MISSING',
+    envMode: import.meta.env?.MODE,
+    hasImportMeta: typeof import.meta !== 'undefined',
+    envKeys: typeof import.meta !== 'undefined' && import.meta.env ? Object.keys(import.meta.env).filter(k => k.startsWith('VITE_FIREBASE')) : []
+  });
+}
 
 // Initialize Firebase
 let app: FirebaseApp | undefined;
