@@ -1,6 +1,5 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getEnvValue } from '../utils/environment.js';
 
 // Helper to detect if we're in production
 const isProduction = (): boolean => {
@@ -14,33 +13,97 @@ const isProduction = (): boolean => {
 };
 
 // Firebase configuration
-// Note: These are client-safe keys - they identify your Firebase project
-// IMPORTANT: Direct static access to import.meta.env is required for Vite to include these in the build
+// CRITICAL: Direct static access to import.meta.env is required for Vite to include these in the build
 // Vite statically analyzes the code and only includes env vars that are directly referenced
-// Using direct references ensures Vite includes them at build time
+// DO NOT use dynamic keys or helper functions - use direct property access only
+// Note: These are client-safe keys - they identify your Firebase project
 const firebaseConfig = {
   // Direct static access - Vite will replace these at build time with actual values
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || getEnvValue('VITE_FIREBASE_API_KEY', 'YOUR_API_KEY'),
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || getEnvValue('VITE_FIREBASE_AUTH_DOMAIN', 'YOUR_PROJECT_ID.firebaseapp.com'),
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || getEnvValue('VITE_FIREBASE_PROJECT_ID', 'YOUR_PROJECT_ID'),
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || getEnvValue('VITE_FIREBASE_STORAGE_BUCKET', 'YOUR_PROJECT_ID.appspot.com'),
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || getEnvValue('VITE_FIREBASE_MESSAGING_SENDER_ID', 'YOUR_MESSAGING_SENDER_ID'),
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || getEnvValue('VITE_FIREBASE_APP_ID', 'YOUR_APP_ID')
+  // If variables are not set, they will be undefined, which we handle in validation
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
 };
 
-// Debug logging in development to help troubleshoot
-if (typeof window !== 'undefined' && (import.meta.env?.MODE === 'development' || import.meta.env?.DEV)) {
-  console.log('🔍 Firebase Config Debug:', {
-    apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'MISSING',
-    authDomain: firebaseConfig.authDomain || 'MISSING',
-    projectId: firebaseConfig.projectId || 'MISSING',
-    storageBucket: firebaseConfig.storageBucket || 'MISSING',
-    messagingSenderId: firebaseConfig.messagingSenderId || 'MISSING',
-    appId: firebaseConfig.appId ? `${firebaseConfig.appId.substring(0, 10)}...` : 'MISSING',
-    envMode: import.meta.env?.MODE,
-    hasImportMeta: typeof import.meta !== 'undefined',
-    envKeys: typeof import.meta !== 'undefined' && import.meta.env ? Object.keys(import.meta.env).filter(k => k.startsWith('VITE_FIREBASE')) : []
-  });
+// Helper to check if a value looks like a real Firebase config (not a placeholder)
+const isValidFirebaseValue = (value: string | undefined, type: 'apiKey' | 'projectId' | 'authDomain' | 'storageBucket' | 'messagingSenderId' | 'appId'): boolean => {
+  if (!value || typeof value !== 'string' || value.trim() === '') return false;
+  
+  // Check for placeholder values
+  if (value.includes('YOUR_') || value === 'undefined' || value === 'null') return false;
+  
+  // Type-specific validation
+  switch (type) {
+    case 'apiKey':
+      // Firebase API keys typically start with 'AIza' and are ~39 chars
+      return value.startsWith('AIza') && value.length > 30;
+    case 'projectId':
+      // Project IDs are alphanumeric with hyphens, typically 6-30 chars
+      return /^[a-z0-9-]+$/.test(value) && value.length >= 6 && !value.includes('YOUR');
+    case 'authDomain':
+      // Auth domains end with .firebaseapp.com
+      return value.includes('.firebaseapp.com') && !value.includes('YOUR');
+    case 'storageBucket':
+      // Storage buckets end with .appspot.com
+      return value.includes('.appspot.com') && !value.includes('YOUR');
+    case 'messagingSenderId':
+      // Sender IDs are numeric strings
+      return /^\d+$/.test(value) && value.length >= 10;
+    case 'appId':
+      // App IDs are typically in format 1:xxxxx:web:xxxxx
+      return value.includes(':') && value.length > 20 && !value.includes('YOUR');
+    default:
+      return true;
+  }
+};
+
+// Debug logging for both development and production to help troubleshoot
+if (typeof window !== 'undefined') {
+  const isDev = import.meta.env?.MODE === 'development' || import.meta.env?.DEV;
+  const isProd = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('reride.co.in');
+  
+  // Always log in production if there's an issue, or always in dev
+  if (isDev || isProd) {
+    const debugInfo = {
+      apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 15)}...` : 'MISSING',
+      authDomain: firebaseConfig.authDomain || 'MISSING',
+      projectId: firebaseConfig.projectId || 'MISSING',
+      storageBucket: firebaseConfig.storageBucket || 'MISSING',
+      messagingSenderId: firebaseConfig.messagingSenderId || 'MISSING',
+      appId: firebaseConfig.appId ? `${firebaseConfig.appId.substring(0, 15)}...` : 'MISSING',
+      envMode: import.meta.env?.MODE,
+      isProduction: isProd,
+      isValid: {
+        apiKey: isValidFirebaseValue(firebaseConfig.apiKey, 'apiKey'),
+        projectId: isValidFirebaseValue(firebaseConfig.projectId, 'projectId'),
+        authDomain: isValidFirebaseValue(firebaseConfig.authDomain, 'authDomain'),
+        storageBucket: isValidFirebaseValue(firebaseConfig.storageBucket, 'storageBucket'),
+        messagingSenderId: isValidFirebaseValue(firebaseConfig.messagingSenderId, 'messagingSenderId'),
+        appId: isValidFirebaseValue(firebaseConfig.appId, 'appId')
+      },
+      // Show which env vars are actually available
+      availableEnvVars: typeof import.meta !== 'undefined' && import.meta.env 
+        ? Object.keys(import.meta.env).filter(k => k.startsWith('VITE_FIREBASE')).map(k => ({
+            key: k,
+            hasValue: !!(import.meta.env as any)[k] && (import.meta.env as any)[k] !== 'undefined'
+          }))
+        : []
+    };
+    
+    if (isDev) {
+      console.log('🔍 Firebase Config Debug (Dev):', debugInfo);
+    } else if (isProd) {
+      // In production, only log if there's a problem
+      const hasInvalidValues = Object.values(debugInfo.isValid).some(v => !v);
+      if (hasInvalidValues) {
+        console.warn('⚠️ Firebase Config Issue (Production):', debugInfo);
+        console.warn('💡 Make sure all 6 Firebase environment variables are set in Vercel and a new deployment was triggered after setting them.');
+      }
+    }
+  }
 }
 
 // Initialize Firebase
@@ -52,21 +115,63 @@ if (typeof window !== 'undefined') {
   try {
     // Only initialize on client side
     if (!getApps().length) {
-      // Validate that we have proper Firebase configuration
-      const hasValidConfig = firebaseConfig.apiKey && 
-                            firebaseConfig.apiKey !== 'YOUR_API_KEY' && 
-                            firebaseConfig.projectId && 
-                            firebaseConfig.projectId !== 'YOUR_PROJECT_ID';
+      // Validate that we have proper Firebase configuration using improved validation
+      const isValidApiKey = isValidFirebaseValue(firebaseConfig.apiKey, 'apiKey');
+      const isValidProjectId = isValidFirebaseValue(firebaseConfig.projectId, 'projectId');
+      const isValidAuthDomain = isValidFirebaseValue(firebaseConfig.authDomain, 'authDomain');
+      const isValidStorageBucket = isValidFirebaseValue(firebaseConfig.storageBucket, 'storageBucket');
+      const isValidMessagingSenderId = isValidFirebaseValue(firebaseConfig.messagingSenderId, 'messagingSenderId');
+      const isValidAppId = isValidFirebaseValue(firebaseConfig.appId, 'appId');
+      
+      const hasValidConfig = isValidApiKey && isValidProjectId && isValidAuthDomain && 
+                            isValidStorageBucket && isValidMessagingSenderId && isValidAppId;
       
       if (hasValidConfig) {
-        app = initializeApp(firebaseConfig);
+        try {
+          app = initializeApp(firebaseConfig);
+          console.log('✅ Firebase initialized successfully');
+        } catch (initError) {
+          const errorMsg = initError instanceof Error ? initError.message : String(initError);
+          initializationError = `Firebase initialization failed: ${errorMsg}`;
+          console.error('❌ Firebase initialization error:', initError);
+        }
       } else {
-        const envGuidance = isProduction() 
-          ? 'Please set Firebase environment variables in your Vercel project settings (Settings → Environment Variables). Add all 6 variables with VITE_ prefix: VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID'
-          : 'Please check your .env.local file in the project root and ensure all Firebase variables are set.';
+        // Build detailed error message
+        const missingFields: string[] = [];
+        if (!isValidApiKey) missingFields.push('VITE_FIREBASE_API_KEY');
+        if (!isValidProjectId) missingFields.push('VITE_FIREBASE_PROJECT_ID');
+        if (!isValidAuthDomain) missingFields.push('VITE_FIREBASE_AUTH_DOMAIN');
+        if (!isValidStorageBucket) missingFields.push('VITE_FIREBASE_STORAGE_BUCKET');
+        if (!isValidMessagingSenderId) missingFields.push('VITE_FIREBASE_MESSAGING_SENDER_ID');
+        if (!isValidAppId) missingFields.push('VITE_FIREBASE_APP_ID');
         
-        initializationError = `Firebase configuration is missing or incomplete. ${envGuidance}`;
+        const prod = isProduction();
+        const baseMessage = prod
+          ? 'Firebase configuration is missing or incomplete. Please set Firebase environment variables in your Vercel project settings (Settings → Environment Variables).'
+          : 'Firebase configuration is missing or incomplete. Please check your .env.local file in the project root.';
+        
+        const missingList = missingFields.length > 0 
+          ? ` Missing or invalid: ${missingFields.join(', ')}.`
+          : '';
+        
+        const instructions = prod
+          ? ' Add all 6 variables with VITE_ prefix: VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID. After setting variables, trigger a new deployment in Vercel (Deployments → Redeploy).'
+          : ' Ensure all Firebase variables are set correctly.';
+        
+        initializationError = `${baseMessage}${missingList}${instructions}`;
         console.warn('⚠️', initializationError);
+        
+        // Additional production debugging
+        if (prod) {
+          console.warn('🔍 Production Debug Info:', {
+            hostname: window.location.hostname,
+            envMode: import.meta.env?.MODE,
+            hasImportMeta: typeof import.meta !== 'undefined',
+            availableVars: typeof import.meta !== 'undefined' && import.meta.env
+              ? Object.keys(import.meta.env).filter(k => k.startsWith('VITE_FIREBASE'))
+              : []
+          });
+        }
       }
     } else {
       app = getApps()[0];
