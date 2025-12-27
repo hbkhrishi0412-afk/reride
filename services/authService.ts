@@ -94,6 +94,10 @@ export const signInWithGoogle = async (): Promise<{
       errorMessage = isProduction 
         ? 'Firebase configuration is invalid. Please verify your Firebase environment variables in Vercel project settings.'
         : 'Firebase configuration is invalid. Please check your .env.local file.';
+    } else if (error.code === 'auth/unauthorized-domain') {
+      // This error occurs when the domain is not authorized in Firebase Console
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
+      errorMessage = `Domain "${currentDomain}" is not authorized in Firebase. Please add this domain to Firebase Console → Authentication → Settings → Authorized domains.`;
     } else if (error.message) {
       errorMessage = error.message;
     }
@@ -167,9 +171,23 @@ export const sendOTP = async (phoneNumber: string): Promise<{
     };
   } catch (error: any) {
     console.error('Send OTP Error:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to send OTP';
+    if (error.code === 'auth/unauthorized-domain') {
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
+      errorMessage = `Domain "${currentDomain}" is not authorized in Firebase. Please add this domain to Firebase Console → Authentication → Settings → Authorized domains.`;
+    } else if (error.code === 'auth/invalid-phone-number') {
+      errorMessage = 'Invalid phone number format. Please enter a valid phone number with country code.';
+    } else if (error.code === 'auth/too-many-requests') {
+      errorMessage = 'Too many requests. Please wait a moment and try again.';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
     return {
       success: false,
-      reason: error.message || 'Failed to send OTP'
+      reason: errorMessage
     };
   }
 };
