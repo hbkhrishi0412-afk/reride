@@ -863,6 +863,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
     const { action, email, password, role, name, mobile, firebaseUid, authProvider, avatarUrl } = req.body;
 
+    // Validate that action is provided
+    if (!action || typeof action !== 'string') {
+      logWarn('⚠️ POST /api/users: Missing or invalid action field', { body: req.body });
+      return res.status(400).json({ 
+        success: false, 
+        reason: 'Invalid action. Please provide a valid action: login, register, oauth-login, or refresh-token.' 
+      });
+    }
+
     // LOGIN
     if (action === 'login') {
       if (!email || !password) {
@@ -1222,7 +1231,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
     }
 
-    return res.status(400).json({ success: false, reason: 'Invalid action.' });
+    logWarn('⚠️ POST /api/users: Invalid action received', { action, bodyKeys: Object.keys(req.body || {}) });
+    return res.status(400).json({ 
+      success: false, 
+      reason: `Invalid action: "${action}". Please use one of: login, register, oauth-login, or refresh-token.` 
+    });
   }
 
   // HEAD - Handle browser pre-flight checks
