@@ -47,8 +47,8 @@ const isValidFirebaseValue = (value: string | undefined, type: 'apiKey' | 'proje
       // Auth domains end with .firebaseapp.com
       return value.includes('.firebaseapp.com') && !value.includes('YOUR');
     case 'storageBucket':
-      // Storage buckets end with .appspot.com
-      return value.includes('.appspot.com') && !value.includes('YOUR');
+      // Storage buckets end with .appspot.com or .firebasestorage.app (newer format)
+      return (value.includes('.appspot.com') || value.includes('.firebasestorage.app')) && !value.includes('YOUR');
     case 'messagingSenderId':
       // Sender IDs are numeric strings
       return /^\d+$/.test(value) && value.length >= 10;
