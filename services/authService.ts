@@ -17,12 +17,29 @@ export const signInWithGoogle = async (): Promise<{
   reason?: string 
 }> => {
   try {
+    // Validate that auth is initialized
+    if (!auth) {
+      console.error('❌ Firebase Auth is not initialized. Please check your Firebase configuration.');
+      return {
+        success: false,
+        reason: 'Firebase Auth is not initialized. Please check your Firebase configuration in .env.local file.'
+      };
+    }
+
     const provider = new GoogleAuthProvider();
     provider.addScope('profile');
     provider.addScope('email');
     
     const result = await signInWithPopup(auth, provider);
     const firebaseUser = result.user;
+    
+    // Validate that we got a user
+    if (!firebaseUser) {
+      return {
+        success: false,
+        reason: 'No user returned from Google Sign-In'
+      };
+    }
     
     // Extract user information
     const userData = {
@@ -41,9 +58,24 @@ export const signInWithGoogle = async (): Promise<{
     };
   } catch (error: any) {
     console.error('Google Sign-In Error:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to sign in with Google';
+    if (error.code === 'auth/popup-closed-by-user') {
+      errorMessage = 'Sign-in popup was closed. Please try again.';
+    } else if (error.code === 'auth/popup-blocked') {
+      errorMessage = 'Popup was blocked by your browser. Please allow popups and try again.';
+    } else if (error.code === 'auth/network-request-failed') {
+      errorMessage = 'Network error. Please check your internet connection and try again.';
+    } else if (error.code === 'auth/api-key-not-valid') {
+      errorMessage = 'Firebase configuration is invalid. Please check your .env.local file.';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
     return {
       success: false,
-      reason: error.message || 'Failed to sign in with Google'
+      reason: errorMessage
     };
   }
 };
@@ -52,6 +84,10 @@ export const signInWithGoogle = async (): Promise<{
 let recaptchaVerifier: RecaptchaVerifier | null = null;
 
 export const initializeRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
+  if (!auth) {
+    throw new Error('Firebase Auth is not initialized. Please check your Firebase configuration.');
+  }
+  
   if (recaptchaVerifier) {
     recaptchaVerifier.clear();
   }
@@ -77,6 +113,13 @@ export const sendOTP = async (phoneNumber: string): Promise<{
   reason?: string;
 }> => {
   try {
+    if (!auth) {
+      return {
+        success: false,
+        reason: 'Firebase Auth is not initialized. Please check your Firebase configuration.'
+      };
+    }
+    
     // Format phone number (must include country code, e.g., +91 for India)
     const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber}`;
     
@@ -84,7 +127,14 @@ export const sendOTP = async (phoneNumber: string): Promise<{
       initializeRecaptcha();
     }
     
-    const confirmationResult = await signInWithPhoneNumber(auth, formattedNumber, recaptchaVerifier!);
+    if (!recaptchaVerifier) {
+      return {
+        success: false,
+        reason: 'Failed to initialize reCAPTCHA. Please try again.'
+      };
+    }
+    
+    const confirmationResult = await signInWithPhoneNumber(auth, formattedNumber, recaptchaVerifier);
     
     return {
       success: true,
