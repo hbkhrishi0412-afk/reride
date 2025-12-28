@@ -4,20 +4,49 @@ import { DB_PATHS } from './firebase-db.js';
 
 // Get Firebase Admin Database instance
 function getFirebaseAdminDatabase(): admin.database.Database | null {
+  // Check if databaseURL is set (required for database operations)
+  const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL;
+  
+  // Diagnostic logging to help debug environment variable issues
+  if (!databaseURL) {
+    console.error('❌ Firebase Admin DB: FIREBASE_DATABASE_URL environment variable is not set.');
+    console.error('💡 Please set FIREBASE_DATABASE_URL in your environment variables (e.g., in Vercel dashboard).');
+    console.error('   Format: https://your-project-default-rtdb.region.firebasedatabase.app');
+    console.error('   Checked: process.env.FIREBASE_DATABASE_URL and process.env.VITE_FIREBASE_DATABASE_URL');
+    return null;
+  }
+  
+  console.log('📡 Firebase Admin DB: Using databaseURL:', databaseURL.substring(0, 60) + '...');
+  
   const app = initializeFirebaseAdmin();
   if (!app) {
+    console.error('❌ Firebase Admin DB: Failed to initialize Firebase Admin app');
     return null;
   }
   
-  // Get database URL from environment
-  const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL;
-  if (!databaseURL) {
-    console.warn('⚠️ Firebase Admin DB: FIREBASE_DATABASE_URL not set');
-    return null;
+  // Database URL should be set during app initialization in firebase-admin.ts
+  // admin.database() will use the URL from the app configuration
+  // If the app was initialized without the databaseURL, we need to pass it explicitly
+  // However, admin.database() doesn't accept URL as parameter, so we must ensure
+  // the app is initialized with the databaseURL (which our updated firebase-admin.ts does)
+  try {
+    const db = admin.database(app);
+    console.log('✅ Firebase Admin DB: Database instance created successfully');
+    return db;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes("Can't determine Firebase Database URL")) {
+      console.error('❌ Firebase Admin DB: Database URL not configured in app initialization.');
+      console.error('💡 The app was initialized without a databaseURL. This may happen if:');
+      console.error('   1. The app was initialized in a previous deployment before FIREBASE_DATABASE_URL was added');
+      console.error('   2. The serverless function instance was cached from a previous cold start');
+      console.error('   3. The app was initialized elsewhere without the databaseURL');
+      console.error('   Solution: Redeploy your application to ensure a fresh initialization with FIREBASE_DATABASE_URL.');
+      console.error(`   Current FIREBASE_DATABASE_URL env value: ${databaseURL ? 'SET (' + databaseURL.substring(0, 50) + '...)' : 'NOT SET'}`);
+      console.error('   This is a serverless caching issue - redeployment will fix it.');
+    }
+    throw error;
   }
-  
-  // Pass databaseURL as second parameter to specify which database to use
-  return admin.database(app, databaseURL);
 }
 
 // Helper to convert record to array

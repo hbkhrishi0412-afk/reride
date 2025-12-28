@@ -11,17 +11,14 @@ import { firebaseConversationService } from '../services/firebase-conversation-s
 import { isDatabaseAvailable as isFirebaseAvailable, getDatabaseStatus } from '../lib/firebase-db.js';
 import { updateFirebaseAuthProfile } from '../lib/firebase-admin.js';
 import { 
-  create,
-  read,
-  readAll,
-  updateData,
-  deleteData,
   DB_PATHS
 } from '../lib/firebase-db.js';
 import {
   adminCreate,
   adminUpdate,
-  adminRead
+  adminRead,
+  adminReadAll,
+  adminDelete
 } from '../lib/firebase-admin-db.js';
 
 // Always use Firebase - MongoDB removed
@@ -2658,8 +2655,8 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: Ha
         });
       }
 
-      // Test Firebase connection
-      await read(DB_PATHS.USERS, 'test');
+      // Test Firebase connection using Admin SDK (bypasses security rules)
+      await adminRead(DB_PATHS.USERS, 'test');
       
       return res.status(200).json({
         success: true,
@@ -2727,8 +2724,8 @@ async function handleHealth(_req: VercelRequest, res: VercelResponse) {
       });
     }
     
-    // Test Firebase connection
-    await read(DB_PATHS.USERS, 'test');
+    // Test Firebase connection using Admin SDK
+    await adminRead(DB_PATHS.USERS, 'test');
     
     return res.status(200).json({
       status: 'ok',
@@ -2999,7 +2996,7 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: 
   }
 
   if (req.method === 'GET') {
-    const items = await readAll<Record<string, unknown>>(DB_PATHS.NEW_CARS);
+    const items = await adminReadAll<Record<string, unknown>>(DB_PATHS.NEW_CARS);
     const itemsArray = Object.entries(items).map(([id, data]) => ({ id, ...data }))
       .sort((a, b) => {
         const aTime = (a as Record<string, unknown>).updatedAt ? new Date((a as Record<string, unknown>).updatedAt as string).getTime() : 0;
@@ -3016,7 +3013,7 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: 
     }
     const id = `${payload.brand_name}_${payload.model_name}_${payload.model_year}_${Date.now()}`;
     const doc = { ...payload, updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
-    await create(DB_PATHS.NEW_CARS, doc, id);
+    await adminCreate(DB_PATHS.NEW_CARS, doc, id);
     return res.status(201).json({ success: true, data: { id, ...doc } });
   }
 
@@ -3026,12 +3023,12 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: 
     if (!docId) {
       return res.status(400).json({ success: false, reason: 'Document id is required' });
     }
-    const existing = await read<Record<string, unknown>>(DB_PATHS.NEW_CARS, String(docId));
+    const existing = await adminRead<Record<string, unknown>>(DB_PATHS.NEW_CARS, String(docId));
     if (!existing) {
       return res.status(404).json({ success: false, reason: 'New car document not found' });
     }
-    await updateData(DB_PATHS.NEW_CARS, String(docId), { ...updateData, updatedAt: new Date().toISOString() });
-    const updated = await read<Record<string, unknown>>(DB_PATHS.NEW_CARS, String(docId));
+    await adminUpdate(DB_PATHS.NEW_CARS, String(docId), { ...updateData, updatedAt: new Date().toISOString() });
+    const updated = await adminRead<Record<string, unknown>>(DB_PATHS.NEW_CARS, String(docId));
     return res.status(200).json({ success: true, data: { id: docId, ...updated } });
   }
 
@@ -3041,7 +3038,7 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: 
     if (!docId) {
       return res.status(400).json({ success: false, reason: 'Document id is required' });
     }
-    await deleteData(DB_PATHS.NEW_CARS, String(docId));
+    await adminDelete(DB_PATHS.NEW_CARS, String(docId));
     return res.status(200).json({ success: true });
   }
 
@@ -3277,7 +3274,7 @@ async function handleTestConnection(_req: VercelRequest, res: VercelResponse) {
     }
     
     // Test Firebase connection by reading a test path
-    await read(DB_PATHS.USERS, 'test');
+    await adminRead(DB_PATHS.USERS, 'test');
     
     return res.status(200).json({
       success: true,
@@ -3528,7 +3525,7 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, faqsPath: 
   try {
     const { category } = req.query;
     
-    const allFaqs = await readAll<Record<string, unknown>>(faqsPath);
+    const allFaqs = await adminReadAll<Record<string, unknown>>(faqsPath);
     let faqs = Object.entries(allFaqs).map(([id, data]) => ({ id, ...data }));
     
     if (category && category !== 'all' && typeof category === 'string') {
@@ -3573,7 +3570,7 @@ async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, faqsPath
       updatedAt: new Date().toISOString()
     };
 
-    await create(faqsPath, faq, id);
+    await adminCreate(faqsPath, faq, id);
 
     return res.status(201).json({
       success: true,
@@ -3601,7 +3598,7 @@ async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, faqsPath
       });
     }
 
-    const existing = await read<Record<string, unknown>>(faqsPath, String(id));
+    const existing = await adminRead<Record<string, unknown>>(faqsPath, String(id));
     if (!existing) {
       return res.status(404).json({
         success: false,
@@ -3609,7 +3606,7 @@ async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, faqsPath
       });
     }
 
-    await updateData(faqsPath, String(id), {
+    await adminUpdate(faqsPath, String(id), {
       ...updateData,
       updatedAt: new Date().toISOString()
     });
@@ -3638,7 +3635,7 @@ async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, faqsPath
       });
     }
 
-    await deleteData(faqsPath, String(id));
+    await adminDelete(faqsPath, String(id));
 
     return res.status(200).json({
       success: true,
@@ -3675,7 +3672,7 @@ async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, 
   try {
     const { userEmail, status } = req.query;
     
-    const allTickets = await readAll<Record<string, unknown>>(ticketsPath);
+    const allTickets = await adminReadAll<Record<string, unknown>>(ticketsPath);
     let tickets = Object.entries(allTickets).map(([id, data]) => ({ id, ...data }));
     
     if (userEmail && typeof userEmail === 'string') {
@@ -3734,7 +3731,7 @@ async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse
       replies: []
     };
 
-    await create(ticketsPath, ticket, id);
+    await adminCreate(ticketsPath, ticket, id);
 
     return res.status(201).json({
       success: true,
@@ -3762,7 +3759,7 @@ async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
-    const existing = await read<Record<string, unknown>>(ticketsPath, String(id));
+    const existing = await adminRead<Record<string, unknown>>(ticketsPath, String(id));
     if (!existing) {
       return res.status(404).json({
         success: false,
@@ -3770,7 +3767,7 @@ async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
-    await updateData(ticketsPath, String(id), {
+    await adminUpdate(ticketsPath, String(id), {
       ...updateData,
       updatedAt: new Date().toISOString()
     });
@@ -3799,7 +3796,7 @@ async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
-    await deleteData(ticketsPath, String(id));
+    await adminDelete(ticketsPath, String(id));
 
     return res.status(200).json({
       success: true,
@@ -3857,7 +3854,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
         }
 
         // Check for existing submission
-        const existingSubmissions = await readAll<Record<string, unknown>>(submissionsPath);
+        const existingSubmissions = await adminReadAll<Record<string, unknown>>(submissionsPath);
         const existingSubmission = Object.values(existingSubmissions).find(
           (sub: any) => sub.registration === submissionData.registration
         );
@@ -3871,7 +3868,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
         // Sanitize submission data
         const sanitizedSubmissionData = await sanitizeObject(submissionData);
         const submissionId = `submission_${Date.now()}`;
-        await create(submissionsPath, sanitizedSubmissionData, submissionId);
+        await adminCreate(submissionsPath, sanitizedSubmissionData, submissionId);
         
         res.status(201).json({
           success: true,
@@ -3885,7 +3882,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
         const pageNum = parseInt(String(page), 10) || 1;
         const limitNum = parseInt(String(limit), 10) || 10;
         
-        let allSubmissions = await readAll<Record<string, unknown>>(submissionsPath);
+        let allSubmissions = await adminReadAll<Record<string, unknown>>(submissionsPath);
         let submissions = Object.entries(allSubmissions).map(([id, data]) => ({ id, ...data }));
         
         // Filter by status
@@ -3938,7 +3935,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
           return res.status(400).json({ error: 'Submission ID is required' });
         }
 
-        const existing = await read<Record<string, unknown>>(submissionsPath, String(submissionUpdateId));
+        const existing = await adminRead<Record<string, unknown>>(submissionsPath, String(submissionUpdateId));
         if (!existing) {
           return res.status(404).json({ error: 'Submission not found' });
         }
@@ -3967,7 +3964,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
           submissionUpdates.estimatedPrice = estimatedPrice;
         }
 
-        await updateData(submissionsPath, String(submissionUpdateId), submissionUpdates as unknown as Record<string, unknown>);
+        await adminUpdate(submissionsPath, String(submissionUpdateId), submissionUpdates as unknown as Record<string, unknown>);
 
         res.status(200).json({
           success: true,
@@ -3982,7 +3979,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
           return res.status(400).json({ error: 'Submission ID is required' });
         }
 
-        await deleteData(submissionsPath, String(deleteId));
+        await adminDelete(submissionsPath, String(deleteId));
 
         res.status(200).json({
           success: true,
@@ -4367,7 +4364,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       
       if (notificationId) {
         // Get single notification
-        const notification = await read<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
+        const notification = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
         if (!notification) {
           return res.status(404).json({ success: false, reason: 'Notification not found' });
         }
@@ -4375,7 +4372,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       }
       
       // Get all notifications and filter
-      const allNotifications = await readAll<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS);
+      const allNotifications = await adminReadAll<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS);
       let notifications = Object.entries(allNotifications).map(([id, data]) => ({ id, ...data }));
       
       if (recipientEmail) {
@@ -4417,7 +4414,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         updatedAt: new Date().toISOString()
       };
       
-      await create(DB_PATHS.NOTIFICATIONS, notification, String(notificationData.id));
+      await adminCreate(DB_PATHS.NOTIFICATIONS, notification, String(notificationData.id));
       return res.status(201).json({ success: true, data: notification });
     }
 
@@ -4429,17 +4426,17 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         return res.status(400).json({ success: false, reason: 'Notification ID is required' });
       }
 
-      const existing = await read<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
+      const existing = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
       if (!existing) {
         return res.status(404).json({ success: false, reason: 'Notification not found' });
       }
 
-      await updateData(DB_PATHS.NOTIFICATIONS, String(notificationId), {
+      await adminUpdate(DB_PATHS.NOTIFICATIONS, String(notificationId), {
         ...updates,
         updatedAt: new Date().toISOString()
       });
       
-      const updated = await read<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
+      const updated = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
       return res.status(200).json({ success: true, data: { id: notificationId, ...updated } });
     }
 
@@ -4451,7 +4448,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         return res.status(400).json({ success: false, reason: 'Notification ID is required' });
       }
 
-      await deleteData(DB_PATHS.NOTIFICATIONS, String(notificationId));
+      await adminDelete(DB_PATHS.NOTIFICATIONS, String(notificationId));
       return res.status(200).json({ success: true, message: 'Notification deleted successfully' });
     }
 

@@ -5,14 +5,25 @@ let adminApp: admin.app.App | null = null;
 let initializationAttempted = false;
 
 export function initializeFirebaseAdmin(): admin.app.App | null {
-  // Return existing app if already initialized
+  // Get database URL from environment (required for database operations)
+  const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL;
+  
+  // Return existing app if already initialized (but only if we have databaseURL configured)
   if (adminApp) {
     return adminApp;
   }
 
   // Check if Firebase Admin is already initialized
+  // Note: In serverless environments, if an app was initialized without databaseURL
+  // in a previous cold start, we'll return it here. This is why we ensure databaseURL
+  // is always included in new initializations below.
   if (admin.apps.length > 0) {
     adminApp = admin.apps[0] as admin.app.App;
+    // Log if we're using an existing app (might have been initialized without databaseURL)
+    if (!databaseURL) {
+      console.warn('⚠️ Using existing Firebase Admin app, but FIREBASE_DATABASE_URL is not set');
+      console.warn('💡 If database operations fail, redeploy to ensure app is initialized with databaseURL');
+    }
     return adminApp;
   }
 
@@ -43,11 +54,27 @@ export function initializeFirebaseAdmin(): admin.app.App | null {
           ? JSON.parse(serviceAccountKey) 
           : serviceAccountKey;
         
-        adminApp = admin.initializeApp({
+        const initConfig: admin.AppOptions = {
           credential: admin.credential.cert(key),
           projectId: key.project_id || projectId,
-        });
+        };
+        
+        // Include databaseURL if it's defined (required for database operations)
+        if (databaseURL) {
+          initConfig.databaseURL = databaseURL;
+        } else {
+          console.warn('⚠️ Firebase Admin: FIREBASE_DATABASE_URL not set. Database operations will fail.');
+          console.warn('💡 Set FIREBASE_DATABASE_URL in your environment variables.');
+          console.warn('   Format: https://your-project-default-rtdb.region.firebasedatabase.app');
+        }
+        
+        adminApp = admin.initializeApp(initConfig);
         console.log('✅ Firebase Admin initialized with service account key');
+        if (databaseURL) {
+          console.log('✅ Database URL configured:', databaseURL.substring(0, 50) + '...');
+        } else {
+          console.warn('⚠️ Database URL not configured - database operations will fail');
+        }
         return adminApp;
       } catch (parseError) {
         const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
@@ -59,10 +86,26 @@ export function initializeFirebaseAdmin(): admin.app.App | null {
     // Try to initialize with Application Default Credentials
     // This works on Vercel if Firebase project is linked, or if GOOGLE_APPLICATION_CREDENTIALS is set
     try {
-      adminApp = admin.initializeApp({
+      const initConfig: admin.AppOptions = {
         projectId: projectId,
-      });
+      };
+      
+      // Include databaseURL if it's defined (required for database operations)
+      if (databaseURL) {
+        initConfig.databaseURL = databaseURL;
+      } else {
+        console.warn('⚠️ Firebase Admin: FIREBASE_DATABASE_URL not set. Database operations will fail.');
+        console.warn('💡 Set FIREBASE_DATABASE_URL in your environment variables.');
+        console.warn('   Format: https://your-project-default-rtdb.region.firebasedatabase.app');
+      }
+      
+      adminApp = admin.initializeApp(initConfig);
       console.log('✅ Firebase Admin initialized with Application Default Credentials');
+      if (databaseURL) {
+        console.log('✅ Database URL configured:', databaseURL.substring(0, 50) + '...');
+      } else {
+        console.warn('⚠️ Database URL not configured - database operations will fail');
+      }
       return adminApp;
     } catch (initError) {
       const errorMsg = initError instanceof Error ? initError.message : String(initError);
