@@ -961,7 +961,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         try {
             const { dataService } = await import('../services/dataService');
             const [vehiclesData, usersData] = await Promise.all([
-                dataService.getVehicles(),
+                dataService.getVehicles(true), // Pass true to get all vehicles including unpublished/sold
                 dataService.getUsers()
             ]);
             

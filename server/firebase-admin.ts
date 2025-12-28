@@ -19,8 +19,18 @@ if (!admin.apps.length) {
   }
   
   try {
+    // Strip outer quotes if present (common mistake when setting env vars)
+    let cleanedJson = serviceAccountJson.trim();
+    if ((cleanedJson.startsWith('"') && cleanedJson.endsWith('"')) ||
+        (cleanedJson.startsWith("'") && cleanedJson.endsWith("'"))) {
+      // Remove outer quotes
+      cleanedJson = cleanedJson.slice(1, -1);
+      // Unescape any escaped quotes
+      cleanedJson = cleanedJson.replace(/\\"/g, '"').replace(/\\'/g, "'");
+    }
+    
     // Parse JSON once - trust the environment variable
-    const serviceAccount = JSON.parse(serviceAccountJson);
+    const serviceAccount = JSON.parse(cleanedJson);
     
     // Validate required fields
     if (!serviceAccount.private_key || !serviceAccount.client_email) {
@@ -54,6 +64,15 @@ if (!admin.apps.length) {
       console.error('   - No outer quotes around the JSON');
       console.error('   - Use \\n for newlines in private_key (not actual newlines)');
       console.error('   - Format: {"type":"service_account","project_id":"xxx",...}');
+      // Show first 100 chars of what we received (for debugging, but don't expose full key)
+      const preview = serviceAccountJson.length > 100 
+        ? serviceAccountJson.substring(0, 100) + '...' 
+        : serviceAccountJson;
+      console.error(`   - Received (first 100 chars): ${preview}`);
+      // Check for common issues
+      if (serviceAccountJson.trim().startsWith('"') || serviceAccountJson.trim().startsWith("'")) {
+        console.error('   ⚠️  Detected outer quotes - these will be automatically stripped');
+      }
     } else {
       // Initialization error
       console.error('❌ Failed to initialize Firebase Admin:', errorMsg);

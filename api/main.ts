@@ -1551,14 +1551,26 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 // Vehicles handler - preserves exact functionality from vehicles.ts
 async function handleVehicles(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
+    // FIX: Handle HEAD requests immediately to prevent 405 errors
+    if (req.method === 'HEAD') {
+      res.setHeader('Content-Length', '0');
+      return res.status(200).end();
+    }
+
+    // Check Firebase availability
+    if (!USE_FIREBASE) {
+      const errorMsg = getFirebaseErrorMessage();
+      logWarn('⚠️ Firebase not available:', errorMsg);
+      return res.status(503).json({
+        success: false,
+        reason: errorMsg,
+        details: 'Please check your Firebase configuration. Server-side requires FIREBASE_* environment variables (without VITE_ prefix).',
+        fallback: true
+      });
+    }
+
     // Check action type from query parameter
     const { type, action } = req.query;
-
-  // HEAD - Handle browser pre-flight checks (backup handler in case global handler misses it)
-  if (req.method === 'HEAD') {
-    res.setHeader('Content-Length', '0');
-    return res.status(200).end();
-  }
 
   // VEHICLE DATA ENDPOINTS (brands, models, variants)
   if (type === 'data') {
@@ -1708,6 +1720,51 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           return distance <= parseFloat(req.query.radius as string);
         });
         return res.status(200).json(nearbyVehicles);
+      }
+
+      // ADMIN ENDPOINT: Return all vehicles including unpublished/sold (requires admin auth)
+      if (action === 'admin-all') {
+        // SECURITY: Verify Auth and Admin Role
+        const adminAuth = authenticateRequest(req);
+        if (!adminAuth.isValid) {
+          console.error('❌ Admin vehicles request failed: Authentication required');
+          return res.status(401).json({ success: false, reason: adminAuth.error });
+        }
+        if (adminAuth.user?.role !== 'admin') {
+          console.error('❌ Admin vehicles request failed: Admin role required', { role: adminAuth.user?.role });
+          return res.status(403).json({ 
+            success: false, 
+            reason: 'Forbidden. Admin access required to view all vehicles.' 
+          });
+        }
+        
+        try {
+          const allVehicles = await firebaseVehicleService.findAll();
+          const statusCounts = {
+            published: allVehicles.filter(v => v.status === 'published').length,
+            unpublished: allVehicles.filter(v => v.status === 'unpublished').length,
+            sold: allVehicles.filter(v => v.status === 'sold').length,
+            total: allVehicles.length
+          };
+          console.log(`🔍 ADMIN: Vehicle status breakdown:`, statusCounts);
+          console.log(`📊 ADMIN: Returning ${allVehicles.length} total vehicles (all statuses)`);
+          
+          // Sort by createdAt descending
+          const sortedVehicles = allVehicles.sort((a, b) => {
+            const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return bTime - aTime;
+          });
+          
+          return res.status(200).json(sortedVehicles);
+        } catch (error) {
+          console.error('❌ Error fetching all vehicles for admin:', error);
+          return res.status(500).json({
+            success: false,
+            reason: 'Failed to fetch all vehicles',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
       }
 
       // DEBUG ENDPOINT: Return all vehicles including unpublished (for testing)
@@ -2184,6 +2241,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (action === 'feature') {
         try {
+          // SECURITY FIX: Verify ownership
           const { vehicleId } = req.body;
           const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
           if (!vehicleIdNum) {
@@ -2194,6 +2252,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          }
+
+          // Verify ownership (unless admin)
+          const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
+          const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+          if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
+            console.error('❌ Feature action failed: Ownership mismatch', { 
+              vehicleSeller: normalizedVehicleSellerEmail, 
+              authenticated: normalizedAuthEmail 
+            });
+            return res.status(403).json({ 
+              success: false, 
+              reason: 'Unauthorized: You can only feature your own listings.' 
+            });
           }
 
           if (vehicle.isFeatured) {
@@ -2297,6 +2369,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             console.warn('⚠️ Vehicle not found with id:', vehicleIdNum);
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
+
+          // SECURITY FIX: Verify ownership (unless admin)
+          const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
+          const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+          if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
+            console.error('❌ Mark as sold failed: Ownership mismatch', { 
+              vehicleSeller: normalizedVehicleSellerEmail, 
+              authenticated: normalizedAuthEmail 
+            });
+            return res.status(403).json({ 
+              success: false, 
+              reason: 'Unauthorized: You can only mark your own listings as sold.' 
+            });
+          }
           
           console.log('✏️ Updating vehicle status to sold...');
           await firebaseVehicleService.update(vehicleIdNum, {
@@ -2332,6 +2418,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
+
+          // SECURITY FIX: Verify ownership (unless admin)
+          const normalizedVehicleSellerEmail = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
+          const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+          if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
+            console.error('❌ Mark as unsold failed: Ownership mismatch', { 
+              vehicleSeller: normalizedVehicleSellerEmail, 
+              authenticated: normalizedAuthEmail 
+            });
+            return res.status(403).json({ 
+              success: false, 
+              reason: 'Unauthorized: You can only mark your own listings as unsold.' 
+            });
+          }
           
           await firebaseVehicleService.update(vehicleIdNum, {
             status: 'published',
@@ -2351,15 +2451,36 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
 
     // Create new vehicle
-    // Check if seller's plan has expired and block creation if so
+    // SECURITY FIX: Verify Auth
+    const vehicleAuth = authenticateRequest(req);
+    if (!vehicleAuth.isValid) {
+      console.error('❌ Vehicle creation failed: Authentication required');
+      return res.status(401).json({ success: false, reason: vehicleAuth.error });
+    }
+    
+    // Verify seller email matches authenticated user (unless admin)
     if (req.body.sellerEmail) {
-      // Sanitize email input
       const sanitizedEmail = (await sanitizeString(String(req.body.sellerEmail))).toLowerCase().trim();
+      const normalizedAuthEmail = vehicleAuth.user?.email ? vehicleAuth.user.email.toLowerCase().trim() : '';
+      
+      if (vehicleAuth.user?.role !== 'admin' && sanitizedEmail !== normalizedAuthEmail) {
+        console.error('❌ Vehicle creation failed: Seller email mismatch', { 
+          provided: sanitizedEmail, 
+          authenticated: normalizedAuthEmail 
+        });
+        return res.status(403).json({ 
+          success: false, 
+          reason: 'Unauthorized: You can only create listings for your own account.' 
+        });
+      }
+      
+      // Check if seller's plan has expired and block creation if so
       const seller = await firebaseUserService.findByEmail(sanitizedEmail);
       if (seller && seller.planExpiryDate) {
         const expiryDate = new Date(seller.planExpiryDate);
         const isExpired = expiryDate < new Date();
         if (isExpired) {
+          console.error('❌ Vehicle creation failed: Plan expired', { email: sanitizedEmail, expiryDate: seller.planExpiryDate });
           return res.status(403).json({ 
             success: false, 
             reason: 'Your subscription plan has expired. Please renew your plan to create new vehicle listings.' 
@@ -2394,28 +2515,56 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
     }
     
+    // Normalize images to always be an array
+    const normalizedImages = Array.isArray(req.body.images) 
+      ? req.body.images 
+      : typeof req.body.images === 'string' 
+        ? [req.body.images] 
+        : [];
+    
     const vehicleData = {
       id: Date.now(),
       ...req.body,
+      images: normalizedImages,
       views: 0,
       inquiriesCount: 0,
       createdAt: new Date().toISOString(),
       listingExpiresAt
     };
     
-    console.log('💾 Saving new vehicle to Firebase...');
-    const newVehicle = await firebaseVehicleService.create(vehicleData);
-    console.log('✅ Vehicle saved successfully to Firebase:', newVehicle.id);
-    
-    // Verify the vehicle was saved by querying it back
-    const verifyVehicle = await firebaseVehicleService.findById(newVehicle.id);
-    if (!verifyVehicle) {
-      console.error('❌ Vehicle creation verification failed - vehicle not found after save');
-    } else {
-      console.log('✅ Vehicle creation verified in database');
+    try {
+      console.log('💾 Saving new vehicle to Firebase...', { 
+        id: vehicleData.id, 
+        make: vehicleData.make, 
+        model: vehicleData.model,
+        sellerEmail: vehicleData.sellerEmail 
+      });
+      
+      const newVehicle = await firebaseVehicleService.create(vehicleData);
+      console.log('✅ Vehicle saved successfully to Firebase:', newVehicle.id);
+      
+      // Verify the vehicle was saved by querying it back
+      const verifyVehicle = await firebaseVehicleService.findById(newVehicle.id);
+      if (!verifyVehicle) {
+        console.error('❌ Vehicle creation verification failed - vehicle not found after save', { id: newVehicle.id });
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Vehicle was created but could not be verified. Please refresh and check your listings.' 
+        });
+      } else {
+        console.log('✅ Vehicle creation verified in database', { id: verifyVehicle.id });
+      }
+      
+      return res.status(201).json(verifyVehicle);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Failed to create vehicle in Firebase:', errorMessage, error);
+      return res.status(500).json({ 
+        success: false, 
+        reason: `Failed to create vehicle: ${errorMessage}`,
+        error: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      });
     }
-    
-    return res.status(201).json(newVehicle);
   }
 
   if (req.method === 'PUT') {
@@ -2447,6 +2596,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
       if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
+      }
+      
+      // Normalize images to always be an array
+      if (updateData.images !== undefined) {
+        updateData.images = Array.isArray(updateData.images) 
+          ? updateData.images 
+          : typeof updateData.images === 'string' 
+            ? [updateData.images] 
+            : [];
       }
       
       // Update vehicle in Firebase
