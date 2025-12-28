@@ -500,6 +500,32 @@ const Home: React.FC<HomeProps> = ({
                         </div>
                     </div>
                 </div>
+            ) : (
+                {/* Fallback message when no vehicles are available */}
+                <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
+                    <div className="max-w-7xl mx-auto">
+                        <div className="text-center">
+                            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mb-6">
+                                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                            </div>
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Discover Premium Vehicles</h2>
+                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">
+                                We're constantly adding new quality vehicles to our collection. Check back soon for the latest listings!
+                            </p>
+                            <button 
+                                onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-4 rounded-xl font-bold text-base md:text-lg flex items-center gap-2 mx-auto transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105"
+                            >
+                                Browse All Vehicles
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Explore by Location Section - Premium Style */}
@@ -666,7 +692,7 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : (
-                // Fallback message when no vehicles are available
+                {/* Fallback message when no vehicles are available */}
                 <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
                     <div className="max-w-7xl mx-auto">
                         <div className="text-center">
