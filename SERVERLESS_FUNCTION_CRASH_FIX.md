@@ -151,3 +151,5 @@ FIREBASE_DATABASE_URL=https://your-project-default-rtdb.region.firebasedatabase.
 
 The serverless function will no longer crash if Firebase is not configured. It will gracefully handle the missing configuration and return appropriate error messages.
 
+
+

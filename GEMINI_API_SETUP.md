@@ -190,3 +190,5 @@ The code is already set up to use the Gemini API key. You just need to:
 
 Once configured, all AI features will work automatically!
 
+
+

@@ -1,9 +1,15 @@
 import admin from 'firebase-admin';
-import { initializeFirebaseAdmin } from './firebase-admin.js';
 import { DB_PATHS } from './firebase-db.js';
 
 // Get Firebase Admin Database instance
 function getFirebaseAdminDatabase(): admin.database.Database | null {
+  // Check if Firebase Admin is initialized
+  if (!admin.apps.length) {
+    console.error('❌ Firebase Admin DB: Firebase Admin is not initialized.');
+    console.error('💡 Make sure FIREBASE_SERVICE_ACCOUNT environment variable is set in Vercel.');
+    return null;
+  }
+  
   // Check if databaseURL is set (required for database operations)
   const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL;
   
@@ -16,13 +22,7 @@ function getFirebaseAdminDatabase(): admin.database.Database | null {
     return null;
   }
   
-  console.log('📡 Firebase Admin DB: Using databaseURL:', databaseURL.substring(0, 60) + '...');
-  
-  const app = initializeFirebaseAdmin();
-  if (!app) {
-    console.error('❌ Firebase Admin DB: Failed to initialize Firebase Admin app');
-    return null;
-  }
+  const app = admin.app();
   
   // Database URL should be set during app initialization in firebase-admin.ts
   // admin.database() will use the URL from the app configuration
@@ -89,7 +89,7 @@ export async function adminReadAll<T>(collection: string): Promise<Record<string
   try {
     const db = getFirebaseAdminDatabase();
     if (!db) {
-      throw new Error('Firebase Admin Database not initialized. Set FIREBASE_SERVICE_ACCOUNT_KEY or link Firebase project in Vercel.');
+      throw new Error('Firebase Admin Database not initialized. Set FIREBASE_SERVICE_ACCOUNT or link Firebase project in Vercel.');
     }
     
     const refPath = db.ref(collection);
@@ -107,7 +107,7 @@ export async function adminReadAll<T>(collection: string): Promise<Record<string
     
     // If Admin SDK is not initialized, provide helpful error message
     if (errorMessage.includes('not initialized') || errorMessage.includes('credential')) {
-      console.error('💡 To fix: Set FIREBASE_SERVICE_ACCOUNT_KEY in Vercel environment variables');
+      console.error('💡 To fix: Set FIREBASE_SERVICE_ACCOUNT in Vercel environment variables');
       console.error('   Or link Firebase project in Vercel (Settings → Integrations → Firebase)');
     }
     
