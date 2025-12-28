@@ -18,6 +18,11 @@ import {
   deleteData,
   DB_PATHS
 } from '../lib/firebase-db.js';
+import {
+  adminCreate,
+  adminUpdate,
+  adminRead
+} from '../lib/firebase-admin-db.js';
 
 // Always use Firebase - MongoDB removed
 // Note: This is checked at module load time. If Firebase is not available,
@@ -1634,14 +1639,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     try {
       if (req.method === 'GET') {
         try {
-          // Try to get vehicle data from Firebase
-          const vehicleData = await read<{ data: typeof defaultData }>(DB_PATHS.VEHICLE_DATA, 'default');
+          // Try to get vehicle data from Firebase using Admin SDK (bypasses security rules)
+          const vehicleData = await adminRead<{ data: typeof defaultData }>(DB_PATHS.VEHICLE_DATA, 'default');
           if (vehicleData && vehicleData.data) {
             return res.status(200).json(vehicleData.data);
           }
           
-          // If no data exists, create default and return it
-          await create(DB_PATHS.VEHICLE_DATA, { data: defaultData }, 'default');
+          // If no data exists, create default using Admin SDK (bypasses security rules)
+          await adminCreate(DB_PATHS.VEHICLE_DATA, { data: defaultData }, 'default');
           return res.status(200).json(defaultData);
         } catch (dbError) {
           console.warn('⚠️ Database connection failed for vehicles data, returning default data:', dbError);
@@ -1653,8 +1658,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (req.method === 'POST') {
         try {
-          // Save vehicle data to Firebase
-          await updateData(DB_PATHS.VEHICLE_DATA, 'default', {
+          // Save vehicle data to Firebase using Admin SDK (bypasses security rules)
+          await adminUpdate(DB_PATHS.VEHICLE_DATA, 'default', {
             data: req.body,
             updatedAt: new Date().toISOString()
           });
@@ -2819,14 +2824,14 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, _optio
   try {
     if (req.method === 'GET') {
       try {
-        // Try to get vehicle data from Firebase
-        const vehicleData = await read<{ data: typeof defaultData }>(DB_PATHS.VEHICLE_DATA, 'default');
+        // Try to get vehicle data from Firebase using Admin SDK (bypasses security rules)
+        const vehicleData = await adminRead<{ data: typeof defaultData }>(DB_PATHS.VEHICLE_DATA, 'default');
         if (vehicleData && vehicleData.data) {
           return res.status(200).json(vehicleData.data);
         }
         
-        // If no data exists, create default and return it
-        await create(DB_PATHS.VEHICLE_DATA, { data: defaultData }, 'default');
+        // If no data exists, create default using Admin SDK (bypasses security rules)
+        await adminCreate(DB_PATHS.VEHICLE_DATA, { data: defaultData }, 'default');
         return res.status(200).json(defaultData);
       } catch (dbError) {
         logWarn('⚠️ Database connection failed for vehicle-data, returning default data:', dbError);
@@ -2838,8 +2843,8 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, _optio
 
     if (req.method === 'POST') {
       try {
-        // Save vehicle data to Firebase
-        await updateData(DB_PATHS.VEHICLE_DATA, 'default', {
+        // Save vehicle data to Firebase using Admin SDK (bypasses security rules)
+        await adminUpdate(DB_PATHS.VEHICLE_DATA, 'default', {
           data: req.body,
           updatedAt: new Date().toISOString()
         });
