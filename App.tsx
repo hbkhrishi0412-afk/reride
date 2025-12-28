@@ -256,7 +256,9 @@ const AppContent: React.FC = React.memo(() => {
     onUpdateSettings,
     onSendBroadcast,
     onExportUsers,
+    onImportUsers,
     onExportVehicles,
+    onImportVehicles,
     onExportSales,
     onUpdateVehicleData,
     onToggleVerifiedStatus,
@@ -1706,7 +1708,9 @@ const AppContent: React.FC = React.memo(() => {
               onSendBroadcast={onSendBroadcast}
               auditLog={auditLog}
               onExportUsers={onExportUsers}
+              onImportUsers={onImportUsers}
               onExportVehicles={onExportVehicles}
+              onImportVehicles={onImportVehicles}
               onExportSales={onExportSales}
               onNavigate={navigate}
               onLogout={handleLogout}
@@ -2437,7 +2441,9 @@ const AppContent: React.FC = React.memo(() => {
             onSendBroadcast={onSendBroadcast}
             auditLog={auditLog}
             onExportUsers={onExportUsers}
+            onImportUsers={onImportUsers}
             onExportVehicles={onExportVehicles}
+            onImportVehicles={onImportVehicles}
             onExportSales={onExportSales}
             onNavigate={navigate}
             onLogout={handleLogout}

@@ -103,7 +103,9 @@ interface AppContextType {
   onUpdateSettings: (settings: PlatformSettings) => void;
   onSendBroadcast: (message: string) => void;
   onExportUsers: () => void;
+  onImportUsers: (users: Omit<User, 'id' | 'firebaseUid'>[]) => Promise<void>;
   onExportVehicles: () => void;
+  onImportVehicles: (vehicles: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => Promise<void>;
   onExportSales: () => void;
   onUpdateVehicleData: (newData: VehicleData) => void;
   onToggleVerifiedStatus: (email: string) => void;
@@ -2109,6 +2111,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         addToast('Export failed. Please try again.', 'error');
       }
     },
+    onImportUsers: async (usersToImport: Omit<User, 'id' | 'firebaseUid'>[]) => {
+      try {
+        const { dataService } = await import('../services/dataService');
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (const userData of usersToImport) {
+          try {
+            // Generate a default password for imported users (they can reset it)
+            const defaultPassword = `TempPass${Math.random().toString(36).slice(-8)}`;
+            
+            // Create user via API register endpoint
+            const response = await fetch('/api/users', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                action: 'register',
+                email: userData.email,
+                password: defaultPassword, // Temporary password
+                name: userData.name,
+                mobile: userData.mobile,
+                role: userData.role,
+              }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
+              throw new Error(errorData.reason || `Failed to create user: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            
+            if (!result.success) {
+              throw new Error(result.reason || 'Failed to create user');
+            }
+
+            // If user was created successfully, update additional fields if provided
+            if (userData.dealershipName || userData.bio || userData.subscriptionPlan || 
+                userData.isVerified !== undefined || userData.location) {
+              try {
+                const updateResponse = await fetch('/api/users', {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(await dataService.getAuthHeaders()),
+                  },
+                  body: JSON.stringify({
+                    email: userData.email,
+                    ...(userData.dealershipName && { dealershipName: userData.dealershipName }),
+                    ...(userData.bio && { bio: userData.bio }),
+                    ...(userData.subscriptionPlan && { subscriptionPlan: userData.subscriptionPlan }),
+                    ...(userData.isVerified !== undefined && { isVerified: userData.isVerified }),
+                    ...(userData.location && { location: userData.location }),
+                    ...(userData.phoneVerified !== undefined && { phoneVerified: userData.phoneVerified }),
+                    ...(userData.emailVerified !== undefined && { emailVerified: userData.emailVerified }),
+                    ...(userData.featuredCredits !== undefined && { featuredCredits: userData.featuredCredits }),
+                    ...(userData.usedCertifications !== undefined && { usedCertifications: userData.usedCertifications }),
+                    ...(userData.avatarUrl && { avatarUrl: userData.avatarUrl }),
+                    ...(userData.logoUrl && { logoUrl: userData.logoUrl }),
+                    ...(userData.status && { status: userData.status }),
+                  }),
+                });
+
+                if (!updateResponse.ok) {
+                  console.warn(`Failed to update additional fields for ${userData.email}, but user was created`);
+                }
+              } catch (updateError) {
+                console.warn(`Failed to update additional fields for ${userData.email}:`, updateError);
+                // Don't throw - user was created successfully
+              }
+            }
+
+            successCount++;
+          } catch (error) {
+            errorCount++;
+            console.error(`Failed to import user ${userData.name} (${userData.email}):`, error);
+            throw error; // Re-throw to be caught by the modal
+          }
+        }
+        
+        // Refresh users list
+        const updatedUsers = await dataService.getUsers();
+        setUsers(updatedUsers);
+        
+        // Log audit entry for import
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const entry = logAction(actor, 'Import Users', 'Users Data', `Imported ${successCount} users from CSV`);
+        setAuditLog(prev => [entry, ...prev]);
+        
+        if (successCount > 0) {
+          addToast(`Successfully imported ${successCount} user(s)`, 'success');
+        }
+        if (errorCount > 0) {
+          addToast(`${errorCount} user(s) failed to import`, 'warning');
+        }
+      } catch (error) {
+        console.error('Import failed:', error);
+        throw error; // Re-throw to be handled by the modal
+      }
+    },
     onExportVehicles: () => {
       try {
         const headers = 'Make,Model,Year,Price,Seller,Status,Mileage,Location,Features\n';
@@ -2135,6 +2239,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       } catch (error) {
         console.error('Export failed:', error);
         addToast('Export failed. Please try again.', 'error');
+      }
+    },
+    onImportVehicles: async (vehiclesToImport: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => {
+      try {
+        const { addVehicle } = await import('../services/dataService');
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (const vehicleData of vehiclesToImport) {
+          try {
+            // Normalize images to array if needed
+          const normalizedImages = Array.isArray(vehicleData.images) 
+              ? vehicleData.images 
+              : typeof vehicleData.images === 'string' 
+                ? [vehicleData.images] 
+                : [];
+            
+            const vehicleToAdd = {
+              ...vehicleData,
+              images: normalizedImages,
+            } as Vehicle;
+            
+            await addVehicle(vehicleToAdd);
+            successCount++;
+          } catch (error) {
+            errorCount++;
+            console.error(`Failed to import vehicle ${vehicleData.make} ${vehicleData.model}:`, error);
+            throw error; // Re-throw to be caught by the modal
+          }
+        }
+        
+        // Refresh vehicles list
+        const { dataService } = await import('../services/dataService');
+        const isAdmin = currentUser?.role === 'admin';
+        const updatedVehicles = await dataService.getVehicles(isAdmin);
+        setVehicles(updatedVehicles);
+        
+        // Log audit entry for import
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const entry = logAction(actor, 'Import Vehicles', 'Vehicles Data', `Imported ${successCount} vehicles from CSV`);
+        setAuditLog(prev => [entry, ...prev]);
+        
+        if (successCount > 0) {
+          addToast(`Successfully imported ${successCount} vehicle(s)`, 'success');
+        }
+        if (errorCount > 0) {
+          addToast(`${errorCount} vehicle(s) failed to import`, 'warning');
+        }
+      } catch (error) {
+        console.error('Import failed:', error);
+        throw error; // Re-throw to be handled by the modal
       }
     },
     onExportSales: () => {
