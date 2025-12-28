@@ -9,7 +9,7 @@ import { firebaseUserService } from '../services/firebase-user-service.js';
 import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
 import { firebaseConversationService } from '../services/firebase-conversation-service.js';
 import { isDatabaseAvailable as isFirebaseAvailable, getDatabaseStatus } from '../lib/firebase-db.js';
-import { updateFirebaseAuthProfile } from '../lib/firebase-admin.js';
+import { updateFirebaseAuthProfile, isFirebaseAdminInitialized } from '../server/firebase-admin.js';
 import { 
   DB_PATHS
 } from '../lib/firebase-db.js';
@@ -19,7 +19,7 @@ import {
   adminRead,
   adminReadAll,
   adminDelete
-} from '../lib/firebase-admin-db.js';
+} from '../server/firebase-admin-db.js';
 
 // Always use Firebase - MongoDB removed
 // Note: This is checked at module load time. If Firebase is not available,
@@ -326,26 +326,10 @@ async function mainHandler(
     return res.status(200).end();
   }
 
+  // Extract pathname early for routing and Firebase Admin checks
+  // Handle Vercel rewrites - check original path if available
+  let pathname = '/';
   try {
-    // Check Firebase availability
-    if (!USE_FIREBASE) {
-      const errorMsg = getFirebaseErrorMessage();
-      logError('❌ Firebase not available:', errorMsg);
-      if (req.method !== 'GET') {
-        return res.status(503).json({
-          success: false,
-          reason: errorMsg,
-          details: 'Please check your Firebase configuration. Server-side requires FIREBASE_* environment variables (without VITE_ prefix).',
-          fallback: true
-        });
-      }
-      res.setHeader('X-Database-Fallback', 'true');
-    }
-
-    // Extract pathname early to check for rate limit exemptions
-    // Handle Vercel rewrites - check original path if available
-    let pathname = '/';
-    try {
       // Vercel sets multiple headers for the original path
       // x-vercel-original-path contains the original request path before rewrite
       // x-invoke-path is another header Vercel sometimes uses
@@ -1566,8 +1550,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 // Vehicles handler - preserves exact functionality from vehicles.ts
 async function handleVehicles(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
-    // Check Firebase availability
-    if (!USE_FIREBASE) {
       return res.status(503).json({
         success: false,
         reason: 'Firebase is not configured. Please set Firebase environment variables.',
