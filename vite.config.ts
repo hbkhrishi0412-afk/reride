@@ -30,6 +30,12 @@ export default defineConfig({
         if (id.startsWith('/api/') || id.includes('/api/')) {
           return id.endsWith('.ts') || id.endsWith('.js');
         }
+        // Exclude server-only Firebase Admin files from client bundle
+        if (id.includes('/lib/firebase-admin') || id.includes('\\lib\\firebase-admin') ||
+            id.includes('/server/firebase-admin') || id.includes('\\server\\firebase-admin') ||
+            id.includes('/server/') || id.includes('\\server\\')) {
+          return true;
+        }
         // Exclude models directory from client bundle (server-side only)
         if (id.includes('/models/') && (id.endsWith('.ts') || id.endsWith('.js'))) {
           return true;

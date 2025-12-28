@@ -1,6 +1,6 @@
 // api/login.ts - Firebase ID Token Verification Endpoint
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import admin from '../lib/firebase-admin.js';
+import admin from '../server/firebase-admin.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests

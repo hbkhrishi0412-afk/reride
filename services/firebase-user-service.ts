@@ -18,7 +18,7 @@ import {
   adminQueryByField,
   adminFindOneByField,
   snapshotToArray as adminSnapshotToArray
-} from '../lib/firebase-admin-db.js';
+} from '../server/firebase-admin-db.js';
 import type { User } from '../types.js';
 
 // Convert email to a Firebase-safe key (replace special chars)
