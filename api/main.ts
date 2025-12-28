@@ -1,26 +1,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import mongoose from 'mongoose';
 import { randomBytes } from 'crypto';
-import connectToDatabase, { MongoConfigError, ensureConnection, isConnectionHealthy, getConnectionState } from '../lib/db.js';
-import User from '../models/User.js';
-import Vehicle from '../models/Vehicle.js';
-import VehicleDataModel from '../models/VehicleData.js';
 import { PLAN_DETAILS } from '../constants.js';
-import NewCar from '../models/NewCar.js';
-import RateLimit from '../models/RateLimit.js';
-import Conversation from '../models/Conversation.js';
-import Notification from '../models/Notification.js';
 import { planService } from '../services/planService.js';
 import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan } from '../types.js';
 import { VehicleCategory } from '../types.js';
 // Firebase services
 import { firebaseUserService } from '../services/firebase-user-service.js';
 import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
+import { firebaseConversationService } from '../services/firebase-conversation-service.js';
 import { isDatabaseAvailable as isFirebaseAvailable } from '../lib/firebase-db.js';
+import { 
+  create,
+  read,
+  readAll,
+  updateData,
+  deleteData,
+  queryByField,
+  DB_PATHS
+} from '../lib/firebase-db.js';
 
-// Database mode: 'firebase' or 'mongodb'
-const DB_MODE = (process.env.DB_MODE || 'firebase').toLowerCase();
-const USE_FIREBASE = DB_MODE === 'firebase' && isFirebaseAvailable();
+// Always use Firebase - MongoDB removed
+const USE_FIREBASE = isFirebaseAvailable();
 import { 
   hashPassword, 
   validatePassword, 
@@ -36,27 +36,11 @@ import {
   type TokenPayload
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
-import { ObjectId } from 'mongodb';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
 
-// Type for MongoDB user document (with _id)
-interface UserDocument extends Omit<UserType, 'id'> {
-  _id?: mongoose.Types.ObjectId;
-  id?: string;
-  [key: string]: unknown;
-}
-
-// Type for normalized user (without _id and password)
+// Type for normalized user (without password)
 interface NormalizedUser extends Omit<UserType, 'password'> {
   id: string;
-}
-
-// Type for MongoDB bulk update operations
-interface BulkUpdateOperation {
-  updateOne: {
-    filter: Record<string, unknown>;
-    update: Record<string, unknown>;
-  };
 }
 
 // Helper: Calculate distance between coordinates
@@ -72,83 +56,39 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
-// Helper: Normalize MongoDB user object for frontend consumption
-// Converts _id to id, ensures role is present, and removes password
-function normalizeUser(user: UserDocument | null | undefined): NormalizedUser | null {
+// Helper: Normalize Firebase user object for frontend consumption
+// Ensures role is present, and removes password
+function normalizeUser(user: UserType | null | undefined): NormalizedUser | null {
   if (!user) return null;
   
-  // Convert _id to id if _id exists and id doesn't
-  const id = user.id || (user._id ? user._id.toString() : undefined);
+  // Firebase users already have id field (no _id conversion needed)
+  const id = user.id;
   if (!id) {
-    // Only log in development to avoid information leakage
-    logWarn('⚠️ User object missing both id and _id fields');
+    logWarn('⚠️ User object missing id field');
     return null;
   }
   
   // Ensure role is present (critical for seller dashboard access)
-  // Only set default if role is truly missing - don't overwrite existing roles
   let role: 'customer' | 'seller' | 'admin' = user.role;
   if (!role || typeof role !== 'string' || !['customer', 'seller', 'admin'].includes(role)) {
     logWarn('⚠️ User object missing or invalid role field:', user.email, 'role:', role);
-    // Default to 'customer' only if role is completely missing
-    // This should rarely happen as role is required in the schema
     role = 'customer';
   }
   
   // Ensure email is present and normalized
   const email = user.email ? user.email.toLowerCase().trim() : '';
   if (!email) {
-    // Only log in development to avoid information leakage
     logWarn('⚠️ User object missing email field');
     return null;
   }
   
-  // Build normalized user object
+  // Build normalized user object (exclude password)
+  const { password, ...userWithoutPassword } = user;
   const normalized: NormalizedUser = {
     id,
-    name: user.name || '',
+    ...userWithoutPassword,
     email,
-    mobile: user.mobile || '',
     role,
-    location: user.location || '',
-    status: user.status || 'active',
-    createdAt: user.createdAt || new Date().toISOString(),
-    ...(user.avatarUrl && { avatarUrl: user.avatarUrl }),
-    ...(user.isVerified !== undefined && { isVerified: user.isVerified }),
-    ...(user.firebaseUid && { firebaseUid: user.firebaseUid }),
-    ...(user.authProvider && { authProvider: user.authProvider }),
-    ...(user.dealershipName && { dealershipName: user.dealershipName }),
-    ...(user.bio && { bio: user.bio }),
-    ...(user.logoUrl && { logoUrl: user.logoUrl }),
-    ...(user.averageRating !== undefined && { averageRating: user.averageRating }),
-    ...(user.ratingCount !== undefined && { ratingCount: user.ratingCount }),
-    ...(user.badges && { badges: user.badges }),
-    ...(user.subscriptionPlan && { subscriptionPlan: user.subscriptionPlan }),
-    ...(user.featuredCredits !== undefined && { featuredCredits: user.featuredCredits }),
-    ...(user.usedCertifications !== undefined && { usedCertifications: user.usedCertifications }),
-    ...(user.planActivatedDate && { planActivatedDate: user.planActivatedDate }),
-    ...(user.planExpiryDate && { planExpiryDate: user.planExpiryDate }),
-    ...(user.phoneVerified !== undefined && { phoneVerified: user.phoneVerified }),
-    ...(user.emailVerified !== undefined && { emailVerified: user.emailVerified }),
-    ...(user.govtIdVerified !== undefined && { govtIdVerified: user.govtIdVerified }),
-    ...(user.verificationDate && { verificationDate: user.verificationDate }),
-    ...(user.pendingPlanUpgrade && { pendingPlanUpgrade: user.pendingPlanUpgrade }),
-    ...(user.responseTime !== undefined && { responseTime: user.responseTime }),
-    ...(user.responseRate !== undefined && { responseRate: user.responseRate }),
-    ...(user.joinedDate && { joinedDate: user.joinedDate }),
-    ...(user.lastActiveAt && { lastActiveAt: user.lastActiveAt }),
-    ...(user.activeListings !== undefined && { activeListings: user.activeListings }),
-    ...(user.soldListings !== undefined && { soldListings: user.soldListings }),
-    ...(user.totalViews !== undefined && { totalViews: user.totalViews }),
-    ...(user.reportedCount !== undefined && { reportedCount: user.reportedCount }),
-    ...(user.isBanned !== undefined && { isBanned: user.isBanned }),
-    ...(user.trustScore !== undefined && { trustScore: user.trustScore }),
-    ...(user.alternatePhone && { alternatePhone: user.alternatePhone }),
-    ...(user.preferredContactHours && { preferredContactHours: user.preferredContactHours }),
-    ...(user.showEmailPublicly !== undefined && { showEmailPublicly: user.showEmailPublicly }),
-    ...(user.verificationStatus && { verificationStatus: user.verificationStatus }),
-    ...(user.aadharCard && { aadharCard: user.aadharCard }),
-    ...(user.panCard && { panCard: user.panCard }),
   };
   
   return normalized;
@@ -186,8 +126,7 @@ const authenticateRequest = (req: VercelRequest): AuthResult => {
 const config = getSecurityConfig();
 
 type HandlerOptions = {
-  mongoAvailable: boolean;
-  mongoFailureReason?: string;
+  // Firebase-only - no MongoDB options needed
 };
 
 // Extract client IP from request headers (handles proxies and Vercel)
@@ -277,85 +216,26 @@ const cleanupRateLimitCache = () => {
   }
 };
 
-// Database-based rate limiting for serverless environments
-const checkRateLimit = async (identifier: string, mongoAvailable: boolean): Promise<{ allowed: boolean; remaining: number }> => {
+// Firebase-based rate limiting for serverless environments
+const checkRateLimit = async (identifier: string): Promise<{ allowed: boolean; remaining: number }> => {
   const now = Date.now();
   const resetTime = now + config.RATE_LIMIT.WINDOW_MS;
   
-  // If MongoDB is not available, use in-memory fallback with TTL
-  if (!mongoAvailable) {
-    cleanupRateLimitCache();
-    const cached = rateLimitCache.get(identifier);
-    
-    if (cached && cached.resetTime >= now) {
-      // Entry exists and is still valid
-      cached.count += 1;
-      if (cached.count > config.RATE_LIMIT.MAX_REQUESTS) {
-        return { allowed: false, remaining: 0 };
-      }
-      return { allowed: true, remaining: Math.max(0, config.RATE_LIMIT.MAX_REQUESTS - cached.count) };
-    } else {
-      // Create new entry
-      rateLimitCache.set(identifier, { count: 1, resetTime });
-      return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS - 1 };
-    }
-  }
+  // Use in-memory cache with TTL for rate limiting
+  cleanupRateLimitCache();
+  const cached = rateLimitCache.get(identifier);
   
-  try {
-    // Clean up expired entries
-    await RateLimit.deleteMany({ resetTime: { $lt: now } });
-    
-    // Find or create rate limit entry
-    const rateLimit = await RateLimit.findOneAndUpdate(
-      { 
-        identifier,
-        resetTime: { $gte: now } // Only consider active windows
-      },
-      {
-        $inc: { count: 1 },
-        $setOnInsert: { 
-          identifier,
-          resetTime,
-          createdAt: new Date()
-        }
-      },
-      { 
-        upsert: true, 
-        new: true,
-        setDefaultsOnInsert: true
-      }
-    );
-    
-    const count = rateLimit?.count || 1;
-    const remaining = Math.max(0, config.RATE_LIMIT.MAX_REQUESTS - count);
-    
-    // If count exceeds limit, update resetTime for next window
-    if (count > config.RATE_LIMIT.MAX_REQUESTS) {
-      await RateLimit.updateOne(
-        { identifier },
-        { $set: { resetTime } }
-      );
+  if (cached && cached.resetTime >= now) {
+    // Entry exists and is still valid
+    cached.count += 1;
+    if (cached.count > config.RATE_LIMIT.MAX_REQUESTS) {
       return { allowed: false, remaining: 0 };
     }
-    
-    return { allowed: true, remaining };
-  } catch (error) {
-    // On error, allow request (fail open) but log the error
-    logError('Rate limiting error:', error);
-    return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS };
-  }
-};
-
-// Helper function to ensure MongoDB connection is ready
-// This replaces all the redundant connection checks throughout the code
-async function ensureMongoConnection(): Promise<void> {
-  if (!isConnectionHealthy()) {
-    await ensureConnection();
-    // Double-check after connection attempt
-    if (!isConnectionHealthy()) {
-      const state = getConnectionState();
-      throw new Error(`MongoDB connection not ready: ${state.stateName} (${state.state})`);
-    }
+    return { allowed: true, remaining: Math.max(0, config.RATE_LIMIT.MAX_REQUESTS - cached.count) };
+  } else {
+    // Create new entry
+    rateLimitCache.set(identifier, { count: 1, resetTime });
+    return { allowed: true, remaining: config.RATE_LIMIT.MAX_REQUESTS - 1 };
   }
 }
 
@@ -420,76 +300,18 @@ async function mainHandler(
   }
 
   try {
-    let mongoAvailable = true;
-    let mongoFailureReason: string | undefined;
-
-    const connectWithGracefulFallback = async () => {
-      try {
-        // Use ensureConnection which handles retries and connection state
-        await ensureConnection();
-        
-        // Double-check connection is actually ready
-        if (!isConnectionHealthy()) {
-          const state = getConnectionState();
-          throw new Error(`Connection not ready: ${state.stateName} (${state.state})`);
-        }
-        
-        // Verify connection works with a ping
-        try {
-          if (!mongoose.connection.db) {
-            throw new Error('Database connection not initialized');
-          }
-          await mongoose.connection.db.admin().ping();
-        } catch (pingError) {
-          throw new Error('Connection ping failed - database not responding');
-        }
-      } catch (dbError) {
-        mongoAvailable = false;
-        
-        // Provide more helpful error messages
-        if (dbError instanceof MongoConfigError) {
-          mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL (or MONGODB_URI) in your environment.';
-        } else if (dbError instanceof Error) {
-          const errorMsg = dbError.message.toLowerCase();
-          // Provide specific guidance based on error type (only in development)
-          if (process.env.NODE_ENV !== 'production') {
-            if (errorMsg.includes('authentication') || errorMsg.includes('bad auth')) {
-              mongoFailureReason = 'Database authentication failed. Check your username and password. Special characters in password must be URL-encoded.';
-            } else if (errorMsg.includes('network') || errorMsg.includes('timeout') || errorMsg.includes('enotfound')) {
-              mongoFailureReason = 'Database connection failed. Check network access settings in MongoDB Atlas and ensure your IP is whitelisted (add 0.0.0.0/0 for all IPs).';
-            } else if (errorMsg.includes('not configured') || errorMsg.includes('not defined')) {
-              mongoFailureReason = 'MongoDB is not configured. Set MONGODB_URL (or MONGODB_URI) in your environment.';
-            } else {
-              mongoFailureReason = `Database temporarily unavailable: ${dbError.message}. Please check your connection settings.`;
-            }
-          } else {
-            // Production: generic message to avoid information leakage
-            mongoFailureReason = 'Database temporarily unavailable. Please try again later.';
-          }
-        } else {
-          mongoFailureReason = 'Database temporarily unavailable. Please try again later.';
-        }
-        
-        // Only log in development to avoid information leakage
-        if (process.env.NODE_ENV !== 'production') {
-          logWarn('Database connection issue:', dbError instanceof Error ? dbError.message : dbError);
-          logWarn('💡 Run "npm run db:diagnose" to diagnose the connection issue.');
-        }
-        if (req.method !== 'GET') {
-          return res.status(503).json({
-            success: false,
-            reason: mongoFailureReason,
-            fallback: true
-          });
-        }
-        res.setHeader('X-Database-Fallback', 'true');
+    // Check Firebase availability
+    if (!USE_FIREBASE) {
+      const errorMsg = 'Firebase is not configured. Please set Firebase environment variables.';
+      logError('❌ Firebase not available:', errorMsg);
+      if (req.method !== 'GET') {
+        return res.status(503).json({
+          success: false,
+          reason: errorMsg,
+          fallback: true
+        });
       }
-      return undefined;
-    };
-
-    const earlyResponse = await connectWithGracefulFallback();
-    if (earlyResponse) {
-      return earlyResponse;
+      res.setHeader('X-Database-Fallback', 'true');
     }
 
     // Extract pathname early to check for rate limit exemptions
@@ -566,7 +388,7 @@ async function mainHandler(
         // This is fine for unauthenticated requests
       }
       
-      const rateLimitResult = await checkRateLimit(rateLimitIdentifier, mongoAvailable);
+      const rateLimitResult = await checkRateLimit(rateLimitIdentifier);
       
       if (!rateLimitResult.allowed) {
         // Only log in development to avoid information leakage
@@ -599,19 +421,13 @@ async function mainHandler(
       if (originalPath?.includes('/users') || invokePath?.includes('/users') || urlPath.includes('/users')) {
         // Only log in development to avoid information leakage
         logInfo(`🔍 Early detection: Routing ${req.method} to handleUsers based on URL/header pattern`);
-        const handlerOptions: HandlerOptions = {
-          mongoAvailable,
-          mongoFailureReason
-        };
+        const handlerOptions: HandlerOptions = {};
         return await handleUsers(req, res, handlerOptions);
       }
     }
 
     // Route to appropriate handler
-    const handlerOptions: HandlerOptions = {
-      mongoAvailable,
-      mongoFailureReason
-    };
+    const handlerOptions: HandlerOptions = {};
 
     // Special handling: If pathname is /api/main (after Vercel rewrite), 
     // check the original path header to determine the actual route
@@ -762,10 +578,7 @@ async function mainHandler(
         (urlPath.includes('/users') || originalPath?.includes('/users'))) {
       logInfo(`🆘 Error handler: Attempting to route ${req.method} /users request to handleUsers as last resort`);
       try {
-        const handlerOptions: HandlerOptions = {
-          mongoAvailable: true,
-          mongoFailureReason: undefined
-        };
+        const handlerOptions: HandlerOptions = {};
         return await handleUsers(req, res, handlerOptions);
       } catch (handlerError) {
         logError('❌ Even handleUsers failed in error handler:', handlerError);
@@ -845,29 +658,19 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       return res.status(200).end();
     }
 
-    const { mongoAvailable, mongoFailureReason } = options;
-    const unavailableResponse = () => res.status(503).json({
-      success: false,
-      reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
-      fallback: true
-    });
+    // Check Firebase availability
+    if (!USE_FIREBASE) {
+      const errorMsg = 'Firebase is not configured. Please set Firebase environment variables.';
+      logWarn('⚠️ Firebase not available:', errorMsg);
+      return res.status(503).json({
+        success: false,
+        reason: errorMsg,
+        fallback: true
+      });
+    }
 
   // Handle authentication actions (POST with action parameter)
   if (req.method === 'POST') {
-    if (!mongoAvailable) {
-      // Provide more detailed error message for login failures
-      const detailedReason = mongoFailureReason || 'Database is currently unavailable. Please try again later.';
-      logWarn('⚠️ Login attempt failed due to MongoDB unavailability:', detailedReason);
-      return res.status(503).json({
-        success: false,
-        reason: detailedReason,
-        fallback: true,
-        // Include helpful message in development
-        ...(process.env.NODE_ENV !== 'production' && {
-          hint: 'Check MONGODB_URL or MONGODB_URI environment variable. Run "npm run db:diagnose" to diagnose connection issues.'
-        })
-      });
-    }
 
     const { action, email, password, role, name, mobile, firebaseUid, authProvider, avatarUrl } = req.body;
 
@@ -897,26 +700,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       // Normalize email to lowercase for consistent database lookup
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
       
-      // Use Firebase if available, otherwise MongoDB
+      // Use Firebase only
       let user: UserType | null = null;
-      let userDoc: UserDocument | null = null;
       
-      if (USE_FIREBASE) {
-        try {
-          user = await firebaseUserService.findByEmail(normalizedEmail);
-          if (user) {
-            userDoc = user as unknown as UserDocument;
-          }
-        } catch (error) {
-          logError('❌ Firebase user lookup error:', error);
-          return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
-        }
-      } else {
-        if (!mongoAvailable) {
-          return unavailableResponse();
-        }
-        userDoc = await User.findOne({ email: normalizedEmail }).lean() as UserDocument | null;
-        user = normalizeUser(userDoc);
+      try {
+        user = await firebaseUserService.findByEmail(normalizedEmail);
+      } catch (error) {
+        logError('❌ Firebase user lookup error:', error);
+        return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
       }
 
       if (!user) {
@@ -948,20 +739,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const accessToken = generateAccessToken(user);
       const refreshToken = generateRefreshToken(user);
 
-      // Normalize user object for frontend (convert _id to id, ensure role is present)
-      // Convert UserType to UserDocument format for normalization
-      const userForNormalization: UserDocument = user as unknown as UserDocument;
-      const normalizedUser = normalizeUser(userForNormalization);
+      // Normalize user object for frontend (ensure role is present)
+      const normalizedUser = normalizeUser(user);
       
-      if (!normalizedUser || !normalizedUser.role) {
+          if (!normalizedUser || !normalizedUser.role) {
         logError('❌ Failed to normalize user object:', { 
           email: user.email, 
           hasRole: !!user.role,
           userObject: {
-            id: user.id || (user as unknown as UserDocument)._id?.toString(),
+            id: user.id,
             email: user.email,
             role: user.role,
-            has_id: !!(user as unknown as UserDocument)._id,
             hasId: !!user.id
           }
         });
@@ -1015,11 +803,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
 
       // Ensure database connection before proceeding
-      try {
-        // Ensure connection is ready before registration
-        await ensureMongoConnection();
-      } catch (dbError) {
-        logError('❌ Database connection error during registration:', dbError);
+      // Firebase connection is handled automatically
         return res.status(503).json({ 
           success: false, 
           reason: 'Database connection failed. Please check MONGODB_URL (or MONGODB_URI) configuration.',
@@ -1047,19 +831,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         // Check if user already exists
         let existingUser: UserType | null = null;
         
-        if (USE_FIREBASE) {
-          try {
-            existingUser = await firebaseUserService.findByEmail(normalizedEmail);
-          } catch (error) {
-            logError('❌ Firebase user lookup error:', error);
-            return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
-          }
-        } else {
-          if (!mongoAvailable) {
-            return unavailableResponse();
-          }
-          const userDoc = await User.findOne({ email: normalizedEmail });
-          existingUser = userDoc ? normalizeUser(userDoc.toObject()) : null;
+        try {
+          existingUser = await firebaseUserService.findByEmail(normalizedEmail);
+        } catch (error) {
+          logError('❌ Firebase user lookup error:', error);
+          return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
         }
         
         if (existingUser) {
@@ -1095,52 +871,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
         let newUser: UserType;
         
-        if (USE_FIREBASE) {
-          try {
-            logInfo('💾 Attempting to save user to Firebase...');
-            newUser = await firebaseUserService.create(userData);
-            logInfo('✅ New user registered and saved to Firebase:', normalizedEmail);
-            
-            // Verify the user was saved
-            const verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
-            if (!verifyUser) {
-              logError('❌ User registration verification failed - user not found after save');
-              return res.status(500).json({ 
-                success: false, 
-                reason: 'User registration failed - user was not saved to database. Please try again.' 
-              });
-            } else {
-              logInfo('✅ User registration verified in database. User ID:', verifyUser.id);
-              newUser = verifyUser;
-            }
-          } catch (error) {
-            logError('❌ Error saving user to Firebase:', error);
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            
-            if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
-              return res.status(400).json({ 
-                success: false, 
-                reason: 'User with this email already exists.' 
-              });
-            }
-            
-            return res.status(500).json({ 
-              success: false, 
-              reason: 'Failed to save user to database. Please try again.',
-              error: errorMessage
-            });
-          }
-        } else {
-          if (!mongoAvailable) {
-            return unavailableResponse();
-          }
-          const mongoUser = new User(userData);
-          logInfo('💾 Attempting to save user to MongoDB...');
-          await mongoUser.save();
-          logInfo('✅ New user registered and saved to MongoDB:', normalizedEmail);
+        try {
+          logInfo('💾 Attempting to save user to Firebase...');
+          newUser = await firebaseUserService.create(userData);
+          logInfo('✅ New user registered and saved to Firebase:', normalizedEmail);
           
           // Verify the user was saved
-          const verifyUser = await User.findOne({ email: normalizedEmail });
+          const verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
           if (!verifyUser) {
             logError('❌ User registration verification failed - user not found after save');
             return res.status(500).json({ 
@@ -1148,18 +885,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
               reason: 'User registration failed - user was not saved to database. Please try again.' 
             });
           } else {
-            logInfo('✅ User registration verified in database. User ID:', verifyUser._id);
+            logInfo('✅ User registration verified in database. User ID:', verifyUser.id);
+            newUser = verifyUser;
           }
+        } catch (error) {
+          logError('❌ Error saving user to Firebase:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           
-          const normalizedNewUser = normalizeUser(verifyUser.toObject());
-          if (!normalizedNewUser) {
-            logError('❌ Failed to normalize user after registration');
-            return res.status(500).json({ 
+          if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+            return res.status(400).json({ 
               success: false, 
-              reason: 'User registration failed - failed to process user data. Please try again.' 
+              reason: 'User with this email already exists.' 
             });
           }
-          newUser = normalizedNewUser;
+          
+          return res.status(500).json({ 
+            success: false, 
+            reason: 'Failed to save user to database. Please try again.',
+            error: errorMessage
+          });
         }
       
         // Generate JWT tokens for new user
@@ -1182,40 +926,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           refreshToken
         });
       } catch (saveError) {
-        logError('❌ Error saving user to MongoDB:', saveError);
+        logError('❌ Error saving user to Firebase:', saveError);
         const errorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
-        const errorStack = saveError instanceof Error ? saveError.stack : undefined;
-        
-        // Log full error details for debugging
-        logError('Registration error details:', { 
-          message: errorMessage, 
-          stack: errorStack,
-          email: normalizedEmail 
-        });
         
         // Check for duplicate key error (email already exists)
         if (saveError instanceof Error && 
-            (saveError.message.includes('E11000') || 
-             saveError.message.includes('duplicate key') ||
-             saveError.message.includes('email_1 dup key'))) {
+            (errorMessage.includes('already exists') || 
+             errorMessage.includes('duplicate'))) {
           return res.status(400).json({ 
             success: false, 
             reason: 'User with this email already exists.' 
           });
         }
         
-        // Check for validation errors
-        if (saveError instanceof Error && saveError.name === 'ValidationError') {
-          return res.status(400).json({ 
-            success: false, 
-            reason: 'Invalid user data provided.',
-            error: errorMessage
-          });
-        }
-        
         return res.status(500).json({ 
           success: false, 
-          reason: 'Failed to save user to database. Please check MongoDB connection and try again.',
+          reason: 'Failed to save user to database. Please try again.',
           error: errorMessage
         });
       }
@@ -1232,31 +958,32 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
       // Normalize email to lowercase for consistent database lookup
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
-      let user = await User.findOne({ email: normalizedEmail });
+      let user = await firebaseUserService.findByEmail(normalizedEmail);
+      
       if (!user) {
         logInfo('🔄 OAuth registration - Creating new user:', normalizedEmail);
-        user = new User({
-          id: Date.now(),
+        const userData = {
+          id: Date.now().toString(),
           email: normalizedEmail,
           name: sanitizedData.name,
           role: sanitizedData.role,
           firebaseUid: sanitizedData.firebaseUid,
           authProvider: sanitizedData.authProvider,
           avatarUrl: sanitizedData.avatarUrl,
-          status: 'active',
+          status: 'active' as const,
           isVerified: true,
-          subscriptionPlan: 'free', // Fixed: should be subscriptionPlan not plan
+          subscriptionPlan: 'free' as const,
           featuredCredits: 0,
           usedCertifications: 0,
           createdAt: new Date().toISOString()
-        });
+        };
         
-        logInfo('💾 Saving OAuth user to MongoDB...');
-        await user.save();
-        logInfo('✅ OAuth user saved to MongoDB:', normalizedEmail);
+        logInfo('💾 Saving OAuth user to Firebase...');
+        user = await firebaseUserService.create(userData);
+        logInfo('✅ OAuth user saved to Firebase:', normalizedEmail);
         
         // Verify the user was saved by querying it back
-        const verifyUser = await User.findOne({ email: normalizedEmail });
+        const verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
         if (!verifyUser) {
           logError('❌ OAuth user registration verification failed - user not found after save');
           return res.status(500).json({ 
@@ -1264,7 +991,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
             reason: 'OAuth registration failed - user was not saved to database. Please try again.' 
           });
         } else {
-          logInfo('✅ OAuth user registration verified in database. User ID:', verifyUser._id);
+          logInfo('✅ OAuth user registration verified in database. User ID:', verifyUser.id);
           // Use the verified user to ensure we have the latest data
           user = verifyUser;
         }
@@ -1276,8 +1003,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const accessToken = generateAccessToken(user);
       const refreshToken = generateRefreshToken(user);
 
-      // Normalize user object for frontend (convert _id to id, ensure role is present)
-      const normalizedUser = normalizeUser(user.toObject());
+      // Normalize user object for frontend (ensure role is present)
+      const normalizedUser = normalizeUser(user);
       
       if (!normalizedUser || !normalizedUser.role) {
         logError('❌ Failed to normalize OAuth user object:', { email: user.email, hasRole: !!user.role });
@@ -1346,34 +1073,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
   // GET - Get all users
   if (req.method === 'GET') {
     const { action, email } = req.query;
-
-    if (!mongoAvailable) {
-      const fallbackUsers = await getFallbackUsers();
-      if (action === 'trust-score' && email) {
-        // Normalize email to lowercase for consistent lookup
-        const normalizedEmail = (email as string).toLowerCase().trim();
-        const user = fallbackUsers.find(u => u.email?.toLowerCase().trim() === normalizedEmail);
-        if (!user) {
-          return res.status(404).json({ success: false, reason: 'User not found', fallback: true });
-        }
-        const trustScore = calculateTrustScore(user);
-        return res.status(200).json({
-          success: true,
-          trustScore,
-          email: user.email,
-          name: user.name,
-          fallback: true
-        });
-      }
-      return res.status(200).json(fallbackUsers);
-    }
     
     if (action === 'trust-score' && email) {
       try {
-        // Sanitize and normalize email to prevent NoSQL injection
+        // Sanitize and normalize email
         const sanitizedEmail = await sanitizeString(String(email));
         const normalizedEmail = sanitizedEmail.toLowerCase().trim();
-        const user = await User.findOne({ email: normalizedEmail });
+        const user = await firebaseUserService.findByEmail(normalizedEmail);
         if (!user) {
           return res.status(404).json({ success: false, reason: 'User not found' });
         }
@@ -1396,27 +1102,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     }
     
     try {
-      // Ensure database connection before querying
-      let isMongoAvailable: boolean = mongoAvailable;
-      // Ensure connection is ready if MongoDB is available
-      if (isMongoAvailable) {
-        try {
-          await ensureMongoConnection();
-        } catch (connError) {
-          logWarn('⚠️ Database connection failed during GET /users, using fallback');
-          isMongoAvailable = false;
-        }
-      }
       
-      if (!isMongoAvailable) {
-        const fallbackUsers = await getFallbackUsers();
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json(fallbackUsers);
-      }
-      
-      const users = await User.find({}).sort({ createdAt: -1 }).lean();
-      // SECURITY FIX: Normalize all users to remove passwords and convert _id to id
-      const normalizedUsers = users.map(user => normalizeUser(user as unknown as UserDocument));
+      const users = await firebaseUserService.findAll();
+      // SECURITY FIX: Normalize all users to remove passwords
+      const normalizedUsers = users.map(user => normalizeUser(user)).filter((u): u is NormalizedUser => u !== null);
       return res.status(200).json(normalizedUsers);
     } catch (error) {
       logError('❌ Error fetching users:', error);
@@ -1446,16 +1135,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         error: 'Invalid or expired authentication token'
       });
     }
-    if (!mongoAvailable) {
-      return unavailableResponse();
-    }
     try {
-      // Ensure database connection is established and ready
-      logInfo('🔌 Ensuring database connection for user update...');
-      await ensureMongoConnection();
-      const state = getConnectionState();
-      logInfo('✅ Database ready for user update, state:', state.stateName);
-      
+      // Firebase connection is handled automatically
       const { email, ...updateData } = req.body;
       
       // SECURITY FIX: Authorization Check
@@ -1540,44 +1221,34 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         }
       });
 
-      // Build update operation
-      const updateOperation: {
-        $set?: Record<string, unknown>;
-        $unset?: Record<string, string | number>;
-      } = {};
-      if (Object.keys(updateFields).length > 0) {
-        updateOperation.$set = updateFields;
-      }
-      if (Object.keys(unsetFields).length > 0) {
-        // Convert unsetFields to proper format (MongoDB $unset expects empty string or 1)
-        const unsetObj: Record<string, string | number> = {};
-        Object.keys(unsetFields).forEach(key => {
-          unsetObj[key] = '';
-        });
-        updateOperation.$unset = unsetObj;
-      }
+      // Build update object for Firebase (no $set/$unset needed)
+      const firebaseUpdates: Record<string, unknown> = {};
+      
+      // Add fields to update
+      Object.keys(updateFields).forEach(key => {
+        firebaseUpdates[key] = updateFields[key];
+      });
+      
+      // For unset fields, set to null (Firebase will remove them)
+      Object.keys(unsetFields).forEach(key => {
+        firebaseUpdates[key] = null;
+      });
 
       // Only proceed with update if there are fields to update
-      if (Object.keys(updateOperation).length === 0) {
+      if (Object.keys(firebaseUpdates).length === 0) {
         return res.status(400).json({ success: false, reason: 'No fields to update.' });
       }
 
-      logInfo('💾 Updating user in database...', { 
+      logInfo('💾 Updating user in Firebase...', { 
         email, 
-        operationKeys: Object.keys(updateOperation),
         hasPasswordUpdate: !!updateFields.password,
-        updateFields: Object.keys(updateFields),
-        connectionState: mongoose.connection.readyState
+        updateFields: Object.keys(firebaseUpdates)
       });
 
-      // Double-check connection before update
-      // Ensure connection is ready before update
-      await ensureMongoConnection();
-
-      // Sanitize and normalize email to prevent NoSQL injection
+      // Sanitize and normalize email
       const sanitizedEmail = await sanitizeString(String(email));
       const normalizedEmail = sanitizedEmail.toLowerCase().trim();
-      const existingUser = await User.findOne({ email: normalizedEmail });
+      const existingUser = await firebaseUserService.findByEmail(normalizedEmail);
       if (!existingUser) {
         logWarn('⚠️ User not found:', email);
         return res.status(404).json({ success: false, reason: 'User not found.' });
@@ -1585,118 +1256,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
       logInfo('📝 Found user, applying update operation...');
       
-      // For password updates, use findOneAndUpdate which already persists changes
-      if (updateFields.password) {
-        try {
-          // Ensure MongoDB connection is active before update
-          try {
-            await ensureMongoConnection();
-          } catch (reconnectError) {
-            logError('❌ Failed to ensure MongoDB connection:', reconnectError);
-            return res.status(503).json({ 
-              success: false, 
-              reason: 'Database connection lost. Please try again later.',
-              error: 'MongoDB connection unavailable'
-            });
-          }
-
-          // Use findOneAndUpdate - it already persists changes to the database
-          // No need for additional save() call as findOneAndUpdate is atomic and persistent
-          const updatedUser = await User.findOneAndUpdate(
-            { email: email.toLowerCase().trim() }, // Ensure email is normalized
-            updateOperation,
-            { new: true, runValidators: true }
-          );
-
-          if (!updatedUser) {
-            logError('❌ Failed to update user after findOneAndUpdate');
-            return res.status(500).json({ success: false, reason: 'Failed to update user. User not found.' });
-          }
-
-          logInfo('✅ User updated successfully:', updatedUser.email);
-          // Never log password update status in production
-          if (process.env.NODE_ENV !== 'production') {
-            logInfo('✅ Password updated via findOneAndUpdate');
-          }
-
-          // Verify the update actually saved by checking the user again
-          const verifyEmail = await sanitizeString(String(email));
-          const verifyUser = await User.findOne({ email: verifyEmail.toLowerCase().trim() });
-          if (verifyUser && verifyUser.password) {
-            // Never log password update verification in production
-            if (process.env.NODE_ENV !== 'production') {
-              logInfo('✅ Password update verified in database');
-              // Verify it's different from the old password (if we can check)
-              if (verifyUser.password !== existingUser.password) {
-                logInfo('✅ Password hash changed, update confirmed');
-              } else {
-                logWarn('⚠️ Password hash unchanged - update may not have worked');
-              }
-            }
-          } else {
-            // Only log errors in development to avoid information leakage
-            if (process.env.NODE_ENV !== 'production') {
-              logError('❌ Password update verification failed - password not found in database');
-            }
-          }
-
-          // Remove password from response for security
-          const { password: _, ...userWithoutPassword } = updatedUser.toObject();
-          return res.status(200).json({ success: true, user: userWithoutPassword });
-        } catch (passwordUpdateError) {
-          logError('❌ Error during password update:', passwordUpdateError);
-          logError('❌ Error stack:', passwordUpdateError instanceof Error ? passwordUpdateError.stack : 'No stack trace');
-          logError('❌ Error name:', passwordUpdateError instanceof Error ? passwordUpdateError.name : 'Unknown');
-          
-          const errorMessage = passwordUpdateError instanceof Error ? passwordUpdateError.message : 'Unknown error';
-          const errorName = passwordUpdateError instanceof Error ? passwordUpdateError.name : 'Unknown';
-          
-          // Provide more specific error messages based on error type
-          if (errorName === 'ValidationError') {
-            return res.status(400).json({ 
-              success: false, 
-              reason: 'Password validation failed. Please check password requirements.',
-              error: errorMessage
-            });
-          }
-          
-          if (errorMessage.includes('MongoServerError') || errorMessage.includes('MongoNetworkError') || errorMessage.includes('connection')) {
-            return res.status(503).json({ 
-              success: false, 
-              reason: 'Database connection error. Please try again later.',
-              error: errorMessage
-            });
-          }
-          
-          if (errorMessage.includes('CastError') || errorMessage.includes('Cast to')) {
-            return res.status(400).json({ 
-              success: false, 
-              reason: 'Invalid data format. Please try again.',
-              error: errorMessage
-            });
-          }
-          
-          return res.status(500).json({ 
-            success: false, 
-            reason: 'Failed to update password. Please try again.',
-            error: errorMessage
-          });
-        }
-      } else {
-        // For non-password updates, use standard findOneAndUpdate
-        const updatedUser = await User.findOneAndUpdate(
-          { email: email.toLowerCase().trim() }, // Ensure email is normalized
-          updateOperation,
-          { new: true, runValidators: true }
-        );
-
+      // Update user in Firebase
+      try {
+        await firebaseUserService.update(normalizedEmail, firebaseUpdates);
+        
+        // Fetch updated user
+        const updatedUser = await firebaseUserService.findByEmail(normalizedEmail);
         if (!updatedUser) {
-          logError('❌ Failed to update user after findOneAndUpdate');
+          logError('❌ Failed to fetch updated user');
           return res.status(500).json({ success: false, reason: 'Failed to update user.' });
         }
 
-        // Explicitly save to ensure persistence
-        await updatedUser.save();
         logInfo('✅ User updated successfully:', updatedUser.email);
 
         // SYNC VEHICLE EXPIRY DATES when planExpiryDate is updated
@@ -1706,23 +1276,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
             const newPlanExpiryDate = updateFields.planExpiryDate || null;
             
             // Find all published vehicles for this seller
-            const sellerVehicles = await Vehicle.find({ 
-              sellerEmail: normalizedEmail,
-              status: 'published'
-            });
+            const allVehicles = await firebaseVehicleService.findAll();
+            const sellerVehicles = allVehicles.filter(v => 
+              v.sellerEmail?.toLowerCase().trim() === normalizedEmail && v.status === 'published'
+            );
             
             if (sellerVehicles.length > 0) {
               const now = new Date();
-              const bulkUpdates: BulkUpdateOperation[] = [];
               
-              sellerVehicles.forEach(vehicle => {
+              for (const vehicle of sellerVehicles) {
                 const vehicleUpdateFields: Record<string, unknown> = {};
                 
                 if (updatedUser.subscriptionPlan === 'premium') {
                   if (newPlanExpiryDate && (typeof newPlanExpiryDate === 'string' || newPlanExpiryDate instanceof Date)) {
                     // Premium plan with expiry: set vehicle expiry to plan expiry
                     const expiryDate = typeof newPlanExpiryDate === 'string' ? new Date(newPlanExpiryDate) : newPlanExpiryDate;
-                    vehicleUpdateFields.listingExpiresAt = expiryDate;
+                    vehicleUpdateFields.listingExpiresAt = expiryDate.toISOString();
                     
                     // If vehicle was expired but plan is now extended, reactivate it
                     if (vehicle.listingExpiresAt && new Date(vehicle.listingExpiresAt) < now && expiryDate >= now) {
@@ -1731,7 +1300,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
                     }
                   } else {
                     // Premium plan without expiry: remove vehicle expiry
-                    vehicleUpdateFields.listingExpiresAt = undefined;
+                    vehicleUpdateFields.listingExpiresAt = null;
                     vehicleUpdateFields.listingStatus = 'active';
                     // Ensure status is published
                     if (vehicle.status !== 'published') {
@@ -1752,22 +1321,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
                 }
                 
                 if (Object.keys(vehicleUpdateFields).length > 0) {
-                  bulkUpdates.push({
-                    updateOne: {
-                      filter: { _id: vehicle._id },
-                      update: { 
-                        $set: vehicleUpdateFields,
-                        ...(vehicleUpdateFields.listingExpiresAt === undefined ? { $unset: { listingExpiresAt: '' } } : {})
-                      }
-                    }
-                  });
+                  await firebaseVehicleService.update(vehicle.id, vehicleUpdateFields);
                 }
-              });
-              
-              if (bulkUpdates.length > 0) {
-                await Vehicle.bulkWrite(bulkUpdates, { ordered: false });
-                logInfo(`✅ Synced ${bulkUpdates.length} vehicle expiry dates for seller ${normalizedEmail}`);
               }
+              
+              logInfo(`✅ Synced ${sellerVehicles.length} vehicle expiry dates for seller ${normalizedEmail}`);
             }
           } catch (syncError) {
             logError('⚠️ Error syncing vehicle expiry dates:', syncError);
@@ -1777,7 +1335,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
         // Verify the update by querying again
         const verifyEmail = await sanitizeString(String(email));
-        const verifyUser = await User.findOne({ email: verifyEmail.toLowerCase().trim() });
+        const verifyUser = await firebaseUserService.findByEmail(verifyEmail.toLowerCase().trim());
         if (!verifyUser) {
           logWarn('⚠️ User update verification failed - user not found after update');
         } else {
@@ -1785,23 +1343,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         }
 
         // Remove password from response for security
-        const { password: _, ...userWithoutPassword } = updatedUser.toObject();
+        const { password: _, ...userWithoutPassword } = updatedUser;
         return res.status(200).json({ success: true, user: userWithoutPassword });
+      } catch (dbError) {
+        logError('❌ Database error during user update:', dbError);
+        const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';
+        
+        return res.status(500).json({ 
+          success: false, 
+          reason: 'Database error occurred. Please try again later.',
+          error: errorMessage
+        });
       }
-    } catch (dbError) {
-      logError('❌ Database error during user update:', dbError);
-      const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';
-      const errorStack = dbError instanceof Error ? dbError.stack : undefined;
-      
-      // Log full error for debugging
-      logError('Error details:', { message: errorMessage, stack: errorStack });
-      
-      return res.status(500).json({ 
-        success: false, 
-        reason: 'Database error occurred. Please try again later.',
-        error: errorMessage
-      });
-    }
   }
 
   // DELETE - Delete user
@@ -1810,9 +1363,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     const auth = authenticateRequest(req);
     if (!auth.isValid) {
       return res.status(401).json({ success: false, reason: auth.error });
-    }
-    if (!mongoAvailable) {
-      return unavailableResponse();
     }
     try {
       const { email } = req.body;
@@ -1829,22 +1379,24 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(400).json({ success: false, reason: 'Email is required for deletion.' });
       }
 
-      // Sanitize email to prevent NoSQL injection
+      // Sanitize email
       const sanitizedEmail = await sanitizeString(String(email));
       const normalizedEmail = sanitizedEmail.toLowerCase().trim();
       logInfo('🔄 DELETE /users - Deleting user:', normalizedEmail);
 
-      const deletedUser = await User.findOneAndDelete({ email: normalizedEmail });
-      if (!deletedUser) {
+      // Check if user exists
+      const existingUser = await firebaseUserService.findByEmail(normalizedEmail);
+      if (!existingUser) {
         logWarn('⚠️ User not found for deletion:', normalizedEmail);
         return res.status(404).json({ success: false, reason: 'User not found.' });
       }
 
-      logInfo('✅ User deleted successfully from MongoDB:', normalizedEmail);
+      // Delete user from Firebase
+      await firebaseUserService.delete(normalizedEmail);
+      logInfo('✅ User deleted successfully from Firebase:', normalizedEmail);
 
       // Verify the user was deleted by querying it
-      const verifyEmail = await sanitizeString(String(email));
-      const verifyUser = await User.findOne({ email: verifyEmail.toLowerCase().trim() });
+      const verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
       if (verifyUser) {
         logError('❌ User deletion verification failed - user still exists in database');
       } else {
@@ -1881,37 +1433,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       }
     }
     
-    // CRITICAL: Check for database connection errors FIRST before checking user authentication errors
-    // MongoDB connection/auth errors (e.g., "Authentication failed" from wrong MongoDB credentials)
-    // should return 503 (Service Unavailable), NOT 401 (Unauthorized)
-    // Only user authentication errors (JWT tokens, login sessions) should return 401
-    // Check for MongoDB-specific errors first (including authentication errors from MongoDB)
+    // Check for Firebase database errors
     const isDbError = error instanceof Error && (
-      error.message.includes('MONGODB') || 
-      error.message.includes('MongoConfigError') ||
-      error.message.includes('MongoServerError') ||
-      error.message.includes('MongoNetworkError') ||
-      error.message.includes('MongoTimeoutError') ||
-      error.message.includes('MongoParseError') ||
-      error.name === 'MongoServerError' ||
-      error.name === 'MongoNetworkError' ||
-      error.name === 'MongoTimeoutError' ||
-      // MongoDB authentication errors (database connection auth, not user auth)
-      (error.message.includes('authentication') && (
-        error.message.includes('Mongo') ||
-        error.message.includes('connection') ||
-        error.message.includes('database') ||
-        error.message.includes('credentials') ||
-        error.message.includes('username') ||
-        error.message.includes('password')
-      )) ||
-      // Connection-related errors
-      (error.message.includes('connect') && (
-        error.message.includes('Mongo') ||
-        error.message.includes('database') ||
-        error.message.includes('ECONNREFUSED') ||
-        error.message.includes('ENOTFOUND')
-      ))
+      error.message.includes('Firebase') ||
+      error.message.includes('firebase') ||
+      error.message.includes('database') && error.message.includes('unavailable')
     );
     
     if (isDbError) {
@@ -1977,14 +1503,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 // Vehicles handler - preserves exact functionality from vehicles.ts
 async function handleVehicles(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   try {
-    const { mongoAvailable, mongoFailureReason } = options;
+    // Check Firebase availability
+    if (!USE_FIREBASE) {
+      return res.status(503).json({
+        success: false,
+        reason: 'Firebase is not configured. Please set Firebase environment variables.',
+        fallback: true
+      });
+    }
+    
     // Check action type from query parameter
     const { type, action } = req.query;
-    const unavailableResponse = () => res.status(503).json({
-      success: false,
-      reason: mongoFailureReason || 'Database is currently unavailable. Please try again later.',
-      fallback: true
-    });
 
   // HEAD - Handle browser pre-flight checks (backup handler in case global handler misses it)
   if (req.method === 'HEAD') {
@@ -2043,23 +1572,16 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
 
     try {
       if (req.method === 'GET') {
-        // Always return default data if mongo is not available
-        if (!mongoAvailable) {
-          res.setHeader('X-Data-Fallback', 'true');
-          return res.status(200).json(defaultData);
-        }
         try {
-          await ensureMongoConnection();
-          console.log('📡 Connected to database for vehicles data fetch operation');
-          
-          let vehicleDataDoc = await VehicleDataModel.findOne();
-          if (!vehicleDataDoc) {
-            // Create default vehicle data if none exists
-            vehicleDataDoc = new VehicleDataModel({ data: defaultData });
-            await vehicleDataDoc.save();
+          // Try to get vehicle data from Firebase
+          const vehicleData = await read<{ data: typeof defaultData }>(DB_PATHS.VEHICLE_DATA, 'default');
+          if (vehicleData && vehicleData.data) {
+            return res.status(200).json(vehicleData.data);
           }
           
-          return res.status(200).json(vehicleDataDoc.data);
+          // If no data exists, create default and return it
+          await create(DB_PATHS.VEHICLE_DATA, { data: defaultData }, 'default');
+          return res.status(200).json(defaultData);
         } catch (dbError) {
           console.warn('⚠️ Database connection failed for vehicles data, returning default data:', dbError);
           // Return default data as fallback - NEVER return 500
@@ -2069,39 +1591,17 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
 
       if (req.method === 'POST') {
-        // Always return success response, even if mongo is not available
-        if (!mongoAvailable) {
-          res.setHeader('X-Data-Fallback', 'true');
-          console.warn('⚠️ Vehicle data save attempted without MongoDB. Returning fallback acknowledgement.');
-          return res.status(200).json({
-            success: true,
-            data: req.body,
-            message: 'Vehicle data processed (database unavailable, using fallback)',
-            fallback: true,
-            timestamp: new Date().toISOString()
-          });
-        }
         try {
-          await ensureMongoConnection();
-          console.log('📡 Connected to database for vehicles data save operation');
+          // Save vehicle data to Firebase
+          await updateData(DB_PATHS.VEHICLE_DATA, 'default', {
+            data: req.body,
+            updatedAt: new Date().toISOString()
+          });
           
-          const vehicleData = await VehicleDataModel.findOneAndUpdate(
-            {},
-            { 
-              data: req.body,
-              updatedAt: new Date()
-            },
-            { 
-              upsert: true, 
-              new: true,
-              setDefaultsOnInsert: true
-            }
-          );
-          
-          console.log('✅ Vehicle data saved successfully to database');
+          console.log('✅ Vehicle data saved successfully to Firebase');
           return res.status(200).json({ 
             success: true, 
-            data: vehicleData.data,
+            data: req.body,
             message: 'Vehicle data updated successfully',
             timestamp: new Date().toISOString()
           });
@@ -2141,55 +1641,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
 
   // VEHICLE CRUD OPERATIONS
   if (req.method === 'GET') {
-    if (!mongoAvailable) {
-      const fallbackVehicles = await getFallbackVehicles();
+    try {
       if (action === 'city-stats' && req.query.city) {
-        // Sanitize city input to prevent injection
+        // Sanitize city input
         const sanitizedCity = await sanitizeString(String(req.query.city));
-        const cityVehicles = fallbackVehicles.filter(v => v.city === sanitizedCity && v.status === 'published');
+        const allVehicles = await firebaseVehicleService.findAll();
+        const cityVehicles = allVehicles.filter(v => v.city === sanitizedCity && v.status === 'published');
         const stats = {
           totalVehicles: cityVehicles.length,
           averagePrice: cityVehicles.reduce((sum, v) => sum + (v.price || 0), 0) / (cityVehicles.length || 1),
-          popularMakes: getPopularMakes(cityVehicles),
-          priceRange: getPriceRange(cityVehicles)
-        };
-        return res.status(200).json({ ...stats, fallback: true });
-      }
-
-      if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
-        const nearbyVehicles = fallbackVehicles.filter(vehicle => {
-          if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
-          const distance = calculateDistance(
-            parseFloat(req.query.lat as string),
-            parseFloat(req.query.lng as string),
-            vehicle.exactLocation.lat,
-            vehicle.exactLocation.lng
-          );
-          return distance <= parseFloat(req.query.radius as string);
-        });
-        // Filter to only published vehicles
-        const publishedNearbyVehicles = nearbyVehicles.filter(v => v.status === 'published');
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json(publishedNearbyVehicles);
-      }
-
-      // Filter to only published vehicles for public-facing endpoint
-      const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
-      res.setHeader('X-Data-Fallback', 'true');
-      return res.status(200).json(publishedFallbackVehicles);
-    }
-
-    try {
-      // Ensure database connection is established
-      await ensureMongoConnection();
-      
-      if (action === 'city-stats' && req.query.city) {
-        // Sanitize city input to prevent NoSQL injection
-        const sanitizedCity = await sanitizeString(String(req.query.city));
-        const cityVehicles = await Vehicle.find({ city: sanitizedCity, status: 'published' });
-        const stats = {
-          totalVehicles: cityVehicles.length,
-          averagePrice: cityVehicles.reduce((sum, v) => sum + v.price, 0) / cityVehicles.length || 0,
           popularMakes: getPopularMakes(cityVehicles),
           priceRange: getPriceRange(cityVehicles)
         };
@@ -2197,8 +1657,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
 
       if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
-        const vehicles = await Vehicle.find({ status: 'published' });
-        const nearbyVehicles = vehicles.filter(vehicle => {
+        const allVehicles = await firebaseVehicleService.findByStatus('published');
+        const nearbyVehicles = allVehicles.filter(vehicle => {
           if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
           const distance = calculateDistance(
             parseFloat(req.query.lat as string),
@@ -2212,7 +1672,13 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
 
       // Get all vehicles and auto-disable expired listings
-      const vehicles = await Vehicle.find({}).sort({ createdAt: -1 });
+      let vehicles = await firebaseVehicleService.findAll();
+      // Sort by createdAt descending
+      vehicles = vehicles.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      });
       
       const now = new Date();
       const sellerEmails = new Set<string>();
@@ -2223,29 +1689,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         }
       });
       
-      const sellerMap = new Map<string, UserDocument>();
+      const sellerMap = new Map<string, UserType>();
       if (sellerEmails.size > 0) {
-        const sellers = await User.find({ email: { $in: Array.from(sellerEmails) } }).lean();
-        sellers.forEach((seller) => {
+        const allUsers = await firebaseUserService.findAll();
+        allUsers.forEach((seller) => {
           if (seller.email) {
-            // Convert lean document to UserDocument format
-            const userDoc: UserDocument = {
-              ...seller,
-              _id: seller._id as mongoose.Types.ObjectId,
-              email: seller.email.toLowerCase().trim(),
-              name: seller.name || '',
-              mobile: seller.mobile || '',
-              role: (seller.role as 'customer' | 'seller' | 'admin') || 'customer',
-              status: seller.status || 'active',
-              createdAt: seller.createdAt || new Date().toISOString(),
-              location: seller.location || '',
-            };
-            sellerMap.set(seller.email.toLowerCase(), userDoc);
+            const normalizedEmail = seller.email.toLowerCase().trim();
+            if (sellerEmails.has(normalizedEmail)) {
+              sellerMap.set(normalizedEmail, seller);
+            }
           }
         });
       }
       
-      const bulkUpdates: BulkUpdateOperation[] = [];
+      const vehicleUpdates: Array<{ id: number; updates: Partial<Vehicle> }> = [];
       
       vehicles.forEach(vehicle => {
         const updateFields: Record<string, any> = {};
@@ -2307,11 +1764,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         }
         
         if (Object.keys(updateFields).length > 0) {
-          bulkUpdates.push({
-            updateOne: {
-              filter: { _id: vehicle._id },
-              update: { $set: updateFields }
-            }
+          vehicleUpdates.push({
+            id: vehicle.id,
+            updates: updateFields
           });
         }
       });
@@ -2349,15 +1804,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           if (publishedVehicles.length > numericLimit) {
             const extras = publishedVehicles.slice(numericLimit); // older ones
             extras.forEach(v => {
-              // Vehicles from MongoDB have _id, but VehicleType doesn't include it
-              // Use id or sellerEmail+make+model as fallback identifier
-              const vehicleId = (v as unknown as { _id?: unknown })._id || v.id;
-              if (vehicleId) {
-                bulkUpdates.push({
-                  updateOne: {
-                    filter: { _id: vehicleId },
-                    update: { $set: { status: 'unpublished', listingStatus: 'suspended' } }
-                  }
+              if (v.id) {
+                vehicleUpdates.push({
+                  id: v.id,
+                  updates: { status: 'unpublished', listingStatus: 'suspended' }
                 });
               }
             });
@@ -2367,27 +1817,31 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         console.warn('⚠️ Error applying plan listing limits:', limitErr);
       }
       
-      if (bulkUpdates.length > 0) {
-        await Vehicle.bulkWrite(bulkUpdates, { ordered: false });
+      // Apply all updates to Firebase
+      for (const update of vehicleUpdates) {
+        await firebaseVehicleService.update(update.id, update.updates);
       }
       
       // Return vehicles after checking expiry (latest data)
-      const refreshedVehicles = bulkUpdates.length > 0
-        ? await Vehicle.find({}).sort({ createdAt: -1 })
+      const refreshedVehicles = vehicleUpdates.length > 0
+        ? await firebaseVehicleService.findAll()
         : vehicles;
       
+      // Sort refreshed vehicles
+      const sortedVehicles = refreshedVehicles.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      });
+      
       // Filter to only published vehicles for public-facing endpoint
-      // (Admin panel and other endpoints can access all vehicles via different routes)
-      const publishedVehicles = refreshedVehicles.filter(v => v.status === 'published');
+      const publishedVehicles = sortedVehicles.filter(v => v.status === 'published');
       
       // Normalize sellerEmail to lowercase for consistent filtering
-      const normalizedVehicles = publishedVehicles.map(v => {
-        const vehicleObj = v.toObject ? v.toObject() : v;
-        return {
-          ...vehicleObj,
-          sellerEmail: vehicleObj.sellerEmail?.toLowerCase().trim() || vehicleObj.sellerEmail
-        };
-      });
+      const normalizedVehicles = publishedVehicles.map(v => ({
+        ...v,
+        sellerEmail: v.sellerEmail?.toLowerCase().trim() || v.sellerEmail
+      }));
       
       return res.status(200).json(normalizedVehicles);
     } catch (error) {
@@ -2411,12 +1865,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           return res.status(400).json({ success: false, reason: 'Valid vehicleId is required' });
         }
 
-        if (!mongoAvailable) {
-          return unavailableResponse();
-        }
-
-        await ensureMongoConnection();
-        const vehicle = await Vehicle.findOne({ id: vehicleIdNum });
+        const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
         if (!vehicle) {
           return res.status(404).json({ success: false, reason: 'Vehicle not found' });
         }
@@ -2436,24 +1885,19 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     if (!auth.isValid) {
       return res.status(401).json({ success: false, reason: auth.error });
     }
-    if (!mongoAvailable) {
-      return unavailableResponse();
-    }
-    // Enforce plan expiry and listing limits for creation (no action or unknown action)
-    // Only applies to standard create flow (i.e., when not handling action sub-routes above)
-    if (!action || (action !== 'refresh' && action !== 'boost' && action !== 'certify' && action !== 'sold' && action !== 'unsold' && action !== 'feature')) {
-      try {
-        const { sellerEmail } = req.body || {};
-        if (!sellerEmail || typeof sellerEmail !== 'string') {
-          return res.status(400).json({ success: false, reason: 'Seller email is required' });
-        }
-        // Sanitize and normalize email to prevent NoSQL injection
-        const sanitizedEmail = await sanitizeString(String(sellerEmail));
-        const normalizedEmail = sanitizedEmail.toLowerCase().trim();
-        // Ensure DB connection for safety
-        await ensureMongoConnection();
-        // Load seller
-        const seller = await User.findOne({ email: normalizedEmail });
+        // Enforce plan expiry and listing limits for creation (no action or unknown action)
+        // Only applies to standard create flow (i.e., when not handling action sub-routes above)
+        if (!action || (action !== 'refresh' && action !== 'boost' && action !== 'certify' && action !== 'sold' && action !== 'unsold' && action !== 'feature')) {
+          try {
+            const { sellerEmail } = req.body || {};
+            if (!sellerEmail || typeof sellerEmail !== 'string') {
+              return res.status(400).json({ success: false, reason: 'Seller email is required' });
+            }
+            // Sanitize and normalize email
+            const sanitizedEmail = await sanitizeString(String(sellerEmail));
+            const normalizedEmail = sanitizedEmail.toLowerCase().trim();
+            // Load seller
+            const seller = await firebaseUserService.findByEmail(normalizedEmail);
         if (!seller) {
           return res.status(404).json({ success: false, reason: 'Seller not found' });
         }
@@ -2474,7 +1918,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
         const listingLimit = planDetails.listingLimit;
         if (listingLimit !== 'unlimited') {
-          const currentActiveCount = await Vehicle.countDocuments({ sellerEmail: normalizedEmail, status: 'published' });
+          const sellerVehicles = await firebaseVehicleService.findBySellerEmail(normalizedEmail);
+          const currentActiveCount = sellerVehicles.filter(v => v.status === 'published').length;
           if (currentActiveCount >= (Number(listingLimit) || 0)) {
             return res.status(403).json({
               success: false,
@@ -2496,7 +1941,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
 
     if (action === 'refresh') {
       const { vehicleId, refreshAction, sellerEmail } = req.body;
-      const vehicle = await Vehicle.findOne({ id: vehicleId });
+      const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
+      const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
       
       if (!vehicle) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found' });
@@ -2509,20 +1955,23 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(403).json({ success: false, reason: 'Unauthorized' });
       }
       
+      const updates: Partial<Vehicle> = {};
       if (refreshAction === 'refresh') {
-        vehicle.views = 0;
-        vehicle.inquiriesCount = 0;
+        updates.views = 0;
+        updates.inquiriesCount = 0;
       } else if (refreshAction === 'renew') {
-        vehicle.listingExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        updates.listingExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       }
       
-      await vehicle.save();
-      return res.status(200).json({ success: true, vehicle });
+      await firebaseVehicleService.update(vehicleIdNum, updates);
+      const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      return res.status(200).json({ success: true, vehicle: updatedVehicle });
     }
 
     if (action === 'boost') {
       const { vehicleId, packageId } = req.body;
-      const vehicle = await Vehicle.findOne({ id: vehicleId });
+      const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
+      const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
       
       if (!vehicle) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found' });
@@ -2554,7 +2003,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       
       const boostInfo = {
         id: `boost_${Date.now()}`,
-        vehicleId: vehicleId,
+        vehicleId: vehicleIdNum,
         packageId: packageId || 'standard',
         type: boostType,
         startDate: new Date().toISOString(),
@@ -2562,33 +2011,35 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         isActive: true
       };
       
-      if (!vehicle.activeBoosts) {
-        vehicle.activeBoosts = [];
-      }
-      vehicle.activeBoosts.push(boostInfo);
-      vehicle.isFeatured = true;
-
-      await vehicle.save();
-      return res.status(200).json({ success: true, vehicle });
+      const activeBoosts = vehicle.activeBoosts || [];
+      activeBoosts.push(boostInfo);
+      
+      await firebaseVehicleService.update(vehicleIdNum, {
+        activeBoosts,
+        isFeatured: true
+      });
+      
+      const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      return res.status(200).json({ success: true, vehicle: updatedVehicle });
     }
 
       if (action === 'certify') {
         try {
           const { vehicleId } = req.body;
-          if (!vehicleId) {
+          const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
+          if (!vehicleIdNum) {
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          await ensureMongoConnection();
-          const vehicle = await Vehicle.findOne({ id: vehicleId });
+          const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
           
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
           
-          // Sanitize seller email to prevent NoSQL injection
+          // Sanitize seller email
           const sanitizedSellerEmail = await sanitizeString(String(vehicle.sellerEmail));
-          const seller = await User.findOne({ email: sanitizedSellerEmail.toLowerCase().trim() });
+          const seller = await firebaseUserService.findByEmail(sanitizedSellerEmail.toLowerCase().trim());
           if (!seller) {
             return res.status(404).json({ success: false, reason: 'Seller not found for this vehicle' });
           }
@@ -2613,30 +2064,32 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           }
 
           if (vehicle.certificationStatus === 'requested') {
-            const vehicleObj = vehicle.toObject();
             return res.status(200).json({
               success: true,
-              vehicle: vehicleObj,
+              vehicle,
               alreadyRequested: true,
               usedCertifications,
               remainingCertifications: Math.max(allowedCertifications - usedCertifications, 0)
             });
           }
 
-          vehicle.certificationStatus = 'requested';
-          vehicle.certificationRequestedAt = new Date().toISOString();
+          await firebaseVehicleService.update(vehicleIdNum, {
+            certificationStatus: 'requested',
+            certificationRequestedAt: new Date().toISOString()
+          });
           
-          seller.usedCertifications = usedCertifications + 1;
-          await Promise.all([vehicle.save(), seller.save()]);
+          await firebaseUserService.update(seller.email, {
+            usedCertifications: usedCertifications + 1
+          });
           
-          // Convert Mongoose document to plain object
-          const vehicleObj = vehicle.toObject();
-          const totalUsed = seller.usedCertifications ?? usedCertifications + 1;
+          const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+          const updatedSeller = await firebaseUserService.findByEmail(seller.email);
+          const totalUsed = updatedSeller?.usedCertifications ?? usedCertifications + 1;
           const remaining = Math.max(allowedCertifications - totalUsed, 0);
           
           return res.status(200).json({ 
             success: true, 
-            vehicle: vehicleObj,
+            vehicle: updatedVehicle,
             usedCertifications: totalUsed,
             remainingCertifications: remaining 
           });
@@ -2652,22 +2105,21 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       if (action === 'feature') {
         try {
           const { vehicleId } = req.body;
-          if (!vehicleId) {
+          const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
+          if (!vehicleIdNum) {
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          await ensureMongoConnection();
-          const vehicle = await Vehicle.findOne({ id: vehicleId });
+          const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
           
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
 
           if (vehicle.isFeatured) {
-            const vehicleObj = vehicle.toObject();
             return res.status(200).json({ 
               success: true, 
-              vehicle: vehicleObj,
+              vehicle,
               alreadyFeatured: true 
             });
           }
@@ -2677,9 +2129,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
             return res.status(400).json({ success: false, reason: 'Vehicle does not have an associated seller.' });
           }
 
-          // Sanitize seller email to prevent NoSQL injection
+          // Sanitize seller email
           const sanitizedSellerEmail = await sanitizeString(String(sellerEmail));
-          const seller = await User.findOne({ email: sanitizedSellerEmail.toLowerCase().trim() });
+          const seller = await firebaseUserService.findByEmail(sanitizedSellerEmail.toLowerCase().trim());
           if (!seller) {
             return res.status(404).json({ success: false, reason: 'Seller not found for this vehicle.' });
           }
@@ -2716,20 +2168,23 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
             });
           }
 
-          vehicle.isFeatured = true;
-          vehicle.featuredAt = new Date().toISOString();
-          await vehicle.save();
+          await firebaseVehicleService.update(vehicleIdNum, {
+            isFeatured: true,
+            featuredAt: new Date().toISOString()
+          });
 
           // Deduct one featured credit
-          seller.featuredCredits = Math.max(0, remainingCredits - 1);
-          await seller.save();
+          await firebaseUserService.update(seller.email, {
+            featuredCredits: Math.max(0, remainingCredits - 1)
+          });
           
-          const vehicleObj = vehicle.toObject();
+          const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+          const updatedSeller = await firebaseUserService.findByEmail(seller.email);
           
           return res.status(200).json({ 
             success: true, 
-            vehicle: vehicleObj,
-            remainingCredits: seller.featuredCredits
+            vehicle: updatedVehicle,
+            remainingCredits: updatedSeller?.featuredCredits ?? 0
           });
         } catch (error) {
           console.error('❌ Error featuring vehicle:', error);
@@ -2754,15 +2209,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           if (isNaN(vehicleIdNum)) {
             return res.status(400).json({ success: false, reason: 'Invalid vehicle ID format' });
           }
-
-          // Ensure database connection is established
-          console.log('🔌 Ensuring database connection...');
-          await ensureMongoConnection();
-          const state = getConnectionState();
-          console.log('✅ Database ready, state:', state.stateName);
           
           console.log('🔍 Finding vehicle with id:', vehicleIdNum);
-          const vehicle = await Vehicle.findOne({ id: vehicleIdNum });
+          const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
           
           if (!vehicle) {
             console.warn('⚠️ Vehicle not found with id:', vehicleIdNum);
@@ -2770,25 +2219,19 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           }
           
           console.log('✏️ Updating vehicle status to sold...');
-          vehicle.status = 'sold';
-          vehicle.listingStatus = 'sold';
-          vehicle.soldAt = new Date().toISOString();
+          await firebaseVehicleService.update(vehicleIdNum, {
+            status: 'sold',
+            listingStatus: 'sold',
+            soldAt: new Date().toISOString()
+          });
           
-          await vehicle.save();
           console.log('✅ Vehicle saved successfully');
+          const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
           
-          // Convert Mongoose document to plain object
-          const vehicleObj = vehicle.toObject();
-          
-          return res.status(200).json({ success: true, vehicle: vehicleObj });
+          return res.status(200).json({ success: true, vehicle: updatedVehicle });
         } catch (error) {
           console.error('❌ Error marking vehicle as sold:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          const errorStack = error instanceof Error ? error.stack : undefined;
-          console.error('❌ Error message:', errorMessage);
-          if (errorStack) {
-            console.error('❌ Error stack:', errorStack);
-          }
           return res.status(500).json({ 
             success: false, 
             reason: errorMessage
@@ -2799,27 +2242,26 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       if (action === 'unsold') {
         try {
           const { vehicleId } = req.body;
-          if (!vehicleId) {
+          const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
+          if (!vehicleIdNum) {
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          await ensureMongoConnection();
-          const vehicle = await Vehicle.findOne({ id: vehicleId });
+          const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
           
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
           }
           
-          vehicle.status = 'published';
-          vehicle.listingStatus = 'active';
-          vehicle.soldAt = undefined;
+          await firebaseVehicleService.update(vehicleIdNum, {
+            status: 'published',
+            listingStatus: 'active',
+            soldAt: null
+          });
           
-          await vehicle.save();
+          const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
           
-          // Convert Mongoose document to plain object
-          const vehicleObj = vehicle.toObject();
-          
-          return res.status(200).json({ success: true, vehicle: vehicleObj });
+          return res.status(200).json({ success: true, vehicle: updatedVehicle });
         } catch (error) {
           console.error('❌ Error marking vehicle as unsold:', error);
           return res.status(500).json({ 
@@ -2832,9 +2274,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     // Create new vehicle
     // Check if seller's plan has expired and block creation if so
     if (req.body.sellerEmail) {
-      // Sanitize email input to prevent NoSQL injection
+      // Sanitize email input
       const sanitizedEmail = (await sanitizeString(String(req.body.sellerEmail))).toLowerCase().trim();
-      const seller = await User.findOne({ email: sanitizedEmail });
+      const seller = await firebaseUserService.findByEmail(sanitizedEmail);
       if (seller && seller.planExpiryDate) {
         const expiryDate = new Date(seller.planExpiryDate);
         const isExpired = expiryDate < new Date();
@@ -2850,9 +2292,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     // Set listingExpiresAt based on seller's plan expiry date
     let listingExpiresAt: string | undefined;
     if (req.body.sellerEmail) {
-      // Sanitize email input to prevent NoSQL injection
+      // Sanitize email input
       const sanitizedEmail = (await sanitizeString(String(req.body.sellerEmail))).toLowerCase().trim();
-      const seller = await User.findOne({ email: sanitizedEmail });
+      const seller = await firebaseUserService.findByEmail(sanitizedEmail);
       if (seller) {
         // Plan is not expired (checked above), so compute expiry for active plans
         if (seller.subscriptionPlan === 'premium') {
@@ -2873,31 +2315,28 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       }
     }
     
-    const newVehicle = new Vehicle({
+    const vehicleData = {
       id: Date.now(),
       ...req.body,
       views: 0,
       inquiriesCount: 0,
       createdAt: new Date().toISOString(),
       listingExpiresAt
-    });
+    };
     
-    console.log('💾 Saving new vehicle to database...');
-    await newVehicle.save();
-    console.log('✅ Vehicle saved successfully to MongoDB:', newVehicle.id);
+    console.log('💾 Saving new vehicle to Firebase...');
+    const newVehicle = await firebaseVehicleService.create(vehicleData);
+    console.log('✅ Vehicle saved successfully to Firebase:', newVehicle.id);
     
     // Verify the vehicle was saved by querying it back
-    const verifyVehicle = await Vehicle.findOne({ id: newVehicle.id });
+    const verifyVehicle = await firebaseVehicleService.findById(newVehicle.id);
     if (!verifyVehicle) {
       console.error('❌ Vehicle creation verification failed - vehicle not found after save');
     } else {
       console.log('✅ Vehicle creation verified in database');
     }
     
-    // Convert Mongoose document to plain object for JSON serialization
-    const vehicleObj = newVehicle.toObject();
-    
-    return res.status(201).json(vehicleObj);
+    return res.status(201).json(newVehicle);
   }
 
   if (req.method === 'PUT') {
@@ -2906,23 +2345,18 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     if (!auth.isValid) {
       return res.status(401).json({ success: false, reason: auth.error });
     }
-    if (!mongoAvailable) {
-      return unavailableResponse();
-    }
     try {
-      // Ensure database connection
-      await ensureMongoConnection();
-      
       const { id, ...updateData } = req.body;
-      if (!id) {
+      const vehicleIdNum = typeof id === 'string' ? parseInt(id, 10) : Number(id);
+      if (!vehicleIdNum) {
         return res.status(400).json({ success: false, reason: 'Vehicle ID is required for update.' });
       }
       
-      console.log('🔄 PUT /vehicles - Updating vehicle:', { id, fields: Object.keys(updateData) });
+      console.log('🔄 PUT /vehicles - Updating vehicle:', { id: vehicleIdNum, fields: Object.keys(updateData) });
       
       // SECURITY FIX: Ownership Check
       // Fetch vehicle to verify ownership before update
-      const existingVehicle = await Vehicle.findOne({ id });
+      const existingVehicle = await firebaseVehicleService.findById(vehicleIdNum);
       if (!existingVehicle) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
       }
@@ -2934,34 +2368,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       
-      // Use findOneAndUpdate with $set to ensure proper update
-      const updatedVehicle = await Vehicle.findOneAndUpdate(
-        { id },
-        { $set: updateData },
-        { new: true, runValidators: true }
-      );
-      
-      if (!updatedVehicle) {
-        console.error('❌ Failed to update vehicle after findOneAndUpdate');
-        return res.status(500).json({ success: false, reason: 'Failed to update vehicle.' });
-      }
-      
-      // Explicitly save to ensure persistence (especially for nested fields)
-      await updatedVehicle.save();
-      console.log('✅ Vehicle updated and saved successfully:', id);
+      // Update vehicle in Firebase
+      await firebaseVehicleService.update(vehicleIdNum, updateData);
+      console.log('✅ Vehicle updated and saved successfully:', vehicleIdNum);
       
       // Verify the update by querying again
-      const verifyVehicle = await Vehicle.findOne({ id });
-      if (!verifyVehicle) {
+      const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      if (!updatedVehicle) {
         console.warn('⚠️ Vehicle update verification failed - vehicle not found after update');
+        return res.status(500).json({ success: false, reason: 'Failed to update vehicle.' });
       } else {
         console.log('✅ Vehicle update verified in database');
       }
       
-      // Convert Mongoose document to plain object for JSON serialization
-      const vehicleObj = updatedVehicle.toObject();
-      
-      return res.status(200).json(vehicleObj);
+      return res.status(200).json(updatedVehicle);
     } catch (error) {
       console.error('❌ Error updating vehicle:', error);
       return res.status(500).json({ 
@@ -2977,22 +2397,17 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     if (!auth.isValid) {
       return res.status(401).json({ success: false, reason: auth.error });
     }
-    if (!mongoAvailable) {
-      return unavailableResponse();
-    }
     try {
-      // Ensure database connection
-      await ensureMongoConnection();
-      
       const { id } = req.body;
-      if (!id) {
+      const vehicleIdNum = typeof id === 'string' ? parseInt(id, 10) : Number(id);
+      if (!vehicleIdNum) {
         return res.status(400).json({ success: false, reason: 'Vehicle ID is required for deletion.' });
       }
       
-      console.log('🔄 DELETE /vehicles - Deleting vehicle:', id);
+      console.log('🔄 DELETE /vehicles - Deleting vehicle:', vehicleIdNum);
       
       // SECURITY FIX: Ownership Check
-      const vehicleToDelete = await Vehicle.findOne({ id });
+      const vehicleToDelete = await firebaseVehicleService.findById(vehicleIdNum);
       if (!vehicleToDelete) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
       }
@@ -3004,16 +2419,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       
-      const deletedVehicle = await Vehicle.findOneAndDelete({ id });
-      if (!deletedVehicle) {
-        console.warn('⚠️ Vehicle not found for deletion:', id);
-        return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
-      }
-      
-      console.log('✅ Vehicle deleted successfully from MongoDB:', id);
+      await firebaseVehicleService.delete(vehicleIdNum);
+      console.log('✅ Vehicle deleted successfully from Firebase:', vehicleIdNum);
       
       // Verify the vehicle was deleted by querying it
-      const verifyVehicle = await Vehicle.findOne({ id });
+      const verifyVehicle = await firebaseVehicleService.findById(vehicleIdNum);
       if (verifyVehicle) {
         console.error('❌ Vehicle deletion verification failed - vehicle still exists in database');
       } else {
@@ -3091,7 +2501,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
 // Admin handler - preserves exact functionality from admin.ts
 async function handleAdmin(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   const { action } = req.query;
-  const { mongoAvailable, mongoFailureReason } = options;
 
   // SECURITY: Require authentication for all admin endpoints
   const authHeader = req.headers.authorization;
@@ -3132,42 +2541,28 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
 
   if (action === 'health') {
     try {
-      const hasMongoUri = !!(process.env.MONGODB_URL || process.env.MONGODB_URI);
-      
-      if (!hasMongoUri) {
+      if (!USE_FIREBASE) {
         return res.status(200).json({
           success: false,
-          message: 'MONGODB_URL (or MONGODB_URI) environment variable is not configured',
-          details: 'Please add MONGODB_URL in Vercel dashboard under Environment Variables (MONGODB_URI also works)',
+          message: 'Firebase environment variables are not configured',
+          details: 'Please add Firebase environment variables in Vercel dashboard under Environment Variables',
           checks: [
-            { name: 'MongoDB URL/URI Configuration', status: 'FAIL', details: 'MONGODB_URL (or MONGODB_URI) environment variable not found' }
+            { name: 'Firebase Configuration', status: 'FAIL', details: 'Firebase environment variables not found' }
           ]
         });
       }
 
-      if (!mongoAvailable) {
-        return res.status(200).json({
-          success: false,
-          message: mongoFailureReason || 'Database connection unavailable.',
-          details: mongoFailureReason || 'The API is running in fallback mode without MongoDB.',
-          checks: [
-            { name: 'MongoDB Availability', status: 'FAIL', details: mongoFailureReason || 'Connection failed' }
-          ]
-        });
-      }
-
-      await ensureMongoConnection();
-      const db = Vehicle.db?.db;
-      const collections = db ? await db.listCollections().toArray() : [];
+      // Test Firebase connection
+      await read(DB_PATHS.USERS, 'test');
       
       return res.status(200).json({
         success: true,
-        message: 'Database connected successfully',
-        collections: collections.map(c => c.name),
-          checks: [
-            { name: 'MongoDB URL/URI Configuration', status: 'PASS', details: 'MONGODB_URL (or MONGODB_URI) is set' },
-            { name: 'Database Connection', status: 'PASS', details: 'Successfully connected to MongoDB' }
-          ]
+        message: 'Firebase connected successfully',
+        collections: Object.values(DB_PATHS),
+        checks: [
+          { name: 'Firebase Configuration', status: 'PASS', details: 'Firebase environment variables are set' },
+          { name: 'Database Connection', status: 'PASS', details: 'Successfully connected to Firebase Realtime Database' }
+        ]
       });
     } catch (error) {
       return res.status(500).json({
@@ -3187,10 +2582,10 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
       });
     }
     
-    if (!mongoAvailable) {
+    if (!USE_FIREBASE) {
       return res.status(503).json({
         success: false,
-        message: mongoFailureReason || 'Database unavailable. Cannot seed data.',
+        message: 'Firebase is not configured. Cannot seed data.',
         fallback: true
       });
     }
@@ -3218,22 +2613,31 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, options: Han
 // Health handler - preserves exact functionality from db-health.ts
 async function handleHealth(_req: VercelRequest, res: VercelResponse) {
   try {
-    await ensureMongoConnection();
-    const state = getConnectionState();
+    if (!USE_FIREBASE) {
+      return res.status(500).json({
+        status: 'error',
+        message: 'Firebase is not configured. Please set Firebase environment variables.',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Test Firebase connection
+    await read(DB_PATHS.USERS, 'test');
+    
     return res.status(200).json({
       status: 'ok',
-      message: 'Database connected successfully.',
-      connectionState: state,
+      message: 'Firebase connected successfully.',
+      database: 'Firebase Realtime Database',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    let errorMessage = 'Database connection failed';
+    let errorMessage = 'Firebase connection failed';
     
     if (error instanceof Error) {
-      if (error.message.includes('MONGODB_URI') || error.message.includes('MONGODB_URL')) {
-        errorMessage += ' - Check MONGODB_URL (or MONGODB_URI) environment variable in Vercel dashboard';
+      if (error.message.includes('Firebase') || error.message.includes('firebase')) {
+        errorMessage += ' - Check Firebase environment variables in Vercel dashboard';
       } else if (error.message.includes('connect') || error.message.includes('timeout')) {
-        errorMessage += ' - Check database server status and network connectivity';
+        errorMessage += ' - Check Firebase project status and network connectivity';
       }
     }
     
@@ -3260,17 +2664,15 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, options: Hand
     });
   }
 
-  if (!options.mongoAvailable) {
+  if (!USE_FIREBASE) {
     return res.status(503).json({
       success: false,
-      message: options.mongoFailureReason || 'Database unavailable. Cannot seed data.',
+      message: 'Firebase is not configured. Cannot seed data.',
       fallback: true
     });
   }
 
   try {
-    await ensureMongoConnection();
-    
     const users = await seedUsers();
     const vehicles = await seedVehicles();
     
@@ -3315,24 +2717,16 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
 
   try {
     if (req.method === 'GET') {
-      // Always return default data if mongo is not available
-      if (!options.mongoAvailable) {
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json(defaultData);
-      }
-
       try {
-        await ensureMongoConnection();
-        logInfo('📡 Connected to database for vehicle-data fetch operation');
-        
-        let vehicleDataDoc = await VehicleDataModel.findOne();
-        if (!vehicleDataDoc) {
-          // Create default vehicle data if none exists
-          vehicleDataDoc = new VehicleDataModel({ data: defaultData });
-          await vehicleDataDoc.save();
+        // Try to get vehicle data from Firebase
+        const vehicleData = await read<{ data: typeof defaultData }>(DB_PATHS.VEHICLE_DATA, 'default');
+        if (vehicleData && vehicleData.data) {
+          return res.status(200).json(vehicleData.data);
         }
         
-        return res.status(200).json(vehicleDataDoc.data);
+        // If no data exists, create default and return it
+        await create(DB_PATHS.VEHICLE_DATA, { data: defaultData }, 'default');
+        return res.status(200).json(defaultData);
       } catch (dbError) {
         logWarn('⚠️ Database connection failed for vehicle-data, returning default data:', dbError);
         // Return default data as fallback - NEVER return 500
@@ -3342,39 +2736,17 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, option
     }
 
     if (req.method === 'POST') {
-      // Always return success response, even if mongo is not available
-      if (!options.mongoAvailable) {
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json({
-          success: true,
-          data: req.body,
-          message: 'Vehicle data processed (database unavailable, using fallback)',
-          fallback: true,
-          timestamp: new Date().toISOString()
-        });
-      }
-
       try {
-        await ensureMongoConnection();
-        logInfo('📡 Connected to database for vehicle-data save operation');
+        // Save vehicle data to Firebase
+        await updateData(DB_PATHS.VEHICLE_DATA, 'default', {
+          data: req.body,
+          updatedAt: new Date().toISOString()
+        });
         
-        const vehicleData = await VehicleDataModel.findOneAndUpdate(
-          {},
-          { 
-            data: req.body,
-            updatedAt: new Date()
-          },
-          { 
-            upsert: true, 
-            new: true,
-            setDefaultsOnInsert: true
-          }
-        );
-        
-        console.log('✅ Vehicle data saved successfully to database');
+        console.log('✅ Vehicle data saved successfully to Firebase');
         return res.status(200).json({ 
           success: true, 
-          data: vehicleData.data,
+          data: req.body,
           message: 'Vehicle data updated successfully',
           timestamp: new Date().toISOString()
         });
@@ -3512,17 +2884,23 @@ function getPriceRange(vehicles: VehicleType[]): { min: number; max: number } {
 
 // New Cars handler - CRUD for new car catalog
 async function handleNewCars(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
-  if (!options.mongoAvailable) {
+  if (!USE_FIREBASE) {
     return res.status(503).json({
       success: false,
-      reason: options.mongoFailureReason || 'Database unavailable. New car catalog requires MongoDB.',
+      reason: 'Firebase is not configured. Please set Firebase environment variables.',
       fallback: true
     });
   }
 
   if (req.method === 'GET') {
-    const items = await NewCar.find({}).sort({ updatedAt: -1 });
-    return res.status(200).json(items);
+    const items = await readAll<Record<string, unknown>>(DB_PATHS.NEW_CARS);
+    const itemsArray = Object.entries(items).map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => {
+        const aTime = a.updatedAt ? new Date(a.updatedAt as string).getTime() : 0;
+        const bTime = b.updatedAt ? new Date(b.updatedAt as string).getTime() : 0;
+        return bTime - aTime;
+      });
+    return res.status(200).json(itemsArray);
   }
 
   if (req.method === 'POST') {
@@ -3530,34 +2908,34 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, options: H
     if (!payload || !payload.brand_name || !payload.model_name || !payload.model_year) {
       return res.status(400).json({ success: false, reason: 'Missing required fields' });
     }
-    const doc = new NewCar({ ...payload });
-    await doc.save();
-    return res.status(201).json({ success: true, data: doc });
+    const id = `${payload.brand_name}_${payload.model_name}_${payload.model_year}_${Date.now()}`;
+    const doc = { ...payload, updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
+    await create(DB_PATHS.NEW_CARS, doc, id);
+    return res.status(201).json({ success: true, data: { id, ...doc } });
   }
 
   if (req.method === 'PUT') {
     const { id, _id, ...updateData } = req.body || {};
     const docId = _id || id;
     if (!docId) {
-      return res.status(400).json({ success: false, reason: 'Document id (_id) is required' });
+      return res.status(400).json({ success: false, reason: 'Document id is required' });
     }
-    const updated = await NewCar.findByIdAndUpdate(docId, updateData, { new: true });
-    if (!updated) {
+    const existing = await read<Record<string, unknown>>(DB_PATHS.NEW_CARS, String(docId));
+    if (!existing) {
       return res.status(404).json({ success: false, reason: 'New car document not found' });
     }
-    return res.status(200).json({ success: true, data: updated });
+    await updateData(DB_PATHS.NEW_CARS, String(docId), { ...updateData, updatedAt: new Date().toISOString() });
+    const updated = await read<Record<string, unknown>>(DB_PATHS.NEW_CARS, String(docId));
+    return res.status(200).json({ success: true, data: { id: docId, ...updated } });
   }
 
   if (req.method === 'DELETE') {
     const { id, _id } = req.body || {};
     const docId = _id || id;
     if (!docId) {
-      return res.status(400).json({ success: false, reason: 'Document id (_id) is required' });
+      return res.status(400).json({ success: false, reason: 'Document id is required' });
     }
-    const deleted = await NewCar.findByIdAndDelete(docId);
-    if (!deleted) {
-      return res.status(404).json({ success: false, reason: 'New car document not found' });
-    }
+    await deleteData(DB_PATHS.NEW_CARS, String(docId));
     return res.status(200).json({ success: true });
   }
 
@@ -3569,7 +2947,7 @@ function generateRandomPassword(): string {
   return randomBytes(32).toString('hex');
 }
 
-async function seedUsers(): Promise<UserDocument[]> {
+async function seedUsers(): Promise<UserType[]> {
   // Prevent seed function from running in production
   if (process.env.NODE_ENV === 'production') {
     throw new Error('Seed function cannot run in production environment');
@@ -3605,28 +2983,28 @@ async function seedUsers(): Promise<UserDocument[]> {
   
   const sampleUsers = [
     {
-      id: 1,
+      id: '1',
       email: 'admin@test.com',
       password: adminPassword,
       name: 'Admin User',
       mobile: '9876543210',
-      role: 'admin',
-      status: 'active',
+      role: 'admin' as const,
+      status: 'active' as const,
       isVerified: true,
-      subscriptionPlan: 'premium',
+      subscriptionPlan: 'premium' as const,
       featuredCredits: 100,
       createdAt: new Date().toISOString()
     },
     {
-      id: 2,
+      id: '2',
       email: 'seller@test.com',
       password: sellerPassword,
       name: 'Prestige Motors',
       mobile: '+91-98765-43210',
-      role: 'seller',
-      status: 'active',
+      role: 'seller' as const,
+      status: 'active' as const,
       isVerified: true,
-      subscriptionPlan: 'premium',
+      subscriptionPlan: 'premium' as const,
       featuredCredits: 5,
       usedCertifications: 1,
       dealershipName: 'Prestige Motors',
@@ -3638,23 +3016,35 @@ async function seedUsers(): Promise<UserDocument[]> {
       createdAt: new Date().toISOString()
     },
     {
-      id: 3,
+      id: '3',
       email: 'customer@test.com',
       password: customerPassword,
       name: 'Test Customer',
       mobile: '9876543212',
-      role: 'customer',
-      status: 'active',
+      role: 'customer' as const,
+      status: 'active' as const,
       isVerified: false,
-      subscriptionPlan: 'free',
+      subscriptionPlan: 'free' as const,
       featuredCredits: 0,
       avatarUrl: 'https://i.pravatar.cc/150?u=customer@test.com',
       createdAt: new Date().toISOString()
     }
   ];
 
-  await User.deleteMany({});
-  const users = await User.insertMany(sampleUsers);
+  // Delete existing users and create new ones in Firebase
+  const existingUsers = await firebaseUserService.findAll();
+  for (const user of existingUsers) {
+    if (['admin@test.com', 'seller@test.com', 'customer@test.com'].includes(user.email.toLowerCase())) {
+      await firebaseUserService.delete(user.email);
+    }
+  }
+  
+  const users: UserType[] = [];
+  for (const userData of sampleUsers) {
+    const user = await firebaseUserService.create(userData);
+    users.push(user);
+  }
+  
   return users;
 }
 
@@ -3669,9 +3059,9 @@ async function seedVehicles(): Promise<VehicleType[]> {
       year: 2022,
       price: 650000,
       mileage: 15000,
-      category: 'FOUR_WHEELER',
+      category: 'FOUR_WHEELER' as const,
       sellerEmail: 'seller@test.com',
-      status: 'published',
+      status: 'published' as const,
       isFeatured: false,
       createdAt: new Date().toISOString()
     },
@@ -3684,16 +3074,28 @@ async function seedVehicles(): Promise<VehicleType[]> {
       year: 2021,
       price: 850000,
       mileage: 25000,
-      category: 'FOUR_WHEELER',
+      category: 'FOUR_WHEELER' as const,
       sellerEmail: 'seller@test.com',
-      status: 'published',
+      status: 'published' as const,
       isFeatured: true,
       createdAt: new Date().toISOString()
     }
   ];
 
-  await Vehicle.deleteMany({});
-  const vehicles = await Vehicle.insertMany(sampleVehicles);
+  // Delete existing test vehicles and create new ones in Firebase
+  const existingVehicles = await firebaseVehicleService.findAll();
+  for (const vehicle of existingVehicles) {
+    if (vehicle.sellerEmail?.toLowerCase() === 'seller@test.com') {
+      await firebaseVehicleService.delete(vehicle.id);
+    }
+  }
+  
+  const vehicles: VehicleType[] = [];
+  for (const vehicleData of sampleVehicles) {
+    const vehicle = await firebaseVehicleService.create(vehicleData);
+    vehicles.push(vehicle);
+  }
+  
   return vehicles;
 }
 
@@ -3717,26 +3119,40 @@ async function handleSystem(req: VercelRequest, res: VercelResponse, _options: H
 // Test Connection Handler
 async function handleTestConnection(_req: VercelRequest, res: VercelResponse) {
   try {
-    console.log('🔍 Testing MongoDB connection and collection...');
+    console.log('🔍 Testing Firebase connection...');
     
-    await ensureMongoConnection();
+    if (!USE_FIREBASE) {
+      return res.status(503).json({
+        success: false,
+        message: 'Firebase is not configured',
+        timestamp: new Date().toISOString(),
+        details: {
+          connection: 'failed',
+          database: 'unreachable',
+          reason: 'Firebase environment variables not set'
+        }
+      });
+    }
+    
+    // Test Firebase connection by reading a test path
+    await read(DB_PATHS.USERS, 'test');
     
     return res.status(200).json({
       success: true,
-      message: 'MongoDB connection test successful',
+      message: 'Firebase connection test successful',
       timestamp: new Date().toISOString(),
       details: {
         connection: 'active',
-        database: 'reride',
+        database: 'Firebase Realtime Database',
         collections: 'accessible'
       }
     });
   } catch (error) {
-    console.error('❌ MongoDB connection test failed:', error);
+    console.error('❌ Firebase connection test failed:', error);
     
     return res.status(500).json({
       success: false,
-      message: 'MongoDB connection test failed',
+      message: 'Firebase connection test failed',
       error: error instanceof Error ? error.message : 'Unknown error',
       timestamp: new Date().toISOString(),
       details: {
@@ -3895,7 +3311,7 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
 
 // Content handler - consolidates content.ts
 async function handleContent(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
-  if (!options.mongoAvailable) {
+  if (!USE_FIREBASE) {
     // For GET requests, return 200 with empty array instead of 503
     if (req.method === 'GET') {
       const { type } = req.query;
@@ -3906,29 +3322,18 @@ async function handleContent(req: VercelRequest, res: VercelResponse, options: H
     }
     return res.status(503).json({
       success: false,
-      reason: options.mongoFailureReason || 'Database is currently unavailable'
+      reason: 'Firebase is not configured. Please set Firebase environment variables.'
     });
   }
 
   try {
-    await ensureMongoConnection();
-    const mongoose = await connectToDatabase();
-    const db = mongoose.connection.db;
-    
-    if (!db) {
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Database connection not available' 
-      });
-    }
-    
     const { type } = req.query;
     
     switch (type) {
       case 'faqs':
-        return await handleFAQs(req, res, db);
+        return await handleFAQs(req, res);
       case 'support-tickets':
-        return await handleSupportTickets(req, res, db);
+        return await handleSupportTickets(req, res);
       default:
         return res.status(400).json({ 
           success: false, 
@@ -3960,59 +3365,40 @@ async function handleContent(req: VercelRequest, res: VercelResponse, options: H
 }
 
 // FAQs Handler
-async function handleFAQs(req: VercelRequest, res: VercelResponse, db: any) {
-  const collection = db.collection('faqs');
+async function handleFAQs(req: VercelRequest, res: VercelResponse) {
+  const faqsPath = `${DB_PATHS.VEHICLE_DATA}/faqs`;
 
   switch (req.method) {
     case 'GET':
-      return await handleGetFAQs(req, res, collection);
+      return await handleGetFAQs(req, res, faqsPath);
     case 'POST':
-      return await handleCreateFAQ(req, res, collection);
+      return await handleCreateFAQ(req, res, faqsPath);
     case 'PUT':
-      return await handleUpdateFAQ(req, res, collection);
+      return await handleUpdateFAQ(req, res, faqsPath);
     case 'DELETE':
-      return await handleDeleteFAQ(req, res, collection);
+      return await handleDeleteFAQ(req, res, faqsPath);
     default:
       return res.status(405).json({ error: 'Method not allowed' });
   }
 }
 
-async function handleGetFAQs(req: VercelRequest, res: VercelResponse, collection: any) {
+async function handleGetFAQs(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
     const { category } = req.query;
     
-    interface FAQQuery {
-      category?: string;
-    }
-    const query: FAQQuery = {};
+    const allFaqs = await readAll<Record<string, unknown>>(faqsPath);
+    let faqs = Object.entries(allFaqs).map(([id, data]) => ({ id, ...data }));
     
     if (category && category !== 'all' && typeof category === 'string') {
-      // Sanitize category to prevent NoSQL injection
-      query.category = await sanitizeString(category);
+      // Sanitize category
+      const sanitizedCategory = await sanitizeString(category);
+      faqs = faqs.filter(faq => (faq.category as string) === sanitizedCategory);
     }
-
-    const faqs = await collection.find(query).toArray();
-    
-    // Transform MongoDB documents to include id field
-    interface FAQDocument {
-      _id?: { toString(): string };
-      id?: number;
-      question?: string;
-      answer?: string;
-      category?: string;
-    }
-    const transformedFaqs = faqs.map((faq: FAQDocument, index: number) => ({
-      id: faq.id || (faq._id ? parseInt(faq._id.toString().slice(-8), 16) : index + 1),
-      question: faq.question || '',
-      answer: faq.answer || '',
-      category: faq.category || 'General',
-      _id: faq._id // Keep _id for MongoDB operations
-    }));
     
     return res.status(200).json({
       success: true,
-      faqs: transformedFaqs,
-      count: transformedFaqs.length
+      faqs,
+      count: faqs.length
     });
   } catch (error) {
     console.error('Error fetching FAQs:', error);
@@ -4026,7 +3412,7 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, collection
   }
 }
 
-async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, collection: any) {
+async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
     const faqData = req.body;
     
@@ -4037,24 +3423,20 @@ async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, collecti
       });
     }
 
-    const result = await collection.insertOne({
+    const id = `faq_${Date.now()}`;
+    const faq = {
       ...faqData,
-      createdAt: new Date().toISOString()
-    });
-
-    // Transform to include id field
-    const createdFaq = {
-      id: faqData.id || parseInt(result.insertedId.toString().slice(-8), 16),
-      question: faqData.question,
-      answer: faqData.answer,
-      category: faqData.category,
-      _id: result.insertedId
+      id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
+
+    await create(faqsPath, faq, id);
 
     return res.status(201).json({
       success: true,
       message: 'FAQ created successfully',
-      faq: createdFaq
+      faq
     });
   } catch (error) {
     console.error('Error creating FAQ:', error);
@@ -4065,7 +3447,7 @@ async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, collecti
   }
 }
 
-async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, collection: any) {
+async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
     const { id } = req.query;
     const updateData = req.body;
@@ -4077,33 +3459,22 @@ async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, collecti
       });
     }
 
-    // Convert string ID to ObjectId for MongoDB query
-    let objectId;
-    try {
-      objectId = new ObjectId(id as string);
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid FAQ ID format'
-      });
-    }
-
-    const result = await collection.updateOne(
-      { _id: objectId },
-      { $set: { ...updateData, updatedAt: new Date().toISOString() } }
-    );
-
-    if (result.matchedCount === 0) {
+    const existing = await read<Record<string, unknown>>(faqsPath, String(id));
+    if (!existing) {
       return res.status(404).json({
         success: false,
         error: 'FAQ not found'
       });
     }
 
+    await updateData(faqsPath, String(id), {
+      ...updateData,
+      updatedAt: new Date().toISOString()
+    });
+
     return res.status(200).json({
       success: true,
-      message: 'FAQ updated successfully',
-      modifiedCount: result.modifiedCount
+      message: 'FAQ updated successfully'
     });
   } catch (error) {
     console.error('Error updating FAQ:', error);
@@ -4114,7 +3485,7 @@ async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, collecti
   }
 }
 
-async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, collection: any) {
+async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
     const { id } = req.query;
 
@@ -4125,30 +3496,11 @@ async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, collecti
       });
     }
 
-    // Convert string ID to ObjectId for MongoDB query
-    let objectId;
-    try {
-      objectId = new ObjectId(id as string);
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid FAQ ID format'
-      });
-    }
-
-    const result = await collection.deleteOne({ _id: objectId });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'FAQ not found'
-      });
-    }
+    await deleteData(faqsPath, String(id));
 
     return res.status(200).json({
       success: true,
-      message: 'FAQ deleted successfully',
-      deletedCount: result.deletedCount
+      message: 'FAQ deleted successfully'
     });
   } catch (error) {
     console.error('Error deleting FAQ:', error);
@@ -4160,47 +3512,50 @@ async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, collecti
 }
 
 // Support Tickets Handler
-async function handleSupportTickets(req: VercelRequest, res: VercelResponse, db: any) {
-  const collection = db.collection('supportTickets');
+async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
+  const ticketsPath = `${DB_PATHS.VEHICLE_DATA}/supportTickets`;
 
   switch (req.method) {
     case 'GET':
-      return await handleGetSupportTickets(req, res, collection);
+      return await handleGetSupportTickets(req, res, ticketsPath);
     case 'POST':
-      return await handleCreateSupportTicket(req, res, collection);
+      return await handleCreateSupportTicket(req, res, ticketsPath);
     case 'PUT':
-      return await handleUpdateSupportTicket(req, res, collection);
+      return await handleUpdateSupportTicket(req, res, ticketsPath);
     case 'DELETE':
-      return await handleDeleteSupportTicket(req, res, collection);
+      return await handleDeleteSupportTicket(req, res, ticketsPath);
     default:
       return res.status(405).json({ error: 'Method not allowed' });
   }
 }
 
-async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, collection: any) {
+async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, ticketsPath: string) {
   try {
     const { userEmail, status } = req.query;
     
-    interface TicketQuery {
-      userEmail?: string;
-      status?: string;
-    }
-    const query: TicketQuery = {};
+    const allTickets = await readAll<Record<string, unknown>>(ticketsPath);
+    let tickets = Object.entries(allTickets).map(([id, data]) => ({ id, ...data }));
     
     if (userEmail && typeof userEmail === 'string') {
-      // Sanitize email to prevent NoSQL injection
-      query.userEmail = await sanitizeString(userEmail);
+      // Sanitize email
+      const sanitizedEmail = await sanitizeString(userEmail);
+      tickets = tickets.filter(ticket => (ticket.userEmail as string)?.toLowerCase().trim() === sanitizedEmail.toLowerCase().trim());
     }
     
     if (status && typeof status === 'string') {
       // Validate status is one of allowed values
       const allowedStatuses = ['Open', 'In Progress', 'Resolved', 'Closed'];
       if (allowedStatuses.includes(status)) {
-        query.status = status;
+        tickets = tickets.filter(ticket => ticket.status === status);
       }
     }
 
-    const tickets = await collection.find(query).sort({ createdAt: -1 }).toArray();
+    // Sort by createdAt descending
+    tickets = tickets.sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
+      return bTime - aTime;
+    });
     
     return res.status(200).json({
       success: true,
@@ -4216,7 +3571,7 @@ async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, 
   }
 }
 
-async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse, collection: any) {
+async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse, ticketsPath: string) {
   try {
     const ticketData = req.body;
     
@@ -4227,18 +3582,22 @@ async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
-    const result = await collection.insertOne({
+    const id = `ticket_${Date.now()}`;
+    const ticket = {
       ...ticketData,
+      id,
       status: 'Open',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       replies: []
-    });
+    };
+
+    await create(ticketsPath, ticket, id);
 
     return res.status(201).json({
       success: true,
       message: 'Support ticket created successfully',
-      ticket: { ...ticketData, _id: result.insertedId }
+      ticket
     });
   } catch (error) {
     console.error('Error creating support ticket:', error);
@@ -4249,7 +3608,7 @@ async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse
   }
 }
 
-async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse, collection: any) {
+async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse, ticketsPath: string) {
   try {
     const { id } = req.query;
     const updateData = req.body;
@@ -4261,33 +3620,22 @@ async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
-    // Convert string ID to ObjectId for MongoDB query
-    let objectId;
-    try {
-      objectId = new ObjectId(id as string);
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid support ticket ID format'
-      });
-    }
-
-    const result = await collection.updateOne(
-      { _id: objectId },
-      { $set: { ...updateData, updatedAt: new Date().toISOString() } }
-    );
-
-    if (result.matchedCount === 0) {
+    const existing = await read<Record<string, unknown>>(ticketsPath, String(id));
+    if (!existing) {
       return res.status(404).json({
         success: false,
         error: 'Support ticket not found'
       });
     }
 
+    await updateData(ticketsPath, String(id), {
+      ...updateData,
+      updatedAt: new Date().toISOString()
+    });
+
     return res.status(200).json({
       success: true,
-      message: 'Support ticket updated successfully',
-      modifiedCount: result.modifiedCount
+      message: 'Support ticket updated successfully'
     });
   } catch (error) {
     console.error('Error updating support ticket:', error);
@@ -4298,7 +3646,7 @@ async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse
   }
 }
 
-async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse, collection: any) {
+async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse, ticketsPath: string) {
   try {
     const { id } = req.query;
 
@@ -4309,30 +3657,11 @@ async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
-    // Convert string ID to ObjectId for MongoDB query
-    let objectId;
-    try {
-      objectId = new ObjectId(id as string);
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid support ticket ID format'
-      });
-    }
-
-    const result = await collection.deleteOne({ _id: objectId });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Support ticket not found'
-      });
-    }
+    await deleteData(ticketsPath, String(id));
 
     return res.status(200).json({
       success: true,
-      message: 'Support ticket deleted successfully',
-      deletedCount: result.deletedCount
+      message: 'Support ticket deleted successfully'
     });
   } catch (error) {
     console.error('Error deleting support ticket:', error);
@@ -4345,35 +3674,18 @@ async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse
 
 // Sell Car handler - consolidates sell-car/index.ts
 async function handleSellCar(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
-  if (!options.mongoAvailable) {
+  if (!USE_FIREBASE) {
     return res.status(503).json({
       success: false,
-      reason: options.mongoFailureReason || 'Database is currently unavailable'
+      reason: 'Firebase is not configured. Please set Firebase environment variables.'
     });
   }
 
   const { method } = req;
 
+  const submissionsPath = `${DB_PATHS.VEHICLE_DATA}/sellCarSubmissions`;
+
   try {
-    await connectToDatabase();
-    const db = mongoose.connection.db;
-    
-    if (!db) {
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Database connection not available' 
-      });
-    }
-    
-    // Verify we're connected to the correct database (reride)
-    const dbName = db.databaseName;
-    if (dbName.toLowerCase() !== 'reride') {
-      console.warn(`⚠️ handleSellCar: Connected to database "${dbName}" but expected "reride"`);
-    } else {
-      console.log(`✅ handleSellCar: Connected to correct database: ${dbName}`);
-    }
-    
-    const collection = db.collection('sellCarSubmissions');
 
     switch (method) {
       case 'POST':
@@ -4402,9 +3714,11 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
           });
         }
 
-        const existingSubmission = await collection.findOne({
-          registration: submissionData.registration
-        });
+        // Check for existing submission
+        const allSubmissions = await readAll<Record<string, unknown>>(submissionsPath);
+        const existingSubmission = Object.values(allSubmissions).find(
+          (sub: any) => sub.registration === submissionData.registration
+        );
 
         if (existingSubmission) {
           return res.status(409).json({ 
@@ -4412,13 +3726,14 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
           });
         }
 
-        // Sanitize submission data to prevent NoSQL injection
+        // Sanitize submission data
         const sanitizedSubmissionData = await sanitizeObject(submissionData);
-        const result = await collection.insertOne(sanitizedSubmissionData);
+        const id = `submission_${Date.now()}`;
+        await create(submissionsPath, sanitizedSubmissionData, id);
         
         res.status(201).json({
           success: true,
-          id: result.insertedId.toString(),
+          id,
           message: 'Car submission received successfully'
         });
         break;
@@ -4427,45 +3742,44 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
         const { page = 1, limit = 10, status: statusFilter, search } = req.query;
         const pageNum = parseInt(String(page), 10) || 1;
         const limitNum = parseInt(String(limit), 10) || 10;
-        const skip = Math.max(0, (pageNum - 1) * limitNum);
-
-        interface SubmissionFilter {
-          status?: string;
-          $or?: Array<{ [key: string]: { $regex: string; $options: string } }>;
-        }
-        const filter: SubmissionFilter = {};
         
+        let allSubmissions = await readAll<Record<string, unknown>>(submissionsPath);
+        let submissions = Object.entries(allSubmissions).map(([id, data]) => ({ id, ...data }));
+        
+        // Filter by status
         if (statusFilter && typeof statusFilter === 'string') {
-          // Validate status is one of allowed values
           const allowedStatuses = ['pending', 'approved', 'rejected', 'processing'];
           if (allowedStatuses.includes(statusFilter.toLowerCase())) {
-            filter.status = statusFilter;
+            submissions = submissions.filter((sub: any) => sub.status === statusFilter);
           }
         }
         
+        // Filter by search
         if (search && typeof search === 'string') {
-          // Sanitize search term to prevent NoSQL injection
           const sanitizedSearch = await sanitizeString(search);
-          filter.$or = [
-            { registration: { $regex: sanitizedSearch, $options: 'i' } },
-            { make: { $regex: sanitizedSearch, $options: 'i' } },
-            { model: { $regex: sanitizedSearch, $options: 'i' } },
-            { customerContact: { $regex: sanitizedSearch, $options: 'i' } }
-          ];
+          const searchLower = sanitizedSearch.toLowerCase();
+          submissions = submissions.filter((sub: any) => 
+            (sub.registration as string)?.toLowerCase().includes(searchLower) ||
+            (sub.make as string)?.toLowerCase().includes(searchLower) ||
+            (sub.model as string)?.toLowerCase().includes(searchLower) ||
+            (sub.customerContact as string)?.toLowerCase().includes(searchLower)
+          );
         }
 
-        const submissions = await collection
-          .find(filter)
-          .sort({ submittedAt: -1 })
-          .skip(skip)
-          .limit(limitNum)
-          .toArray();
+        // Sort by submittedAt descending
+        submissions = submissions.sort((a, b) => {
+          const aTime = a.submittedAt ? new Date(a.submittedAt as string).getTime() : 0;
+          const bTime = b.submittedAt ? new Date(b.submittedAt as string).getTime() : 0;
+          return bTime - aTime;
+        });
 
-        const total = await collection.countDocuments(filter);
+        const total = submissions.length;
+        const skip = Math.max(0, (pageNum - 1) * limitNum);
+        const paginatedSubmissions = submissions.slice(skip, skip + limitNum);
 
         res.status(200).json({
           success: true,
-          data: submissions,
+          data: paginatedSubmissions,
           pagination: {
             page: pageNum,
             limit: limitNum,
@@ -4482,11 +3796,9 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
           return res.status(400).json({ error: 'Submission ID is required' });
         }
 
-        let objectId;
-        try {
-          objectId = new ObjectId(id);
-        } catch (error) {
-          return res.status(400).json({ error: 'Invalid submission ID format' });
+        const existing = await read<Record<string, unknown>>(submissionsPath, String(id));
+        if (!existing) {
+          return res.status(404).json({ error: 'Submission not found' });
         }
 
         interface UpdateData {
@@ -4513,14 +3825,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
           updateData.estimatedPrice = estimatedPrice;
         }
 
-        const updateResult = await collection.updateOne(
-          { _id: objectId },
-          { $set: updateData }
-        );
-
-        if (updateResult.matchedCount === 0) {
-          return res.status(404).json({ error: 'Submission not found' });
-        }
+        await updateData(submissionsPath, String(id), updateData);
 
         res.status(200).json({
           success: true,
@@ -4535,18 +3840,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
           return res.status(400).json({ error: 'Submission ID is required' });
         }
 
-        let deleteObjectId;
-        try {
-          deleteObjectId = new ObjectId(deleteId as string);
-        } catch (error) {
-          return res.status(400).json({ error: 'Invalid submission ID format' });
-        }
-
-        const deleteResult = await collection.deleteOne({ _id: deleteObjectId });
-        
-        if (deleteResult.deletedCount === 0) {
-          return res.status(404).json({ error: 'Submission not found' });
-        }
+        await deleteData(submissionsPath, String(deleteId));
 
         res.status(200).json({
           success: true,
@@ -4607,14 +3901,12 @@ async function handleBusiness(req: VercelRequest, res: VercelResponse, options: 
 // Payments Handler
 async function handlePayments(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   try {
-    if (!options.mongoAvailable) {
+    if (!USE_FIREBASE) {
       return res.status(503).json({
         success: false,
-        reason: options.mongoFailureReason || 'Database is currently unavailable'
+        reason: 'Firebase is not configured. Please set Firebase environment variables.'
       });
     }
-
-    await ensureMongoConnection();
 
     const { action } = req.query;
 
@@ -4817,10 +4109,10 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, options: 
 // Conversations Handler
 async function handleConversations(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   try {
-    if (!options.mongoAvailable) {
+    if (!USE_FIREBASE) {
       return res.status(503).json({
         success: false,
-        reason: options.mongoFailureReason || 'Database is currently unavailable'
+        reason: 'Firebase is not configured. Please set Firebase environment variables.'
       });
     }
 
@@ -4830,19 +4122,29 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, opti
       
       if (conversationId) {
         // Get single conversation
-        const conversation = await Conversation.findOne({ id: conversationId }).lean();
+        const conversation = await firebaseConversationService.findById(String(conversationId));
         if (!conversation) {
           return res.status(404).json({ success: false, reason: 'Conversation not found' });
         }
         return res.status(200).json({ success: true, data: conversation });
       }
       
-      // Build query
-      const query: any = {};
-      if (customerId) query.customerId = customerId;
-      if (sellerId) query.sellerId = sellerId;
+      let conversations;
+      if (customerId) {
+        conversations = await firebaseConversationService.findByCustomerId(String(customerId));
+      } else if (sellerId) {
+        conversations = await firebaseConversationService.findBySellerId(String(sellerId));
+      } else {
+        conversations = await firebaseConversationService.findAll();
+      }
       
-      const conversations = await Conversation.find(query).sort({ lastMessageAt: -1 }).lean();
+      // Sort by lastMessageAt descending
+      conversations = conversations.sort((a, b) => {
+        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return bTime - aTime;
+      });
+      
       return res.status(200).json({ success: true, data: conversations });
     }
 
@@ -4854,14 +4156,16 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, opti
         return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
       }
 
-      // Use upsert to create or update
-      const conversation = await Conversation.findOneAndUpdate(
-        { id: conversationData.id },
-        conversationData,
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      ).lean();
-
-      return res.status(200).json({ success: true, data: conversation });
+      // Check if conversation exists
+      const existing = await firebaseConversationService.findById(conversationData.id);
+      if (existing) {
+        await firebaseConversationService.update(conversationData.id, conversationData);
+        const updated = await firebaseConversationService.findById(conversationData.id);
+        return res.status(200).json({ success: true, data: updated });
+      } else {
+        const conversation = await firebaseConversationService.create(conversationData);
+        return res.status(200).json({ success: true, data: conversation });
+      }
     }
 
     // PUT - Update conversation (add message)
@@ -4872,14 +4176,8 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, opti
         return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
       }
 
-      const conversation = await Conversation.findOneAndUpdate(
-        { id: conversationId },
-        { 
-          $push: { messages: message },
-          $set: { lastMessageAt: message.timestamp }
-        },
-        { new: true }
-      ).lean();
+      await firebaseConversationService.addMessage(String(conversationId), message);
+      const conversation = await firebaseConversationService.findById(String(conversationId));
 
       if (!conversation) {
         return res.status(404).json({ success: false, reason: 'Conversation not found' });
@@ -4896,7 +4194,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, opti
         return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
       }
 
-      await Conversation.deleteOne({ id: conversationId });
+      await firebaseConversationService.delete(String(conversationId));
       return res.status(200).json({ success: true, message: 'Conversation deleted successfully' });
     }
 
@@ -4914,10 +4212,10 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, opti
 // Notifications Handler
 async function handleNotifications(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   try {
-    if (!options.mongoAvailable) {
+    if (!USE_FIREBASE) {
       return res.status(503).json({
         success: false,
-        reason: options.mongoFailureReason || 'Database is currently unavailable'
+        reason: 'Firebase is not configured. Please set Firebase environment variables.'
       });
     }
 
@@ -4927,25 +4225,36 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
       
       if (notificationId) {
         // Get single notification
-        const notification = await Notification.findOne({ id: Number(notificationId) }).lean();
+        const notification = await read<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
         if (!notification) {
           return res.status(404).json({ success: false, reason: 'Notification not found' });
         }
-        return res.status(200).json({ success: true, data: notification });
+        return res.status(200).json({ success: true, data: { id: notificationId, ...notification } });
       }
       
-      // Build query
-      const query: any = {};
+      // Get all notifications and filter
+      const allNotifications = await readAll<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS);
+      let notifications = Object.entries(allNotifications).map(([id, data]) => ({ id, ...data }));
+      
       if (recipientEmail) {
         const emailValue = Array.isArray(recipientEmail) ? recipientEmail[0] : recipientEmail;
-        query.recipientEmail = emailValue.toLowerCase().trim();
-      }
-      if (isRead !== undefined) {
-        const isReadValue = Array.isArray(isRead) ? isRead[0] : isRead;
-        query.isRead = isReadValue === 'true';
+        const normalizedEmail = emailValue.toLowerCase().trim();
+        notifications = notifications.filter(n => (n.recipientEmail as string)?.toLowerCase().trim() === normalizedEmail);
       }
       
-      const notifications = await Notification.find(query).sort({ timestamp: -1 }).lean();
+      if (isRead !== undefined) {
+        const isReadValue = Array.isArray(isRead) ? isRead[0] : isRead;
+        const isReadBool = isReadValue === 'true';
+        notifications = notifications.filter(n => n.isRead === isReadBool);
+      }
+      
+      // Sort by timestamp descending
+      notifications = notifications.sort((a, b) => {
+        const aTime = a.timestamp ? new Date(a.timestamp as string).getTime() : 0;
+        const bTime = b.timestamp ? new Date(b.timestamp as string).getTime() : 0;
+        return bTime - aTime;
+      });
+      
       return res.status(200).json({ success: true, data: notifications });
     }
 
@@ -4958,10 +4267,16 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
       }
 
       // Normalize email
-      notificationData.recipientEmail = notificationData.recipientEmail.toLowerCase().trim();
-
-      const notification = await Notification.create(notificationData);
-      return res.status(201).json({ success: true, data: notification.toObject() });
+      const normalizedEmail = notificationData.recipientEmail.toLowerCase().trim();
+      const notification = {
+        ...notificationData,
+        recipientEmail: normalizedEmail,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      await create(DB_PATHS.NOTIFICATIONS, notification, String(notificationData.id));
+      return res.status(201).json({ success: true, data: { id: notificationData.id, ...notification } });
     }
 
     // PUT - Update notification (mark as read, etc.)
@@ -4972,17 +4287,18 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
         return res.status(400).json({ success: false, reason: 'Notification ID is required' });
       }
 
-      const notification = await Notification.findOneAndUpdate(
-        { id: Number(notificationId) },
-        { $set: updates },
-        { new: true }
-      ).lean();
-
-      if (!notification) {
+      const existing = await read<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
+      if (!existing) {
         return res.status(404).json({ success: false, reason: 'Notification not found' });
       }
 
-      return res.status(200).json({ success: true, data: notification });
+      await updateData(DB_PATHS.NOTIFICATIONS, String(notificationId), {
+        ...updates,
+        updatedAt: new Date().toISOString()
+      });
+      
+      const updated = await read<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
+      return res.status(200).json({ success: true, data: { id: notificationId, ...updated } });
     }
 
     // DELETE - Delete notification
@@ -4993,7 +4309,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
         return res.status(400).json({ success: false, reason: 'Notification ID is required' });
       }
 
-      await Notification.deleteOne({ id: Number(notificationId) });
+      await deleteData(DB_PATHS.NOTIFICATIONS, String(notificationId));
       return res.status(200).json({ success: true, message: 'Notification deleted successfully' });
     }
 
@@ -5011,10 +4327,10 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
 // Plans Handler
 async function handlePlans(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
   try {
-    if (!options.mongoAvailable) {
+    if (!USE_FIREBASE) {
       return res.status(503).json({
         success: false,
-        reason: options.mongoFailureReason || 'Database is currently unavailable'
+        reason: 'Firebase is not configured. Please set Firebase environment variables.'
       });
     }
 
