@@ -8,7 +8,7 @@ import { VehicleCategory } from '../types.js';
 import { firebaseUserService } from '../services/firebase-user-service.js';
 import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
 import { firebaseConversationService } from '../services/firebase-conversation-service.js';
-import { isDatabaseAvailable as isFirebaseAvailable } from '../lib/firebase-db.js';
+import { isDatabaseAvailable as isFirebaseAvailable, getDatabaseStatus } from '../lib/firebase-db.js';
 import { 
   create,
   read,
@@ -20,7 +20,22 @@ import {
 } from '../lib/firebase-db.js';
 
 // Always use Firebase - MongoDB removed
+// Note: This is checked at module load time. If Firebase is not available,
+// API routes will return proper error messages with details on how to fix it.
 const USE_FIREBASE = isFirebaseAvailable();
+
+// Get Firebase status with detailed error information
+function getFirebaseErrorMessage(): string {
+  try {
+    const status = getDatabaseStatus();
+    if (status.available) {
+      return '';
+    }
+    return status.details || status.error || 'Firebase database is not available. Please check your configuration.';
+  } catch {
+    return 'Firebase database is not available. Please check your configuration.';
+  }
+}
 import { 
   hashPassword, 
   validatePassword, 
@@ -302,12 +317,13 @@ async function mainHandler(
   try {
     // Check Firebase availability
     if (!USE_FIREBASE) {
-      const errorMsg = 'Firebase is not configured. Please set Firebase environment variables.';
+      const errorMsg = getFirebaseErrorMessage();
       logError('❌ Firebase not available:', errorMsg);
       if (req.method !== 'GET') {
         return res.status(503).json({
           success: false,
           reason: errorMsg,
+          details: 'Please check your Firebase configuration. Server-side requires FIREBASE_* environment variables (without VITE_ prefix).',
           fallback: true
         });
       }
@@ -650,11 +666,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
     // Check Firebase availability
     if (!USE_FIREBASE) {
-      const errorMsg = 'Firebase is not configured. Please set Firebase environment variables.';
+      const errorMsg = getFirebaseErrorMessage();
       logWarn('⚠️ Firebase not available:', errorMsg);
       return res.status(503).json({
         success: false,
         reason: errorMsg,
+        details: 'Please check your Firebase configuration. Server-side requires FIREBASE_* environment variables (without VITE_ prefix).',
         fallback: true
       });
     }
@@ -1457,7 +1474,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       
       // Only return 401 if it's clearly a user auth error
       // If it contains "authentication" but doesn't match user auth patterns, treat as 500 (safer)
-      if (isUserAuthError && !errorMsg.includes('mongo') && !errorMsg.includes('database') && !errorMsg.includes('connection')) {
+      if (isUserAuthError && !errorMsg.includes('firebase') && !errorMsg.includes('database') && !errorMsg.includes('connection')) {
         return res.status(401).json({
           success: false,
           reason: 'Authentication failed. Please log in again.',
@@ -1654,8 +1671,26 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(200).json(nearbyVehicles);
       }
 
+      // DEBUG ENDPOINT: Return all vehicles including unpublished (for testing)
+      if (action === 'debug-all') {
+        const allVehicles = await firebaseVehicleService.findAll();
+        const statusCounts = {
+          published: allVehicles.filter(v => v.status === 'published').length,
+          unpublished: allVehicles.filter(v => v.status === 'unpublished').length,
+          sold: allVehicles.filter(v => v.status === 'sold').length,
+          total: allVehicles.length
+        };
+        console.log(`🔍 DEBUG: Vehicle status breakdown:`, statusCounts);
+        return res.status(200).json({
+          total: allVehicles.length,
+          statusCounts,
+          vehicles: allVehicles
+        });
+      }
+
       // Get all vehicles and auto-disable expired listings
       let vehicles = await firebaseVehicleService.findAll();
+      console.log(`📊 Total vehicles fetched from Firebase: ${vehicles.length}`);
       // Sort by createdAt descending
       vehicles = vehicles.sort((a, b) => {
         const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1819,6 +1854,17 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       
       // Filter to only published vehicles for public-facing endpoint
       const publishedVehicles = sortedVehicles.filter(v => v.status === 'published');
+      const unpublishedCount = sortedVehicles.length - publishedVehicles.length;
+      console.log(`📊 Published vehicles after filtering: ${publishedVehicles.length} out of ${sortedVehicles.length} total (${unpublishedCount} unpublished/sold)`);
+      
+      // Log status breakdown for debugging
+      const statusBreakdown = {
+        published: sortedVehicles.filter(v => v.status === 'published').length,
+        unpublished: sortedVehicles.filter(v => v.status === 'unpublished').length,
+        sold: sortedVehicles.filter(v => v.status === 'sold').length,
+        other: sortedVehicles.filter(v => !['published', 'unpublished', 'sold'].includes(v.status || '')).length
+      };
+      console.log(`📊 Vehicle status breakdown:`, statusBreakdown);
       
       // Normalize sellerEmail to lowercase for consistent filtering
       const normalizedVehicles = publishedVehicles.map(v => ({
@@ -1826,6 +1872,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         sellerEmail: v.sellerEmail?.toLowerCase().trim() || v.sellerEmail
       }));
       
+      console.log(`📊 Returning ${normalizedVehicles.length} published vehicles to client`);
       return res.status(200).json(normalizedVehicles);
     } catch (error) {
       console.error('❌ Error fetching vehicles:', error);
@@ -2451,7 +2498,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
     }
     
     // If it's a database connection error, return 200 with fallback data instead of 503
-    if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect'))) {
+    if (error instanceof Error && (error.message.includes('FIREBASE') || error.message.includes('Firebase') || error.message.includes('connect'))) {
       const fallbackVehicles = await getFallbackVehicles();
       const publishedFallbackVehicles = fallbackVehicles.filter(v => v.status === 'published');
       res.setHeader('X-Data-Fallback', 'true');
@@ -3698,8 +3745,8 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
         }
 
         // Check for existing submission
-        const allSubmissions = await readAll<Record<string, unknown>>(submissionsPath);
-        const existingSubmission = Object.values(allSubmissions).find(
+        const existingSubmissions = await readAll<Record<string, unknown>>(submissionsPath);
+        const existingSubmission = Object.values(existingSubmissions).find(
           (sub: any) => sub.registration === submissionData.registration
         );
 
@@ -4073,7 +4120,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, options: 
     res.setHeader('Content-Type', 'application/json');
     
     // If it's a database connection error, return 503
-    if (error instanceof Error && (error.message.includes('MONGODB') || error.message.includes('connect'))) {
+    if (error instanceof Error && (error.message.includes('FIREBASE') || error.message.includes('Firebase') || error.message.includes('connect'))) {
       return res.status(503).json({
         success: false,
         reason: 'Database is currently unavailable. Please try again later.',

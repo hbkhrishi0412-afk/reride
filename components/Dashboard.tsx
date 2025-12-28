@@ -21,6 +21,7 @@ import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
+import { getFirebaseStatus, getFirebaseErrorMessage } from '../utils/firebase-status';
 
 // Safely register Chart.js components - wrap in try-catch to prevent crashes if Chart.js fails to load
 try {
@@ -1664,6 +1665,20 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     return result;
   }, [vehicleData]);
 
+  // Check Firebase connection status (only in browser, not SSR)
+  const [firebaseStatus, setFirebaseStatus] = useState<{ available: boolean; error?: string; details?: string } | null>(null);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const status = getFirebaseStatus();
+        setFirebaseStatus(status);
+      } catch (error) {
+        setFirebaseStatus({ available: false, error: 'Unable to check Firebase status' });
+      }
+    }
+  }, []);
+
   // Guard against missing seller (AFTER all hooks)
   if (!seller || !seller.email) {
     return (
@@ -3150,6 +3165,30 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         <div className="absolute top-20 right-20 w-80 h-80 bg-gradient-to-br from-blue-200/20 to-purple-200/20 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-tr from-orange-200/15 to-pink-200/15 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
       </div>
+      
+      {/* Firebase Connection Status Banner */}
+      {firebaseStatus && !firebaseStatus.available && (
+        <div className="relative z-20 bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-yellow-800">
+                Firebase Database Connection Issue
+              </h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>{getFirebaseErrorMessage(firebaseStatus)}</p>
+                {firebaseStatus.details && (
+                  <p className="mt-1 text-xs">{firebaseStatus.details}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="relative z-10 container mx-auto py-8 px-4">
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8">

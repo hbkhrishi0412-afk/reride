@@ -8,29 +8,63 @@ let firebaseApp: FirebaseApp | undefined;
 // Get or initialize Firebase app (works on both client and server)
 function getFirebaseApp(): FirebaseApp {
   if (!firebaseApp) {
-    // Check if app already exists
-    const existingApps = getApps();
-    if (existingApps.length > 0) {
-      firebaseApp = existingApps[0];
-    } else {
-      // Initialize for server-side use
-      // For server-side, prioritize FIREBASE_* (without VITE_ prefix) for better serverless compatibility
-      // Fallback to VITE_FIREBASE_* for backward compatibility
-      const firebaseConfig = {
-        apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || '',
-        authDomain: process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-        projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '',
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-        messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-        appId: process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID || '',
-        databaseURL: process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || '',
-      };
+    try {
+      // Check if app already exists
+      const existingApps = getApps();
+      if (existingApps.length > 0) {
+        firebaseApp = existingApps[0];
+      } else {
+        // Initialize for server-side use
+        // CRITICAL: For server-side (API routes, serverless), prioritize FIREBASE_* (without VITE_ prefix)
+        // VITE_ prefixed variables are only available in client-side builds and may not be present in serverless environments
+        // Fallback to VITE_FIREBASE_* only for backward compatibility in client-side code
+        const isServerSide = typeof window === 'undefined';
+        
+        const firebaseConfig = {
+          // Prioritize FIREBASE_* for server-side, VITE_FIREBASE_* for client-side
+          apiKey: isServerSide 
+            ? (process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || '')
+            : (process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || ''),
+          authDomain: isServerSide
+            ? (process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN || '')
+            : (process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || ''),
+          projectId: isServerSide
+            ? (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '')
+            : (process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || ''),
+          storageBucket: isServerSide
+            ? (process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '')
+            : (process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || ''),
+          messagingSenderId: isServerSide
+            ? (process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '')
+            : (process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || ''),
+          appId: isServerSide
+            ? (process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID || '')
+            : (process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || ''),
+          databaseURL: isServerSide
+            ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || '')
+            : (process.env.VITE_FIREBASE_DATABASE_URL || process.env.FIREBASE_DATABASE_URL || ''),
+        };
 
-      if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-        throw new Error('Firebase configuration is missing. Please set Firebase environment variables.');
+        // Validate required fields
+        if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+          const missingFields: string[] = [];
+          if (!firebaseConfig.apiKey) missingFields.push(isServerSide ? 'FIREBASE_API_KEY' : 'VITE_FIREBASE_API_KEY');
+          if (!firebaseConfig.projectId) missingFields.push(isServerSide ? 'FIREBASE_PROJECT_ID' : 'VITE_FIREBASE_PROJECT_ID');
+          
+          const envHint = isServerSide 
+            ? 'Set FIREBASE_API_KEY, FIREBASE_PROJECT_ID, etc. in your server environment variables (Vercel, etc.)'
+            : 'Set VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, etc. in your .env.local file';
+          
+          throw new Error(
+            `Firebase configuration is missing required fields: ${missingFields.join(', ')}. ${envHint}`
+          );
+        }
+
+        firebaseApp = initializeApp(firebaseConfig);
       }
-
-      firebaseApp = initializeApp(firebaseConfig);
+    } catch (error) {
+      console.error('❌ Firebase initialization error:', error);
+      throw new Error(`Firebase initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
   return firebaseApp;
@@ -39,18 +73,39 @@ function getFirebaseApp(): FirebaseApp {
 // Get database instance
 export function getFirebaseDatabase(): Database {
   if (!database) {
-    const app = getFirebaseApp();
-    const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL;
-    
-    if (databaseURL) {
-      database = getDatabase(app, databaseURL);
-    } else {
-      // For server-side operations, database URL should be provided
-      // But we allow fallback to default for backward compatibility
-      if (typeof window === 'undefined') {
-        console.warn('⚠️ FIREBASE_DATABASE_URL not set. Using default database URL. This may cause issues in serverless environments.');
+    try {
+      const app = getFirebaseApp();
+      const isServerSide = typeof window === 'undefined';
+      
+      // Get database URL with proper priority
+      const databaseURL = isServerSide
+        ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL)
+        : (process.env.VITE_FIREBASE_DATABASE_URL || process.env.FIREBASE_DATABASE_URL);
+      
+      // For server-side operations, database URL should be provided for reliability
+      // Client-side can use default from firebaseConfig, but server-side should be explicit
+      if (databaseURL) {
+        // Validate URL format
+        if (!databaseURL.startsWith('https://') || !databaseURL.includes('firebasedatabase')) {
+          console.warn('⚠️ FIREBASE_DATABASE_URL format may be incorrect. Expected format: https://your-project-default-rtdb.region.firebasedatabase.app/');
+        }
+        database = getDatabase(app, databaseURL);
+      } else {
+        if (isServerSide) {
+          // Server-side: Warn but allow default (for backward compatibility)
+          // In production, this should be set explicitly
+          console.warn(
+            '⚠️ FIREBASE_DATABASE_URL not set for server-side. Using default database URL. ' +
+            'This may cause issues in serverless environments. ' +
+            'Please set FIREBASE_DATABASE_URL in your environment variables.'
+          );
+        }
+        database = getDatabase(app);
       }
-      database = getDatabase(app);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Firebase database initialization error:', errorMessage);
+      throw new Error(`Firebase database initialization failed: ${errorMessage}`);
     }
   }
   return database;
@@ -85,55 +140,103 @@ export async function create<T extends Record<string, unknown>>(
   data: T,
   key?: string
 ): Promise<string> {
-  const db = getFirebaseDatabase();
-  let refPath: DatabaseReference;
-  
-  if (key) {
-    refPath = ref(db, `${collection}/${key}`);
-    await set(refPath, {
-      ...data,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    return key;
-  } else {
-    refPath = ref(db, collection);
-    const newRef = push(refPath);
-    await set(newRef, {
-      ...data,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    return newRef.key!;
+  try {
+    const db = getFirebaseDatabase();
+    let refPath: DatabaseReference;
+    
+    if (key) {
+      refPath = ref(db, `${collection}/${key}`);
+      await set(refPath, {
+        ...data,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return key;
+    } else {
+      refPath = ref(db, collection);
+      const newRef = push(refPath);
+      await set(newRef, {
+        ...data,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return newRef.key!;
+    }
+  } catch (error) {
+    console.error(`❌ Firebase create error at ${collection}/${key || 'auto'}:`, error);
+    throw error; // Re-throw to be handled by caller
   }
 }
 
 export async function read<T>(collection: string, key?: string): Promise<T | null> {
-  const db = getFirebaseDatabase();
-  const refPath = key ? ref(db, `${collection}/${key}`) : ref(db, collection);
-  const snapshot = await get(refPath);
-  
-  if (!snapshot.exists()) {
-    return null;
+  try {
+    const db = getFirebaseDatabase();
+    const refPath = key ? ref(db, `${collection}/${key}`) : ref(db, collection);
+    const snapshot = await get(refPath);
+    
+    if (!snapshot.exists()) {
+      return null;
+    }
+    
+    if (key) {
+      return { id: key, ...snapshot.val() } as T;
+    }
+    
+    return snapshot.val() as T;
+  } catch (error) {
+    console.error(`❌ Firebase read error at ${collection}/${key || ''}:`, error);
+    throw error; // Re-throw to be handled by caller
   }
-  
-  if (key) {
-    return { id: key, ...snapshot.val() } as T;
-  }
-  
-  return snapshot.val() as T;
 }
 
-export async function readAll<T>(collection: string): Promise<Record<string, T>> {
-  const db = getFirebaseDatabase();
-  const refPath = ref(db, collection);
-  const snapshot = await get(refPath);
-  
-  if (!snapshot.exists()) {
+export async function readAll<T>(collection: string, throwOnError = false): Promise<Record<string, T>> {
+  try {
+    const db = getFirebaseDatabase();
+    const refPath = ref(db, collection);
+    const snapshot = await get(refPath);
+    
+    if (!snapshot.exists()) {
+      // This is not an error - collection simply has no data
+      const isDev = process.env.NODE_ENV === 'development';
+      if (isDev) {
+        console.log(`📊 Firebase readAll: No data found at path "${collection}"`);
+      }
+      return {};
+    }
+    
+    const data = snapshot.val() as Record<string, T>;
+    const count = Object.keys(data).length;
+    const dataSize = JSON.stringify(data).length;
+    
+    const isDev = process.env.NODE_ENV === 'development';
+    if (isDev) {
+      console.log(`📊 Firebase readAll: Retrieved ${count} items from "${collection}" (${(dataSize / 1024).toFixed(2)} KB)`);
+      
+      // Log sample keys for debugging (first 5 keys)
+      const sampleKeys = Object.keys(data).slice(0, 5);
+      if (sampleKeys.length > 0) {
+        console.log(`📊 Sample keys: ${sampleKeys.join(', ')}${count > 5 ? '...' : ''}`);
+      }
+    }
+    
+    return data;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Firebase readAll error for "${collection}":`, errorMessage);
+    
+    // Check if it's a permission error (security rules) vs connection error
+    if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('permission')) {
+      console.error(`💡 Permission denied. Check Firebase security rules for path: "${collection}"`);
+    }
+    
+    if (throwOnError) {
+      throw error;
+    }
+    
+    // Return empty object to prevent cascading failures, but log the error
+    // Callers should check for empty results and handle appropriately
     return {};
   }
-  
-  return snapshot.val() as Record<string, T>;
 }
 
 export async function updateData<T extends Record<string, unknown>>(
@@ -141,55 +244,107 @@ export async function updateData<T extends Record<string, unknown>>(
   key: string,
   updates: Partial<T>
 ): Promise<void> {
-  const db = getFirebaseDatabase();
-  const refPath = ref(db, `${collection}/${key}`);
-  
-  await update(refPath, {
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  });
+  try {
+    const db = getFirebaseDatabase();
+    const refPath = ref(db, `${collection}/${key}`);
+    
+    await update(refPath, {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error(`❌ Firebase updateData error at ${collection}/${key}:`, error);
+    throw error; // Re-throw to be handled by caller
+  }
 }
 
 export async function deleteData(collection: string, key: string): Promise<void> {
-  const db = getFirebaseDatabase();
-  const refPath = ref(db, `${collection}/${key}`);
-  await remove(refPath);
+  try {
+    const db = getFirebaseDatabase();
+    const refPath = ref(db, `${collection}/${key}`);
+    await remove(refPath);
+  } catch (error) {
+    console.error(`❌ Firebase deleteData error at ${collection}/${key}:`, error);
+    throw error; // Re-throw to be handled by caller
+  }
 }
 
 // Query operations
 export async function queryByField<T>(
   collection: string,
   field: string,
-  value: string | number | boolean
+  value: string | number | boolean,
+  throwOnError = false
 ): Promise<Record<string, T>> {
-  const db = getFirebaseDatabase();
-  const refPath = ref(db, collection);
-  const q = query(refPath, orderByChild(field), equalTo(value));
-  const snapshot = await get(q);
-  
-  if (!snapshot.exists()) {
+  try {
+    const db = getFirebaseDatabase();
+    const refPath = ref(db, collection);
+    const q = query(refPath, orderByChild(field), equalTo(value));
+    const snapshot = await get(q);
+    
+    if (!snapshot.exists()) {
+      // No results found - this is normal, not an error
+      return {};
+    }
+    
+    return snapshot.val() as Record<string, T>;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Firebase queryByField error at ${collection} (${field}=${value}):`, errorMessage);
+    
+    // Check if it's a permission error vs other error
+    if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('permission')) {
+      console.error(`💡 Permission denied. Check Firebase security rules for path: "${collection}"`);
+    } else if (errorMessage.includes('index')) {
+      console.error(`💡 Index error. You may need to create an index in Firebase Console for: "${collection}/${field}"`);
+    }
+    
+    if (throwOnError) {
+      throw error;
+    }
+    
+    // Return empty object to prevent cascading failures
     return {};
   }
-  
-  return snapshot.val() as Record<string, T>;
 }
 
 export async function queryByRange<T>(
   collection: string,
   field: string,
   startValue: string | number,
-  endValue: string | number
+  endValue: string | number,
+  throwOnError = false
 ): Promise<Record<string, T>> {
-  const db = getFirebaseDatabase();
-  const refPath = ref(db, collection);
-  const q = query(refPath, orderByChild(field), startAt(startValue), endAt(endValue));
-  const snapshot = await get(q);
-  
-  if (!snapshot.exists()) {
+  try {
+    const db = getFirebaseDatabase();
+    const refPath = ref(db, collection);
+    const q = query(refPath, orderByChild(field), startAt(startValue), endAt(endValue));
+    const snapshot = await get(q);
+    
+    if (!snapshot.exists()) {
+      // No results found - this is normal, not an error
+      return {};
+    }
+    
+    return snapshot.val() as Record<string, T>;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Firebase queryByRange error at ${collection} (${field}=${startValue}-${endValue}):`, errorMessage);
+    
+    // Check if it's a permission error vs other error
+    if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('permission')) {
+      console.error(`💡 Permission denied. Check Firebase security rules for path: "${collection}"`);
+    } else if (errorMessage.includes('index')) {
+      console.error(`💡 Index error. You may need to create an index in Firebase Console for: "${collection}/${field}"`);
+    }
+    
+    if (throwOnError) {
+      throw error;
+    }
+    
+    // Return empty object to prevent cascading failures
     return {};
   }
-  
-  return snapshot.val() as Record<string, T>;
 }
 
 // Helper to convert Firebase snapshot to array
@@ -223,11 +378,54 @@ export function isDatabaseAvailable(): boolean {
     const db = getFirebaseDatabase();
     return !!db;
   } catch (error) {
-    // Log error in development, but fail silently in production
-    if (process.env.NODE_ENV === 'development' || process.env.VERCEL_ENV === 'development') {
-      console.warn('⚠️ Firebase database not available:', error instanceof Error ? error.message : String(error));
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Always log errors in development/debug environments
+    const isDev = process.env.NODE_ENV === 'development' || 
+                  process.env.VERCEL_ENV === 'development' || 
+                  process.env.NODE_ENV !== 'production';
+    
+    if (isDev) {
+      console.warn('⚠️ Firebase database not available:', errorMessage);
+      console.warn('💡 Make sure Firebase environment variables are set correctly.');
+      console.warn('   Server-side: FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.');
+      console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, etc.');
+    } else {
+      // In production, log to console but don't expose details to users
+      console.error('❌ Firebase database unavailable. Check configuration.');
     }
+    
     return false;
+  }
+}
+
+// Helper to get database connection status with details
+export function getDatabaseStatus(): {
+  available: boolean;
+  error?: string;
+  details?: string;
+} {
+  try {
+    const db = getFirebaseDatabase();
+    return { available: !!db };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isServerSide = typeof window === 'undefined';
+    
+    let details = '';
+    if (errorMessage.includes('configuration is missing')) {
+      details = isServerSide
+        ? 'Please set FIREBASE_* environment variables (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, etc.)'
+        : 'Please set VITE_FIREBASE_* environment variables in .env.local';
+    } else if (errorMessage.includes('DATABASE_URL')) {
+      details = 'Please set FIREBASE_DATABASE_URL environment variable';
+    }
+    
+    return {
+      available: false,
+      error: errorMessage,
+      details,
+    };
   }
 }
 
