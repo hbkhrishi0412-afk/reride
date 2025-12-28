@@ -194,3 +194,4 @@ If you encounter issues:
 - Check Firebase Realtime Database rules
 - Review error logs in the console
 
+

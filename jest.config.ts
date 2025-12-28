@@ -10,6 +10,9 @@ const config: Config = {
       '<rootDir>/__mocks__/fileMock.js',
     '^\\.\\/security-config$': '<rootDir>/utils/security-config.ts',
     '^\\.\\./utils/security-config$': '<rootDir>/utils/security-config.ts',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^(\\.{1,2}/.*)\\.ts$': '$1',
+    '^(\\.{1,2}/.*)\\.tsx$': '$1',
   },
   transform: {
     '^.+\\.(ts|tsx)$': [
@@ -20,17 +23,39 @@ const config: Config = {
           module: 'ESNext',
           target: 'ES2020',
           jsx: 'react-jsx',
+          allowSyntheticDefaultImports: true,
+          esModuleInterop: true,
+          moduleResolution: 'node',
+        },
+      },
+    ],
+    '^.+\\.js$': [
+      'ts-jest',
+      {
+        useESM: true,
+        tsconfig: {
+          module: 'ESNext',
+          allowSyntheticDefaultImports: true,
+          esModuleInterop: true,
+          moduleResolution: 'node',
         },
       },
     ],
   },
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
   transformIgnorePatterns: [
-    'node_modules/(?!(mongodb|mongoose|bson)/)'
+    'node_modules/(?!(mongodb|mongoose|bson|firebase|@firebase|@google)/)'
   ],
   testMatch: [
     '<rootDir>/__tests__/**/*.(test|spec).(ts|tsx|js)',
     '<rootDir>/src/**/*.(test|spec).(ts|tsx|js)',
+  ],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/e2e/',
+    '/dist/',
+    '/coverage/',
+    '/playwright-report/',
   ],
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
@@ -40,6 +65,9 @@ const config: Config = {
     '!src/**/*.d.ts',
     '!src/setupTests.ts',
     '!src/vite-env.d.ts',
+    '!**/node_modules/**',
+    '!**/e2e/**',
+    '!**/dist/**',
   ],
   coverageThreshold: {
     global: {
@@ -53,6 +81,7 @@ const config: Config = {
   testTimeout: 10000,
   clearMocks: true,
   restoreMocks: true,
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 };
 
 export default config;

@@ -54,6 +54,7 @@ const mockDataServiceImplementation = {
   register: jest.fn(() => Promise.resolve({ success: true, user: { id: 1, email: 'test@test.com' } } as any)),
 };
 
+// Mock dataService before importing AppProvider
 jest.mock('../services/dataService', () => ({
   dataService: mockDataServiceImplementation,
   getVehicles: () => mockDataServiceImplementation.getVehicles(),

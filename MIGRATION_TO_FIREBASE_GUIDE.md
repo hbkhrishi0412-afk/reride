@@ -173,3 +173,4 @@ After successful migration:
 4. Set up proper Firebase security rules
 5. Consider implementing Firebase indexes for better query performance
 
+

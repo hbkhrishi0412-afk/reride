@@ -33,10 +33,12 @@ export const firebaseVehicleService = {
   // Get all vehicles
   async findAll(): Promise<Vehicle[]> {
     const vehicles = await readAll<Vehicle>(DB_PATHS.VEHICLES);
-    return snapshotToArray(vehicles).map(v => ({
+    const vehicleArray = snapshotToArray(vehicles).map(v => ({
       ...v,
       id: parseInt(v.id) || v.id,
     })) as Vehicle[];
+    console.log(`📊 firebaseVehicleService.findAll: Converted ${Object.keys(vehicles).length} records to ${vehicleArray.length} vehicles`);
+    return vehicleArray;
   },
 
   // Update vehicle

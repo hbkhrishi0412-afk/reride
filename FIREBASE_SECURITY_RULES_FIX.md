@@ -125,3 +125,4 @@ If you're still having issues:
 2. Verify you're using the correct Firebase project
 3. Check that the database URL matches: `https://reride-ade6a-default-rtdb.asia-southeast1.firebasedatabase.app/`
 
+
