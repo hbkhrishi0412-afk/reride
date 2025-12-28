@@ -48,7 +48,7 @@ export interface Conversation {
 export const firebaseConversationService = {
   // Create a new conversation
   async create(conversationData: Omit<Conversation, 'id'>): Promise<Conversation> {
-    const id = conversationData.id || `${conversationData.customerId}_${conversationData.vehicleId}`;
+    const id = `${conversationData.customerId}_${conversationData.vehicleId}`;
     await create(DB_PATHS.CONVERSATIONS, conversationData, id);
     
     return {

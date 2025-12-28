@@ -222,11 +222,18 @@ export async function readAll<T>(collection: string, throwOnError = false): Prom
     return data;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`❌ Firebase readAll error for "${collection}":`, errorMessage);
     
     // Check if it's a permission error (security rules) vs connection error
-    if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('permission')) {
-      console.error(`💡 Permission denied. Check Firebase security rules for path: "${collection}"`);
+    const isPermissionError = errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('permission');
+    
+    if (isPermissionError) {
+      // Permission errors are expected in serverless contexts without Admin SDK
+      // Log as warning instead of error to reduce noise
+      console.warn(`⚠️ Firebase readAll permission denied for "${collection}". This is expected in serverless contexts.`);
+      console.warn(`💡 To fix: Use Firebase Admin SDK or update security rules for server-side access.`);
+    } else {
+      // Log actual errors (connection issues, etc.)
+      console.error(`❌ Firebase readAll error for "${collection}":`, errorMessage);
     }
     
     if (throwOnError) {
