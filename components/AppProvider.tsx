@@ -1038,14 +1038,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         setIsLoading(true);
         
         // CRITICAL: Set a maximum timeout to prevent infinite loading
-        // If loading takes more than 3 seconds, force completion (aggressive timeout for faster UX)
+        // If loading takes more than 5 seconds, force completion (balanced timeout for better UX)
         loadingTimeout = setTimeout(() => {
           if (isMounted) {
-            console.warn('⚠️ Initial data loading exceeded 3s timeout, forcing completion');
+            console.warn('⚠️ Initial data loading exceeded 5s timeout, forcing completion');
             setIsLoading(false);
-            // Don't show toast if this fires - loading should be fast
+            // Ensure we have at least empty arrays so the app can render
+            if (vehicles.length === 0) {
+              setVehicles([]);
+            }
+            if (users.length === 0) {
+              setUsers([]);
+            }
           }
-        }, 3000); // 3 seconds max - very aggressive for fast initial render
+        }, 5000); // 5 seconds max - balanced for initial render
         
         // Load critical data first (vehicles and users) with individual timeouts
         const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T, silent: boolean = false): Promise<T> => {
@@ -1063,43 +1069,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           ]);
         };
         
-        // Load critical data sequentially with delays to prevent rate limiting
-        // dataService now uses request queue internally, so we can call it directly
-        const vehiclesData = await loadWithTimeout(
-          dataService.getVehicles().catch(err => {
-            if (process.env.NODE_ENV === 'development') {
-              console.warn('Failed to load vehicles, using empty array:', err);
-            }
-            return [];
-          }),
-          10000,
-          [],
-          true
-        );
-        
-        // Small delay between critical requests
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        const usersData = await loadWithTimeout(
-          dataService.getUsers().catch(err => {
-            if (process.env.NODE_ENV === 'development') {
-              console.warn('Failed to load users, using empty array:', err);
-            }
-            return [];
-          }),
-          10000,
-          [],
-          true
-        );
+        // Load critical data with shorter timeouts to prevent hanging
+        // Use Promise.allSettled to ensure we always get results, even if some fail
+        const [vehiclesResult, usersResult] = await Promise.allSettled([
+          loadWithTimeout(
+            dataService.getVehicles().catch(err => {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('Failed to load vehicles, using empty array:', err);
+              }
+              return [];
+            }),
+            8000, // 8 second timeout for vehicles
+            [],
+            true
+          ),
+          loadWithTimeout(
+            dataService.getUsers().catch(err => {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('Failed to load users, using empty array:', err);
+              }
+              return [];
+            }),
+            8000, // 8 second timeout for users
+            [],
+            true
+          )
+        ]);
         
         if (!isMounted) return;
         
-        setVehicles(vehiclesData);
-        setUsers(usersData);
+        // Extract results from Promise.allSettled
+        const vehiclesData = vehiclesResult.status === 'fulfilled' ? vehiclesResult.value : [];
+        const usersData = usersResult.status === 'fulfilled' ? usersResult.value : [];
+        
+        // CRITICAL: Always set vehicles and users, even if empty, so the app can render
+        setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+        setUsers(Array.isArray(usersData) ? usersData : []);
         
         // Set some recommendations (first 6 vehicles) - only if we have vehicles
-        if (vehiclesData.length > 0) {
+        if (Array.isArray(vehiclesData) && vehiclesData.length > 0) {
           setRecommendations(vehiclesData.slice(0, 6));
+        } else {
+          // Ensure recommendations is always an array
+          setRecommendations([]);
         }
         
         // Load FAQs from MongoDB (non-blocking, with delay to prevent rate limiting)
@@ -1223,8 +1235,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
       } catch (error) {
         console.error('AppProvider: Error loading initial data:', error);
+        // CRITICAL: Ensure we have at least empty arrays so the app can render
         if (isMounted) {
-          addToast('Some data failed to load. The app will continue with available data.', 'warning');
+          // Ensure vehicles and users are always arrays
+          setVehicles(prev => Array.isArray(prev) ? prev : []);
+          setUsers(prev => Array.isArray(prev) ? prev : []);
+          setRecommendations([]);
+          setIsLoading(false);
+          // Only show warning toast in development to avoid user confusion
+          if (process.env.NODE_ENV === 'development') {
+            addToast('Some data failed to load. The app will continue with available data.', 'warning');
+          }
         }
       } finally {
         // CRITICAL: Always clear loading state, even on error
@@ -1232,7 +1253,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           clearTimeout(loadingTimeout);
         }
         if (isMounted) {
-          setIsLoading(false);
+          // Force loading to false after a short delay to ensure UI updates
+          setTimeout(() => {
+            if (isMounted) {
+              setIsLoading(false);
+            }
+          }, 100);
         }
       }
     };
