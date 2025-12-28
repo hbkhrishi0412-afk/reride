@@ -599,28 +599,18 @@ async function mainHandler(
       });
     }
     
-    // Check for MongoDB/database errors first (including authentication errors from MongoDB)
+    // Check for Firebase/database errors first
     const isDbError = error instanceof Error && (
-      error.message.includes('MONGODB_URI') || 
-      error.message.includes('MONGODB_URL') ||
-      error.message.includes('MongoServerError') ||
-      error.message.includes('MongoNetworkError') ||
-      error.message.includes('MongoTimeoutError') ||
-      error.name === 'MongoServerError' ||
-      error.name === 'MongoNetworkError' ||
-      error.name === 'MongoTimeoutError' ||
-      // MongoDB authentication errors (database connection auth, not user auth)
-      (error.message.includes('authentication') && (
-        error.message.includes('Mongo') ||
-        error.message.includes('connection') ||
-        error.message.includes('database') ||
-        error.message.includes('credentials') ||
-        error.message.includes('username') ||
-        error.message.includes('password')
-      )) ||
-      // Connection-related errors
-      ((error.message.includes('connect') || error.message.includes('timeout')) && (
-        error.message.includes('Mongo') ||
+      error.message.includes('FIREBASE') || 
+      error.message.includes('Firebase') ||
+      error.message.includes('firebase') ||
+      error.message.includes('PERMISSION_DENIED') ||
+      error.message.includes('UNAUTHENTICATED') ||
+      error.message.includes('UNAVAILABLE') ||
+      // Firebase connection-related errors
+      ((error.message.includes('connect') || error.message.includes('timeout') || error.message.includes('network')) && (
+        error.message.includes('Firebase') ||
+        error.message.includes('firebase') ||
         error.message.includes('database') ||
         error.message.includes('ECONNREFUSED') ||
         error.message.includes('ENOTFOUND')
@@ -630,18 +620,18 @@ async function mainHandler(
     if (isDbError) {
       logError('❌ Database error in main handler:', error instanceof Error ? error.message : 'Unknown error');
       // Check if it's a configuration error vs connection error
-      if (error instanceof Error && (error.message.includes('MONGODB_URI') || error.message.includes('MONGODB_URL'))) {
+      if (error instanceof Error && (error.message.includes('FIREBASE') || error.message.includes('Firebase') || error.message.includes('firebase'))) {
         return res.status(503).json({ 
           success: false, 
-          reason: 'Database configuration error. Please check MONGODB_URL (or MONGODB_URI) environment variable.',
-          details: 'The application is configured to use MongoDB but the connection string is not properly configured.'
+          reason: 'Firebase configuration error. Please check Firebase environment variables.',
+          details: 'The application requires Firebase to be properly configured. Please verify your Firebase credentials and project settings.'
         });
       }
       // General database connection/auth error
       return res.status(503).json({ 
         success: false, 
-        reason: 'Database connection failed. Please ensure the database is running and accessible.',
-        details: 'Unable to connect to MongoDB database. Please check your database configuration, credentials, and network connectivity.'
+        reason: 'Database connection failed. Please ensure Firebase is properly configured and accessible.',
+        details: 'Unable to connect to Firebase Realtime Database. Please check your Firebase configuration, credentials, and network connectivity.'
       });
     }
     
@@ -802,14 +792,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         return res.status(400).json({ success: false, reason: 'All fields are required.' });
       }
 
-      // Ensure database connection before proceeding
-      // Firebase connection is handled automatically
-        return res.status(503).json({ 
-          success: false, 
-          reason: 'Database connection failed. Please check MONGODB_URL (or MONGODB_URI) configuration.',
-          error: dbError instanceof Error ? dbError.message : 'Connection error'
-        });
-      }
+      // Firebase connection is handled automatically - no need for connection checks
 
       // Sanitize and validate input data
       const sanitizedData = await sanitizeObject({ email, password, name, mobile, role });
