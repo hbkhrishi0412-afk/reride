@@ -13,6 +13,15 @@ import Notification from '../models/Notification.js';
 import { planService } from '../services/planService.js';
 import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan } from '../types.js';
 import { VehicleCategory } from '../types.js';
+// Firebase services
+import { firebaseUserService } from '../services/firebase-user-service.js';
+import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
+import { firebaseConversationService } from '../services/firebase-conversation-service.js';
+import { isDatabaseAvailable as isFirebaseAvailable } from '../lib/firebase-db.js';
+
+// Database mode: 'firebase' or 'mongodb'
+const DB_MODE = (process.env.DB_MODE || 'firebase').toLowerCase();
+const USE_FIREBASE = DB_MODE === 'firebase' && isFirebaseAvailable();
 import { 
   hashPassword, 
   validatePassword, 
@@ -888,7 +897,28 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       
       // Normalize email to lowercase for consistent database lookup
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
-      const user = await User.findOne({ email: normalizedEmail }).lean() as UserDocument | null;
+      
+      // Use Firebase if available, otherwise MongoDB
+      let user: UserType | null = null;
+      let userDoc: UserDocument | null = null;
+      
+      if (USE_FIREBASE) {
+        try {
+          user = await firebaseUserService.findByEmail(normalizedEmail);
+          if (user) {
+            userDoc = user as unknown as UserDocument;
+          }
+        } catch (error) {
+          logError('❌ Firebase user lookup error:', error);
+          return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
+        }
+      } else {
+        if (!mongoAvailable) {
+          return unavailableResponse();
+        }
+        userDoc = await User.findOne({ email: normalizedEmail }).lean() as UserDocument | null;
+        user = normalizeUser(userDoc);
+      }
 
       if (!user) {
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
@@ -1013,7 +1043,24 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
 
       try {
-        const existingUser = await User.findOne({ email: normalizedEmail });
+        // Check if user already exists
+        let existingUser: UserType | null = null;
+        
+        if (USE_FIREBASE) {
+          try {
+            existingUser = await firebaseUserService.findByEmail(normalizedEmail);
+          } catch (error) {
+            logError('❌ Firebase user lookup error:', error);
+            return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
+          }
+        } else {
+          if (!mongoAvailable) {
+            return unavailableResponse();
+          }
+          const userDoc = await User.findOne({ email: normalizedEmail });
+          existingUser = userDoc ? normalizeUser(userDoc.toObject()) : null;
+        }
+        
         if (existingUser) {
           logWarn('⚠️ Registration attempt with existing email:', normalizedEmail);
           return res.status(400).json({ success: false, reason: 'User already exists.' });
@@ -1029,56 +1076,98 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
         // Generate unique ID to avoid collisions
         const userId = Date.now() + Math.floor(Math.random() * 1000);
 
-        const newUser = new User({
-          id: userId,
+        const userData = {
+          id: userId.toString(),
           email: normalizedEmail,
-          password: hashedPassword, // Store hashed password
+          password: hashedPassword,
           name: sanitizedData.name,
           mobile: sanitizedData.mobile,
           role: sanitizedData.role,
-          status: 'active',
+          status: 'active' as const,
           isVerified: false,
-          subscriptionPlan: 'free', // Fixed: should be subscriptionPlan not plan
+          subscriptionPlan: 'free' as const,
           featuredCredits: 0,
           usedCertifications: 0,
           createdAt: new Date().toISOString()
-        });
+        };
 
-        logInfo('💾 Attempting to save user to MongoDB...');
-        await newUser.save();
-        logInfo('✅ New user registered and saved to MongoDB:', normalizedEmail);
-      
-        // Verify the user was saved by querying it back
-        const verifyUser = await User.findOne({ email: normalizedEmail });
-        if (!verifyUser) {
-          logError('❌ User registration verification failed - user not found after save');
-          return res.status(500).json({ 
-            success: false, 
-            reason: 'User registration failed - user was not saved to database. Please try again.' 
-          });
+        let newUser: UserType;
+        
+        if (USE_FIREBASE) {
+          try {
+            logInfo('💾 Attempting to save user to Firebase...');
+            newUser = await firebaseUserService.create(userData);
+            logInfo('✅ New user registered and saved to Firebase:', normalizedEmail);
+            
+            // Verify the user was saved
+            const verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
+            if (!verifyUser) {
+              logError('❌ User registration verification failed - user not found after save');
+              return res.status(500).json({ 
+                success: false, 
+                reason: 'User registration failed - user was not saved to database. Please try again.' 
+              });
+            } else {
+              logInfo('✅ User registration verified in database. User ID:', verifyUser.id);
+              newUser = verifyUser;
+            }
+          } catch (error) {
+            logError('❌ Error saving user to Firebase:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            
+            if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
+              return res.status(400).json({ 
+                success: false, 
+                reason: 'User with this email already exists.' 
+              });
+            }
+            
+            return res.status(500).json({ 
+              success: false, 
+              reason: 'Failed to save user to database. Please try again.',
+              error: errorMessage
+            });
+          }
         } else {
-          logInfo('✅ User registration verified in database. User ID:', verifyUser._id);
+          if (!mongoAvailable) {
+            return unavailableResponse();
+          }
+          const mongoUser = new User(userData);
+          logInfo('💾 Attempting to save user to MongoDB...');
+          await mongoUser.save();
+          logInfo('✅ New user registered and saved to MongoDB:', normalizedEmail);
+          
+          // Verify the user was saved
+          const verifyUser = await User.findOne({ email: normalizedEmail });
+          if (!verifyUser) {
+            logError('❌ User registration verification failed - user not found after save');
+            return res.status(500).json({ 
+              success: false, 
+              reason: 'User registration failed - user was not saved to database. Please try again.' 
+            });
+          } else {
+            logInfo('✅ User registration verified in database. User ID:', verifyUser._id);
+          }
+          
+          newUser = normalizeUser(verifyUser.toObject());
         }
       
         // Generate JWT tokens for new user
         const accessToken = generateAccessToken(newUser);
         const refreshToken = generateRefreshToken(newUser);
         
-        // Normalize user object for frontend (convert _id to id, ensure role is present)
-        const normalizedUser = normalizeUser(newUser.toObject());
-        
-        if (!normalizedUser || !normalizedUser.role) {
-          logError('❌ Failed to normalize new user object:', { email: newUser.email, hasRole: !!newUser.role });
+        if (!newUser || !newUser.role) {
+          logError('❌ Failed to normalize new user object:', { email: userData.email, hasRole: !!userData.role });
           return res.status(500).json({ 
             success: false, 
             reason: 'Failed to process user data. Please try again.' 
           });
         }
         
-        logInfo('✅ Registration complete. User ID:', newUser._id);
+        logInfo('✅ Registration complete. User ID:', newUser.id);
         return res.status(201).json({ 
           success: true, 
-          user: normalizedUser,
+          user: newUser,
           accessToken,
           refreshToken
         });
