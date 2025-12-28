@@ -22,7 +22,17 @@ import {
 // Always use Firebase - MongoDB removed
 // Note: This is checked at module load time. If Firebase is not available,
 // API routes will return proper error messages with details on how to fix it.
-const USE_FIREBASE = isFirebaseAvailable();
+// CRITICAL FIX: Wrap in try-catch to prevent function crashes if Firebase initialization fails
+let USE_FIREBASE = false;
+try {
+  USE_FIREBASE = isFirebaseAvailable();
+} catch (error) {
+  // Don't crash the function if Firebase initialization fails at module load
+  // We'll handle this gracefully in each handler by returning 503 errors
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  console.warn('⚠️ Firebase initialization failed at module load (function will still work, but Firebase operations will return 503):', errorMessage);
+  USE_FIREBASE = false;
+}
 
 // Get Firebase status with detailed error information
 function getFirebaseErrorMessage(): string {
@@ -4306,7 +4316,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
       };
       
       await create(DB_PATHS.NOTIFICATIONS, notification, String(notificationData.id));
-      return res.status(201).json({ success: true, data: { id: notificationData.id, ...notification } });
+      return res.status(201).json({ success: true, data: notification });
     }
 
     // PUT - Update notification (mark as read, etc.)

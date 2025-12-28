@@ -375,9 +375,36 @@ export async function findOneByField<T>(
 // Helper to check if database is available
 export function isDatabaseAvailable(): boolean {
   try {
+    // First check if required environment variables exist (without initializing)
+    // This prevents crashes during module load if config is missing
+    const isServerSide = typeof window === 'undefined';
+    const hasApiKey = isServerSide 
+      ? (process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY)
+      : (process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY);
+    const hasProjectId = isServerSide
+      ? (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID)
+      : (process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID);
+    
+    // If basic config is missing, return false without trying to initialize
+    if (!hasApiKey || !hasProjectId) {
+      const isDev = process.env.NODE_ENV === 'development' || 
+                    process.env.VERCEL_ENV === 'development' || 
+                    process.env.NODE_ENV !== 'production';
+      if (isDev) {
+        console.warn('⚠️ Firebase database not available: Missing required environment variables.');
+        console.warn('💡 Make sure Firebase environment variables are set correctly.');
+        console.warn('   Server-side: FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.');
+        console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, etc.');
+      }
+      return false;
+    }
+    
+    // Only try to get database if config exists
+    // This can still throw, but we catch it below
     const db = getFirebaseDatabase();
     return !!db;
   } catch (error) {
+    // Never throw - always return false to prevent function crashes
     const errorMessage = error instanceof Error ? error.message : String(error);
     
     // Always log errors in development/debug environments
@@ -395,6 +422,7 @@ export function isDatabaseAvailable(): boolean {
       console.error('❌ Firebase database unavailable. Check configuration.');
     }
     
+    // CRITICAL: Always return false, never throw
     return false;
   }
 }
