@@ -16,7 +16,8 @@ function getFirebaseAdminDatabase(): admin.database.Database | null {
     return null;
   }
   
-  return admin.database(app);
+  // Pass databaseURL as second parameter to specify which database to use
+  return admin.database(app, databaseURL);
 }
 
 // Helper to convert record to array
