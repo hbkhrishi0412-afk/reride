@@ -16,7 +16,6 @@ import { VehicleCategory } from '../types.js';
 // Firebase services
 import { firebaseUserService } from '../services/firebase-user-service.js';
 import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
-import { firebaseConversationService } from '../services/firebase-conversation-service.js';
 import { isDatabaseAvailable as isFirebaseAvailable } from '../lib/firebase-db.js';
 
 // Database mode: 'firebase' or 'mongodb'
@@ -950,17 +949,19 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       const refreshToken = generateRefreshToken(user);
 
       // Normalize user object for frontend (convert _id to id, ensure role is present)
-      const normalizedUser = normalizeUser(user);
+      // Convert UserType to UserDocument format for normalization
+      const userForNormalization: UserDocument = user as unknown as UserDocument;
+      const normalizedUser = normalizeUser(userForNormalization);
       
       if (!normalizedUser || !normalizedUser.role) {
         logError('❌ Failed to normalize user object:', { 
           email: user.email, 
           hasRole: !!user.role,
           userObject: {
-            id: user.id || user._id,
+            id: user.id || (user as unknown as UserDocument)._id?.toString(),
             email: user.email,
             role: user.role,
-            has_id: !!user._id,
+            has_id: !!(user as unknown as UserDocument)._id,
             hasId: !!user.id
           }
         });
@@ -1083,6 +1084,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           name: sanitizedData.name,
           mobile: sanitizedData.mobile,
           role: sanitizedData.role,
+          location: '', // Default empty location, can be updated later
           status: 'active' as const,
           isVerified: false,
           subscriptionPlan: 'free' as const,
@@ -1149,7 +1151,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
             logInfo('✅ User registration verified in database. User ID:', verifyUser._id);
           }
           
-          newUser = normalizeUser(verifyUser.toObject());
+          const normalizedNewUser = normalizeUser(verifyUser.toObject());
+          if (!normalizedNewUser) {
+            logError('❌ Failed to normalize user after registration');
+            return res.status(500).json({ 
+              success: false, 
+              reason: 'User registration failed - failed to process user data. Please try again.' 
+            });
+          }
+          newUser = normalizedNewUser;
         }
       
         // Generate JWT tokens for new user

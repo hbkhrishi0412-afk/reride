@@ -14,14 +14,15 @@ function getFirebaseApp(): FirebaseApp {
       firebaseApp = existingApps[0];
     } else {
       // Initialize for server-side use
-      // For server-side, we need to use environment variables directly
+      // For server-side, prioritize FIREBASE_* (without VITE_ prefix) for better serverless compatibility
+      // Fallback to VITE_FIREBASE_* for backward compatibility
       const firebaseConfig = {
-        apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || '',
-        authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || '',
-        projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || '',
-        storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || '',
-        messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || '',
-        appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || '',
+        apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || '',
+        authDomain: process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+        projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '',
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+        messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+        appId: process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID || '',
         databaseURL: process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || '',
       };
 
@@ -44,6 +45,11 @@ export function getFirebaseDatabase(): Database {
     if (databaseURL) {
       database = getDatabase(app, databaseURL);
     } else {
+      // For server-side operations, database URL should be provided
+      // But we allow fallback to default for backward compatibility
+      if (typeof window === 'undefined') {
+        console.warn('⚠️ FIREBASE_DATABASE_URL not set. Using default database URL. This may cause issues in serverless environments.');
+      }
       database = getDatabase(app);
     }
   }
@@ -214,8 +220,13 @@ export async function findOneByField<T>(
 // Helper to check if database is available
 export function isDatabaseAvailable(): boolean {
   try {
-    return !!getFirebaseDatabase();
-  } catch {
+    const db = getFirebaseDatabase();
+    return !!db;
+  } catch (error) {
+    // Log error in development, but fail silently in production
+    if (process.env.NODE_ENV === 'development' || process.env.VERCEL_ENV === 'development') {
+      console.warn('⚠️ Firebase database not available:', error instanceof Error ? error.message : String(error));
+    }
     return false;
   }
 }
