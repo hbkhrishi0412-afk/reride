@@ -1,0 +1,118 @@
+{
+  "rules": {
+    "users": {
+      "$userKey": {
+        "name": { ".read": true },
+        "email": { ".read": true },
+        "avatarUrl": { ".read": true },
+        "role": { ".read": true },
+        "isVerified": { ".read": true },
+        "dealershipName": { ".read": true },
+        "bio": { ".read": true },
+        "logoUrl": { ".read": true },
+        "averageRating": { ".read": true },
+        "ratingCount": { ".read": true },
+        "badges": { ".read": true },
+        "phoneVerified": { ".read": true },
+        "emailVerified": { ".read": true },
+        "govtIdVerified": { ".read": true },
+        "trustScore": { ".read": true },
+        "subscriptionPlan": { ".read": true },
+        "location": { ".read": true },
+        "status": { ".read": true },
+        
+        "password": {
+          ".read": false,
+          ".write": "auth != null && (data.child('firebaseUid').val() == auth.uid || (!data.exists() && newData.child('firebaseUid').val() == auth.uid))"
+        },
+        "mobile": {
+          ".read": "auth != null && data.child('firebaseUid').val() == auth.uid"
+        },
+        "alternatePhone": {
+          ".read": "auth != null && data.child('firebaseUid').val() == auth.uid"
+        },
+        "pendingPlanUpgrade": {
+          ".read": "auth != null && data.child('firebaseUid').val() == auth.uid"
+        },
+        "reportedCount": {
+          ".read": false
+        },
+        "isBanned": {
+          ".read": false
+        },
+        
+        ".read": "auth != null && data.child('firebaseUid').val() == auth.uid",
+        ".write": "auth != null && (data.child('firebaseUid').val() == auth.uid || (!data.exists() && newData.child('firebaseUid').val() == auth.uid))",
+        
+        "$other": {
+          ".read": "auth != null && data.child('firebaseUid').val() == auth.uid"
+        }
+      },
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "vehicles": {
+      "$vehicleId": {
+        ".read": "data.child('status').val() == 'published' || auth != null",
+        ".write": "auth != null",
+        ".validate": "!newData.exists() || newData.hasChildren(['make', 'model', 'price', 'sellerEmail'])"
+      },
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "conversations": {
+      "$conversationId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "!newData.exists() || newData.hasChildren(['customerId', 'sellerId', 'vehicleId'])"
+      },
+      ".read": false,
+      ".write": false
+    },
+    "notifications": {
+      "$notificationId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      },
+      ".read": false,
+      ".write": false
+    },
+    "vehicleData": {
+      ".read": true,
+      ".write": "auth != null",
+      "$key": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    },
+    "newCars": {
+      ".read": true,
+      ".write": "auth != null",
+      "$carId": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    },
+    "plans": {
+      ".read": true,
+      ".write": "auth != null",
+      "$planId": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    },
+    "rateLimits": {
+      "$userId": {
+        ".read": "auth != null && auth.uid == $userId",
+        ".write": "auth != null && auth.uid == $userId"
+      },
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}
+
