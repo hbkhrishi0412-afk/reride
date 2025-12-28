@@ -10,6 +10,8 @@ import { VehicleDataBulkUploadModal } from './VehicleDataBulkUploadModal';
 import VehicleDataManagement from './VehicleDataManagement';
 import SellerFormPreview from './SellerFormPreview';
 import { planService } from '../services/planService';
+import ImportVehiclesModal from './ImportVehiclesModal';
+import ImportUsersModal from './ImportUsersModal';
 
 // --- Seller Filter Dropdown Component ---
 interface SellerFilterDropdownProps {
@@ -144,7 +146,9 @@ interface AdminPanelProps {
     onSendBroadcast: (message: string) => void;
     auditLog: AuditLogEntry[];
     onExportUsers: () => void;
+    onImportUsers: (users: Omit<User, 'id' | 'firebaseUid'>[]) => Promise<void>;
     onExportVehicles: () => void;
+    onImportVehicles: (vehicles: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => Promise<void>;
     onExportSales: () => void;
     onNavigate?: (view: View) => void;
     onLogout?: () => void;
@@ -918,7 +922,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         onAdminUpdateUser, onUpdateUserPlan, onUpdateVehicle, onDeleteVehicle, onToggleVehicleStatus,
         onToggleVehicleFeature,
         onResolveFlag, platformSettings, onUpdateSettings, onSendBroadcast,
-        auditLog, onExportUsers, onExportVehicles, onNavigate, onLogout, vehicleData, onUpdateVehicleData,
+        auditLog, onExportUsers, onImportUsers, onExportVehicles, onImportVehicles, onNavigate, onLogout, vehicleData, onUpdateVehicleData,
         supportTickets, onUpdateSupportTicket, faqItems, onAddFaq, onUpdateFaq, onDeleteFaq,
         onCertificationApproval
     } = props;
@@ -939,6 +943,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     
     // Loading states for actions
     const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [showImportUsersModal, setShowImportUsersModal] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     
     // Helper function to handle loading states
@@ -1199,6 +1205,16 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
+                                            setShowImportUsersModal(true);
+                                        }} 
+                                        className="px-4 py-1.5 text-sm rounded-md font-medium cursor-pointer transition-colors bg-blue-500 text-white hover:bg-blue-600 shadow-sm"
+                                    >
+                                        Import Users
+                                    </button>
+                                    <button 
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
                                             handleActionWithLoading('export-users', onExportUsers);
                                         }} 
                                         disabled={loadingActions.has('export-users')}
@@ -1443,6 +1459,16 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     <option value={100}>100 per page</option>
                                 </select>
                             </div>
+                            <button 
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setShowImportModal(true);
+                                }} 
+                                className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 cursor-pointer"
+                            >
+                                Import Vehicles
+                            </button>
                             <button 
                                 onClick={(e) => {
                                     e.preventDefault();
@@ -3277,6 +3303,22 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 <VehicleDataBulkUploadModal 
                     onClose={() => setIsBulkUploadOpen(false)} 
                     onUpdateData={onUpdateVehicleData}
+                />
+            )}
+            
+            {/* Import Vehicles Modal */}
+            {showImportModal && onImportVehicles && (
+                <ImportVehiclesModal 
+                    onClose={() => setShowImportModal(false)} 
+                    onImportVehicles={onImportVehicles}
+                />
+            )}
+            
+            {/* Import Users Modal */}
+            {showImportUsersModal && onImportUsers && (
+                <ImportUsersModal 
+                    onClose={() => setShowImportUsersModal(false)} 
+                    onImportUsers={onImportUsers}
                 />
             )}
         </div>
