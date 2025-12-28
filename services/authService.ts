@@ -3,8 +3,7 @@ import {
   GoogleAuthProvider,
   signInWithPhoneNumber,
   RecaptchaVerifier,
-  ConfirmationResult,
-  UserCredential
+  ConfirmationResult
 } from 'firebase/auth';
 import { auth, getFirebaseInitError } from '../lib/firebase';
 import { User } from '../types';
