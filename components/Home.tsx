@@ -16,7 +16,6 @@ interface HomeProps {
     wishlist: number[];
     onViewSellerProfile: (sellerEmail: string) => void;
     recommendations: Vehicle[];
-    allVehicles: Vehicle[];
     onNavigate: (view: View) => void;
     onSelectCity: (city: string) => void;
 }
@@ -27,7 +26,6 @@ const Home: React.FC<HomeProps> = ({
     onToggleCompare,
     onToggleWishlist, 
     wishlist,
-    allVehicles,
     onNavigate,
     onSelectCity,
     comparisonList,
@@ -501,7 +499,6 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : (
-                {/* Fallback message when no vehicles are available */}
                 <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
                     <div className="max-w-7xl mx-auto">
                         <div className="text-center">
@@ -612,7 +609,7 @@ const Home: React.FC<HomeProps> = ({
             </div>
 
             {/* Recommended For You Section - Premium Style */}
-            {recommendations.length > 0 && (
+            {recommendations.length > 0 ? (
                 <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
                     <div className="max-w-7xl mx-auto">
                         <div className="text-center mb-12">
@@ -692,7 +689,6 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : (
-                {/* Fallback message when no vehicles are available */}
                 <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
                     <div className="max-w-7xl mx-auto">
                         <div className="text-center">

@@ -9,7 +9,7 @@ import { firebaseUserService } from '../services/firebase-user-service.js';
 import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
 import { firebaseConversationService } from '../services/firebase-conversation-service.js';
 import { isDatabaseAvailable as isFirebaseAvailable, getDatabaseStatus } from '../lib/firebase-db.js';
-import { updateFirebaseAuthProfile, isFirebaseAdminInitialized } from '../server/firebase-admin.js';
+import { updateFirebaseAuthProfile } from '../server/firebase-admin.js';
 import { 
   DB_PATHS
 } from '../lib/firebase-db.js';
@@ -121,8 +121,33 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
   return normalized;
 }
 
-// Authentication middleware - now imported from auth.ts
-import { authenticateRequest, type AuthResult } from './auth.js';
+// Authentication middleware
+interface AuthResult {
+  isValid: boolean;
+  user?: { userId: string; email: string; role: string; type?: string };
+  error?: string;
+}
+
+const authenticateRequest = (req: VercelRequest): AuthResult => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { isValid: false, error: 'No valid authorization header' };
+  }
+  
+  try {
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const decoded = verifyToken(token);
+    // Ensure role is present for the user object
+    const user = {
+      ...decoded,
+      role: decoded.role || 'customer' as 'customer' | 'seller' | 'admin'
+    };
+    return { isValid: true, user };
+  } catch (error) {
+    return { isValid: false, error: 'Invalid or expired token' };
+  }
+};
 
 // Rate limiting using MongoDB for serverless compatibility
 const config = getSecurityConfig();
@@ -347,6 +372,7 @@ async function mainHandler(
       logInfo(`📍 Fallback pathname: ${pathname}, req.url: ${req.url}`);
     }
 
+  try {
     // Check if this is a health check endpoint or HEAD request (exempt from rate limiting)
     const isHealthEndpoint = pathname.includes('/db-health') || 
                              pathname.includes('/health') || 
@@ -1076,19 +1102,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     }
     
     try {
+      
       const users = await firebaseUserService.findAll();
       // SECURITY FIX: Normalize all users to remove passwords
       const normalizedUsers = users.map(user => normalizeUser(user)).filter((u): u is NormalizedUser => u !== null);
-      
-      // If no users found in database, use fallback users (for initial setup or empty database)
-      if (normalizedUsers.length === 0) {
-        logWarn('⚠️ No users found in database, using fallback users');
-        const fallbackUsers = await getFallbackUsers();
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json(fallbackUsers);
-      }
-      
-      logInfo(`✅ Fetched ${normalizedUsers.length} users from database`);
       return res.status(200).json(normalizedUsers);
     } catch (error) {
       logError('❌ Error fetching users:', error);
@@ -1096,7 +1113,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       try {
         const fallbackUsers = await getFallbackUsers();
         res.setHeader('X-Data-Fallback', 'true');
-        logWarn('⚠️ Using fallback users due to error');
         return res.status(200).json(fallbackUsers);
       } catch (fallbackError) {
         // Even fallback failed, return empty array instead of 500
@@ -1535,15 +1551,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 // Vehicles handler - preserves exact functionality from vehicles.ts
 async function handleVehicles(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
-    // Check Firebase availability
-    if (!USE_FIREBASE) {
-      return res.status(503).json({
-        success: false,
-        reason: 'Firebase is not configured. Please set Firebase environment variables.',
-        fallback: true
-      });
-    }
-    
     // Check action type from query parameter
     const { type, action } = req.query;
 
@@ -2387,26 +2394,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
     }
     
-    // Log incoming request body to debug image issues
-    console.log('📥 POST /vehicles - Request body keys:', Object.keys(req.body || {}));
-    console.log('📸 Images in request body:', req.body.images);
-    
-    // Normalize images to always be an array
-    let normalizedImages: string[] = [];
-    if (req.body.images) {
-      if (Array.isArray(req.body.images)) {
-        // Filter out any null/undefined/empty values
-        normalizedImages = req.body.images.filter((img): img is string => typeof img === 'string' && img.length > 0);
-      } else if (typeof req.body.images === 'string' && req.body.images.length > 0) {
-        normalizedImages = [req.body.images];
-      }
-    }
-    
     const vehicleData = {
       id: Date.now(),
       ...req.body,
-      // Ensure images array is preserved and normalized
-      images: normalizedImages,
       views: 0,
       inquiriesCount: 0,
       createdAt: new Date().toISOString(),
@@ -2414,7 +2404,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     };
     
     console.log('💾 Saving new vehicle to Firebase...');
-    console.log('📸 Vehicle images being saved (normalized):', vehicleData.images);
     const newVehicle = await firebaseVehicleService.create(vehicleData);
     console.log('✅ Vehicle saved successfully to Firebase:', newVehicle.id);
     
@@ -2442,8 +2431,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         return res.status(400).json({ success: false, reason: 'Vehicle ID is required for update.' });
       }
       
-      console.log('🔄 PUT /vehicles - Updating vehicle:', { id: vehicleIdNum, fields: Object.keys(updateData) });
-      console.log('📸 Images in request body:', req.body.images);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🔄 PUT /vehicles - Updating vehicle:', { id: vehicleIdNum, fields: Object.keys(updateData) });
+      }
       
       // SECURITY FIX: Ownership Check
       // Fetch vehicle to verify ownership before update
@@ -2458,21 +2448,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       if (!auth.user || (auth.user.role !== 'admin' && normalizedVehicleSellerEmail !== normalizedAuthEmail)) {
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
-      
-      // Ensure images array is preserved in update (if provided)
-      if (updateData.images !== undefined) {
-        // Normalize images to always be an array
-        if (Array.isArray(updateData.images)) {
-          // Filter out any null/undefined values
-          updateData.images = updateData.images.filter((img): img is string => typeof img === 'string' && img.length > 0);
-        } else if (typeof updateData.images === 'string' && updateData.images.length > 0) {
-          updateData.images = [updateData.images];
-        } else {
-          updateData.images = [];
-        }
-      }
-      
-      console.log('📸 Vehicle images being updated (normalized):', updateData.images);
       
       // Update vehicle in Firebase
       await firebaseVehicleService.update(vehicleIdNum, updateData);
@@ -2510,7 +2485,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         return res.status(400).json({ success: false, reason: 'Vehicle ID is required for deletion.' });
       }
       
-      console.log('🔄 DELETE /vehicles - Deleting vehicle:', vehicleIdNum);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🔄 DELETE /vehicles - Deleting vehicle:', vehicleIdNum);
+      }
       
       // SECURITY FIX: Ownership Check
       const vehicleToDelete = await firebaseVehicleService.findById(vehicleIdNum);
@@ -2936,12 +2913,12 @@ async function getFallbackVehicles(): Promise<VehicleType[]> {
 }
 
 async function getFallbackUsers(): Promise<NormalizedUser[]> {
-  // Return fallback user data with all roles for admin panel testing
+  // Return minimal fallback user data
   return [
     {
       id: 'fallback-user-1',
-      name: 'Demo Customer',
-      email: 'customer@test.com',
+      name: 'Demo User',
+      email: 'demo@reride.com',
       mobile: '9876543210',
       role: 'customer',
       location: 'Mumbai',
@@ -2949,31 +2926,6 @@ async function getFallbackUsers(): Promise<NormalizedUser[]> {
       createdAt: new Date().toISOString(),
       subscriptionPlan: 'free',
       isVerified: false
-    },
-    {
-      id: 'fallback-user-2',
-      name: 'Demo Seller',
-      email: 'seller@test.com',
-      mobile: '9876543211',
-      role: 'seller',
-      location: 'Delhi',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      subscriptionPlan: 'free',
-      isVerified: false,
-      dealershipName: 'Demo Dealership'
-    },
-    {
-      id: 'fallback-user-3',
-      name: 'Demo Admin',
-      email: 'admin@test.com',
-      mobile: '9876543212',
-      role: 'admin',
-      location: 'Bangalore',
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      subscriptionPlan: 'free',
-      isVerified: true
     }
   ];
 }
@@ -4624,4 +4576,3 @@ export default async function handler(
     }
   }
 }
-
