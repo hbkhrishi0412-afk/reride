@@ -1167,7 +1167,7 @@ const AppContent: React.FC = React.memo(() => {
                         listingExpiresAt = expiryDate.toISOString();
                       }
                       
-                      const { addVehicle } = await import('./services/vehicleService');
+                      const { addVehicle, getVehicles } = await import('./services/vehicleService');
                       const vehicleToAdd = {
                         ...vehicleData,
                         id: Date.now() + Math.floor(Math.random() * 1000),
@@ -1182,6 +1182,16 @@ const AppContent: React.FC = React.memo(() => {
                       
                       const newVehicle = await addVehicle(vehicleToAdd);
                       setVehicles(prev => [...prev, newVehicle]);
+                      
+                      // Refresh vehicles list from API to ensure buy cars section shows the new vehicle
+                      try {
+                        const refreshedVehicles = await getVehicles();
+                        setVehicles(refreshedVehicles);
+                      } catch (refreshError) {
+                        console.warn('Failed to refresh vehicles list after adding vehicle:', refreshError);
+                        // Continue anyway - we already updated local state
+                      }
+                      
                       addToast('Vehicle added successfully!', 'success');
                     } catch (error) {
                       console.error('❌ Failed to add vehicle:', error);
@@ -1250,6 +1260,17 @@ const AppContent: React.FC = React.memo(() => {
                   
                   // Update local state
                   setVehicles(prev => [...prev, result]);
+                  
+                  // Refresh vehicles list from API to ensure buy cars section shows the new vehicle
+                  try {
+                    const { getVehicles } = await import('./services/vehicleService');
+                    const refreshedVehicles = await getVehicles();
+                    setVehicles(refreshedVehicles);
+                  } catch (refreshError) {
+                    console.warn('Failed to refresh vehicles list after adding vehicle:', refreshError);
+                    // Continue anyway - we already updated local state
+                  }
+                  
                   addToast('Vehicle added successfully', 'success');
                 } catch (error) {
                   console.error('❌ Failed to add vehicle:', error);
@@ -1292,11 +1313,18 @@ const AppContent: React.FC = React.memo(() => {
                   }));
                   
                   // Call API to create vehicles
-                  const { addVehicle } = await import('./services/vehicleService');
+                  const { addVehicle, getVehicles } = await import('./services/vehicleService');
                   const results = await Promise.all(newVehicles.map(vehicle => addVehicle(vehicle)));
                   
-                  // Update local state
-                  setVehicles(prev => [...prev, ...results]);
+                  // Refresh vehicles list from API to ensure buy cars section shows the new vehicles
+                  try {
+                    const refreshedVehicles = await getVehicles();
+                    setVehicles(refreshedVehicles);
+                  } catch (refreshError) {
+                    console.warn('Failed to refresh vehicles list after adding vehicles:', refreshError);
+                    // Fallback: update local state with results
+                    setVehicles(prev => [...prev, ...results]);
+                  }
                   addToast(`${results.length} vehicles added successfully`, 'success');
                 } catch (error) {
                   console.error('❌ Failed to add vehicles:', error);
@@ -1754,16 +1782,28 @@ const AppContent: React.FC = React.memo(() => {
                   }
                   
                   // Current password is correct, now update to new password
-                  // In development (localStorage), store as plain text
-                  // In production (API), send plain text and let API hash it
-                  // Both cases use the same value, so no conditional needed
-                  await updateUser(currentUser.email, { password: passwords.new });
-                  // Don't show success here - let updateUser handle the toast message
-                  // This ensures we show the correct message based on MongoDB success/failure
-                  return true;
+                  // Send plain text password - API will hash it
+                  try {
+                    await updateUser(currentUser.email, { password: passwords.new });
+                    // Success message will be shown by updateUser in AppProvider
+                    return true;
+                  } catch (updateError) {
+                    console.error('Failed to update password:', updateError);
+                    // Check if it's a specific error from the API
+                    const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
+                    if (errorMessage.includes('Server error') || errorMessage.includes('500')) {
+                      addToast('Password update failed: Server error. Please try again.', 'error');
+                    } else if (errorMessage.includes('Authentication') || errorMessage.includes('401')) {
+                      addToast('Password update failed: Authentication expired. Please log in again.', 'error');
+                    } else {
+                      addToast(`Password update failed: ${errorMessage}`, 'error');
+                    }
+                    return false;
+                  }
                 } catch (error) {
                   console.error('Failed to update password:', error);
-                  addToast('Failed to update password', 'error');
+                  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                  addToast(`Password update failed: ${errorMessage}`, 'error');
                   return false;
                 }
               }
