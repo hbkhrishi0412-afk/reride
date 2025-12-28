@@ -9,13 +9,13 @@ import { firebaseUserService } from '../services/firebase-user-service.js';
 import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
 import { firebaseConversationService } from '../services/firebase-conversation-service.js';
 import { isDatabaseAvailable as isFirebaseAvailable, getDatabaseStatus } from '../lib/firebase-db.js';
+import { updateFirebaseAuthProfile } from '../lib/firebase-admin.js';
 import { 
   create,
   read,
   readAll,
   updateData,
   deleteData,
-  queryByField,
   DB_PATHS
 } from '../lib/firebase-db.js';
 
@@ -667,7 +667,7 @@ async function mainHandler(
 }
 
 // Users handler - preserves exact functionality from users.ts
-async function handleUsers(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleUsers(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     // FIX: Handle HEAD requests immediately to prevent 405 errors
     if (req.method === 'HEAD') {
@@ -965,6 +965,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
       // Sanitize OAuth data
       const sanitizedData = await sanitizeObject({ firebaseUid, email, name, role, authProvider, avatarUrl });
+      const mobile = req.body.mobile || '';
+      const location = req.body.location || '';
 
       // Normalize email to lowercase for consistent database lookup
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
@@ -972,10 +974,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
       
       if (!user) {
         logInfo('🔄 OAuth registration - Creating new user:', normalizedEmail);
-        const userData = {
-          id: Date.now().toString(),
+        const userData: Omit<UserType, 'id'> = {
           email: normalizedEmail,
           name: sanitizedData.name,
+          mobile: mobile,
+          location: location,
           role: sanitizedData.role,
           firebaseUid: sanitizedData.firebaseUid,
           authProvider: sanitizedData.authProvider,
@@ -1279,6 +1282,46 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 
         logInfo('✅ User updated successfully:', updatedUser.email);
 
+        // SYNC FIREBASE AUTH PROFILE when user profile data changes
+        if (existingUser.firebaseUid) {
+          try {
+            const authUpdates: {
+              displayName?: string;
+              photoURL?: string;
+              email?: string;
+              phoneNumber?: string;
+            } = {};
+
+            // Map database fields to Firebase Auth fields
+            if (updateFields.name !== undefined) {
+              authUpdates.displayName = updateFields.name as string;
+            }
+            if (updateFields.avatarUrl !== undefined) {
+              authUpdates.photoURL = updateFields.avatarUrl as string;
+            }
+            if (updateFields.email !== undefined) {
+              authUpdates.email = updateFields.email as string;
+            }
+            if (updateFields.mobile !== undefined) {
+              authUpdates.phoneNumber = updateFields.mobile as string;
+            }
+
+            // Only update Firebase Auth if there are relevant fields to update
+            if (Object.keys(authUpdates).length > 0) {
+              logInfo('🔄 Syncing Firebase Auth profile...', { 
+                firebaseUid: existingUser.firebaseUid,
+                fields: Object.keys(authUpdates)
+              });
+              await updateFirebaseAuthProfile(existingUser.firebaseUid, authUpdates);
+              logInfo('✅ Firebase Auth profile synced successfully');
+            }
+          } catch (authError) {
+            logError('⚠️ Error syncing Firebase Auth profile:', authError);
+            // Don't fail the user update if Auth sync fails - database update already succeeded
+            // This is a non-critical operation
+          }
+        }
+
         // SYNC VEHICLE EXPIRY DATES when planExpiryDate is updated
         if (updateFields.planExpiryDate !== undefined || unsetFields.planExpiryDate !== undefined) {
           try {
@@ -1365,6 +1408,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
           error: errorMessage
         });
       }
+    } catch (putError) {
+      logError('❌ Error in PUT handler:', putError);
+      return res.status(500).json({
+        success: false,
+        reason: 'Failed to update user',
+        error: putError instanceof Error ? putError.message : 'Unknown error'
+      });
+    }
   }
 
   // DELETE - Delete user
@@ -1424,7 +1475,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
     }
   }
 
-  return res.status(405).json({ success: false, reason: 'Method not allowed.' });
+    return res.status(405).json({ success: false, reason: 'Method not allowed.' });
   } catch (error) {
     logError('❌ Error in handleUsers:', error);
     // Ensure we always return JSON
@@ -1511,7 +1562,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, options: Han
 }
 
 // Vehicles handler - preserves exact functionality from vehicles.ts
-async function handleVehicles(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleVehicles(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     // Check Firebase availability
     if (!USE_FIREBASE) {
@@ -1730,7 +1781,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         });
       }
       
-      const vehicleUpdates: Array<{ id: number; updates: Partial<Vehicle> }> = [];
+      const vehicleUpdates: Array<{ id: number; updates: Partial<VehicleType> }> = [];
       
       vehicles.forEach(vehicle => {
         const updateFields: Record<string, any> = {};
@@ -1911,8 +1962,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         }
 
         const currentViews = typeof vehicle.views === 'number' ? vehicle.views : 0;
-        vehicle.views = currentViews + 1;
-        await vehicle.save();
+        await firebaseVehicleService.update(vehicleIdNum, {
+          views: currentViews + 1
+        });
 
         return res.status(200).json({ success: true, views: vehicle.views });
       } catch (error) {
@@ -1995,7 +2047,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
         return res.status(403).json({ success: false, reason: 'Unauthorized' });
       }
       
-      const updates: Partial<Vehicle> = {};
+      const updates: Partial<VehicleType> = {};
       if (refreshAction === 'refresh') {
         updates.views = 0;
         updates.inquiriesCount = 0;
@@ -2020,7 +2072,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
       // Add boost information if packageId is provided
       // packageId format is like "top_search_3", "homepage_spot", etc.
       // Extract type and duration from packageId
-      let boostType = 'top_search';
+      let boostType: 'top_search' | 'homepage_spotlight' | 'featured_badge' | 'multi_city' = 'top_search';
       let boostDuration = 7; // Default 7 days
       
       if (packageId) {
@@ -2031,10 +2083,20 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           const isLastPartNumber = !isNaN(Number(lastPart));
           
           if (isLastPartNumber) {
-            boostType = parts.slice(0, -1).join('_');
+            const extractedType = parts.slice(0, -1).join('_');
+            // Validate and set boostType
+            if (extractedType === 'top_search' || extractedType === 'homepage_spotlight' || 
+                extractedType === 'featured_badge' || extractedType === 'multi_city') {
+              boostType = extractedType;
+            }
             boostDuration = Number(lastPart);
           } else {
-            boostType = parts.join('_');
+            const extractedType = parts.join('_');
+            // Validate and set boostType
+            if (extractedType === 'top_search' || extractedType === 'homepage_spotlight' || 
+                extractedType === 'featured_badge' || extractedType === 'multi_city') {
+              boostType = extractedType;
+            }
             // Use default duration based on package
             boostDuration = 7; // Default
           }
@@ -2295,8 +2357,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
           
           await firebaseVehicleService.update(vehicleIdNum, {
             status: 'published',
-            listingStatus: 'active',
-            soldAt: null
+            listingStatus: 'active'
           });
           
           const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
@@ -2345,7 +2406,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
             // Premium without expiry date: leave undefined (no expiry)
             listingExpiresAt = undefined;
           }
-        } else if (seller.subscriptionPlan !== 'premium') {
+        } else if (seller.subscriptionPlan === 'free' || seller.subscriptionPlan === 'pro') {
           // Free and Pro plans get 30-day expiry from today
           const expiryDate = new Date();
           expiryDate.setDate(expiryDate.getDate() + 30);
@@ -2539,7 +2600,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, options: 
 }
 
 // Admin handler - preserves exact functionality from admin.ts
-async function handleAdmin(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   const { action } = req.query;
 
   // SECURITY: Require authentication for all admin endpoints
@@ -2691,7 +2752,7 @@ async function handleHealth(_req: VercelRequest, res: VercelResponse) {
 }
 
 // Seed handler - preserves exact functionality from seed.ts
-async function handleSeed(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleSeed(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   }
@@ -2731,7 +2792,7 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, options: Hand
 }
 
 // Vehicle Data handler - preserves exact functionality from vehicle-data.ts
-async function handleVehicleData(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleVehicleData(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   // Ensure JSON content type
   res.setHeader('Content-Type', 'application/json');
   
@@ -2923,7 +2984,7 @@ function getPriceRange(vehicles: VehicleType[]): { min: number; max: number } {
 }
 
 // New Cars handler - CRUD for new car catalog
-async function handleNewCars(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_FIREBASE) {
     return res.status(503).json({
       success: false,
@@ -2936,8 +2997,8 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, options: H
     const items = await readAll<Record<string, unknown>>(DB_PATHS.NEW_CARS);
     const itemsArray = Object.entries(items).map(([id, data]) => ({ id, ...data }))
       .sort((a, b) => {
-        const aTime = a.updatedAt ? new Date(a.updatedAt as string).getTime() : 0;
-        const bTime = b.updatedAt ? new Date(b.updatedAt as string).getTime() : 0;
+        const aTime = (a as Record<string, unknown>).updatedAt ? new Date((a as Record<string, unknown>).updatedAt as string).getTime() : 0;
+        const bTime = (b as Record<string, unknown>).updatedAt ? new Date((b as Record<string, unknown>).updatedAt as string).getTime() : 0;
         return bTime - aTime;
       });
     return res.status(200).json(itemsArray);
@@ -3021,13 +3082,13 @@ async function seedUsers(): Promise<UserType[]> {
   const expiryDate = new Date(now);
   expiryDate.setMonth(expiryDate.getMonth() + 1); // 1 month from now
   
-  const sampleUsers = [
+  const sampleUsers: Array<Omit<UserType, 'id'>> = [
     {
-      id: '1',
       email: 'admin@test.com',
       password: adminPassword,
       name: 'Admin User',
       mobile: '9876543210',
+      location: 'Mumbai, Maharashtra',
       role: 'admin' as const,
       status: 'active' as const,
       isVerified: true,
@@ -3036,11 +3097,11 @@ async function seedUsers(): Promise<UserType[]> {
       createdAt: new Date().toISOString()
     },
     {
-      id: '2',
       email: 'seller@test.com',
       password: sellerPassword,
       name: 'Prestige Motors',
       mobile: '+91-98765-43210',
+      location: 'Delhi, NCR',
       role: 'seller' as const,
       status: 'active' as const,
       isVerified: true,
@@ -3056,11 +3117,11 @@ async function seedUsers(): Promise<UserType[]> {
       createdAt: new Date().toISOString()
     },
     {
-      id: '3',
       email: 'customer@test.com',
       password: customerPassword,
       name: 'Test Customer',
       mobile: '9876543212',
+      location: 'Bangalore, Karnataka',
       role: 'customer' as const,
       status: 'active' as const,
       isVerified: false,
@@ -3089,9 +3150,8 @@ async function seedUsers(): Promise<UserType[]> {
 }
 
 async function seedVehicles(): Promise<VehicleType[]> {
-  const sampleVehicles = [
+  const sampleVehicles: Array<Omit<VehicleType, 'id'>> = [
     {
-      id: 1,
       views: 324,
       make: 'Maruti Suzuki',
       model: 'Swift',
@@ -3099,14 +3159,32 @@ async function seedVehicles(): Promise<VehicleType[]> {
       year: 2022,
       price: 650000,
       mileage: 15000,
-      category: 'FOUR_WHEELER' as const,
+      category: VehicleCategory.FOUR_WHEELER,
       sellerEmail: 'seller@test.com',
       status: 'published' as const,
       isFeatured: false,
+      images: ['https://example.com/image1.jpg'],
+      features: ['Power Steering', 'Air Conditioning', 'Music System'],
+      description: 'Well maintained Swift in excellent condition',
+      engine: '1.2L Petrol',
+      transmission: 'Manual',
+      fuelType: 'Petrol',
+      fuelEfficiency: '20 kmpl',
+      color: 'White',
+      location: 'Delhi, NCR',
+      city: 'Delhi',
+      state: 'DL',
+      registrationYear: 2022,
+      insuranceValidity: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      insuranceType: 'Comprehensive',
+      rto: 'Delhi',
+      noOfOwners: 1,
+      displacement: '1197 cc',
+      groundClearance: '170 mm',
+      bootSpace: '268 litres',
       createdAt: new Date().toISOString()
     },
     {
-      id: 2,
       views: 512,
       make: 'Honda',
       model: 'City',
@@ -3114,10 +3192,29 @@ async function seedVehicles(): Promise<VehicleType[]> {
       year: 2021,
       price: 850000,
       mileage: 25000,
-      category: 'FOUR_WHEELER' as const,
+      category: VehicleCategory.FOUR_WHEELER,
       sellerEmail: 'seller@test.com',
       status: 'published' as const,
       isFeatured: true,
+      images: ['https://example.com/image2.jpg'],
+      features: ['Sunroof', 'Touchscreen', 'Reverse Camera'],
+      description: 'Premium Honda City with all features',
+      engine: '1.5L Petrol',
+      transmission: 'CVT',
+      fuelType: 'Petrol',
+      fuelEfficiency: '17.8 kmpl',
+      color: 'Silver',
+      location: 'Delhi, NCR',
+      city: 'Delhi',
+      state: 'DL',
+      registrationYear: 2021,
+      insuranceValidity: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000).toISOString(),
+      insuranceType: 'Comprehensive',
+      rto: 'Delhi',
+      noOfOwners: 1,
+      displacement: '1498 cc',
+      groundClearance: '165 mm',
+      bootSpace: '506 litres',
       createdAt: new Date().toISOString()
     }
   ];
@@ -3350,7 +3447,7 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
 }
 
 // Content handler - consolidates content.ts
-async function handleContent(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleContent(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_FIREBASE) {
     // For GET requests, return 200 with empty array instead of 503
     if (req.method === 'GET') {
@@ -3432,7 +3529,7 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, faqsPath: 
     if (category && category !== 'all' && typeof category === 'string') {
       // Sanitize category
       const sanitizedCategory = await sanitizeString(category);
-      faqs = faqs.filter(faq => (faq.category as string) === sanitizedCategory);
+      faqs = faqs.filter(faq => ((faq as Record<string, unknown>).category as string) === sanitizedCategory);
     }
     
     return res.status(200).json({
@@ -3579,21 +3676,21 @@ async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, 
     if (userEmail && typeof userEmail === 'string') {
       // Sanitize email
       const sanitizedEmail = await sanitizeString(userEmail);
-      tickets = tickets.filter(ticket => (ticket.userEmail as string)?.toLowerCase().trim() === sanitizedEmail.toLowerCase().trim());
+      tickets = tickets.filter(ticket => ((ticket as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() === sanitizedEmail.toLowerCase().trim());
     }
     
     if (status && typeof status === 'string') {
       // Validate status is one of allowed values
       const allowedStatuses = ['Open', 'In Progress', 'Resolved', 'Closed'];
       if (allowedStatuses.includes(status)) {
-        tickets = tickets.filter(ticket => ticket.status === status);
+        tickets = tickets.filter(ticket => (ticket as Record<string, unknown>).status === status);
       }
     }
 
     // Sort by createdAt descending
     tickets = tickets.sort((a, b) => {
-      const aTime = a.createdAt ? new Date(a.createdAt as string).getTime() : 0;
-      const bTime = b.createdAt ? new Date(b.createdAt as string).getTime() : 0;
+      const aTime = (a as Record<string, unknown>).createdAt ? new Date((a as Record<string, unknown>).createdAt as string).getTime() : 0;
+      const bTime = (b as Record<string, unknown>).createdAt ? new Date((b as Record<string, unknown>).createdAt as string).getTime() : 0;
       return bTime - aTime;
     });
     
@@ -3713,7 +3810,7 @@ async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse
 }
 
 // Sell Car handler - consolidates sell-car/index.ts
-async function handleSellCar(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   if (!USE_FIREBASE) {
     return res.status(503).json({
       success: false,
@@ -3768,12 +3865,12 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
 
         // Sanitize submission data
         const sanitizedSubmissionData = await sanitizeObject(submissionData);
-        const id = `submission_${Date.now()}`;
-        await create(submissionsPath, sanitizedSubmissionData, id);
+        const submissionId = `submission_${Date.now()}`;
+        await create(submissionsPath, sanitizedSubmissionData, submissionId);
         
         res.status(201).json({
           success: true,
-          id,
+          id: submissionId,
           message: 'Car submission received successfully'
         });
         break;
@@ -3808,8 +3905,8 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
 
         // Sort by submittedAt descending
         submissions = submissions.sort((a, b) => {
-          const aTime = a.submittedAt ? new Date(a.submittedAt as string).getTime() : 0;
-          const bTime = b.submittedAt ? new Date(b.submittedAt as string).getTime() : 0;
+          const aTime = (a as Record<string, unknown>).submittedAt ? new Date((a as Record<string, unknown>).submittedAt as string).getTime() : 0;
+          const bTime = (b as Record<string, unknown>).submittedAt ? new Date((b as Record<string, unknown>).submittedAt as string).getTime() : 0;
           return bTime - aTime;
         });
 
@@ -3830,24 +3927,24 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
         break;
 
       case 'PUT':
-        const { id, status: updateStatus, adminNotes, estimatedPrice } = req.body;
+        const { id: submissionUpdateId, status: updateStatus, adminNotes, estimatedPrice } = req.body;
         
-        if (!id) {
+        if (!submissionUpdateId) {
           return res.status(400).json({ error: 'Submission ID is required' });
         }
 
-        const existing = await read<Record<string, unknown>>(submissionsPath, String(id));
+        const existing = await read<Record<string, unknown>>(submissionsPath, String(submissionUpdateId));
         if (!existing) {
           return res.status(404).json({ error: 'Submission not found' });
         }
 
-        interface UpdateData {
+        interface SubmissionUpdateData {
           status?: string;
           adminNotes?: string;
           estimatedPrice?: number;
           updatedAt: string;
         }
-        const updateData: UpdateData = {
+        const submissionUpdates: SubmissionUpdateData = {
           updatedAt: new Date().toISOString()
         };
         
@@ -3855,17 +3952,17 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
         if (updateStatus && typeof updateStatus === 'string') {
           const allowedStatuses = ['pending', 'approved', 'rejected', 'processing'];
           if (allowedStatuses.includes(updateStatus.toLowerCase())) {
-            updateData.status = updateStatus;
+            submissionUpdates.status = updateStatus;
           }
         }
         if (adminNotes && typeof adminNotes === 'string') {
-          updateData.adminNotes = await sanitizeString(adminNotes);
+          submissionUpdates.adminNotes = await sanitizeString(adminNotes);
         }
         if (estimatedPrice && typeof estimatedPrice === 'number') {
-          updateData.estimatedPrice = estimatedPrice;
+          submissionUpdates.estimatedPrice = estimatedPrice;
         }
 
-        await updateData(submissionsPath, String(id), updateData);
+        await updateData(submissionsPath, String(submissionUpdateId), submissionUpdates as unknown as Record<string, unknown>);
 
         res.status(200).json({
           success: true,
@@ -3903,7 +4000,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, options: H
 }
 
 // Business handler - consolidates business.ts (payments and plans)
-async function handleBusiness(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleBusiness(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const pathname = url.pathname || '';
@@ -3922,9 +4019,9 @@ async function handleBusiness(req: VercelRequest, res: VercelResponse, options: 
     
     switch (type) {
       case 'payments':
-        return await handlePayments(req, res, options);
+        return await handlePayments(req, res, _options);
       case 'plans':
-        return await handlePlans(req, res, options);
+        return await handlePlans(req, res, _options);
       default:
         return res.status(400).json({ 
           success: false, 
@@ -3939,7 +4036,7 @@ async function handleBusiness(req: VercelRequest, res: VercelResponse, options: 
 }
 
 // Payments Handler
-async function handlePayments(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handlePayments(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     if (!USE_FIREBASE) {
       return res.status(503).json({
@@ -4147,7 +4244,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, options: 
 }
 
 // Conversations Handler
-async function handleConversations(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleConversations(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     if (!USE_FIREBASE) {
       return res.status(503).json({
@@ -4250,7 +4347,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, opti
 }
 
 // Notifications Handler
-async function handleNotifications(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handleNotifications(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     if (!USE_FIREBASE) {
       return res.status(503).json({
@@ -4279,19 +4376,19 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
       if (recipientEmail) {
         const emailValue = Array.isArray(recipientEmail) ? recipientEmail[0] : recipientEmail;
         const normalizedEmail = emailValue.toLowerCase().trim();
-        notifications = notifications.filter(n => (n.recipientEmail as string)?.toLowerCase().trim() === normalizedEmail);
+        notifications = notifications.filter(n => ((n as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() === normalizedEmail);
       }
       
       if (isRead !== undefined) {
         const isReadValue = Array.isArray(isRead) ? isRead[0] : isRead;
         const isReadBool = isReadValue === 'true';
-        notifications = notifications.filter(n => n.isRead === isReadBool);
+        notifications = notifications.filter(n => (n as Record<string, unknown>).isRead === isReadBool);
       }
       
       // Sort by timestamp descending
       notifications = notifications.sort((a, b) => {
-        const aTime = a.timestamp ? new Date(a.timestamp as string).getTime() : 0;
-        const bTime = b.timestamp ? new Date(b.timestamp as string).getTime() : 0;
+        const aTime = (a as Record<string, unknown>).timestamp ? new Date((a as Record<string, unknown>).timestamp as string).getTime() : 0;
+        const bTime = (b as Record<string, unknown>).timestamp ? new Date((b as Record<string, unknown>).timestamp as string).getTime() : 0;
         return bTime - aTime;
       });
       
@@ -4365,7 +4462,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, opti
 }
 
 // Plans Handler
-async function handlePlans(req: VercelRequest, res: VercelResponse, options: HandlerOptions) {
+async function handlePlans(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     if (!USE_FIREBASE) {
       return res.status(503).json({
