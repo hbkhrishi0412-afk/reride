@@ -169,3 +169,5 @@ firebase use
 **Note:** Firebase Authentication works independently of Firebase Hosting. You can use Firebase Auth with Vercel, Netlify, or any other hosting provider!
 
 
+
+
