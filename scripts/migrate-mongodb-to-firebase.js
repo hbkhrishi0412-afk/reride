@@ -33,20 +33,9 @@ try {
   console.log('ℹ️  dotenv not found, using environment variables directly');
 }
 
-// Firebase configuration
-const firebaseConfig = {
-  apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY,
-  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID,
-  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID,
-  databaseURL: process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || 'https://reride-ade6a-default-rtdb.asia-southeast1.firebasedatabase.app/',
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app, firebaseConfig.databaseURL);
+// Firebase configuration and database will be initialized in main() function
+let app;
+let db;
 
 // Optimized batch processing with higher concurrency (parallel processing)
 async function processBatch(items, concurrency, processor) {
@@ -119,7 +108,7 @@ function toPlainObject(doc) {
   return obj;
 }
 
-async function migrateUsers() {
+async function migrateUsers(db) {
   console.log('\n📦 Migrating Users...');
   const users = await User.find({});
   console.log(`   Found ${users.length} users`);
@@ -145,7 +134,7 @@ async function migrateUsers() {
   return results;
 }
 
-async function migrateVehicles() {
+async function migrateVehicles(db) {
   console.log('\n🚗 Migrating Vehicles...');
   const vehicles = await Vehicle.find({});
   console.log(`   Found ${vehicles.length} vehicles`);
@@ -168,7 +157,7 @@ async function migrateVehicles() {
   return results;
 }
 
-async function migrateConversations() {
+async function migrateConversations(db) {
   console.log('\n💬 Migrating Conversations...');
   const conversations = await Conversation.find({});
   console.log(`   Found ${conversations.length} conversations`);
@@ -195,7 +184,7 @@ async function migrateConversations() {
   return results;
 }
 
-async function migrateNotifications() {
+async function migrateNotifications(db) {
   console.log('\n🔔 Migrating Notifications...');
   const notifications = await Notification.find({});
   console.log(`   Found ${notifications.length} notifications`);
@@ -218,7 +207,7 @@ async function migrateNotifications() {
   return results;
 }
 
-async function migrateVehicleData() {
+async function migrateVehicleData(db) {
   console.log('\n📊 Migrating Vehicle Data...');
   const vehicleDataDocs = await VehicleData.find({});
   console.log(`   Found ${vehicleDataDocs.length} vehicle data documents`);
@@ -230,8 +219,11 @@ async function migrateVehicleData() {
       return false;
     }
     
+    // Use document _id or a unique identifier as the key to avoid overwriting
+    // Get the ID before deleting _id
+    const docId = (dataObj._id ? dataObj._id.toString() : (doc._id ? doc._id.toString() : 'main'));
     delete dataObj._id;
-    const dataRef = ref(db, `vehicleData/main`);
+    const dataRef = ref(db, `vehicleData/${docId}`);
     await set(dataRef, dataObj.data);
     return true;
   });
@@ -241,7 +233,7 @@ async function migrateVehicleData() {
   return results;
 }
 
-async function migrateNewCars() {
+async function migrateNewCars(db) {
   console.log('\n🚙 Migrating New Cars...');
   const newCars = await NewCar.find({});
   console.log(`   Found ${newCars.length} new cars`);
@@ -269,12 +261,9 @@ async function migrateNewCars() {
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
   console.log(`   ✅ New Cars migration complete: ${results.migrated} migrated, ${results.skipped} skipped (${elapsed}s)`);
   return results;
-  
-  console.log(`   ✅ New Cars migration complete: ${results.migrated} migrated, ${results.skipped} skipped`);
-  return results;
 }
 
-async function migratePlans() {
+async function migratePlans(db) {
   console.log('\n💳 Migrating Plans...');
   const plans = await Plan.find({});
   console.log(`   Found ${plans.length} plans`);
@@ -297,7 +286,7 @@ async function migratePlans() {
   return results;
 }
 
-async function migrateRateLimits() {
+async function migrateRateLimits(db) {
   console.log('\n⏱️  Migrating Rate Limits...');
   const rateLimits = await RateLimit.find({});
   console.log(`   Found ${rateLimits.length} rate limit entries`);
@@ -332,17 +321,39 @@ async function main() {
   }
   
   // Validate Firebase configuration
-  const databaseURL = process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || 'https://reride-ade6a-default-rtdb.asia-southeast1.firebasedatabase.app/';
+  const firebaseConfig = {
+    apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY,
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID,
+    databaseURL: process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || 'https://reride-ade6a-default-rtdb.asia-southeast1.firebasedatabase.app/',
+  };
   
-  if (!databaseURL) {
-    console.error('❌ FIREBASE_DATABASE_URL environment variable is not set!');
+  // Validate required Firebase config fields
+  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+    console.error('❌ Firebase configuration is missing required fields!');
+    console.error('   Required: FIREBASE_API_KEY (or VITE_FIREBASE_API_KEY)');
+    console.error('   Required: FIREBASE_PROJECT_ID (or VITE_FIREBASE_PROJECT_ID)');
+    console.error('   Optional but recommended: FIREBASE_DATABASE_URL');
     process.exit(1);
   }
   
-  console.log('📡 Using Firebase Database URL:', databaseURL);
+  if (!firebaseConfig.databaseURL || firebaseConfig.databaseURL === 'https://reride-ade6a-default-rtdb.asia-southeast1.firebasedatabase.app/') {
+    console.warn('⚠️  Using default Firebase Database URL. If this is incorrect, set FIREBASE_DATABASE_URL environment variable.');
+  }
+  
+  console.log('📡 Using Firebase Database URL:', firebaseConfig.databaseURL);
   console.log('✅ Using Firebase Client SDK with optimized parallel batch processing\n');
   
   try {
+    // Initialize Firebase
+    console.log('🔥 Initializing Firebase...');
+    app = initializeApp(firebaseConfig);
+    db = getDatabase(app, firebaseConfig.databaseURL);
+    console.log('✅ Firebase initialized successfully\n');
+    
     // Connect to MongoDB
     console.log('📡 Connecting to MongoDB...');
     await mongoose.connect(mongoUri);
@@ -352,14 +363,14 @@ async function main() {
     
     // Run migrations
     const results = {
-      users: await migrateUsers(),
-      vehicles: await migrateVehicles(),
-      conversations: await migrateConversations(),
-      notifications: await migrateNotifications(),
-      vehicleData: await migrateVehicleData(),
-      newCars: await migrateNewCars(),
-      plans: await migratePlans(),
-      rateLimits: await migrateRateLimits(),
+      users: await migrateUsers(db),
+      vehicles: await migrateVehicles(db),
+      conversations: await migrateConversations(db),
+      notifications: await migrateNotifications(db),
+      vehicleData: await migrateVehicleData(db),
+      newCars: await migrateNewCars(db),
+      plans: await migratePlans(db),
+      rateLimits: await migrateRateLimits(db),
     };
     
     // Summary
