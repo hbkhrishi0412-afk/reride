@@ -1,0 +1,206 @@
+{
+  "rules": {
+    "users": {
+      "$userKey": {
+        // Users are keyed by email (converted to Firebase-safe key)
+        // Check if authenticated user matches this user by email or firebaseUid
+        ".read": "auth != null && (data.child('email').val() == root.child('users').child(auth.uid).child('email').val() || data.child('firebaseUid').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        
+        ".write": "auth != null && (data.child('email').val() == root.child('users').child(auth.uid).child('email').val() || data.child('firebaseUid').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        
+        // Public read access for basic profile info (for seller profiles)
+        // This allows reading seller info without full authentication
+        "name": {
+          ".read": true
+        },
+        "email": {
+          ".read": true
+        },
+        "avatarUrl": {
+          ".read": true
+        },
+        "role": {
+          ".read": true
+        },
+        "isVerified": {
+          ".read": true
+        },
+        "dealershipName": {
+          ".read": true
+        },
+        "bio": {
+          ".read": true
+        },
+        "logoUrl": {
+          ".read": true
+        },
+        "averageRating": {
+          ".read": true
+        },
+        "ratingCount": {
+          ".read": true
+        },
+        "badges": {
+          ".read": true
+        },
+        "phoneVerified": {
+          ".read": true
+        },
+        "emailVerified": {
+          ".read": true
+        },
+        "govtIdVerified": {
+          ".read": true
+        },
+        "trustScore": {
+          ".read": true
+        },
+        "subscriptionPlan": {
+          ".read": true
+        },
+        "location": {
+          ".read": true
+        },
+        
+        // Sensitive fields - only readable by owner or admin
+        "password": {
+          ".read": false,
+          ".write": "auth != null && (data.child('email').val() == root.child('users').child(auth.uid).child('email').val() || data.child('firebaseUid').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+        },
+        "mobile": {
+          ".read": "auth != null && (data.child('email').val() == root.child('users').child(auth.uid).child('email').val() || data.child('firebaseUid').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+        },
+        "alternatePhone": {
+          ".read": "auth != null && (data.child('email').val() == root.child('users').child(auth.uid).child('email').val() || data.child('firebaseUid').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+        },
+        "pendingPlanUpgrade": {
+          ".read": "auth != null && (data.child('email').val() == root.child('users').child(auth.uid).child('email').val() || data.child('firebaseUid').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+        },
+        "reportedCount": {
+          ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+        },
+        "isBanned": {
+          ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+        },
+        
+        // All other fields follow parent rules
+        "$other": {
+          ".read": "auth != null && (data.child('email').val() == root.child('users').child(auth.uid).child('email').val() || data.child('firebaseUid').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+          ".write": "auth != null && (data.child('email').val() == root.child('users').child(auth.uid).child('email').val() || data.child('firebaseUid').val() == auth.uid || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+        }
+      },
+      
+      // Allow authenticated admin users to query all users (for server-side operations)
+      // Note: For serverless functions, use Firebase Admin SDK instead
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+    },
+    
+    "vehicles": {
+      "$vehicleId": {
+        // Public read for published vehicles (for browsing)
+        ".read": "data.child('status').val() == 'published' || (auth != null && (data.child('sellerEmail').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin'))",
+        
+        // Sellers can write their own vehicles, admins can write any
+        // For new vehicles, check if sellerEmail in newData matches authenticated user
+        ".write": "auth != null && ((!data.exists() && newData.child('sellerEmail').val() == root.child('users').child(auth.uid).child('email').val()) || (data.exists() && data.child('sellerEmail').val() == root.child('users').child(auth.uid).child('email').val()) || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        
+        // Validate required fields when creating
+        ".validate": "!newData.exists() || newData.hasChildren(['make', 'model', 'price', 'sellerEmail']) || root.child('users').child(auth.uid).child('role').val() == 'admin'"
+      },
+      
+      // Allow querying vehicles (for filtering, searching published vehicles)
+      ".read": true,
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+    },
+    
+    "conversations": {
+      "$conversationId": {
+        // Users can only read conversations they're part of (by email match)
+        ".read": "auth != null && (data.child('customerId').val() == root.child('users').child(auth.uid).child('email').val() || data.child('sellerId').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        
+        // Users can write to conversations they're part of
+        // For new conversations, check if user is customer or admin
+        ".write": "auth != null && ((!data.exists() && (newData.child('customerId').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin')) || (data.exists() && (data.child('customerId').val() == root.child('users').child(auth.uid).child('email').val() || data.child('sellerId').val() == root.child('users').child(auth.uid).child('email').val())) || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        
+        // Validate required fields when creating
+        ".validate": "!newData.exists() || newData.hasChildren(['customerId', 'sellerId', 'vehicleId']) || root.child('users').child(auth.uid).child('role').val() == 'admin'"
+      },
+      
+      // No list access - must access by ID
+      ".read": false,
+      ".write": false
+    },
+    
+    "notifications": {
+      "$notificationId": {
+        // Users can only read their own notifications
+        ".read": "auth != null && (data.child('userId').val() == auth.uid || data.child('userId').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        
+        // System/admins can write notifications
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+      },
+      
+      // No list access
+      ".read": false,
+      ".write": false
+    },
+    
+    "vehicleData": {
+      // Public read access for vehicle data (brands, models, variants)
+      ".read": true,
+      
+      // Only admins can write vehicle data
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
+      
+      "$key": {
+        ".read": true,
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+      }
+    },
+    
+    "newCars": {
+      // Public read for new car listings
+      ".read": true,
+      
+      // Only admins can write
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
+      
+      "$carId": {
+        ".read": true,
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+      }
+    },
+    
+    "plans": {
+      // Public read for subscription plans
+      ".read": true,
+      
+      // Only admins can write
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
+      
+      "$planId": {
+        ".read": true,
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+      }
+    },
+    
+    "rateLimits": {
+      // Only authenticated users can read/write their own rate limit data
+      "$userId": {
+        ".read": "auth != null && (auth.uid == $userId || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && (auth.uid == $userId || root.child('users').child(auth.uid).child('role').val() == 'admin')"
+      },
+      
+      ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
+    },
+    
+    // Default deny all other paths
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}
+

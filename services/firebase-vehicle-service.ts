@@ -14,8 +14,8 @@ import type { Vehicle } from '../types.js';
 export const firebaseVehicleService = {
   // Create a new vehicle
   async create(vehicleData: Omit<Vehicle, 'id'>): Promise<Vehicle> {
-    // Generate a unique ID if not provided
-    const id = vehicleData.id || Date.now();
+    // Generate a unique ID
+    const id = Date.now();
     await create(DB_PATHS.VEHICLES, vehicleData, id.toString());
     
     return {
