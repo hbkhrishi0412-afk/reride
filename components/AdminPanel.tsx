@@ -939,6 +939,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     
     // Loading states for actions
     const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
+    const [isRefreshing, setIsRefreshing] = useState(false);
     
     // Helper function to handle loading states
     const handleActionWithLoading = async (actionKey: string, action: () => void | Promise<void>) => {
@@ -951,6 +952,36 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 newSet.delete(actionKey);
                 return newSet;
             });
+        }
+    };
+    
+    // Refresh data from database
+    const handleRefreshData = async () => {
+        setIsRefreshing(true);
+        try {
+            const { dataService } = await import('../services/dataService');
+            const [vehiclesData, usersData] = await Promise.all([
+                dataService.getVehicles(),
+                dataService.getUsers()
+            ]);
+            
+            // Update localStorage cache to trigger refresh in AppProvider
+            if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+                localStorage.setItem('reRideVehicles', JSON.stringify(vehiclesData));
+                localStorage.setItem('reRideUsers', JSON.stringify(usersData));
+                // Trigger storage event to notify other components
+                window.dispatchEvent(new Event('storage'));
+            }
+            
+            // Force page reload to ensure all components get updated data
+            // This is the most reliable way to ensure sync
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
+        } catch (error) {
+            console.error('Failed to refresh data:', error);
+            alert('Failed to refresh data. Please try again.');
+            setIsRefreshing(false);
         }
     };
 
@@ -1135,21 +1166,51 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         Admins ({users.filter(u => u.role === 'admin').length})
                                     </button>
                                 </div>
-                                <button 
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleActionWithLoading('export-users', onExportUsers);
-                                    }} 
-                                    disabled={loadingActions.has('export-users')}
-                                    className={`px-4 py-1.5 text-sm rounded-md font-medium cursor-pointer transition-colors ${
-                                        loadingActions.has('export-users') 
-                                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                                            : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
-                                    }`}
-                                >
-                                    {loadingActions.has('export-users') ? 'Exporting...' : 'Export Users'}
-                                </button>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleRefreshData();
+                                        }} 
+                                        disabled={isRefreshing}
+                                        className={`px-4 py-1.5 text-sm rounded-md font-medium cursor-pointer transition-colors flex items-center gap-2 ${
+                                            isRefreshing 
+                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                                : 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm'
+                                        }`}
+                                        title="Refresh data from database"
+                                    >
+                                        {isRefreshing ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                Refreshing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                                Refresh
+                                            </>
+                                        )}
+                                    </button>
+                                    <button 
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleActionWithLoading('export-users', onExportUsers);
+                                        }} 
+                                        disabled={loadingActions.has('export-users')}
+                                        className={`px-4 py-1.5 text-sm rounded-md font-medium cursor-pointer transition-colors ${
+                                            loadingActions.has('export-users') 
+                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                                : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'
+                                        }`}
+                                    >
+                                        {loadingActions.has('export-users') ? 'Exporting...' : 'Export Users'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
