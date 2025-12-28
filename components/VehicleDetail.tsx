@@ -196,32 +196,6 @@ const getBankLogo = (bankName: string, size: 'sm' | 'md' | 'lg' = 'md'): React.R
   return <BankLogo bankName={bankName} size={size} />;
 };
 
-// Finance Partners Card Component
-const FinancePartnersCard: React.FC<{ partnerBanks: string[] }> = memo(({ partnerBanks }) => (
-  <div className="flex flex-col gap-2 p-4 bg-gradient-to-br from-purple-50 to-blue-50 dark:bg-white rounded-lg border border-purple-200">
-    <span className="text-sm font-medium text-brand-gray-600 dark:text-spinny-text text-center">Finance Partners</span>
-    {partnerBanks && partnerBanks.length > 0 ? (
-      <div className="flex flex-col gap-2 items-center">
-        <div className="flex flex-wrap justify-center gap-2">
-          {partnerBanks.slice(0, 4).map((bank, index) => (
-            <div key={index} className="flex flex-col items-center gap-1">
-              {getBankLogo(bank)}
-              <span className="text-xs font-semibold text-purple-700 text-center leading-tight max-w-[60px] truncate" title={bank}>
-                {bank.split(' ')[0]}
-              </span>
-            </div>
-          ))}
-        </div>
-        {partnerBanks.length > 4 && (
-          <span className="text-xs text-purple-600 font-medium">+{partnerBanks.length - 4} more</span>
-        )}
-      </div>
-    ) : (
-      <span className="text-xs text-gray-500 italic text-center">Not available</span>
-    )}
-  </div>
-));
-
 const SpecDetail: React.FC<{ label: string; value: string | number | undefined }> = ({ label, value }) => (
     <div className="flex justify-between py-2 border-b border-gray-200-100 dark:border-gray-200-200 last:border-b-0">
         <dt className="text-sm text-brand-gray-600 dark:text-spinny-text">{label}</dt>

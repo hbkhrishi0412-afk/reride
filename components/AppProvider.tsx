@@ -1071,9 +1071,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // Load critical data with shorter timeouts to prevent hanging
         // Use Promise.allSettled to ensure we always get results, even if some fail
+        // For admin users, load all vehicles (including unpublished/sold)
+        const isAdmin = currentUser?.role === 'admin';
         const [vehiclesResult, usersResult] = await Promise.allSettled([
           loadWithTimeout(
-            dataService.getVehicles().catch(err => {
+            dataService.getVehicles(isAdmin).catch(err => {
               if (process.env.NODE_ENV === 'development') {
                 console.warn('Failed to load vehicles, using empty array:', err);
               }
@@ -1287,7 +1289,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // dataService now uses request queue internally
         // Load sequentially with delays
-        const vehiclesData = await dataService.getVehicles();
+        // For admin users, load all vehicles (including unpublished/sold)
+        const isAdmin = currentUser?.role === 'admin';
+        const vehiclesData = await dataService.getVehicles(isAdmin);
         
         await new Promise(resolve => setTimeout(resolve, 300));
         

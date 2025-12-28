@@ -241,13 +241,15 @@ class DataService {
   }
 
   // Vehicle operations
-  async getVehicles(): Promise<Vehicle[]> {
+  async getVehicles(includeAllStatuses: boolean = false): Promise<Vehicle[]> {
     if (this.isDevelopment) {
       return this.getVehiclesLocal();
     }
 
     try {
-      const vehicles = await this.makeApiRequest<Vehicle[]>('/vehicles');
+      // For admin users, use admin-all endpoint to get all vehicles (including unpublished/sold)
+      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles';
+      const vehicles = await this.makeApiRequest<Vehicle[]>(endpoint);
       // Validate response is an array
       if (!Array.isArray(vehicles)) {
         throw new Error('Invalid response format: expected array');
@@ -353,10 +355,20 @@ class DataService {
         this.setLocalStorageData('reRideVehicles_prod', cachedVehicles);
       }
       
+      console.log('✅ Vehicle added successfully via API:', vehicle.id);
       return vehicle;
     } catch (error) {
-      console.warn('API failed, falling back to local storage:', error);
-      return this.addVehicleLocal(vehicleData);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Failed to add vehicle via API:', errorMessage);
+      
+      // In production, don't silently fall back to local storage
+      // This would create a mismatch between Firebase and local storage
+      if (errorMessage.includes('Authentication') || errorMessage.includes('401') || errorMessage.includes('403')) {
+        throw new Error('Authentication required. Please log in and try again.');
+      }
+      
+      // For other errors, still throw to show the error to the user
+      throw new Error(`Failed to add vehicle: ${errorMessage}`);
     }
   }
 
@@ -391,10 +403,18 @@ class DataService {
         this.setLocalStorageData('reRideVehicles_prod', updatedVehicles);
       }
       
+      console.log('✅ Vehicle updated successfully via API:', vehicle.id);
       return vehicle;
     } catch (error) {
-      console.warn('API failed, falling back to local storage:', error);
-      return this.updateVehicleLocal(vehicleData);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Failed to update vehicle via API:', errorMessage);
+      
+      // In production, don't silently fall back to local storage
+      if (errorMessage.includes('Authentication') || errorMessage.includes('401') || errorMessage.includes('403')) {
+        throw new Error('Authentication required. Please log in and try again.');
+      }
+      
+      throw new Error(`Failed to update vehicle: ${errorMessage}`);
     }
   }
 
@@ -429,10 +449,18 @@ class DataService {
         this.setLocalStorageData('reRideVehicles_prod', filteredVehicles);
       }
       
+      console.log('✅ Vehicle deleted successfully via API:', vehicleId);
       return result;
     } catch (error) {
-      console.warn('API failed, falling back to local storage:', error);
-      return this.deleteVehicleLocal(vehicleId);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('❌ Failed to delete vehicle via API:', errorMessage);
+      
+      // In production, don't silently fall back to local storage
+      if (errorMessage.includes('Authentication') || errorMessage.includes('401') || errorMessage.includes('403')) {
+        throw new Error('Authentication required. Please log in and try again.');
+      }
+      
+      throw new Error(`Failed to delete vehicle: ${errorMessage}`);
     }
   }
 
