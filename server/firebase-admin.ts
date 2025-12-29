@@ -7,12 +7,12 @@ import admin from 'firebase-admin';
 // Simple, deterministic initialization
 // One parse, one initialize, one failure path
 if (!admin.apps.length) {
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   
   if (!serviceAccountJson) {
     const error = new Error(
-      'FIREBASE_SERVICE_ACCOUNT environment variable is not set. ' +
-      'Set it in Vercel: Settings → Environment Variables → FIREBASE_SERVICE_ACCOUNT'
+      'FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set. ' +
+      'Set it in Vercel: Settings → Environment Variables → FIREBASE_SERVICE_ACCOUNT_KEY'
     );
     console.error('❌', error.message);
     throw error; // Stop immediately - do not continue
@@ -35,7 +35,7 @@ if (!admin.apps.length) {
     // Validate required fields
     if (!serviceAccount.private_key || !serviceAccount.client_email) {
       const error = new Error(
-        'FIREBASE_SERVICE_ACCOUNT missing required fields (private_key, client_email). ' +
+        'FIREBASE_SERVICE_ACCOUNT_KEY missing required fields (private_key, client_email). ' +
         'Check your service account JSON format.'
       );
       console.error('❌', error.message);
@@ -59,7 +59,7 @@ if (!admin.apps.length) {
     
     if (error instanceof SyntaxError) {
       // JSON parse error
-      console.error('❌ Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:', errorMsg);
+      console.error('❌ Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON:', errorMsg);
       console.error('💡 Make sure the environment variable contains valid JSON');
       console.error('   - No outer quotes around the JSON');
       console.error('   - Use \\n for newlines in private_key (not actual newlines)');
@@ -106,6 +106,7 @@ export async function updateFirebaseAuthProfile(
     photoURL?: string;
     email?: string;
     phoneNumber?: string;
+    password?: string;
   }
 ): Promise<void> {
   if (!admin.apps.length) {
@@ -126,6 +127,9 @@ export async function updateFirebaseAuthProfile(
   }
   if (updates.phoneNumber !== undefined) {
     authUpdates.phoneNumber = updates.phoneNumber;
+  }
+  if (updates.password !== undefined) {
+    authUpdates.password = updates.password;
   }
 
   if (Object.keys(authUpdates).length === 0) {

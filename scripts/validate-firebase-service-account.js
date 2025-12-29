@@ -1,13 +1,13 @@
-// Script to validate FIREBASE_SERVICE_ACCOUNT environment variable
+// Script to validate FIREBASE_SERVICE_ACCOUNT_KEY environment variable
 // Run this locally or in Vercel to check if the JSON is valid
 // Usage: node scripts/validate-firebase-service-account.js
 
-const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
 if (!serviceAccountJson) {
-  console.error('❌ FIREBASE_SERVICE_ACCOUNT environment variable is not set');
+  console.error('❌ FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set');
   console.log('\n💡 To set it locally, create a .env.local file with:');
-  console.log('   FIREBASE_SERVICE_ACCOUNT=\'{"type":"service_account",...}\'');
+  console.log('   FIREBASE_SERVICE_ACCOUNT_KEY=\'{"type":"service_account",...}\'');
   process.exit(1);
 }
 
@@ -65,7 +65,7 @@ try {
     console.log('   private_key:', parsed.private_key ? `${parsed.private_key.substring(0, 50)}...` : 'MISSING');
   }
   
-  console.log('\n✅ FIREBASE_SERVICE_ACCOUNT is valid and ready to use!');
+  console.log('\n✅ FIREBASE_SERVICE_ACCOUNT_KEY is valid and ready to use!');
   
 } catch (error) {
   console.error('❌ JSON parsing failed:', error.message);

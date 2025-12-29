@@ -9,7 +9,7 @@ function getFirebaseAdminDatabase(): admin.database.Database {
   // If we get here and Admin is not initialized, it should have thrown during module load
   // But double-check to fail fast
   if (!admin.apps.length) {
-    throw new Error('Firebase Admin is not initialized. Check FIREBASE_SERVICE_ACCOUNT environment variable.');
+    throw new Error('Firebase Admin is not initialized. Check FIREBASE_SERVICE_ACCOUNT_KEY environment variable.');
   }
   
   const app = admin.app();

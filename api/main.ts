@@ -1248,7 +1248,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       // Sanitize and normalize email
       const sanitizedEmail = await sanitizeString(String(email));
       const normalizedEmail = sanitizedEmail.toLowerCase().trim();
-      const existingUser = await firebaseUserService.findByEmail(normalizedEmail);
+      
+      let existingUser: UserType | null;
+      try {
+        existingUser = await firebaseUserService.findByEmail(normalizedEmail);
+      } catch (findError) {
+        logError('❌ Error finding user:', findError);
+        const errorMessage = findError instanceof Error ? findError.message : 'Unknown error';
+        return res.status(500).json({ 
+          success: false, 
+          reason: `Database error while finding user: ${errorMessage}`,
+          error: 'Database connection error'
+        });
+      }
+      
       if (!existingUser) {
         logWarn('⚠️ User not found:', email);
         return res.status(404).json({ success: false, reason: 'User not found.' });
@@ -1259,12 +1272,29 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       // Update user in Firebase
       try {
         await firebaseUserService.update(normalizedEmail, firebaseUpdates);
+        logInfo('✅ User update operation completed in Firebase');
         
         // Fetch updated user
-        const updatedUser = await firebaseUserService.findByEmail(normalizedEmail);
+        let updatedUser: UserType | null;
+        try {
+          updatedUser = await firebaseUserService.findByEmail(normalizedEmail);
+        } catch (fetchError) {
+          logError('❌ Error fetching updated user:', fetchError);
+          const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown error';
+          return res.status(500).json({ 
+            success: false, 
+            reason: `Database error while fetching updated user: ${errorMessage}`,
+            error: 'Database connection error'
+          });
+        }
+        
         if (!updatedUser) {
-          logError('❌ Failed to fetch updated user');
-          return res.status(500).json({ success: false, reason: 'Failed to update user.' });
+          logError('❌ Failed to fetch updated user after update');
+          return res.status(500).json({ 
+            success: false, 
+            reason: 'User update completed but failed to verify. Please refresh and try again.',
+            error: 'Verification error'
+          });
         }
 
         logInfo('✅ User updated successfully:', updatedUser.email);
@@ -1277,6 +1307,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
               photoURL?: string;
               email?: string;
               phoneNumber?: string;
+              password?: string;
             } = {};
 
             // Map database fields to Firebase Auth fields
@@ -1292,6 +1323,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             if (updateFields.mobile !== undefined) {
               authUpdates.phoneNumber = updateFields.mobile as string;
             }
+            // CRITICAL: Also sync password to Firebase Auth if it was updated
+            // Note: Firebase Auth requires plain text password (it will hash it internally)
+            // But we only have the hashed password here, so we need to use the original plain text
+            // For now, we'll skip Firebase Auth password update since we only have the hash
+            // The database password is what's used for API authentication anyway
 
             // Only update Firebase Auth if there are relevant fields to update
             if (Object.keys(authUpdates).length > 0) {
@@ -1389,9 +1425,23 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         logError('❌ Database error during user update:', dbError);
         const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';
         
+        // Provide more specific error messages based on error type
+        let userFriendlyReason = 'Database error occurred. Please try again later.';
+        
+        if (errorMessage.includes('permission') || errorMessage.includes('Permission denied')) {
+          userFriendlyReason = 'Permission denied. Please check your authentication and try again.';
+        } else if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+          userFriendlyReason = 'Database connection error. Please check your internet connection and try again.';
+        } else if (errorMessage.includes('timeout')) {
+          userFriendlyReason = 'Request timed out. Please try again.';
+        } else if (updateFields.password) {
+          // Password-specific error
+          userFriendlyReason = 'Failed to update password. Please try again or contact support if the issue persists.';
+        }
+        
         return res.status(500).json({ 
           success: false, 
-          reason: 'Database error occurred. Please try again later.',
+          reason: userFriendlyReason,
           error: errorMessage
         });
       }
