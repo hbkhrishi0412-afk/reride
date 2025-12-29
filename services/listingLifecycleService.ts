@@ -150,11 +150,12 @@ export async function getListingLifecycle(vehicle: Vehicle, sellerPlan?: { subsc
   
   return {
     vehicleId: vehicle.id,
-    createdAt: vehicle.createdAt || new Date().toISOString(),
+    // Use explicit undefined check to preserve falsy values like empty strings or "0"
+    createdAt: vehicle.createdAt !== undefined ? vehicle.createdAt : new Date().toISOString(),
     expiresAt: expiresAt,
     lastRefreshedAt: vehicle.listingLastRefreshed,
-    autoRenew: vehicle.listingAutoRenew || false,
-    renewalCount: vehicle.listingRenewalCount || 0,
+    autoRenew: vehicle.listingAutoRenew ?? false,
+    renewalCount: vehicle.listingRenewalCount ?? 0,
     status: isListingExpired(vehicle, sellerPlan) ? 'expired' : 'active',
   };
 }

@@ -210,14 +210,17 @@ const deleteVehicleLocal = async (vehicleId: number): Promise<{ success: boolean
 // --- Production (API) Functions ---
 
 const getVehiclesApi = async (): Promise<Vehicle[]> => {
-  const response = await fetch('/api/vehicles', {
+  const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
+  const response = await authenticatedFetch('/api/vehicles', {
     method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-    credentials: 'include',
   });
-  const data = await handleResponse<Vehicle[]>(response);
+  const result = await handleApiResponse<Vehicle[]>(response);
+  
+  if (!result.success) {
+    throw new Error(result.reason || result.error || 'Failed to fetch vehicles');
+  }
+  
+  const data = result.data || [];
   
   // Validate that all items are vehicles
   if (!Array.isArray(data)) {
@@ -233,48 +236,42 @@ const getVehiclesApi = async (): Promise<Vehicle[]> => {
 };
 
 const addVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
-  const authHeaders = getAuthHeader();
-  const response = await fetch('/api/vehicles', {
+  const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
+  const response = await authenticatedFetch('/api/vehicles', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...authHeaders,
-    },
-    credentials: 'include',
     body: JSON.stringify(vehicleData),
   });
-  return handleResponse(response);
+  const result = await handleApiResponse<Vehicle>(response);
+  if (!result.success) {
+    throw new Error(result.reason || result.error || 'Failed to add vehicle');
+  }
+  return result.data!;
 };
 
 const updateVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {
-  const authHeaders = getAuthHeader();
-  const response = await fetch('/api/vehicles', {
+  const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
+  const response = await authenticatedFetch('/api/vehicles', {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...authHeaders,
-    },
-    credentials: 'include',
     body: JSON.stringify(vehicleData),
   });
-  return handleResponse(response);
+  const result = await handleApiResponse<Vehicle>(response);
+  if (!result.success) {
+    throw new Error(result.reason || result.error || 'Failed to update vehicle');
+  }
+  return result.data!;
 };
 
 const deleteVehicleApi = async (vehicleId: number): Promise<{ success: boolean, id: number }> => {
-  const authHeaders = getAuthHeader();
-  const response = await fetch('/api/vehicles', {
+  const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
+  const response = await authenticatedFetch('/api/vehicles', {
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...authHeaders,
-    },
-    credentials: 'include',
     body: JSON.stringify({ id: vehicleId }),
   });
-  return handleResponse(response);
+  const result = await handleApiResponse<{ success: boolean, id: number }>(response);
+  if (!result.success) {
+    throw new Error(result.reason || result.error || 'Failed to delete vehicle');
+  }
+  return result.data!;
 };
 
 

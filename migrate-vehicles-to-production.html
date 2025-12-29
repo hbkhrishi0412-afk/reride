@@ -306,8 +306,8 @@
                         listingExpiresAt: undefined,
                         // Ensure status is published
                         status: vehicle.status || 'published',
-                        // Ensure createdAt exists
-                        createdAt: vehicle.createdAt || new Date().toISOString()
+                        // Ensure createdAt exists - use explicit undefined check to preserve falsy values
+                        createdAt: vehicle.createdAt !== undefined ? vehicle.createdAt : new Date().toISOString()
                     };
 
                     log(`📤 Migrating vehicle ${i + 1}/${localVehicles.length}: ${vehicle.make} ${vehicle.model} (ID: ${vehicle.id})...`);

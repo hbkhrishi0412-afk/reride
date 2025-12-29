@@ -1,6 +1,7 @@
 
 import type { User } from '../types';
 import { isDevelopmentEnvironment } from '../utils/environment';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 // Fallback mock users to prevent loading issues
 const FALLBACK_USERS: User[] = [
@@ -432,46 +433,32 @@ const getUsersApi = async (): Promise<User[]> => {
 };
 
 const updateUserApi = async (userData: Partial<User> & { email: string }): Promise<User> => {
-    let response = await fetch('/api/users', {
+    // Use authenticatedFetch - it handles token refresh automatically
+    const response = await authenticatedFetch('/api/users', {
         method: 'PUT',
-        headers: getAuthHeader(),
         body: JSON.stringify(userData),
     });
     
-    // If we get 401, try refreshing token and retry once
-    if (response.status === 401) {
-        try {
-            // Clone response before consuming it
-            const responseClone = response.clone();
-            await handleResponse(responseClone); // This will attempt token refresh
-        } catch (error) {
-            if (error instanceof Error && error.message === 'TOKEN_REFRESHED') {
-                // Token was refreshed, retry the request with new token
-                response = await fetch('/api/users', {
-                    method: 'PUT',
-                    headers: getAuthHeader(),
-                    body: JSON.stringify(userData),
-                });
-            } else {
-                // Token refresh failed, get error from original response
-                const errorData = await response.json().catch(() => ({ 
-                    error: 'Authentication expired. Please log in again and try again.' 
-                }));
-                throw new Error(errorData.error || errorData.reason || 'Authentication expired. Please log in again and try again.');
-            }
-        }
+    // Use handleApiResponse to parse the response properly
+    const result = await handleApiResponse<User>(response);
+    
+    if (!result.success) {
+        throw new Error(result.reason || result.error || 'Failed to update user');
     }
     
-    return handleResponse(response);
+    return result.data!;
 };
 
 const deleteUserApi = async (email: string): Promise<{ success: boolean, email: string }> => {
-    const response = await fetch('/api/users', {
+    const response = await authenticatedFetch('/api/users', {
         method: 'DELETE',
-        headers: getAuthHeader(),
         body: JSON.stringify({ email }),
     });
-    return handleResponse(response);
+    const result = await handleApiResponse<{ success: boolean, email: string }>(response);
+    if (!result.success) {
+        throw new Error(result.reason || result.error || 'Failed to delete user');
+    }
+    return result.data!;
 };
 
 const authApi = async (body: any, retryCount = 0): Promise<any> => {

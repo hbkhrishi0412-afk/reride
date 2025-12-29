@@ -56,7 +56,7 @@ export const firebaseVehicleService = {
     const vehicles = await dbReadAll<Vehicle>(DB_PATHS.VEHICLES);
     const vehicleArray = dbSnapshotToArray(vehicles).map(v => ({
       ...v,
-      id: parseInt(v.id) || v.id,
+      id: Number(v.id),
     })) as Vehicle[];
     console.log(`📊 firebaseVehicleService.findAll: Converted ${Object.keys(vehicles).length} records to ${vehicleArray.length} vehicles`);
     return vehicleArray;
@@ -77,7 +77,7 @@ export const firebaseVehicleService = {
     const vehicles = await dbQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'sellerEmail', sellerEmail.toLowerCase().trim());
     return dbSnapshotToArray(vehicles).map(v => ({
       ...v,
-      id: parseInt(v.id) || v.id,
+      id: Number(v.id),
     })) as Vehicle[];
   },
 
@@ -86,7 +86,7 @@ export const firebaseVehicleService = {
     const vehicles = await dbQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'status', status);
     return dbSnapshotToArray(vehicles).map(v => ({
       ...v,
-      id: parseInt(v.id) || v.id,
+      id: Number(v.id),
     })) as Vehicle[];
   },
 
@@ -95,7 +95,7 @@ export const firebaseVehicleService = {
     const vehicles = await dbQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'isFeatured', true);
     return dbSnapshotToArray(vehicles).map(v => ({
       ...v,
-      id: parseInt(v.id) || v.id,
+      id: Number(v.id),
     })) as Vehicle[];
   },
 
@@ -104,7 +104,7 @@ export const firebaseVehicleService = {
     const vehicles = await dbQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'category', category);
     return dbSnapshotToArray(vehicles).map(v => ({
       ...v,
-      id: parseInt(v.id) || v.id,
+      id: Number(v.id),
     })) as Vehicle[];
   },
 
@@ -113,7 +113,7 @@ export const firebaseVehicleService = {
     const vehicles = await dbQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'city', city);
     return dbSnapshotToArray(vehicles).map(v => ({
       ...v,
-      id: parseInt(v.id) || v.id,
+      id: Number(v.id),
     })) as Vehicle[];
   },
 
@@ -122,7 +122,7 @@ export const firebaseVehicleService = {
     const vehicles = await dbQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'state', state);
     return dbSnapshotToArray(vehicles).map(v => ({
       ...v,
-      id: parseInt(v.id) || v.id,
+      id: Number(v.id),
     })) as Vehicle[];
   },
 };
