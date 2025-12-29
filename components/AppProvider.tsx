@@ -2031,7 +2031,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       },
     onResolveFlag: (type: 'vehicle' | 'conversation', id: number | string) => {
       if (type === 'vehicle') {
-        const vehicle = vehicles.find(v => v.id === id);
+        const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
         setVehicles(prev => Array.isArray(prev) ? prev.map(vehicle => 
           vehicle && vehicle.id === id ? { ...vehicle, isFlagged: false } : vehicle
         ) : []);
@@ -3081,7 +3081,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     deleteUser: (email: string) => {
-      const user = users.find(u => u.email === email);
+      const user = Array.isArray(users) ? users.find(u => u.email === email) : undefined;
       
       // Log audit entry for user deletion
       const actor = currentUser?.name || currentUser?.email || 'System';
@@ -3097,7 +3097,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     },
     deleteVehicle: async (id: number) => {
       try {
-        const vehicle = vehicles.find(v => v.id === id);
+        const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
         
         // Call API to delete vehicle
         const { deleteVehicle: deleteVehicleApi } = await import('../services/vehicleService');
@@ -3180,45 +3180,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               type: 'text' as const
             };
             
-            return {
+            const updatedConv = {
               ...conv,
               messages: [...updatedMessages, responseMessage],
               lastMessageAt: new Date().toISOString()
             };
+            
+            // Update activeChat if it's the same conversation
+            // Use the computed updatedConv instead of accessing stale conversations from closure
+            setActiveChat(activeChatPrev => {
+              if (activeChatPrev && activeChatPrev.id === conversationId) {
+                return updatedConv;
+              }
+              return activeChatPrev;
+            });
+            
+            return updatedConv;
           }
           return conv;
         }) : [];
         
         console.log('🔧 Updated conversations after offer response:', updated);
         return updated;
-      });
-      
-      // Update activeChat if it's the same conversation
-      setActiveChat(prev => {
-        if (prev && prev.id === conversationId) {
-          const updatedConv = conversations.find(conv => conv.id === conversationId);
-          if (updatedConv) {
-            return {
-              ...updatedConv,
-              messages: updatedConv.messages.map(msg => {
-                if (msg.id === messageId) {
-                  const updatedPayload = {
-                    ...msg.payload,
-                    status: response,
-                    ...(counterPrice && { counterPrice })
-                  };
-                  
-                  return {
-                    ...msg,
-                    payload: updatedPayload
-                  };
-                }
-                return msg;
-              })
-            };
-          }
-        }
-        return prev;
       });
       
       addToast(`Offer ${response} successfully`, 'success');

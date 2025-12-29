@@ -62,9 +62,10 @@ export async function adminCreate<T extends Record<string, unknown>>(
   const db = getFirebaseAdminDatabase();
   
   // Add timestamps to match client SDK behavior
+  // Preserve existing createdAt if provided (e.g., for seed data with intentional dates)
   const dataWithTimestamps = {
     ...data,
-    createdAt: new Date().toISOString(),
+    createdAt: data.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   
