@@ -1671,10 +1671,19 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
+        // Safely get Firebase status - wrap in try-catch to prevent crashes
         const status = getFirebaseStatus();
         setFirebaseStatus(status);
       } catch (error) {
-        setFirebaseStatus({ available: false, error: 'Unable to check Firebase status' });
+        // If Firebase status check fails, set a safe default
+        // Don't throw - just log and continue
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.warn('⚠️ Dashboard: Failed to check Firebase status:', errorMessage);
+        setFirebaseStatus({ 
+          available: false, 
+          error: 'Unable to check Firebase status',
+          details: errorMessage
+        });
       }
     }
   }, []);
