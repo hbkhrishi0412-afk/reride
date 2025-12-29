@@ -252,21 +252,43 @@ class DataService {
       const vehicles = await this.makeApiRequest<Vehicle[]>(endpoint);
       // Validate response is an array
       if (!Array.isArray(vehicles)) {
+        console.error('❌ Invalid response format: expected array, got:', typeof vehicles);
         throw new Error('Invalid response format: expected array');
       }
+      
+      // Log success for debugging
+      console.log(`✅ Loaded ${vehicles.length} vehicles from production API`);
+      
       // Cache the API data locally for offline use (use production cache key)
       this.setLocalStorageData('reRideVehicles_prod', vehicles);
       return vehicles;
     } catch (error) {
-      console.error('❌ Production API failed to load vehicles:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('❌ Production API failed to load vehicles:', errorMessage);
+      
       // In production, try to use cached API data (not mock data)
       const cachedVehicles = this.getLocalStorageData<Vehicle[]>('reRideVehicles_prod', []);
       if (cachedVehicles.length > 0) {
-        console.warn('⚠️ Using cached production data due to API failure');
+        console.warn(`⚠️ Using cached production data (${cachedVehicles.length} vehicles) due to API failure`);
         return cachedVehicles;
       }
-      // If no cached data, return empty array (don't use mock data in production)
-      console.error('❌ No cached production data available, returning empty array');
+      
+      // If no cached data, log detailed error and return empty array
+      console.error('❌ No cached production data available. API error details:', {
+        message: errorMessage,
+        endpoint: includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles',
+        timestamp: new Date().toISOString()
+      });
+      
+      // Show user-friendly error in console (won't break the app)
+      if (typeof window !== 'undefined') {
+        console.error('💡 Troubleshooting:');
+        console.error('   1. Check if Firebase is properly configured');
+        console.error('   2. Verify /api/vehicles endpoint is working');
+        console.error('   3. Check browser network tab for API errors');
+        console.error('   4. Ensure database is seeded with vehicles');
+      }
+      
       return [];
     }
   }

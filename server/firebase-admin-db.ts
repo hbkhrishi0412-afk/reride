@@ -61,14 +61,21 @@ export async function adminCreate<T extends Record<string, unknown>>(
 ): Promise<string> {
   const db = getFirebaseAdminDatabase();
   
+  // Add timestamps to match client SDK behavior
+  const dataWithTimestamps = {
+    ...data,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  
   if (key) {
     const refPath = db.ref(`${collection}/${key}`);
-    await refPath.set(data);
+    await refPath.set(dataWithTimestamps);
     return key;
   } else {
     const refPath = db.ref(collection);
     const newRef = refPath.push();
-    await newRef.set(data);
+    await newRef.set(dataWithTimestamps);
     return newRef.key || '';
   }
 }
@@ -80,7 +87,11 @@ export async function adminUpdate<T extends Record<string, unknown>>(
 ): Promise<void> {
   const db = getFirebaseAdminDatabase();
   const refPath = db.ref(`${collection}/${key}`);
-  await refPath.update(updates);
+  // Add updatedAt timestamp to match client SDK behavior
+  await refPath.update({
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export async function adminDelete(collection: string, key: string): Promise<void> {

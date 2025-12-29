@@ -435,31 +435,58 @@ export function isDatabaseAvailable(): boolean {
 }
 
 // Helper to get database connection status with details
+// CRITICAL: This function must NEVER throw - always return a status object
 export function getDatabaseStatus(): {
   available: boolean;
   error?: string;
   details?: string;
 } {
   try {
-    const db = getFirebaseDatabase();
-    return { available: !!db };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const isServerSide = typeof window === 'undefined';
-    
-    let details = '';
-    if (errorMessage.includes('configuration is missing')) {
-      details = isServerSide
-        ? 'Please set FIREBASE_* environment variables (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, etc.)'
-        : 'Please set VITE_FIREBASE_* environment variables in .env.local';
-    } else if (errorMessage.includes('DATABASE_URL')) {
-      details = 'Please set FIREBASE_DATABASE_URL environment variable';
+    // Check if database is available without throwing
+    const isAvailable = isDatabaseAvailable();
+    if (!isAvailable) {
+      // Return unavailable status without throwing
+      const isServerSide = typeof window === 'undefined';
+      return {
+        available: false,
+        error: 'Firebase database is not available',
+        details: isServerSide
+          ? 'Please check FIREBASE_* environment variables'
+          : 'Please check VITE_FIREBASE_* environment variables'
+      };
     }
     
+    // Try to get database instance (this might still throw, so we catch it)
+    try {
+      const db = getFirebaseDatabase();
+      return { available: !!db };
+    } catch (dbError) {
+      // If getFirebaseDatabase throws, return error status
+      const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
+      const isServerSide = typeof window === 'undefined';
+      
+      let details = '';
+      if (errorMessage.includes('configuration is missing')) {
+        details = isServerSide
+          ? 'Please set FIREBASE_* environment variables (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, etc.)'
+          : 'Please set VITE_FIREBASE_* environment variables in .env.local';
+      } else if (errorMessage.includes('DATABASE_URL')) {
+        details = 'Please set FIREBASE_DATABASE_URL environment variable';
+      }
+      
+      return {
+        available: false,
+        error: errorMessage,
+        details,
+      };
+    }
+  } catch (outerError) {
+    // Final safety catch - if anything else throws, return safe error status
+    const errorMessage = outerError instanceof Error ? outerError.message : String(outerError);
     return {
       available: false,
-      error: errorMessage,
-      details,
+      error: `Database status check failed: ${errorMessage}`,
+      details: 'An unexpected error occurred while checking database status'
     };
   }
 }

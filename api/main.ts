@@ -2947,11 +2947,16 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, _options: Han
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   }
 
-  // Prevent seed function from running in production
-  if (process.env.NODE_ENV === 'production') {
+  // Allow production seeding with secret key
+  const secretKey = req.headers['x-seed-secret'] || req.body?.secretKey;
+  const validSecret = process.env.SEED_SECRET_KEY || 'reride-seed-2024-production';
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  
+  // In production, require secret key
+  if (isProduction && secretKey !== validSecret) {
     return res.status(403).json({
       success: false,
-      reason: 'Seed function cannot run in production environment'
+      reason: 'Invalid or missing secret key for production seeding. Provide x-seed-secret header or secretKey in body.'
     });
   }
 
@@ -2964,13 +2969,30 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, _options: Han
   }
 
   try {
-    const users = await seedUsers();
+    const users = await seedUsers(isProduction ? secretKey : undefined);
     const vehicles = await seedVehicles();
     
     return res.status(200).json({
       success: true,
       message: 'Database seeded successfully',
-      data: { users: users.length, vehicles: vehicles.length }
+      data: { 
+        users: { inserted: users.length }, 
+        vehicles: { inserted: vehicles.length } 
+      },
+      credentials: {
+        admin: {
+          email: 'admin@test.com',
+          password: process.env.SEED_ADMIN_PASSWORD || 'password'
+        },
+        sellers: [{
+          email: 'seller@test.com',
+          password: process.env.SEED_SELLER_PASSWORD || 'password'
+        }],
+        customers: [{
+          email: 'customer@test.com',
+          password: process.env.SEED_CUSTOMER_PASSWORD || 'password'
+        }]
+      }
     });
   } catch (error) {
     return res.status(500).json({
@@ -3238,10 +3260,11 @@ function generateRandomPassword(): string {
   return randomBytes(32).toString('hex');
 }
 
-async function seedUsers(): Promise<UserType[]> {
-  // Prevent seed function from running in production
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('Seed function cannot run in production environment');
+async function seedUsers(productionSecret?: string): Promise<UserType[]> {
+  // Allow production seeding if secret is provided
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  if (isProduction && !productionSecret) {
+    throw new Error('Production seeding requires secret key');
   }
   
   // Use environment variables for seed passwords or generate cryptographically random ones
@@ -3340,89 +3363,127 @@ async function seedUsers(): Promise<UserType[]> {
 }
 
 async function seedVehicles(): Promise<VehicleType[]> {
-  const sampleVehicles: Array<Omit<VehicleType, 'id'>> = [
-    {
-      views: 324,
-      make: 'Maruti Suzuki',
-      model: 'Swift',
-      variant: 'VXi',
-      year: 2022,
-      price: 650000,
-      mileage: 15000,
+  // Generate 50 vehicles instead of just 2
+  const vehicleCount = 50;
+  const sampleVehicles: Array<Omit<VehicleType, 'id'>> = [];
+  
+  const makes = ['Tata', 'Mahindra', 'Hyundai', 'Maruti Suzuki', 'Honda', 'Toyota', 'Kia', 'MG'];
+  const modelsByMake: Record<string, string[]> = {
+    'Tata': ['Nexon', 'Harrier', 'Safari', 'Punch', 'Altroz'],
+    'Mahindra': ['XUV700', 'Scorpio', 'Thar', 'XUV300', 'Bolero'],
+    'Hyundai': ['Creta', 'Venue', 'i20', 'Verna', 'Alcazar'],
+    'Maruti Suzuki': ['Brezza', 'Swift', 'Baleno', 'Ertiga', 'Dzire'],
+    'Honda': ['City', 'Amaze', 'Jazz', 'WR-V', 'Civic'],
+    'Toyota': ['Fortuner', 'Innova Crysta', 'Glanza', 'Urban Cruiser', 'Camry'],
+    'Kia': ['Seltos', 'Sonet', 'Carens', 'Carnival', 'EV6'],
+    'MG': ['Hector', 'Astor', 'ZS EV', 'Gloster', 'Comet']
+  };
+  const colors = ['White', 'Black', 'Silver', 'Red', 'Blue', 'Grey', 'Brown'];
+  const fuelTypes = ['Petrol', 'Diesel', 'Electric', 'CNG', 'Hybrid'];
+  const transmissions = ['Manual', 'Automatic', 'AMT', 'CVT', 'DCT'];
+  const variants = ['ZX', 'VX', 'SX', 'LX', 'Base', 'Top'];
+  const sellers = ['seller@test.com'];
+  const cities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Chennai', 'Hyderabad'];
+  const statesByCity: Record<string, string> = {
+    'Mumbai': 'MH', 'Pune': 'MH', 'Delhi': 'DL', 'Bangalore': 'KA', 
+    'Chennai': 'TN', 'Hyderabad': 'TS'
+  };
+  
+  for (let i = 1; i <= vehicleCount; i++) {
+    const make = makes[Math.floor(Math.random() * makes.length)];
+    const models = modelsByMake[make] || ['Model'];
+    const model = models[Math.floor(Math.random() * models.length)];
+    const variant = variants[Math.floor(Math.random() * variants.length)];
+    const year = 2015 + Math.floor(Math.random() * 10);
+    const city = cities[Math.floor(Math.random() * cities.length)];
+    const state = statesByCity[city] || 'MH';
+    const price = Math.round((300000 + Math.floor(Math.random() * 2000000)) / 5000) * 5000;
+    const mileage = Math.floor(Math.random() * 100000);
+    const fuelType = fuelTypes[Math.floor(Math.random() * fuelTypes.length)];
+    const transmission = transmissions[Math.floor(Math.random() * transmissions.length)];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const engineSize = 1000 + Math.floor(Math.random() * 1500);
+    
+    sampleVehicles.push({
+      make,
+      model,
+      variant: `${model} ${variant}`,
+      year,
+      price,
+      mileage,
       category: VehicleCategory.FOUR_WHEELER,
-      sellerEmail: 'seller@test.com',
+      sellerEmail: sellers[0],
       status: 'published' as const,
-      isFeatured: false,
-      images: ['https://example.com/image1.jpg'],
-      features: ['Power Steering', 'Air Conditioning', 'Music System'],
-      description: 'Well maintained Swift in excellent condition',
-      engine: '1.2L Petrol',
-      transmission: 'Manual',
-      fuelType: 'Petrol',
-      fuelEfficiency: '20 kmpl',
-      color: 'White',
-      location: 'Delhi, NCR',
-      city: 'Delhi',
-      state: 'DL',
-      registrationYear: 2022,
-      insuranceValidity: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      insuranceType: 'Comprehensive',
-      rto: 'Delhi',
-      noOfOwners: 1,
-      displacement: '1197 cc',
-      groundClearance: '170 mm',
-      bootSpace: '268 litres',
-      createdAt: new Date().toISOString()
-    },
-    {
-      views: 512,
-      make: 'Honda',
-      model: 'City',
-      variant: 'VX',
-      year: 2021,
-      price: 850000,
-      mileage: 25000,
-      category: VehicleCategory.FOUR_WHEELER,
-      sellerEmail: 'seller@test.com',
-      status: 'published' as const,
-      isFeatured: true,
-      images: ['https://example.com/image2.jpg'],
-      features: ['Sunroof', 'Touchscreen', 'Reverse Camera'],
-      description: 'Premium Honda City with all features',
-      engine: '1.5L Petrol',
-      transmission: 'CVT',
-      fuelType: 'Petrol',
-      fuelEfficiency: '17.8 kmpl',
-      color: 'Silver',
-      location: 'Delhi, NCR',
-      city: 'Delhi',
-      state: 'DL',
-      registrationYear: 2021,
-      insuranceValidity: new Date(Date.now() + 200 * 24 * 60 * 60 * 1000).toISOString(),
-      insuranceType: 'Comprehensive',
-      rto: 'Delhi',
-      noOfOwners: 1,
-      displacement: '1498 cc',
-      groundClearance: '165 mm',
-      bootSpace: '506 litres',
-      createdAt: new Date().toISOString()
-    }
-  ];
+      isFeatured: Math.random() > 0.7,
+      views: Math.floor(Math.random() * 1000),
+      inquiriesCount: Math.floor(Math.random() * 50),
+      images: [
+        `https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800&auto=format&q=80&sig=${i}`,
+        `https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&auto=format&q=80&sig=${i + 1000}`
+      ],
+      features: ['Power Steering', 'Air Conditioning', 'Alloy Wheels', 'ABS', 'Airbags', 'Music System'],
+      description: `Well maintained ${year} ${make} ${model} in excellent condition. Single owner, full service history. Available in ${city}.`,
+      engine: `${engineSize} cc`,
+      transmission,
+      fuelType,
+      fuelEfficiency: `${12 + Math.floor(Math.random() * 13)} km/l`,
+      color,
+      location: `${city}, ${state}`,
+      city,
+      state,
+      registrationYear: year,
+      insuranceValidity: new Date(Date.now() + Math.floor(Math.random() * 365) * 24 * 60 * 60 * 1000).toISOString(),
+      insuranceType: Math.random() > 0.5 ? 'Comprehensive' : 'Third Party',
+      rto: `${state}-${String(Math.floor(Math.random() * 50) + 1).padStart(2, '0')}`,
+      noOfOwners: 1 + Math.floor(Math.random() * 3),
+      displacement: `${engineSize} cc`,
+      groundClearance: `${150 + Math.floor(Math.random() * 70)} mm`,
+      bootSpace: `${250 + Math.floor(Math.random() * 250)} litres`,
+      createdAt: new Date(Date.now() - Math.floor(Math.random() * 90) * 24 * 60 * 60 * 1000).toISOString()
+    });
+  }
 
-  // Delete existing test vehicles and create new ones in Firebase
-  const existingVehicles = await firebaseVehicleService.findAll();
-  for (const vehicle of existingVehicles) {
-    if (vehicle.sellerEmail?.toLowerCase() === 'seller@test.com') {
-      await firebaseVehicleService.delete(vehicle.id);
+  // Delete existing test vehicles (from seller@test.com) before creating new ones
+  // This prevents duplicates when re-seeding
+  try {
+    const existingVehicles = await firebaseVehicleService.findAll();
+    const testVehicles = existingVehicles.filter(v => 
+      v.sellerEmail?.toLowerCase() === 'seller@test.com'
+    );
+    
+    if (testVehicles.length > 0) {
+      console.log(`🗑️ Deleting ${testVehicles.length} existing test vehicles...`);
+      for (const vehicle of testVehicles) {
+        try {
+          await firebaseVehicleService.delete(vehicle.id);
+        } catch (deleteError) {
+          console.warn(`⚠️ Failed to delete vehicle ${vehicle.id}:`, deleteError);
+        }
+      }
+    }
+  } catch (cleanupError) {
+    console.warn('⚠️ Error during vehicle cleanup, continuing with seed:', cleanupError);
+  }
+  
+  // Create new vehicles
+  const vehicles: VehicleType[] = [];
+  console.log(`🚗 Creating ${sampleVehicles.length} vehicles...`);
+  
+  for (let i = 0; i < sampleVehicles.length; i++) {
+    const vehicleData = sampleVehicles[i];
+    try {
+      const vehicle = await firebaseVehicleService.create(vehicleData);
+      vehicles.push(vehicle);
+      if ((i + 1) % 10 === 0) {
+        console.log(`   ✓ Created ${i + 1}/${sampleVehicles.length} vehicles...`);
+      }
+    } catch (createError) {
+      console.error(`❌ Failed to create vehicle ${i + 1}:`, createError);
+      // Continue with other vehicles even if one fails
     }
   }
   
-  const vehicles: VehicleType[] = [];
-  for (const vehicleData of sampleVehicles) {
-    const vehicle = await firebaseVehicleService.create(vehicleData);
-    vehicles.push(vehicle);
-  }
-  
+  console.log(`✅ Successfully created ${vehicles.length} vehicles`);
   return vehicles;
 }
 

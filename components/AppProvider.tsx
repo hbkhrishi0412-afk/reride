@@ -954,7 +954,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           // Restore selectedVehicle if we're going to DETAIL view and have the ID
           if (restoredView === View.DETAIL && event.state.selectedVehicleId) {
             const vehicleId = event.state.selectedVehicleId;
-            const vehicleToRestore = vehicles.find(v => v.id === vehicleId);
+            const vehicleToRestore = Array.isArray(vehicles) ? vehicles.find(v => v.id === vehicleId) : undefined;
             if (vehicleToRestore) {
               setSelectedVehicle(vehicleToRestore);
               if (process.env.NODE_ENV === 'development') {
@@ -1579,7 +1579,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       // Mark vehicle as being updated
       updatingVehiclesRef.current.add(id);
 
-      const vehicleToUpdate = vehicles.find(v => v.id === id);
+      const vehicleToUpdate = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
       if (!vehicleToUpdate) {
         updatingVehiclesRef.current.delete(id);
         addToast('Vehicle not found', 'error');
@@ -1591,7 +1591,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       const result = await updateVehicleApi(updatedVehicle);
 
       setVehicles(prev =>
-        prev.map(vehicle => (vehicle.id === id ? result : vehicle))
+        Array.isArray(prev) ? prev.map(vehicle => (vehicle && vehicle.id === id ? result : vehicle)) : []
       );
 
       const wasFeatured = Boolean(vehicleToUpdate.isFeatured);
@@ -1720,8 +1720,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       });
 
       setUsers(prev =>
-        prev.map(user => {
-          if (user.email === email) {
+        Array.isArray(prev) ? prev.map(user => {
+          if (user && user.email === email) {
             // Deep merge verificationStatus if it exists in updateFields
             let updatedUser = { ...user };
             
@@ -1763,7 +1763,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             return updatedUser;
           }
           return user;
-        })
+        }) : []
       );
       
       // Also update in MongoDB - pass both updates and nulls
@@ -1785,7 +1785,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     onCreateUser: async (userData: Omit<User, 'status'>): Promise<{ success: boolean, reason: string }> => {
       try {
         // Check if user already exists
-        const existingUser = users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
+        const existingUser = Array.isArray(users) ? users.find(u => u && u.email && u.email.toLowerCase() === userData.email.toLowerCase()) : undefined;
         if (existingUser) {
           return { success: false, reason: 'User with this email already exists.' };
         }
@@ -1868,13 +1868,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           // Use the updateUser function defined later in contextValue
           const { updateUser: updateUserService } = await import('../services/userService');
           await updateUserService({ email, subscriptionPlan: plan });
-          setUsers(prev => prev.map(user => 
-            user.email === email ? { ...user, subscriptionPlan: plan } : user
-          ));
+          setUsers(prev => Array.isArray(prev) ? prev.map(user => 
+            user && user.email === email ? { ...user, subscriptionPlan: plan } : user
+          ) : []);
           
           // Log audit entry for plan update
           const actor = currentUser?.name || currentUser?.email || 'System';
-          const user = users.find(u => u.email === email);
+          const user = Array.isArray(users) ? users.find(u => u && u.email === email) : undefined;
           const previousPlan = user?.subscriptionPlan || 'unknown';
           const entry = logAction(actor, 'Update User Plan', email, `Changed plan from ${previousPlan} to ${plan}`);
           setAuditLog(prev => [entry, ...prev]);
@@ -1887,16 +1887,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       },
       onToggleUserStatus: async (email: string) => {
         try {
-          const user = users.find(u => u.email === email);
+          const user = Array.isArray(users) ? users.find(u => u && u.email === email) : undefined;
           if (!user) return;
           
           const newStatus = user.status === 'active' ? 'inactive' : 'active';
           // Use the updateUser function defined later in contextValue
           const { updateUser: updateUserService } = await import('../services/userService');
           await updateUserService({ email, status: newStatus });
-          setUsers(prev => prev.map(user => 
-            user.email === email ? { ...user, status: newStatus } : user
-          ));
+          setUsers(prev => Array.isArray(prev) ? prev.map(user => 
+            user && user.email === email ? { ...user, status: newStatus } : user
+          ) : []);
           
           // Log audit entry for user status toggle
           const actor = currentUser?.name || currentUser?.email || 'System';
@@ -1911,7 +1911,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       },
       onToggleVehicleStatus: async (vehicleId: number) => {
         try {
-          const vehicle = vehicles.find(v => v.id === vehicleId);
+          const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v && v.id === vehicleId) : undefined;
           if (!vehicle) return;
           
           const newStatus = vehicle.status === 'published' ? 'unpublished' : 'published';
@@ -1929,7 +1929,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       },
       onToggleVehicleFeature: async (vehicleId: number) => {
         try {
-          const vehicle = vehicles.find(v => v.id === vehicleId);
+          const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v && v.id === vehicleId) : undefined;
           if (!vehicle) {
             addToast('Vehicle not found', 'error');
             return;
@@ -1981,7 +1981,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
 
           if (result?.success && result.vehicle) {
             setVehicles(prev =>
-              prev.map(v => (v.id === vehicleId ? result.vehicle : v))
+              Array.isArray(prev) ? prev.map(v => (v && v.id === vehicleId ? result.vehicle : v)) : []
             );
 
             const sellerEmail = result.vehicle?.sellerEmail;
@@ -1989,11 +1989,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               const remainingCredits = result.remainingCredits;
 
               setUsers(prev =>
-                prev.map(user =>
-                  user.email === sellerEmail
+                Array.isArray(prev) ? prev.map(user =>
+                  user && user.email === sellerEmail
                     ? { ...user, featuredCredits: remainingCredits }
                     : user
-                )
+                ) : []
               );
 
               setCurrentUser(prev =>
@@ -2032,9 +2032,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     onResolveFlag: (type: 'vehicle' | 'conversation', id: number | string) => {
       if (type === 'vehicle') {
         const vehicle = vehicles.find(v => v.id === id);
-        setVehicles(prev => prev.map(vehicle => 
-          vehicle.id === id ? { ...vehicle, isFlagged: false } : vehicle
-        ));
+        setVehicles(prev => Array.isArray(prev) ? prev.map(vehicle => 
+          vehicle && vehicle.id === id ? { ...vehicle, isFlagged: false } : vehicle
+        ) : []);
         
         // Log audit entry for flag resolution
         const actor = currentUser?.name || currentUser?.email || 'System';
@@ -2042,9 +2042,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         const entry = logAction(actor, 'Resolve Flag', targetInfo, `Resolved flag on ${type}`);
         setAuditLog(prev => [entry, ...prev]);
       } else {
-        setConversations(prev => prev.map(conv => 
-          conv.id === id ? { ...conv, isFlagged: false } : conv
-        ));
+        setConversations(prev => Array.isArray(prev) ? prev.map(conv => 
+          conv && conv.id === id ? { ...conv, isFlagged: false } : conv
+        ) : []);
         
         // Log audit entry for flag resolution
         const actor = currentUser?.name || currentUser?.email || 'System';
@@ -2086,9 +2086,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     onExportUsers: () => {
       try {
         const headers = 'Name,Email,Role,Status,Mobile,Join Date\n';
-        const csv = users.map(user => 
+        const csv = Array.isArray(users) ? users.map(user => 
           `"${user.name}","${user.email}","${user.role}","${user.status}","${user.mobile || ''}","${user.joinedDate || ''}"`
-        ).join('\n');
+        ).join('\n') : '';
         const fullCsv = headers + csv;
         const blob = new Blob([fullCsv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -2216,9 +2216,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     onExportVehicles: () => {
       try {
         const headers = 'Make,Model,Year,Price,Seller,Status,Mileage,Location,Features\n';
-        const csv = vehicles.map(vehicle => 
+        const csv = Array.isArray(vehicles) ? vehicles.map(vehicle => 
           `"${vehicle.make}","${vehicle.model}","${vehicle.year}","${vehicle.price}","${vehicle.sellerEmail}","${vehicle.status}","${vehicle.mileage || ''}","${vehicle.location || ''}","${vehicle.features?.join('; ') || ''}"`
-        ).join('\n');
+        ).join('\n') : '';
         const fullCsv = headers + csv;
         const blob = new Blob([fullCsv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -2294,7 +2294,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     },
     onExportSales: () => {
       try {
-        const soldVehicles = vehicles.filter(v => v.status === 'sold');
+        const soldVehicles = Array.isArray(vehicles) ? vehicles.filter(v => v && v.status === 'sold') : [];
         const headers = 'Make,Model,Year,Sale Price,Seller,Buyer,Sale Date\n';
         const csv = soldVehicles.map(vehicle => 
           `"${vehicle.make}","${vehicle.model}","${vehicle.year}","${vehicle.price}","${vehicle.sellerEmail}","N/A","N/A"`
@@ -2353,15 +2353,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     onToggleVerifiedStatus: (email: string) => {
-      setUsers(prev => prev.map(user => 
-        user.email === email ? { ...user, isVerified: !user.isVerified } : user
-      ));
+      setUsers(prev => Array.isArray(prev) ? prev.map(user => 
+        user && user.email === email ? { ...user, isVerified: !user.isVerified } : user
+      ) : []);
       addToast(`Verification status toggled for ${email}`, 'success');
     },
     onUpdateSupportTicket: (ticket: SupportTicket) => {
-      setSupportTickets(prev => prev.map(t => 
-        t.id === ticket.id ? ticket : t
-      ));
+      setSupportTickets(prev => Array.isArray(prev) ? prev.map(t => 
+        t && t.id === ticket.id ? ticket : t
+      ) : []);
       addToast('Support ticket updated', 'success');
     },
     onAddFaq: async (faq: Omit<FAQItem, 'id'>) => {
@@ -2412,8 +2412,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // MongoDB update succeeded - NOW update local state
         setFaqItems(prev => {
-          const updated = prev.map(f => {
-            if (f.id === faq.id) {
+          const updated = Array.isArray(prev) ? prev.map(f => {
+            if (f && f.id === faq.id) {
               const updatedFaq = { ...faq };
               // Preserve _id if it exists
               if ((f as any)._id) {
@@ -2422,7 +2422,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               return updatedFaq;
             }
             return f;
-          });
+          }) : [];
           saveFaqs(updated);
           return updated;
         });
@@ -2450,7 +2450,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // MongoDB delete succeeded - NOW delete from local state
         setFaqItems(prev => {
-          const updated = prev.filter(f => f.id !== id);
+          const updated = Array.isArray(prev) ? prev.filter(f => f && f.id !== id) : [];
           saveFaqs(updated);
           return updated;
         });
@@ -2463,14 +2463,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => {
-      const vehicle = vehicles.find(v => v.id === vehicleId);
+      const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v && v.id === vehicleId) : undefined;
       
-      setVehicles(prev => prev.map(vehicle => 
-        vehicle.id === vehicleId ? { 
+      setVehicles(prev => Array.isArray(prev) ? prev.map(vehicle => 
+        vehicle && vehicle.id === vehicleId ? { 
           ...vehicle, 
           certificationStatus: decision === 'approved' ? 'certified' : 'rejected' 
         } : vehicle
-      ));
+      ) : []);
       
       // Log audit entry for certification approval/rejection
       const actor = currentUser?.name || currentUser?.email || 'System';
@@ -2528,15 +2528,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
 
         // Update conversations and save to localStorage
         setConversations(prev => {
-          const updated = prev.map(conv => 
-            conv.id === conversationId ? {
+          const updated = Array.isArray(prev) ? prev.map(conv => 
+            conv && conv.id === conversationId ? {
               ...conv,
-              messages: [...conv.messages, newMessage],
+              messages: Array.isArray(conv.messages) ? [...conv.messages, newMessage] : [newMessage],
               lastMessageAt: newMessage.timestamp,
               isReadBySeller: currentUser.role === 'seller' ? true : conv.isReadBySeller,
               isReadByCustomer: currentUser.role === 'customer' ? true : conv.isReadByCustomer
             } : conv
-          );
+          ) : [];
           
           // Save to localStorage immediately
           try {
@@ -2668,15 +2668,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
 
         // Update conversations and save to localStorage
         setConversations(prev => {
-          const updated = prev.map(conv => 
-            conv.id === conversationId ? {
+          const updated = Array.isArray(prev) ? prev.map(conv => 
+            conv && conv.id === conversationId ? {
               ...conv,
-              messages: [...conv.messages, newMessage],
+              messages: Array.isArray(conv.messages) ? [...conv.messages, newMessage] : [newMessage],
               lastMessageAt: newMessage.timestamp,
               isReadBySeller: currentUser.role === 'seller' ? true : conv.isReadBySeller,
               isReadByCustomer: currentUser.role === 'customer' ? true : conv.isReadByCustomer
             } : conv
-          );
+          ) : [];
           
           // Save to localStorage immediately
           try {
@@ -2784,25 +2784,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     markAsRead: (conversationId: string) => {
-      setConversations(prev => prev.map(conv => 
-        conv.id === conversationId ? {
+      setConversations(prev => Array.isArray(prev) ? prev.map(conv => 
+        conv && conv.id === conversationId ? {
           ...conv,
-          messages: conv.messages.map(msg => ({ ...msg, isRead: true }))
+          messages: Array.isArray(conv.messages) ? conv.messages.map(msg => ({ ...msg, isRead: true })) : []
         } : conv
-      ));
+      ) : []);
     },
     toggleTyping: (conversationId: string, isTyping: boolean) => {
       setTypingStatus(isTyping ? { conversationId, userRole: (currentUser?.role === 'seller' ? 'seller' : 'customer') as 'seller' | 'customer' } : null);
     },
     flagContent: (type: 'vehicle' | 'conversation', id: number | string) => {
       if (type === 'vehicle') {
-        setVehicles(prev => prev.map(vehicle => 
-          vehicle.id === id ? { ...vehicle, isFlagged: true } : vehicle
-        ));
+        setVehicles(prev => Array.isArray(prev) ? prev.map(vehicle => 
+          vehicle && vehicle.id === id ? { ...vehicle, isFlagged: true } : vehicle
+        ) : []);
       } else {
-        setConversations(prev => prev.map(conv => 
-          conv.id === id ? { ...conv, isFlagged: true } : conv
-        ));
+        setConversations(prev => Array.isArray(prev) ? prev.map(conv => 
+          conv && conv.id === id ? { ...conv, isFlagged: true } : conv
+        ) : []);
       }
       addToast(`Content flagged for review`, 'warning');
     },
@@ -2899,8 +2899,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             };
             
             // Update React state - ensure partnerBanks is properly merged
-            setUsers(prev => prev.map(user => {
-              if (user.email === email) {
+            setUsers(prev => Array.isArray(prev) ? prev.map(user => {
+              if (user && user.email === email) {
                 const merged = { ...user, ...updatedUserData };
                 // Explicitly ensure partnerBanks is included if it was in the update
                 if (safeUpdates.partnerBanks !== undefined) {
@@ -2910,7 +2910,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 return merged;
               }
               return user;
-            }));
+            }) : []);
             
             if (currentUser && currentUser.email === email) {
               // CRITICAL: Always preserve role when updating currentUser
@@ -3089,7 +3089,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       const entry = logAction(actor, 'Delete User', email, `Deleted user: ${userInfo}`);
       setAuditLog(prev => [entry, ...prev]);
       
-      setUsers(prev => prev.filter(user => user.email !== email));
+      setUsers(prev => Array.isArray(prev) ? prev.filter(user => user && user.email !== email) : []);
       addToast('User deleted successfully', 'success');
     },
     updateVehicle: async (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => {
@@ -3111,7 +3111,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           setAuditLog(prev => [entry, ...prev]);
           
           // Update local state
-          setVehicles(prev => prev.filter(vehicle => vehicle.id !== id));
+          setVehicles(prev => Array.isArray(prev) ? prev.filter(vehicle => vehicle && vehicle.id !== id) : []);
           addToast('Vehicle deleted successfully', 'success');
           console.log('✅ Vehicle deleted via API:', result);
         } else {
@@ -3129,28 +3129,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     },
     toggleWishlist: (vehicleId: number) => {
       setWishlist(prev => 
-        prev.includes(vehicleId) 
+        Array.isArray(prev) && prev.includes(vehicleId) 
           ? prev.filter(id => id !== vehicleId)
-          : [...prev, vehicleId]
+          : Array.isArray(prev) ? [...prev, vehicleId] : [vehicleId]
       );
     },
     toggleCompare: (vehicleId: number) => {
-      setComparisonList(prev => 
-        prev.includes(vehicleId) 
-          ? prev.filter(id => id !== vehicleId)
-          : prev.length < 3 ? [...prev, vehicleId] : prev
-      );
+      setComparisonList(prev => {
+        const safePrev = Array.isArray(prev) ? prev : [];
+        return safePrev.includes(vehicleId) 
+          ? safePrev.filter(id => id !== vehicleId)
+          : safePrev.length < 3 ? [...safePrev, vehicleId] : safePrev;
+      });
     },
     onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => {
       console.log('🔧 onOfferResponse called:', { conversationId, messageId, response, counterPrice });
       
       setConversations(prev => {
-        const updated = prev.map(conv => {
-          if (conv.id === conversationId) {
-            const updatedMessages = conv.messages.map(msg => {
-              if (msg.id === messageId) {
+        const updated = Array.isArray(prev) ? prev.map(conv => {
+          if (conv && conv.id === conversationId) {
+            const updatedMessages = Array.isArray(conv.messages) ? conv.messages.map(msg => {
+              if (msg && msg.id === messageId) {
                 const updatedPayload = {
-                  ...msg.payload,
+                  ...(msg.payload || {}),
                   status: response,
                   ...(counterPrice && { counterPrice })
                 };
@@ -3161,7 +3162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 };
               }
               return msg;
-            });
+            }) : [];
             
             // Add a response message
             const responseMessages = {
@@ -3186,7 +3187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             };
           }
           return conv;
-        });
+        }) : [];
         
         console.log('🔧 Updated conversations after offer response:', updated);
         return updated;

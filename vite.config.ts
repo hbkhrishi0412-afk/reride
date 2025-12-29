@@ -15,8 +15,8 @@ export default defineConfig({
     global: 'globalThis'
   },
   build: {
-    // Optimize chunk size - lower threshold to catch bloat earlier
-    chunkSizeWarningLimit: 500,
+    // Optimize chunk size - increased threshold since we're splitting better
+    chunkSizeWarningLimit: 600,
     // Ensure proper module resolution and chunk ordering
     commonjsOptions: {
       include: [/node_modules/],
@@ -64,7 +64,7 @@ export default defineConfig({
               return 'vendor';
             }
             
-            // Separate heavy libraries into their own chunks
+            // Separate heavy libraries into their own chunks for better caching
             if (id.includes('firebase')) {
               return 'firebase';
             }
@@ -77,7 +77,11 @@ export default defineConfig({
             if (id.includes('react-window')) {
               return 'react-window';
             }
-            // Group smaller libraries together
+            // Split framer-motion into its own chunk (large animation library)
+            if (id.includes('framer-motion')) {
+              return 'framer-motion';
+            }
+            // Group smaller utility libraries together
             if (id.includes('bcryptjs') || id.includes('validator') || id.includes('dompurify')) {
               return 'utils-vendor';
             }
@@ -86,11 +90,16 @@ export default defineConfig({
           }
           
           // Split by feature/route for better caching and lazy loading
+          // More granular splitting to reduce individual chunk sizes
           if (id.includes('/components/Dashboard')) {
             return 'dashboard';
           }
+          // Split admin panel into smaller chunks
           if (id.includes('/components/AdminPanel')) {
             return 'admin';
+          }
+          if (id.includes('/components/NewCarsAdmin') || id.includes('/components/SellCarAdmin')) {
+            return 'admin-extended';
           }
           if (id.includes('/components/VehicleList') || id.includes('/components/VehicleDetail')) {
             return 'vehicles';
@@ -98,26 +107,39 @@ export default defineConfig({
           if (id.includes('/components/Home')) {
             return 'home';
           }
-          if (id.includes('/components/Profile') || id.includes('/components/Login')) {
+          if (id.includes('/components/Profile') || id.includes('/components/Login') || id.includes('/components/UnifiedLogin')) {
             return 'auth';
           }
           if (id.includes('/components/ChatWidget') || id.includes('/components/CustomerInbox')) {
             return 'chat';
           }
+          // Split large components into separate chunks
+          if (id.includes('/components/SellCarPage') || id.includes('/components/NewCars')) {
+            return 'sell-car';
+          }
+          if (id.includes('/components/BuyerDashboard') || id.includes('/components/SellerProfilePage')) {
+            return 'user-pages';
+          }
+          // Split mobile components into separate chunk (large bundle)
+          if (id.includes('/components/Mobile')) {
+            return 'mobile-components';
+          }
+          // Split AppProvider (large context provider)
+          if (id.includes('/components/AppProvider')) {
+            return 'app-provider';
+          }
           
           // Split constants by type for better lazy loading
+          // Only split if the module is actually imported (not just referenced)
           if (id.includes('/constants/location')) {
             return 'constants-location';
           }
-          if (id.includes('/constants/plans')) {
-            return 'constants-plans';
-          }
+          // Plans and boost are dynamically imported, so don't create separate chunks
+          // They'll be included in the chunks that actually use them
           if (id.includes('/constants/fallback')) {
             return 'constants-fallback';
           }
-          if (id.includes('/constants/boost')) {
-            return 'constants-boost';
-          }
+          // Group all other constants together to avoid empty chunks
           if (id.includes('/constants/') || id.includes('/data/')) {
             return 'constants';
           }

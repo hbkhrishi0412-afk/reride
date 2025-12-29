@@ -28,8 +28,22 @@ export function getFirebaseStatus(): FirebaseStatus {
     return cachedStatus;
   }
   
-  // Check availability
-  const status = getDatabaseStatus();
+  // Check availability - wrap in try-catch to prevent crashes
+  let status;
+  try {
+    status = getDatabaseStatus();
+  } catch (error) {
+    // If getDatabaseStatus throws, return a safe error status
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    cachedStatus = {
+      available: false,
+      error: `Database status check failed: ${errorMessage}`,
+      details: errorMessage,
+      timestamp: now,
+    };
+    statusCheckTime = now;
+    return cachedStatus;
+  }
   
   cachedStatus = {
     ...status,

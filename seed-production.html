@@ -176,7 +176,8 @@
         
         <div class="info-box">
             <strong>ℹ️ What this does:</strong>
-            This will populate your database with 7 test users and 50 vehicle listings. Perfect for testing and demo purposes!
+            This will populate your Firebase database with 3 test users and 50 vehicle listings. Perfect for testing and demo purposes!<br><br>
+            <strong>⚠️ Production Note:</strong> You need to set SEED_SECRET_KEY in Vercel environment variables (or use default: reride-seed-2024-production). The secret key is required to seed production databases for security.
         </div>
         
         <div class="input-group">
@@ -187,6 +188,19 @@
                 placeholder="https://your-app.vercel.app" 
                 value=""
             >
+        </div>
+        
+        <div class="input-group">
+            <label for="secretKey">Secret Key (Required for Production)</label>
+            <input 
+                type="password" 
+                id="secretKey" 
+                placeholder="Enter SEED_SECRET_KEY from Vercel env vars" 
+                value=""
+            >
+            <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
+                Default: reride-seed-2024-production (or set SEED_SECRET_KEY in Vercel)
+            </small>
         </div>
         
         <button class="button" onclick="seedDatabase()">
@@ -207,6 +221,7 @@
         
         async function seedDatabase() {
             const apiUrl = document.getElementById('apiUrl').value.trim();
+            const secretKey = document.getElementById('secretKey').value.trim() || 'reride-seed-2024-production';
             const statusDiv = document.getElementById('status');
             const button = document.querySelector('.button');
             
@@ -223,14 +238,16 @@
             try {
                 // Show loading
                 button.disabled = true;
-                showStatus('loading', '<div class="spinner"></div> Seeding database... This may take a few seconds.');
+                showStatus('loading', '<div class="spinner"></div> Seeding database with 50 vehicles... This may take a few seconds.');
                 
-                // Call seed API
+                // Call seed API with secret key
                 const response = await fetch(seedEndpoint, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
-                    }
+                        'Content-Type': 'application/json',
+                        'x-seed-secret': secretKey
+                    },
+                    body: JSON.stringify({ secretKey })
                 });
                 
                 const data = await response.json();
@@ -263,14 +280,29 @@
                 }, 3000);
                 
             } catch (error) {
+                let errorMessage = error.message || 'Unknown error';
+                let fixes = `
+                    <strong>Common fixes:</strong><br>
+                    • Check Firebase environment variables are set in Vercel<br>
+                    • Verify the secret key matches SEED_SECRET_KEY in Vercel (default: reride-seed-2024-production)<br>
+                    • Make sure your site URL is correct<br>
+                    • Check Vercel deployment logs for more details<br>
+                    • Ensure Firebase Realtime Database is properly configured
+                `;
+                
+                if (errorMessage.includes('secret key') || errorMessage.includes('Invalid or missing')) {
+                    fixes = `
+                        <strong>Secret Key Issue:</strong><br>
+                        • Set SEED_SECRET_KEY in Vercel Environment Variables<br>
+                        • Or use the default: reride-seed-2024-production<br>
+                        • Make sure the secret key in the form matches the one in Vercel
+                    `;
+                }
+                
                 showStatus('error', `
                     <strong>❌ Error seeding database</strong><br><br>
-                    ${error.message}<br><br>
-                    <strong>Common fixes:</strong><br>
-                    • Check MONGODB_URI is set in Vercel Environment Variables<br>
-                    • Verify MongoDB Atlas network access allows connections<br>
-                    • Make sure your site URL is correct<br>
-                    • Check Vercel deployment logs for more details
+                    ${errorMessage}<br><br>
+                    ${fixes}
                 `);
             } finally {
                 button.disabled = false;

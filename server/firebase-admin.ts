@@ -19,6 +19,24 @@ if (!admin.apps.length) {
   }
   
   try {
+    // Check if user accidentally pasted just the private key instead of full JSON
+    if (serviceAccountJson.trim().startsWith('-----BEGIN PRIVATE KEY-----') ||
+        serviceAccountJson.trim().startsWith('-----BEGIN RSA PRIVATE KEY-----')) {
+      const error = new Error(
+        'FIREBASE_SERVICE_ACCOUNT_KEY appears to be just the private key, not the full JSON.\n' +
+        'You need the COMPLETE service account JSON file, not just the private_key field.\n' +
+        'The JSON should start with: {"type":"service_account","project_id":"...",...}'
+      );
+      console.error('❌', error.message);
+      console.error('💡 How to fix:');
+      console.error('   1. Go to Firebase Console → Project Settings → Service Accounts');
+      console.error('   2. Click "Generate New Private Key"');
+      console.error('   3. Download the JSON file');
+      console.error('   4. Copy the ENTIRE JSON content (all of it, not just private_key)');
+      console.error('   5. Paste it into Vercel Environment Variable FIREBASE_SERVICE_ACCOUNT_KEY');
+      throw error;
+    }
+    
     // Strip outer quotes if present (common mistake when setting env vars)
     let cleanedJson = serviceAccountJson.trim();
     if ((cleanedJson.startsWith('"') && cleanedJson.endsWith('"')) ||
