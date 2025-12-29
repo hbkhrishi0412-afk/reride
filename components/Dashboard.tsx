@@ -2476,7 +2476,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               <StatCard title="Active Listings" value={activeListings.length} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 17v-2a4 4 0 00-4-4h-1.5m1.5 4H13m-2 0a2 2 0 104 0 2 2 0 00-4 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 11V7a4 4 0 00-4-4H7a4 4 0 00-4 4v4" /></svg>} />
               <StatCard title="Unread Messages" value={unreadCount} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>} />
-              <StatCard title="Your Seller Rating" value={`${(seller?.averageRating || 0).toFixed(1)} (${seller?.ratingCount || 0})`} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.522 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.522 4.674c.3.921-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.784.57-1.838-.197-1.539-1.118l1.522-4.674a1 1 0 00-.363-1.118L2.98 8.11c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.522-4.674z" /></svg>} />
+              <StatCard title="Your Seller Rating" value={`${(seller && typeof seller.averageRating === 'number' ? seller.averageRating : 0).toFixed(1)} (${seller && typeof seller.ratingCount === 'number' ? seller.ratingCount : 0})`} icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.522 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.522 4.674c.3.921-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.784.57-1.838-.197-1.539-1.118l1.522-4.674a1 1 0 00-.363-1.118L2.98 8.11c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.522-4.674z" /></svg>} />
             </div>
             <PlanStatusCard
               seller={seller}
@@ -2586,39 +2586,82 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
                     <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Listing Performance</h2>
                     {filteredActiveListings.length > 0 ? (
-                        <Bar 
-                            data={analyticsData.chartData} 
-                            options={{ 
-                                responsive: true, 
-                                plugins: { 
-                                    legend: { position: 'top' }, 
-                                    title: { display: true, text: 'Views vs. Inquiries per Vehicle' } 
-                                },
-                                scales: {
-                                    y: {
-                                        type: 'linear',
-                                        display: true,
-                                        position: 'left',
-                                        title: {
-                                            display: true,
-                                            text: 'Views'
-                                        }
-                                    },
-                                    y1: {
-                                        type: 'linear',
-                                        display: true,
-                                        position: 'right',
-                                        title: {
-                                            display: true,
-                                            text: 'Inquiries'
-                                        },
-                                        grid: {
-                                            drawOnChartArea: false, // only want the grid lines for one axis to show up
-                                        },
-                                    },
-                                }
-                            }} 
-                        />
+                        (() => {
+                          try {
+                            // Safety check: ensure chartData is valid before rendering
+                            if (!analyticsData?.chartData || !analyticsData.chartData.labels || !analyticsData.chartData.datasets) {
+                              return (
+                                <div className="text-center py-16 px-6">
+                                  <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">Chart Data Unavailable</h3>
+                                  <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">
+                                    Unable to load chart data. Please refresh the page.
+                                  </p>
+                                </div>
+                              );
+                            }
+                            
+                            // Check if Chart.js is available
+                            if (typeof ChartJS === 'undefined' || typeof Bar === 'undefined') {
+                              return (
+                                <div className="text-center py-16 px-6">
+                                  <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">Chart Library Not Loaded</h3>
+                                  <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">
+                                    Please refresh the page to load the chart library.
+                                  </p>
+                                </div>
+                              );
+                            }
+                            
+                            return (
+                              <Bar 
+                                  data={analyticsData.chartData} 
+                                  options={{ 
+                                      responsive: true, 
+                                      plugins: { 
+                                          legend: { position: 'top' }, 
+                                          title: { display: true, text: 'Views vs. Inquiries per Vehicle' } 
+                                      },
+                                      scales: {
+                                          y: {
+                                              type: 'linear',
+                                              display: true,
+                                              position: 'left',
+                                              title: {
+                                                  display: true,
+                                                  text: 'Views'
+                                              }
+                                          },
+                                          y1: {
+                                              type: 'linear',
+                                              display: true,
+                                              position: 'right',
+                                              title: {
+                                                  display: true,
+                                                  text: 'Inquiries'
+                                              },
+                                              grid: {
+                                                  drawOnChartArea: false, // only want the grid lines for one axis to show up
+                                              },
+                                          },
+                                      }
+                                  }} 
+                              />
+                            );
+                          } catch (chartError) {
+                            // Log error but don't crash the dashboard
+                            if (process.env.NODE_ENV === 'development') {
+                              console.error('❌ Error rendering chart:', chartError);
+                            }
+                            return (
+                              <div className="text-center py-16 px-6">
+                                <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">Chart Error</h3>
+                                <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">
+                                  Unable to display chart. Please refresh the page.
+                                </p>
+                              </div>
+                            );
+                          }
+                        })()
                     ) : (
                         <div className="text-center py-16 px-6">
                             <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">No Data to Display</h3>
@@ -3294,7 +3337,38 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           {/* Premium Main Content */}
           <main className="lg:col-span-1">
             <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 min-h-[600px]">
-              {renderContent()}
+              {(() => {
+                try {
+                  return renderContent();
+                } catch (error) {
+                  // Log error for debugging but don't crash the entire dashboard
+                  if (process.env.NODE_ENV === 'development') {
+                    console.error('❌ Error rendering dashboard content:', error);
+                  }
+                  logProductionError(error, 'Dashboard content render error');
+                  
+                  // Return a fallback UI instead of crashing
+                  return (
+                    <div className="text-center py-16 px-6">
+                      <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
+                        <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-xl font-semibold text-gray-900 mb-2">Unable to Load Dashboard Content</h3>
+                      <p className="text-gray-600 mb-4">
+                        An error occurred while loading the dashboard. Please try refreshing the page.
+                      </p>
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+                      >
+                        Refresh Page
+                      </button>
+                    </div>
+                  );
+                }
+              })()}
             </div>
           </main>
         </div>

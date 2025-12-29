@@ -63,9 +63,10 @@ export async function adminCreate<T extends Record<string, unknown>>(
   
   // Add timestamps to match client SDK behavior
   // Preserve existing createdAt if provided (e.g., for seed data with intentional dates)
+  // Use explicit undefined check to preserve falsy values like 0 or empty strings
   const dataWithTimestamps = {
     ...data,
-    createdAt: data.createdAt || new Date().toISOString(),
+    createdAt: data.createdAt !== undefined ? data.createdAt : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   
