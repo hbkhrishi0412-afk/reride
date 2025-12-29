@@ -130,3 +130,4 @@ When creating/updating vehicles, check the console logs for:
 4. Verify images display correctly in frontend
 5. Check Firebase database to confirm images are saved
 
+

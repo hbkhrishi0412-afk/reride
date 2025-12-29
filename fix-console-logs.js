@@ -62,3 +62,4 @@ content = lines.join('\n');
 fs.writeFileSync(file, content, 'utf8');
 console.log('Fixed all console.log statements with NODE_ENV checks');
 
+
