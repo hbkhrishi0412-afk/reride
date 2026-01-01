@@ -84,15 +84,36 @@ export function getFirebaseDatabase(): Database {
       const isServerSide = typeof window === 'undefined';
       
       // Get database URL with proper priority
-      // On client-side, use import.meta.env (Vite's way), on server-side use process.env
+      // CRITICAL: On client-side, Vite only exposes variables with VITE_ prefix via import.meta.env
+      // On server-side, we can use process.env for both FIREBASE_* and VITE_FIREBASE_*
       const clientEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
       const databaseURL = isServerSide
         ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL)
-        : (clientEnv?.VITE_FIREBASE_DATABASE_URL || process.env?.VITE_FIREBASE_DATABASE_URL);
+        : (clientEnv?.VITE_FIREBASE_DATABASE_URL || '');
+      
+      // For client-side, also try to get from firebaseConfig if available (from lib/firebase.ts)
+      // This is a fallback if VITE_FIREBASE_DATABASE_URL wasn't set but firebaseConfig has it
+      if (!databaseURL && !isServerSide && typeof window !== 'undefined') {
+        try {
+          // Try to get from the initialized app's options
+          const appOptions = app.options;
+          if (appOptions && appOptions.databaseURL) {
+            // Use the databaseURL from the app config as fallback
+            const fallbackURL = appOptions.databaseURL;
+            if (fallbackURL && fallbackURL.includes('firebasedatabase')) {
+              console.log('📊 Using databaseURL from Firebase app config');
+              database = getDatabase(app, fallbackURL);
+              return database;
+            }
+          }
+        } catch (e) {
+          // Silently fail - we'll use default below
+        }
+      }
       
       // For server-side operations, database URL should be provided for reliability
       // Client-side can use default from firebaseConfig, but server-side should be explicit
-      if (databaseURL) {
+      if (databaseURL && databaseURL.trim() !== '') {
         // Validate URL format
         if (!databaseURL.startsWith('https://') || !databaseURL.includes('firebasedatabase')) {
           console.warn('⚠️ FIREBASE_DATABASE_URL format may be incorrect. Expected format: https://your-project-default-rtdb.region.firebasedatabase.app/');
@@ -107,7 +128,27 @@ export function getFirebaseDatabase(): Database {
             'This may cause issues in serverless environments. ' +
             'Please set FIREBASE_DATABASE_URL in your environment variables.'
           );
+        } else {
+          // Client-side: This is a critical error - database URL should be set
+          const isProd = typeof window !== 'undefined' && 
+            (window.location.hostname.includes('vercel.app') || 
+             window.location.hostname.includes('reride.co.in'));
+          
+          if (isProd) {
+            console.error(
+              '❌ VITE_FIREBASE_DATABASE_URL is not set in production. ' +
+              'Please set VITE_FIREBASE_DATABASE_URL in Vercel environment variables and redeploy. ' +
+              'The database will not work without this variable.'
+            );
+          } else {
+            console.warn(
+              '⚠️ VITE_FIREBASE_DATABASE_URL is not set. ' +
+              'Please add VITE_FIREBASE_DATABASE_URL to your .env.local file. ' +
+              'Using default database URL as fallback.'
+            );
+          }
         }
+        // Use default database URL (from firebaseConfig if available)
         database = getDatabase(app);
       }
     } catch (error) {
@@ -404,12 +445,17 @@ export function isDatabaseAvailable(): boolean {
     // This prevents crashes during module load if config is missing
     const isServerSide = typeof window === 'undefined';
     // On client-side, use import.meta.env (Vite's way), on server-side use process.env
+    const clientEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
     const hasApiKey = isServerSide 
       ? (process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY)
-      : (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_API_KEY) || (process.env?.VITE_FIREBASE_API_KEY);
+      : (clientEnv?.VITE_FIREBASE_API_KEY || '');
     const hasProjectId = isServerSide
       ? (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID)
-      : (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_PROJECT_ID) || (process.env?.VITE_FIREBASE_PROJECT_ID);
+      : (clientEnv?.VITE_FIREBASE_PROJECT_ID || '');
+    // Also check for database URL on client-side (critical for Realtime Database)
+    const hasDatabaseURL = isServerSide
+      ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL)
+      : (clientEnv?.VITE_FIREBASE_DATABASE_URL || '');
     
     // If basic config is missing, cache and return false without trying to initialize
     if (!hasApiKey || !hasProjectId) {
@@ -420,10 +466,26 @@ export function isDatabaseAvailable(): boolean {
         console.warn('⚠️ Firebase database not available: Missing required environment variables.');
         console.warn('💡 Make sure Firebase environment variables are set correctly.');
         console.warn('   Server-side: FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.');
-        console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, etc.');
+        console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_DATABASE_URL, etc.');
       }
       availabilityCache = { available: false, timestamp: now };
       return false;
+    }
+    
+    // On client-side, also check for database URL (critical for Realtime Database)
+    if (!isServerSide && !hasDatabaseURL) {
+      const isProd = typeof window !== 'undefined' && 
+        (window.location.hostname.includes('vercel.app') || 
+         window.location.hostname.includes('reride.co.in'));
+      
+      if (isProd) {
+        console.error('❌ VITE_FIREBASE_DATABASE_URL is missing in production. Database will not work.');
+        console.error('💡 Set VITE_FIREBASE_DATABASE_URL in Vercel environment variables and redeploy.');
+      } else {
+        console.warn('⚠️ VITE_FIREBASE_DATABASE_URL is missing. Database may not work correctly.');
+        console.warn('💡 Add VITE_FIREBASE_DATABASE_URL to your .env.local file.');
+      }
+      // Don't return false here - allow it to try with default URL, but log the warning
     }
     
     // Only try to get database if config exists and it's not already initialized
@@ -482,8 +544,8 @@ export function getDatabaseStatus(): {
         available: false,
         error: 'Firebase database is not available',
         details: isServerSide
-          ? 'Please check FIREBASE_* environment variables'
-          : 'Please check VITE_FIREBASE_* environment variables'
+          ? 'Please check FIREBASE_* environment variables (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL)'
+          : 'Please check VITE_FIREBASE_* environment variables (VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_DATABASE_URL). CRITICAL: VITE_FIREBASE_DATABASE_URL must be set for Realtime Database to work.'
       };
     }
     
@@ -499,10 +561,12 @@ export function getDatabaseStatus(): {
       let details = '';
       if (errorMessage.includes('configuration is missing')) {
         details = isServerSide
-          ? 'Please set FIREBASE_* environment variables (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, etc.)'
-          : 'Please set VITE_FIREBASE_* environment variables in .env.local';
+          ? 'Please set FIREBASE_* environment variables (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.)'
+          : 'Please set VITE_FIREBASE_* environment variables in .env.local (VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_DATABASE_URL, etc.)';
       } else if (errorMessage.includes('DATABASE_URL')) {
-        details = 'Please set FIREBASE_DATABASE_URL environment variable';
+        details = isServerSide
+          ? 'Please set FIREBASE_DATABASE_URL environment variable'
+          : 'Please set VITE_FIREBASE_DATABASE_URL environment variable (CRITICAL for client-side Realtime Database)';
       }
       
       return {

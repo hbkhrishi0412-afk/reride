@@ -111,10 +111,12 @@ const isTokenLikelyValid = (): boolean => {
       const exp = payload.exp;
       if (!exp) return true; // No expiration claim, assume valid
       
-      // Check if token expires in next 60 seconds (increased buffer time for better reliability)
-      // This gives us more time to refresh before expiration
+      // Check if token expires in next 120 seconds (increased buffer time for production reliability)
+      // This gives us more time to refresh before expiration, especially important in production
+      // where network latency might be higher
       const now = Math.floor(Date.now() / 1000);
-      return exp > (now + 60);
+      const bufferSeconds = 120; // 2 minutes buffer for production safety
+      return exp > (now + bufferSeconds);
     } catch {
       // If we can't parse, be conservative and assume it might be expired
       // This will trigger a proactive refresh
