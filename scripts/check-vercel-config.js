@@ -1,12 +1,21 @@
 #!/usr/bin/env node
 /**
- * Check Vercel Configuration Status
+ * Check Local Environment Configuration
  * 
- * This script helps identify what might be causing 401/503 errors
- * even when JWT_SECRET is already set.
+ * ⚠️ NOTE: This script checks LOCAL environment variables (process.env)
+ * For Vercel production, use the Vercel Dashboard to verify variables.
+ * 
+ * This script helps identify missing environment variables locally.
+ * For production verification, see VERCEL_ENV_VERIFICATION.md
+ * 
+ * To verify Vercel environment variables:
+ * 1. Go to Vercel Dashboard → Settings → Environment Variables
+ * 2. Check browser console on production site
+ * 3. See VERCEL_ENV_VERIFICATION.md for complete guide
  */
 
-console.log('🔍 Vercel Configuration Check\n');
+console.log('🔍 Local Environment Configuration Check\n');
+console.log('⚠️  NOTE: This checks LOCAL variables only. For Vercel, use the dashboard.\n');
 console.log('='.repeat(60));
 console.log('📋 Configuration Status Analysis\n');
 
@@ -131,10 +140,12 @@ if (issues.length === 0) {
   console.log('\n💡 Next Steps:');
   console.log('   1. Add missing variables to Vercel Dashboard');
   console.log('   2. Enable all variables for: Production, Preview, Development');
-  console.log('   3. Redeploy your application');
-  console.log('   4. Clear browser tokens and log in again');
+  console.log('   3. Redeploy your application (CRITICAL - variables are embedded at build time)');
+  console.log('   4. Verify in production using VERCEL_ENV_VERIFICATION.md');
+  console.log('   5. Clear browser tokens and log in again');
 }
 
 console.log('\n' + '='.repeat(60));
+console.log('\n📚 For complete Vercel verification guide, see: VERCEL_ENV_VERIFICATION.md\n');
 process.exit(issues.length === 0 ? 0 : 1);
 

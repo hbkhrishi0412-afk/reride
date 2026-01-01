@@ -6,7 +6,8 @@ import {
   VehicleListErrorBoundary, 
   ChatErrorBoundary, 
   DashboardErrorBoundary, 
-  AdminPanelErrorBoundary
+  AdminPanelErrorBoundary,
+  AuthenticationErrorBoundary
 } from './components/ErrorBoundaries';
 import Header from './components/Header';
 import MobileDashboard from './components/MobileDashboard';
@@ -141,10 +142,21 @@ const preloadCriticalComponents = () => {
     // Preload secondary components when idle
     schedulePreload(() => {
       Promise.all([
-        import('./components/Dashboard'),
-        import('./components/Profile')
+        import('./components/Dashboard').catch((error) => {
+          // Log error but don't fail - Dashboard will be loaded on-demand if needed
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Dashboard preload failed (non-critical):', error);
+          }
+          return null; // Return null to prevent Promise.all from failing
+        }),
+        import('./components/Profile').catch((error) => {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Profile preload failed (non-critical):', error);
+          }
+          return null;
+        })
       ]).catch(() => {
-        // Silently fail if preloading fails
+        // Silently fail if preloading fails - these are optimizations, not critical
       });
     }, 2000);
   }
@@ -2141,38 +2153,44 @@ const AppContent: React.FC = React.memo(() => {
       case ViewEnum.CUSTOMER_LOGIN:
       case ViewEnum.SELLER_LOGIN:
         return (
-          <Suspense fallback={<LoadingSpinner />}>
-            <UnifiedLogin 
-              onLogin={handleLogin}
-              onRegister={handleRegister}
-              onNavigate={navigate}
-              onForgotPassword={() => {
-                setForgotPasswordRole('customer');
-                navigate(ViewEnum.FORGOT_PASSWORD);
-              }}
-              allowedRoles={['customer', 'seller']}
-            />
-          </Suspense>
+          <AuthenticationErrorBoundary>
+            <Suspense fallback={<LoadingSpinner />}>
+              <UnifiedLogin 
+                onLogin={handleLogin}
+                onRegister={handleRegister}
+                onNavigate={navigate}
+                onForgotPassword={() => {
+                  setForgotPasswordRole('customer');
+                  navigate(ViewEnum.FORGOT_PASSWORD);
+                }}
+                allowedRoles={['customer', 'seller']}
+              />
+            </Suspense>
+          </AuthenticationErrorBoundary>
         );
 
       case ViewEnum.ADMIN_LOGIN:
         return (
-          <Suspense fallback={<LoadingSpinner />}>
-            <AdminLogin
-              onLogin={handleLogin}
-              onNavigate={navigate}
-            />
-          </Suspense>
+          <AuthenticationErrorBoundary>
+            <Suspense fallback={<LoadingSpinner />}>
+              <AdminLogin
+                onLogin={handleLogin}
+                onNavigate={navigate}
+              />
+            </Suspense>
+          </AuthenticationErrorBoundary>
         );
 
       case ViewEnum.NEW_CARS_ADMIN_LOGIN:
         return (
-          <Suspense fallback={<LoadingSpinner />}>
-            <NewCarsAdminLogin
-              onLogin={handleLogin}
-              onNavigate={navigate}
-            />
-          </Suspense>
+          <AuthenticationErrorBoundary>
+            <Suspense fallback={<LoadingSpinner />}>
+              <NewCarsAdminLogin
+                onLogin={handleLogin}
+                onNavigate={navigate}
+              />
+            </Suspense>
+          </AuthenticationErrorBoundary>
         );
 
       case ViewEnum.NEW_CARS_ADMIN_PANEL:
@@ -2200,15 +2218,19 @@ const AppContent: React.FC = React.memo(() => {
 
       case ViewEnum.FORGOT_PASSWORD:
         return (
-          <ForgotPassword 
-            onResetRequest={(email) => {
-              // Handle password reset request
-              if (process.env.NODE_ENV === 'development') {
-                console.log('Password reset requested for:', email);
-              }
-            }}
-            onBack={() => goBack(ViewEnum.LOGIN_PORTAL)}
-          />
+          <AuthenticationErrorBoundary>
+            <Suspense fallback={<LoadingSpinner />}>
+              <ForgotPassword 
+                onResetRequest={(email) => {
+                  // Handle password reset request
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('Password reset requested for:', email);
+                  }
+                }}
+                onBack={() => goBack(ViewEnum.LOGIN_PORTAL)}
+              />
+            </Suspense>
+          </AuthenticationErrorBoundary>
         );
 
       case ViewEnum.SELL_CAR:

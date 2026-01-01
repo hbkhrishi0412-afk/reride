@@ -295,11 +295,12 @@ VITE_FIREBASE_DATABASE_URL=https://reride-ade6a-default-rtdb.asia-southeast1.fir
 
 If problems persist after following this guide:
 
-1. **Check Vercel Build Logs**: Look for environment variable warnings
-2. **Check Browser Console**: Look for Firebase initialization errors
-3. **Check Network Tab**: Look for failed Firebase requests
-4. **Verify Firebase Console**: Ensure database is accessible and rules are correct
-5. **Test in Development**: Verify it works locally with `.env.local`
+1. **Check Vercel Environment Variables**: See `VERCEL_ENV_VERIFICATION.md` for complete verification guide
+2. **Check Vercel Build Logs**: Look for environment variable warnings
+3. **Check Browser Console**: Look for Firebase initialization errors
+4. **Check Network Tab**: Look for failed Firebase requests
+5. **Verify Firebase Console**: Ensure database is accessible and rules are correct
+6. **Test in Development**: Verify it works locally with `.env.local`
 
 ## ✅ Success Indicators
 
