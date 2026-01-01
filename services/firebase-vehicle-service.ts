@@ -11,48 +11,25 @@ import {
 import type { Vehicle } from '../types.js';
 
 // Import Admin SDK functions for server-side operations (serverless functions)
-// Only import when in server context to avoid bundling in client
-let adminDbFunctions: {
-  adminReadAll: <T>(collection: string) => Promise<Record<string, T>>;
-  adminCreate: <T extends Record<string, unknown>>(collection: string, data: T, key?: string) => Promise<string>;
-  adminRead: <T>(collection: string, key: string) => Promise<T | null>;
-  adminUpdate: <T extends Record<string, unknown>>(collection: string, key: string, updates: Partial<T>) => Promise<void>;
-  adminDelete: (collection: string, key: string) => Promise<void>;
-  adminQueryByField: <T>(collection: string, field: string, value: string | number | boolean) => Promise<Record<string, T>>;
-  snapshotToArray: <T>(data: Record<string, T>) => Array<T & { id: string }>;
-} | null = null;
+// This service is only used in api/main.ts (server-side), so we can use static imports
+// Static import like api/main.ts does - works reliably in serverless functions
+import {
+  adminReadAll,
+  adminCreate,
+  adminRead,
+  adminUpdate,
+  adminDelete,
+  adminQueryByField
+} from '../server/firebase-admin-db.js';
 
-// Lazy load Admin SDK functions only in server context
-async function getAdminDbFunctions() {
-  if (typeof window !== 'undefined') {
-    // Client-side: Admin SDK not available
-    return null;
-  }
-  
-  if (!adminDbFunctions) {
-    try {
-      // Dynamic import to avoid bundling Admin SDK in client code
-      const adminDb = await import('../server/firebase-admin-db.js');
-      adminDbFunctions = {
-        adminReadAll: adminDb.adminReadAll,
-        adminCreate: adminDb.adminCreate,
-        adminRead: adminDb.adminRead,
-        adminUpdate: adminDb.adminUpdate,
-        adminDelete: adminDb.adminDelete,
-        adminQueryByField: adminDb.adminQueryByField,
-        snapshotToArray: (data: Record<string, any>) => {
-          return Object.keys(data).map(key => ({ id: key, ...data[key] }));
-        },
-      };
-    } catch (error) {
-      // If Admin SDK fails to load, log error but continue (will fall back to client SDK)
-      console.warn('⚠️ Failed to load Firebase Admin SDK, falling back to client SDK:', error);
-      return null;
-    }
-  }
-  
-  return adminDbFunctions;
+// Helper to convert Admin SDK snapshot format to array with string IDs
+// CRITICAL: Spread data first, then set id to preserve string ID from key
+function adminSnapshotToArray<T>(data: Record<string, T>): Array<T & { id: string }> {
+  return Object.keys(data).map(key => ({ ...data[key], id: key }));
 }
+
+// Check if we're in server context (where Admin SDK is available)
+const isServerContext = typeof window === 'undefined';
 
 // Helper function to safely convert string ID to number
 // Ensures we always return a number (never a string) to maintain type safety
@@ -77,10 +54,9 @@ export const firebaseVehicleService = {
     // Generate a unique ID
     const id = Date.now();
     
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      await adminDb.adminCreate(DB_PATHS.VEHICLES, vehicleData, id.toString());
+    // Use Admin SDK in server context (api/main.ts), Client SDK elsewhere
+    if (isServerContext) {
+      await adminCreate(DB_PATHS.VEHICLES, vehicleData, id.toString());
     } else {
       await create(DB_PATHS.VEHICLES, vehicleData, id.toString());
     }
@@ -93,10 +69,9 @@ export const firebaseVehicleService = {
 
   // Find vehicle by ID
   async findById(id: number): Promise<Vehicle | null> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      const vehicle = await adminDb.adminRead<Vehicle & { id: string }>(DB_PATHS.VEHICLES, id.toString());
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      const vehicle = await adminRead<Vehicle & { id: string }>(DB_PATHS.VEHICLES, id.toString());
       // adminRead returns { id: string, ...data }, convert to numeric id
       if (vehicle) {
         const { id: stringId, ...vehicleData } = vehicle;
@@ -111,11 +86,10 @@ export const firebaseVehicleService = {
 
   // Get all vehicles
   async findAll(): Promise<Vehicle[]> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      const vehicles = await adminDb.adminReadAll<Vehicle>(DB_PATHS.VEHICLES);
-      const vehicleArray = convertSnapshotToVehicles(adminDb.snapshotToArray(vehicles));
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      const vehicles = await adminReadAll<Vehicle>(DB_PATHS.VEHICLES);
+      const vehicleArray = convertSnapshotToVehicles(adminSnapshotToArray(vehicles));
       console.log(`📊 firebaseVehicleService.findAll (Admin SDK): Converted ${Object.keys(vehicles).length} records to ${vehicleArray.length} vehicles`);
       return vehicleArray;
     } else {
@@ -128,10 +102,9 @@ export const firebaseVehicleService = {
 
   // Update vehicle
   async update(id: number, updates: Partial<Vehicle>): Promise<void> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      await adminDb.adminUpdate(DB_PATHS.VEHICLES, id.toString(), updates);
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      await adminUpdate(DB_PATHS.VEHICLES, id.toString(), updates);
     } else {
       await updateData(DB_PATHS.VEHICLES, id.toString(), updates);
     }
@@ -139,10 +112,9 @@ export const firebaseVehicleService = {
 
   // Delete vehicle
   async delete(id: number): Promise<void> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      await adminDb.adminDelete(DB_PATHS.VEHICLES, id.toString());
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      await adminDelete(DB_PATHS.VEHICLES, id.toString());
     } else {
       await deleteData(DB_PATHS.VEHICLES, id.toString());
     }
@@ -150,11 +122,10 @@ export const firebaseVehicleService = {
 
   // Find vehicles by seller email
   async findBySellerEmail(sellerEmail: string): Promise<Vehicle[]> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      const vehicles = await adminDb.adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'sellerEmail', sellerEmail.toLowerCase().trim());
-      return convertSnapshotToVehicles(adminDb.snapshotToArray(vehicles));
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      const vehicles = await adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'sellerEmail', sellerEmail.toLowerCase().trim());
+      return convertSnapshotToVehicles(adminSnapshotToArray(vehicles));
     } else {
       const vehicles = await queryByField<Vehicle>(DB_PATHS.VEHICLES, 'sellerEmail', sellerEmail.toLowerCase().trim());
       return convertSnapshotToVehicles(snapshotToArray(vehicles));
@@ -163,11 +134,10 @@ export const firebaseVehicleService = {
 
   // Find vehicles by status
   async findByStatus(status: 'published' | 'unpublished' | 'sold'): Promise<Vehicle[]> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      const vehicles = await adminDb.adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'status', status);
-      return convertSnapshotToVehicles(adminDb.snapshotToArray(vehicles));
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      const vehicles = await adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'status', status);
+      return convertSnapshotToVehicles(adminSnapshotToArray(vehicles));
     } else {
       const vehicles = await queryByField<Vehicle>(DB_PATHS.VEHICLES, 'status', status);
       return convertSnapshotToVehicles(snapshotToArray(vehicles));
@@ -176,11 +146,10 @@ export const firebaseVehicleService = {
 
   // Find featured vehicles
   async findFeatured(): Promise<Vehicle[]> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      const vehicles = await adminDb.adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'isFeatured', true);
-      return convertSnapshotToVehicles(adminDb.snapshotToArray(vehicles));
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      const vehicles = await adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'isFeatured', true);
+      return convertSnapshotToVehicles(adminSnapshotToArray(vehicles));
     } else {
       const vehicles = await queryByField<Vehicle>(DB_PATHS.VEHICLES, 'isFeatured', true);
       return convertSnapshotToVehicles(snapshotToArray(vehicles));
@@ -189,11 +158,10 @@ export const firebaseVehicleService = {
 
   // Find vehicles by category
   async findByCategory(category: string): Promise<Vehicle[]> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      const vehicles = await adminDb.adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'category', category);
-      return convertSnapshotToVehicles(adminDb.snapshotToArray(vehicles));
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      const vehicles = await adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'category', category);
+      return convertSnapshotToVehicles(adminSnapshotToArray(vehicles));
     } else {
       const vehicles = await queryByField<Vehicle>(DB_PATHS.VEHICLES, 'category', category);
       return convertSnapshotToVehicles(snapshotToArray(vehicles));
@@ -202,11 +170,10 @@ export const firebaseVehicleService = {
 
   // Find vehicles by city
   async findByCity(city: string): Promise<Vehicle[]> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      const vehicles = await adminDb.adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'city', city);
-      return convertSnapshotToVehicles(adminDb.snapshotToArray(vehicles));
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      const vehicles = await adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'city', city);
+      return convertSnapshotToVehicles(adminSnapshotToArray(vehicles));
     } else {
       const vehicles = await queryByField<Vehicle>(DB_PATHS.VEHICLES, 'city', city);
       return convertSnapshotToVehicles(snapshotToArray(vehicles));
@@ -215,15 +182,13 @@ export const firebaseVehicleService = {
 
   // Find vehicles by state
   async findByState(state: string): Promise<Vehicle[]> {
-    // Try Admin SDK first (server-side), fall back to client SDK
-    const adminDb = await getAdminDbFunctions();
-    if (adminDb) {
-      const vehicles = await adminDb.adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'state', state);
-      return convertSnapshotToVehicles(adminDb.snapshotToArray(vehicles));
+    // Use Admin SDK in server context, Client SDK elsewhere
+    if (isServerContext) {
+      const vehicles = await adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'state', state);
+      return convertSnapshotToVehicles(adminSnapshotToArray(vehicles));
     } else {
       const vehicles = await queryByField<Vehicle>(DB_PATHS.VEHICLES, 'state', state);
       return convertSnapshotToVehicles(snapshotToArray(vehicles));
     }
   },
 };
-

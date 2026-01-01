@@ -17,11 +17,12 @@ function getFirebaseAdminDatabase(): admin.database.Database {
 }
 
 // Helper to convert record to array
+// CRITICAL: Spread data first, then set id to preserve string ID from key
 function snapshotToArray<T>(data: Record<string, T>): T[] {
   if (!data || typeof data !== 'object') {
     return [];
   }
-  return Object.keys(data).map(key => ({ id: key, ...data[key] } as T));
+  return Object.keys(data).map(key => ({ ...data[key], id: key } as T));
 }
 
 // Admin SDK Database Operations (bypasses security rules)
@@ -36,7 +37,8 @@ export async function adminRead<T>(collection: string, key?: string): Promise<T 
   }
   
   if (key) {
-    return { id: key, ...snapshot.val() } as T;
+    // CRITICAL: Spread data first, then set id to preserve string ID from key
+    return { ...snapshot.val(), id: key } as T;
   }
   
   return snapshot.val() as T;
@@ -128,7 +130,8 @@ export async function adminFindOneByField<T>(
   if (keys.length === 0) {
     return null;
   }
-  return { id: keys[0], ...results[keys[0]] } as T;
+  // CRITICAL: Spread data first, then set id to preserve string ID from key
+  return { ...results[keys[0]], id: keys[0] } as T;
 }
 
 // Export helper functions

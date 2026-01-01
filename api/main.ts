@@ -3207,7 +3207,8 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: 
 
   if (req.method === 'GET') {
     const items = await adminReadAll<Record<string, unknown>>(DB_PATHS.NEW_CARS);
-    const itemsArray = Object.entries(items).map(([id, data]) => ({ id, ...data }))
+    // CRITICAL: Spread data first, then set id to preserve string ID from key
+    const itemsArray = Object.entries(items).map(([id, data]) => ({ ...data, id }))
       .sort((a, b) => {
         const aTime = (a as Record<string, unknown>).updatedAt ? new Date((a as Record<string, unknown>).updatedAt as string).getTime() : 0;
         const bTime = (b as Record<string, unknown>).updatedAt ? new Date((b as Record<string, unknown>).updatedAt as string).getTime() : 0;
@@ -3775,7 +3776,8 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, faqsPath: 
     const { category } = req.query;
     
     const allFaqs = await adminReadAll<Record<string, unknown>>(faqsPath);
-    let faqs = Object.entries(allFaqs).map(([id, data]) => ({ id, ...data }));
+    // CRITICAL: Spread data first, then set id to preserve string ID from key
+    let faqs = Object.entries(allFaqs).map(([id, data]) => ({ ...data, id }));
     
     if (category && category !== 'all' && typeof category === 'string') {
       // Sanitize category
@@ -3922,7 +3924,8 @@ async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, 
     const { userEmail, status } = req.query;
     
     const allTickets = await adminReadAll<Record<string, unknown>>(ticketsPath);
-    let tickets = Object.entries(allTickets).map(([id, data]) => ({ id, ...data }));
+    // CRITICAL: Spread data first, then set id to preserve string ID from key
+    let tickets = Object.entries(allTickets).map(([id, data]) => ({ ...data, id }));
     
     if (userEmail && typeof userEmail === 'string') {
       // Sanitize email
@@ -4132,7 +4135,8 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
         const limitNum = parseInt(String(limit), 10) || 10;
         
         let allSubmissions = await adminReadAll<Record<string, unknown>>(submissionsPath);
-        let submissions = Object.entries(allSubmissions).map(([id, data]) => ({ id, ...data }));
+        // CRITICAL: Spread data first, then set id to preserve string ID from key
+        let submissions = Object.entries(allSubmissions).map(([id, data]) => ({ ...data, id }));
         
         // Filter by status
         if (statusFilter && typeof statusFilter === 'string') {
@@ -4622,7 +4626,8 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       
       // Get all notifications and filter
       const allNotifications = await adminReadAll<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS);
-      let notifications = Object.entries(allNotifications).map(([id, data]) => ({ id, ...data }));
+      // CRITICAL: Spread data first, then set id to preserve string ID from key
+      let notifications = Object.entries(allNotifications).map(([id, data]) => ({ ...data, id }));
       
       if (recipientEmail) {
         const emailValue = Array.isArray(recipientEmail) ? recipientEmail[0] : recipientEmail;

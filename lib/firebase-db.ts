@@ -5,6 +5,10 @@ import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 let database: Database | undefined;
 let firebaseApp: FirebaseApp | undefined;
 
+// Cache for availability check to avoid repeated initialization attempts
+let availabilityCache: { available: boolean; timestamp: number } | null = null;
+const AVAILABILITY_CACHE_DURATION = 5000; // Cache for 5 seconds
+
 // Get or initialize Firebase app (works on both client and server)
 function getFirebaseApp(): FirebaseApp {
   if (!firebaseApp) {
@@ -20,29 +24,31 @@ function getFirebaseApp(): FirebaseApp {
         // Fallback to VITE_FIREBASE_* only for backward compatibility in client-side code
         const isServerSide = typeof window === 'undefined';
         
+        // On client-side, use import.meta.env (Vite's way), on server-side use process.env
+        const clientEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
         const firebaseConfig = {
           // Prioritize FIREBASE_* for server-side, VITE_FIREBASE_* for client-side
           apiKey: isServerSide 
             ? (process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || '')
-            : (process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || ''),
+            : (clientEnv?.VITE_FIREBASE_API_KEY || process.env?.VITE_FIREBASE_API_KEY || ''),
           authDomain: isServerSide
             ? (process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN || '')
-            : (process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN || ''),
+            : (clientEnv?.VITE_FIREBASE_AUTH_DOMAIN || process.env?.VITE_FIREBASE_AUTH_DOMAIN || ''),
           projectId: isServerSide
             ? (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '')
-            : (process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || ''),
+            : (clientEnv?.VITE_FIREBASE_PROJECT_ID || process.env?.VITE_FIREBASE_PROJECT_ID || ''),
           storageBucket: isServerSide
             ? (process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '')
-            : (process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET || ''),
+            : (clientEnv?.VITE_FIREBASE_STORAGE_BUCKET || process.env?.VITE_FIREBASE_STORAGE_BUCKET || ''),
           messagingSenderId: isServerSide
             ? (process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '')
-            : (process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID || ''),
+            : (clientEnv?.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || ''),
           appId: isServerSide
             ? (process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID || '')
-            : (process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID || ''),
+            : (clientEnv?.VITE_FIREBASE_APP_ID || process.env?.VITE_FIREBASE_APP_ID || ''),
           databaseURL: isServerSide
             ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || '')
-            : (process.env.VITE_FIREBASE_DATABASE_URL || process.env.FIREBASE_DATABASE_URL || ''),
+            : (clientEnv?.VITE_FIREBASE_DATABASE_URL || process.env?.VITE_FIREBASE_DATABASE_URL || ''),
         };
 
         // Validate required fields
@@ -78,9 +84,11 @@ export function getFirebaseDatabase(): Database {
       const isServerSide = typeof window === 'undefined';
       
       // Get database URL with proper priority
+      // On client-side, use import.meta.env (Vite's way), on server-side use process.env
+      const clientEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
       const databaseURL = isServerSide
         ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL)
-        : (process.env.VITE_FIREBASE_DATABASE_URL || process.env.FIREBASE_DATABASE_URL);
+        : (clientEnv?.VITE_FIREBASE_DATABASE_URL || process.env?.VITE_FIREBASE_DATABASE_URL);
       
       // For server-side operations, database URL should be provided for reliability
       // Client-side can use default from firebaseConfig, but server-side should be explicit
@@ -179,7 +187,8 @@ export async function read<T>(collection: string, key?: string): Promise<T | nul
     }
     
     if (key) {
-      return { id: key, ...snapshot.val() } as T;
+      // CRITICAL: Spread data first, then set id to preserve string ID from key
+      return { ...snapshot.val(), id: key } as T;
     }
     
     return snapshot.val() as T;
@@ -355,10 +364,11 @@ export async function queryByRange<T>(
 }
 
 // Helper to convert Firebase snapshot to array
+// CRITICAL: Spread data first, then set id to preserve string ID from key
 export function snapshotToArray<T>(snapshot: Record<string, T>): Array<T & { id: string }> {
   return Object.entries(snapshot).map(([id, data]) => ({
-    id,
     ...data,
+    id,
   }));
 }
 
@@ -376,23 +386,32 @@ export async function findOneByField<T>(
   }
   
   const [id, data] = entries[0];
-  return { id, ...data } as T & { id: string };
+  // CRITICAL: Spread data first, then set id to preserve string ID from key
+  return { ...data, id } as T & { id: string };
 }
 
 // Helper to check if database is available
+// Uses caching to avoid repeated expensive initialization checks
 export function isDatabaseAvailable(): boolean {
+  // Return cached result if still valid (performance optimization)
+  const now = Date.now();
+  if (availabilityCache && (now - availabilityCache.timestamp) < AVAILABILITY_CACHE_DURATION) {
+    return availabilityCache.available;
+  }
+  
   try {
     // First check if required environment variables exist (without initializing)
     // This prevents crashes during module load if config is missing
     const isServerSide = typeof window === 'undefined';
+    // On client-side, use import.meta.env (Vite's way), on server-side use process.env
     const hasApiKey = isServerSide 
       ? (process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY)
-      : (process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY);
+      : (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_API_KEY) || (process.env?.VITE_FIREBASE_API_KEY);
     const hasProjectId = isServerSide
       ? (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID)
-      : (process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID);
+      : (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_PROJECT_ID) || (process.env?.VITE_FIREBASE_PROJECT_ID);
     
-    // If basic config is missing, return false without trying to initialize
+    // If basic config is missing, cache and return false without trying to initialize
     if (!hasApiKey || !hasProjectId) {
       const isDev = process.env.NODE_ENV === 'development' || 
                     process.env.VERCEL_ENV === 'development' || 
@@ -403,13 +422,22 @@ export function isDatabaseAvailable(): boolean {
         console.warn('   Server-side: FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.');
         console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, etc.');
       }
+      availabilityCache = { available: false, timestamp: now };
       return false;
     }
     
-    // Only try to get database if config exists
-    // This can still throw, but we catch it below
+    // Only try to get database if config exists and it's not already initialized
+    // Check if already initialized first (performance optimization)
+    if (database) {
+      availabilityCache = { available: true, timestamp: now };
+      return true;
+    }
+    
+    // Try to initialize (this can still throw, but we catch it below)
     const db = getFirebaseDatabase();
-    return !!db;
+    const available = !!db;
+    availabilityCache = { available, timestamp: now };
+    return available;
   } catch (error) {
     // Never throw - always return false to prevent function crashes
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -428,6 +456,9 @@ export function isDatabaseAvailable(): boolean {
       // In production, log to console but don't expose details to users
       console.error('❌ Firebase database unavailable. Check configuration.');
     }
+    
+    // Cache the failure to avoid repeated attempts
+    availabilityCache = { available: false, timestamp: now };
     
     // CRITICAL: Always return false, never throw
     return false;
