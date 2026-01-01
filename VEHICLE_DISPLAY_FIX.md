@@ -116,3 +116,4 @@ Open browser console on production site. You should see:
    - Monitor browser console errors
    - Verify Firebase connection
 
+

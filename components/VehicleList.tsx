@@ -181,25 +181,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [viewMode, setViewMode] = useState<'grid' | 'tile'>('grid');
   const [isAiSearchCollapsed, setIsAiSearchCollapsed] = useState(true); // Start collapsed on mobile for better UX
   
-  // Responsive items per page based on screen size
-  const [itemsPerPage, setItemsPerPage] = useState(BASE_ITEMS_PER_PAGE);
-  
-  useEffect(() => {
-    const updateItemsPerPage = () => {
-      const width = window.innerWidth;
-      if (width < 768) {
-        setItemsPerPage(12);  // Mobile: 12 items
-      } else if (width < 1024) {
-        setItemsPerPage(24);  // Tablet: 24 items
-      } else {
-        setItemsPerPage(45);  // Desktop: 45 items (15 rows × 3 columns)
-      }
-    };
-    
-    updateItemsPerPage();
-    window.addEventListener('resize', updateItemsPerPage);
-    return () => window.removeEventListener('resize', updateItemsPerPage);
-  }, []);
+  // Pagination removed - showing all vehicles for better user experience
 
   // Mobile modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -748,11 +730,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     return count;
   }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, isWishlistMode, isStateFilterUserSet, initialCategory]);
 
-  const totalPages = Math.ceil(processedVehicles.length / itemsPerPage);
-  const paginatedVehicles = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return processedVehicles.slice(startIndex, startIndex + itemsPerPage);
-  }, [processedVehicles, currentPage, itemsPerPage]);
+  // Show all vehicles - no pagination limit
+  // Removed pagination to display all vehicles from database
+  const paginatedVehicles = processedVehicles;
+  const totalPages = 1; // Set to 1 to hide pagination controls
 
   if (isWishlistMode) {
      return (
@@ -1373,7 +1354,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               </div>
             )}
           </div>
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+          {/* Pagination removed - showing all vehicles */}
         </main>
       </div>
 
