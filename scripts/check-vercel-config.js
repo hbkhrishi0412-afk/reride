@@ -78,6 +78,12 @@ firebaseVars.server.forEach(varName => {
   }
 });
 
+if (clientMissing > 0) {
+  issues.push(`${clientMissing} client-side Firebase variables are missing`);
+  recommendations.push('Add VITE_FIREBASE_* variables to Vercel');
+  recommendations.push('These are required for client-side Firebase initialization');
+}
+
 if (serverMissing > 0) {
   issues.push(`${serverMissing} server-side Firebase variables are missing`);
   recommendations.push('Add FIREBASE_* variables (without VITE_ prefix) to Vercel');
@@ -95,6 +101,11 @@ otherVars.forEach(varName => {
   } else {
     console.log(`  ❌ ${varName} - MISSING`);
     issues.push(`${varName} is missing`);
+    if (varName === 'MONGODB_URI') {
+      recommendations.push('Add MONGODB_URI to Vercel environment variables (your MongoDB connection string)');
+    } else if (varName === 'GEMINI_API_KEY') {
+      recommendations.push('Add GEMINI_API_KEY to Vercel environment variables (your Google Gemini API key)');
+    }
   }
 });
 

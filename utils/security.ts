@@ -122,17 +122,40 @@ export const verifyToken = (token: string): TokenPayload => {
     if (!secret) {
       throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
     }
-    const decoded = jwt.verify(token, secret, {
-      issuer: config.JWT.ISSUER,
-      audience: config.JWT.AUDIENCE
-    });
     
-    if (typeof decoded === 'string' || !decoded) {
-      throw new Error('Invalid token payload');
+    try {
+      const decoded = jwt.verify(token, secret, {
+        issuer: config.JWT.ISSUER,
+        audience: config.JWT.AUDIENCE
+      });
+      
+      if (typeof decoded === 'string' || !decoded) {
+        throw new Error('Invalid token payload');
+      }
+      
+      return decoded as TokenPayload;
+    } catch (jwtError: unknown) {
+      // Preserve JWT-specific errors for better debugging
+      // jsonwebtoken throws errors with specific names
+      if (jwtError && typeof jwtError === 'object' && 'name' in jwtError) {
+        const errorName = (jwtError as { name: string }).name;
+        if (errorName === 'TokenExpiredError') {
+          throw new Error('Token has expired');
+        } else if (errorName === 'JsonWebTokenError') {
+          throw new Error('Invalid token format');
+        } else if (errorName === 'NotBeforeError') {
+          throw new Error('Token not yet valid');
+        }
+      }
+      // For other JWT errors, throw a generic message
+      throw new Error('Invalid or expired token');
     }
-    
-    return decoded as TokenPayload;
   } catch (error) {
+    // Re-throw errors that are already user-friendly
+    if (error instanceof Error && error.message.includes('JWT_SECRET')) {
+      throw error;
+    }
+    // For other errors, provide a generic message
     throw new Error('Invalid or expired token');
   }
 };
