@@ -40,10 +40,13 @@ function convertIdToNumber(idString: string): number {
 
 // Helper function to convert snapshot array items to Vehicle objects with numeric IDs
 function convertSnapshotToVehicles(items: Array<Vehicle & { id: string }>): Vehicle[] {
-  return items.map(v => ({
-    ...v,
-    id: convertIdToNumber(v.id),
-  }));
+  return items.map(v => {
+    const { id: stringId, ...vehicleData } = v;
+    return {
+      ...vehicleData,
+      id: convertIdToNumber(stringId),
+    } as Vehicle;
+  });
 }
 
 // Vehicle service for Firebase Realtime Database
