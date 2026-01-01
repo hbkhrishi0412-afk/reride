@@ -71,25 +71,34 @@ export function clearStatusCache(): void {
 
 /**
  * Get user-friendly error message for Firebase connection issues
+ * Safely handles null/undefined status objects
  */
-export function getFirebaseErrorMessage(status: FirebaseStatus): string {
+export function getFirebaseErrorMessage(status: FirebaseStatus | null | undefined): string {
+  // Handle null/undefined status
+  if (!status) {
+    return 'Firebase database is not available. Please check your configuration.';
+  }
+  
   if (status.available) {
     return '';
   }
   
-  if (status.error?.includes('configuration is missing')) {
+  // Safely check error string
+  const errorMessage = status.error || '';
+  
+  if (errorMessage.includes('configuration is missing')) {
     return 'Firebase configuration is missing. Please check your environment variables.';
   }
   
-  if (status.error?.includes('DATABASE_URL')) {
+  if (errorMessage.includes('DATABASE_URL')) {
     return 'Firebase Database URL is not configured. Please set FIREBASE_DATABASE_URL.';
   }
   
-  if (status.error?.includes('PERMISSION_DENIED')) {
+  if (errorMessage.includes('PERMISSION_DENIED')) {
     return 'Permission denied. Please check Firebase security rules.';
   }
   
-  return status.error || 'Firebase database is not available. Please check your configuration.';
+  return errorMessage || 'Firebase database is not available. Please check your configuration.';
 }
 
 

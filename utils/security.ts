@@ -151,9 +151,16 @@ export const verifyToken = (token: string): TokenPayload => {
       throw new Error('Invalid or expired token');
     }
   } catch (error) {
-    // Re-throw errors that are already user-friendly
-    if (error instanceof Error && error.message.includes('JWT_SECRET')) {
-      throw error;
+    // Re-throw errors that are already user-friendly JWT-specific errors
+    // These are the specific error messages thrown from the inner catch block above
+    if (error instanceof Error) {
+      const errorMsg = error.message;
+      if (errorMsg === 'Token has expired' || 
+          errorMsg === 'Invalid token format' || 
+          errorMsg === 'Token not yet valid' ||
+          errorMsg.includes('JWT_SECRET')) {
+        throw error; // Preserve JWT-specific errors
+      }
     }
     // For other errors, provide a generic message
     throw new Error('Invalid or expired token');

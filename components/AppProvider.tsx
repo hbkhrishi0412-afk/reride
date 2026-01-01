@@ -2826,9 +2826,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state/localStorage only on success
         // This ensures password changes are persisted to MongoDB immediately, not just locally
-        // This ensures password changes are persisted to MongoDB immediately, not just locally
         try {
           console.log('📡 Sending user update request to API (real-time MongoDB update)...', { email, hasPassword: !!updates.password });
+          
+          // PROACTIVE TOKEN REFRESH: For critical operations like password updates, 
+          // proactively refresh token before making the request to prevent session expiration errors
+          if (updates.password) {
+            try {
+              const { refreshAccessToken } = await import('../services/userService');
+              console.log('🔄 Proactively refreshing token before password update...');
+              const refreshResult = await refreshAccessToken();
+              if (refreshResult.success && refreshResult.accessToken) {
+                console.log('✅ Token refreshed proactively before password update');
+              } else {
+                console.warn('⚠️ Proactive token refresh failed, but continuing with request (will retry on 401)');
+              }
+            } catch (refreshError) {
+              console.warn('⚠️ Error during proactive token refresh:', refreshError);
+              // Continue with request - authenticatedFetch will handle 401 and retry
+            }
+          }
           
           // Use authenticated fetch with automatic token refresh
           const { authenticatedFetch } = await import('../utils/authenticatedFetch');
