@@ -139,7 +139,10 @@ const authenticateRequest = (req: VercelRequest): AuthResult => {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     
     // Check if JWT_SECRET is configured before attempting verification
-    const secret = process.env.JWT_SECRET;
+    // Use getSecurityConfig().JWT.SECRET (same source as verifyToken) to ensure consistency
+    // This allows development fallback to work correctly
+    const securityConfig = getSecurityConfig();
+    const secret = securityConfig.JWT.SECRET;
     if (!secret) {
       logWarn('⚠️ JWT_SECRET is not set - authentication will fail');
       return { 
@@ -164,7 +167,9 @@ const authenticateRequest = (req: VercelRequest): AuthResult => {
         error: 'Server configuration error: JWT_SECRET is missing. Please configure JWT_SECRET in your environment variables.' 
       };
     }
-    return { isValid: false, error: 'Invalid or expired token' };
+    // Preserve JWT-specific error messages from verifyToken (e.g., 'Token has expired', 'Invalid token format')
+    // These provide better debugging information than a generic message
+    return { isValid: false, error: errorMessage };
   }
 };
 

@@ -3232,8 +3232,19 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 Firebase Database Connection Issue
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
-                <p>{getFirebaseErrorMessage(firebaseStatus)}</p>
-                {firebaseStatus.details && (
+                <p>
+                  {(() => {
+                    try {
+                      // Safely get error message - getFirebaseErrorMessage now handles null/undefined
+                      return getFirebaseErrorMessage(firebaseStatus);
+                    } catch (error) {
+                      // Fallback if getFirebaseErrorMessage fails (shouldn't happen now, but safety first)
+                      console.warn('⚠️ Error getting Firebase error message:', error);
+                      return firebaseStatus?.error || 'Firebase database is not available. Please check your configuration.';
+                    }
+                  })()}
+                </p>
+                {firebaseStatus?.details && (
                   <p className="mt-1 text-xs">{firebaseStatus.details}</p>
                 )}
               </div>
