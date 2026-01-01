@@ -73,6 +73,16 @@ const storeTokens = (accessToken: string, refreshToken: string) => {
   try {
     localStorage.setItem('reRideAccessToken', accessToken);
     localStorage.setItem('reRideRefreshToken', refreshToken);
+    
+    // Reset refresh token invalid flag when new tokens are stored (fire-and-forget)
+    // This ensures that after successful login/register, we can refresh tokens again
+    // Use dynamic import to avoid circular dependencies
+    import('../utils/authenticatedFetch').then(({ resetRefreshTokenInvalidFlag }) => {
+      resetRefreshTokenInvalidFlag();
+    }).catch(() => {
+      // Silently fail if module can't be imported (shouldn't happen in normal flow)
+      // This is a non-critical operation - tokens are already stored
+    });
   } catch (error) {
     console.warn('Failed to store tokens:', error);
   }
