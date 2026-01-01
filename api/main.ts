@@ -137,6 +137,17 @@ const authenticateRequest = (req: VercelRequest): AuthResult => {
   
   try {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    
+    // Check if JWT_SECRET is configured before attempting verification
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      logWarn('⚠️ JWT_SECRET is not set - authentication will fail');
+      return { 
+        isValid: false, 
+        error: 'Server configuration error: JWT_SECRET is missing. Please configure JWT_SECRET in your environment variables.' 
+      };
+    }
+    
     const decoded = verifyToken(token);
     // Ensure role is present for the user object
     const user = {
@@ -145,6 +156,14 @@ const authenticateRequest = (req: VercelRequest): AuthResult => {
     };
     return { isValid: true, user };
   } catch (error) {
+    // Provide more specific error messages
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('JWT_SECRET')) {
+      return { 
+        isValid: false, 
+        error: 'Server configuration error: JWT_SECRET is missing. Please configure JWT_SECRET in your environment variables.' 
+      };
+    }
     return { isValid: false, error: 'Invalid or expired token' };
   }
 };
@@ -1071,6 +1090,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
   }
 
   // GET - Get all users
+  // NOTE: This endpoint does NOT require authentication - it's a public endpoint
+  // Invalid or expired tokens in Authorization header are ignored
   if (req.method === 'GET') {
     const { action, email } = req.query;
     
@@ -1102,7 +1123,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     }
     
     try {
-      
+      // GET /api/users is a public endpoint - no authentication required
+      // If Authorization header is present but invalid, we ignore it
       const users = await firebaseUserService.findAll();
       // SECURITY FIX: Normalize all users to remove passwords
       const normalizedUsers = users.map(user => normalizeUser(user)).filter((u): u is NormalizedUser => u !== null);
