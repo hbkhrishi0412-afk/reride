@@ -25,7 +25,10 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  // Database URL is required for Realtime Database
+  // CRITICAL: This must be VITE_FIREBASE_DATABASE_URL (not FIREBASE_DATABASE_URL) for client-side
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || ''
 };
 
 // Helper to check if a value looks like a real Firebase config (not a placeholder)
@@ -90,7 +93,10 @@ if (typeof window !== 'undefined') {
             key: k,
             hasValue: !!(import.meta.env as any)[k] && (import.meta.env as any)[k] !== 'undefined'
           }))
-        : []
+        : [],
+      // Check for database URL specifically
+      databaseURL: firebaseConfig.databaseURL ? `${firebaseConfig.databaseURL.substring(0, 30)}...` : 'MISSING',
+      hasDatabaseURL: !!firebaseConfig.databaseURL && firebaseConfig.databaseURL.includes('firebasedatabase')
     };
     
     if (isDev) {
@@ -155,8 +161,8 @@ if (typeof window !== 'undefined') {
           : '';
         
         const instructions = prod
-          ? ' Add all 6 variables with VITE_ prefix: VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID. After setting variables, trigger a new deployment in Vercel (Deployments → Redeploy).'
-          : ' Ensure all Firebase variables are set correctly.';
+          ? ' Add all 7 variables with VITE_ prefix: VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID, VITE_FIREBASE_DATABASE_URL. After setting variables, trigger a new deployment in Vercel (Deployments → Redeploy).'
+          : ' Ensure all Firebase variables are set correctly, including VITE_FIREBASE_DATABASE_URL.';
         
         initializationError = `${baseMessage}${missingList}${instructions}`;
         console.warn('⚠️', initializationError);
