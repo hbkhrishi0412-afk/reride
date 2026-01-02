@@ -273,10 +273,37 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         ws: true,
+        // CRITICAL FIX: Add timeout and better error handling
+        timeout: 30000, // 30 second timeout
         configure: (proxy, _options) => {
-          proxy.on('error', (err, _req, _res) => {
-            console.error('API Proxy Error:', err.message);
-            console.warn('⚠️ Make sure the API server is running: npm run dev:api');
+          proxy.on('error', (err, req, res) => {
+            // #region agent log
+            const errorInfo = {
+              message: err.message,
+              code: (err as any).code,
+              url: req.url,
+              method: req.method
+            };
+            fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'vite.config.ts:277',message:'Vite proxy error',data:errorInfo,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
+            // #endregion
+            console.error('❌ API Proxy Error:', err.message);
+            console.error('   Request URL:', req.url);
+            console.error('   Error Code:', (err as any).code);
+            console.warn('⚠️ Make sure the API server is running on port 3001: npm run dev:api');
+            
+            // CRITICAL FIX: Send proper error response instead of hanging
+            if (!res.headersSent) {
+              res.writeHead(503, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              });
+              res.end(JSON.stringify({
+                success: false,
+                error: 'Service Unavailable',
+                reason: 'API server is not running. Please start it with: npm run dev:api',
+                message: err.message
+              }));
+            }
           });
           proxy.on('proxyReq', (proxyReq, req, _res) => {
             if (process.env.NODE_ENV === 'development') {
@@ -288,13 +315,22 @@ export default defineConfig({
               console.log('← API Response:', proxyRes.statusCode, req.url);
             }
           });
+          // CRITICAL FIX: Handle connection issues
+          proxy.on('close', (res, socket, head) => {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'vite.config.ts:304',message:'Vite proxy connection closed',data:{hasRes:!!res},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
+            // #endregion
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('⚠️ Proxy connection closed');
+            }
+          });
         },
       }
     }
   },
   // Optimize dependencies
   optimizeDeps: {
-    include: ['react', 'react-dom', 'framer-motion'],
+    include: ['react', 'react-dom', 'framer-motion', 'socket.io-client'],
     // Exclude heavy dependencies from pre-bundling
     exclude: ['@google/genai', 'mongodb', 'mongoose'],
     // Force optimization of specific packages

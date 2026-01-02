@@ -2,8 +2,17 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 
 const app = express();
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
 const PORT = 3001;
 
 // Enable CORS for all routes
@@ -1087,51 +1096,212 @@ app.delete('/api/content', (req, res) => {
 });
 
 // Conversations endpoints (mock handlers for development)
-app.get('/api/conversations', (req, res) => {
+app.get('/api/conversations', async (req, res) => {
   try {
+    // CRITICAL FIX: Handle MongoDB connection failures gracefully
+    try {
+      await ensureConnection();
+    } catch (dbError) {
+      console.warn('⚠️ MongoDB connection failed for GET /api/conversations:', dbError);
+      // Return empty array when DB is unavailable - frontend will use localStorage
+      return res.json({
+        success: true,
+        data: [],
+        warning: 'Database unavailable - using local storage'
+      });
+    }
+    
     const { customerId, sellerId } = req.query;
-    // Return empty array - actual data comes from localStorage in dev
+    
+    // Build query
+    const query = {};
+    if (customerId) {
+      query.customerId = customerId;
+    }
+    if (sellerId) {
+      query.sellerId = sellerId;
+    }
+    
+    // Fetch conversations from MongoDB
+    const conversations = await Conversation.find(query)
+      .sort({ lastMessageAt: -1 })
+      .lean();
+    
+    // Convert MongoDB documents to frontend format
+    const formattedConversations = conversations.map(conv => ({
+      id: conv.id,
+      customerId: conv.customerId,
+      customerName: conv.customerName,
+      sellerId: conv.sellerId,
+      vehicleId: conv.vehicleId,
+      vehicleName: conv.vehicleName,
+      vehiclePrice: conv.vehiclePrice,
+      messages: conv.messages || [],
+      lastMessageAt: conv.lastMessageAt,
+      isReadBySeller: conv.isReadBySeller || false,
+      isReadByCustomer: conv.isReadByCustomer !== undefined ? conv.isReadByCustomer : true,
+      isFlagged: conv.isFlagged || false,
+      flagReason: conv.flagReason,
+      flaggedAt: conv.flaggedAt
+    }));
+    
     res.json({
       success: true,
-      data: []
+      data: formattedConversations
     });
   } catch (error) {
     console.error('Error in GET /api/conversations:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Failed to fetch conversations'
     });
   }
 });
 
-app.post('/api/conversations', (req, res) => {
+app.post('/api/conversations', async (req, res) => {
   try {
-    // Accept and return the conversation data (mock save)
+    // CRITICAL FIX: Handle MongoDB connection failures gracefully
+    try {
+      await ensureConnection();
+    } catch (dbError) {
+      console.warn('⚠️ MongoDB connection failed for POST /api/conversations:', dbError);
+      // Return success but indicate data is stored locally only
+      return res.json({
+        success: true,
+        data: req.body,
+        warning: 'Database unavailable - data stored locally only'
+      });
+    }
+    
+    const conversationData = req.body;
+    
+    // Save or update conversation in MongoDB
+    const conversation = await Conversation.findOneAndUpdate(
+      { id: conversationData.id },
+      {
+        id: conversationData.id,
+        customerId: conversationData.customerId,
+        customerName: conversationData.customerName,
+        sellerId: conversationData.sellerId,
+        vehicleId: conversationData.vehicleId,
+        vehicleName: conversationData.vehicleName,
+        vehiclePrice: conversationData.vehiclePrice,
+        messages: conversationData.messages || [],
+        lastMessageAt: conversationData.lastMessageAt || new Date().toISOString(),
+        isReadBySeller: conversationData.isReadBySeller !== undefined ? conversationData.isReadBySeller : false,
+        isReadByCustomer: conversationData.isReadByCustomer !== undefined ? conversationData.isReadByCustomer : true,
+        isFlagged: conversationData.isFlagged || false,
+        flagReason: conversationData.flagReason,
+        flaggedAt: conversationData.flaggedAt
+      },
+      { upsert: true, new: true }
+    );
+    
     res.json({
       success: true,
-      data: req.body
+      data: {
+        id: conversation.id,
+        customerId: conversation.customerId,
+        customerName: conversation.customerName,
+        sellerId: conversation.sellerId,
+        vehicleId: conversation.vehicleId,
+        vehicleName: conversation.vehicleName,
+        vehiclePrice: conversation.vehiclePrice,
+        messages: conversation.messages || [],
+        lastMessageAt: conversation.lastMessageAt,
+        isReadBySeller: conversation.isReadBySeller,
+        isReadByCustomer: conversation.isReadByCustomer,
+        isFlagged: conversation.isFlagged,
+        flagReason: conversation.flagReason,
+        flaggedAt: conversation.flaggedAt
+      }
     });
   } catch (error) {
     console.error('Error in POST /api/conversations:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Failed to save conversation'
     });
   }
 });
 
-app.put('/api/conversations', (req, res) => {
+app.put('/api/conversations', async (req, res) => {
   try {
-    // Accept message updates (mock update)
+    // CRITICAL FIX: Handle MongoDB connection failures gracefully
+    try {
+      await ensureConnection();
+    } catch (dbError) {
+      console.warn('⚠️ MongoDB connection failed for PUT /api/conversations:', dbError);
+      // Return success but indicate data is stored locally only
+      return res.json({
+        success: true,
+        data: req.body,
+        warning: 'Database unavailable - data stored locally only'
+      });
+    }
+    
+    const { conversationId, message } = req.body;
+    
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'conversationId is required'
+      });
+    }
+    
+    // Find conversation
+    const conversation = await Conversation.findOne({ id: conversationId });
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation not found'
+      });
+    }
+    
+    // Add message to conversation
+    if (message) {
+      conversation.messages.push(message);
+      conversation.lastMessageAt = message.timestamp || new Date().toISOString();
+      
+      // Update read status based on sender
+      if (message.sender === 'seller') {
+        conversation.isReadBySeller = true;
+        conversation.isReadByCustomer = false;
+      } else if (message.sender === 'user') {
+        conversation.isReadByCustomer = true;
+        conversation.isReadBySeller = false;
+      }
+    }
+    
+    await conversation.save();
+    
     res.json({
       success: true,
-      data: req.body
+      data: {
+        id: conversation.id,
+        customerId: conversation.customerId,
+        customerName: conversation.customerName,
+        sellerId: conversation.sellerId,
+        vehicleId: conversation.vehicleId,
+        vehicleName: conversation.vehicleName,
+        vehiclePrice: conversation.vehiclePrice,
+        messages: conversation.messages || [],
+        lastMessageAt: conversation.lastMessageAt,
+        isReadBySeller: conversation.isReadBySeller,
+        isReadByCustomer: conversation.isReadByCustomer,
+        isFlagged: conversation.isFlagged,
+        flagReason: conversation.flagReason,
+        flaggedAt: conversation.flaggedAt
+      }
     });
   } catch (error) {
     console.error('Error in PUT /api/conversations:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Failed to update conversation'
     });
   }
 });
@@ -1408,6 +1578,191 @@ app.post('/api/gemini', (req, res) => {
   });
 });
 
+// Import chat API
+import chatRouter from './api/chat.js';
+import { setupChatWebSocket } from './api/chat-websocket.js';
+
+// Import MongoDB models for conversations
+import { ensureConnection } from './lib/db.js';
+import { Conversation } from './lib/models/Conversation.js';
+
+// Setup WebSocket for chat (Socket.io)
+if (io) {
+  setupChatWebSocket(io);
+  
+  // Real-time conversation sync - broadcast messages to both customer and seller
+  io.on('connection', (socket) => {
+    socket.on('conversation:message', async (data) => {
+      try {
+        await ensureConnection();
+        
+        const { conversationId, message } = data;
+        
+        if (conversationId && message) {
+          // Update conversation in MongoDB
+          const conversation = await Conversation.findOne({ id: conversationId });
+          if (conversation) {
+            conversation.messages.push(message);
+            conversation.lastMessageAt = message.timestamp || new Date().toISOString();
+            
+            // Update read status
+            if (message.sender === 'seller') {
+              conversation.isReadBySeller = true;
+              conversation.isReadByCustomer = false;
+            } else if (message.sender === 'user') {
+              conversation.isReadByCustomer = true;
+              conversation.isReadBySeller = false;
+            }
+            
+            await conversation.save();
+            
+            // Broadcast to all connected clients (both customer and seller see the message)
+            io.emit('conversation:new-message', {
+              conversationId,
+              message,
+              conversation: {
+                id: conversation.id,
+                customerId: conversation.customerId,
+                sellerId: conversation.sellerId,
+                messages: conversation.messages,
+                lastMessageAt: conversation.lastMessageAt,
+                isReadBySeller: conversation.isReadBySeller,
+                isReadByCustomer: conversation.isReadByCustomer
+              }
+            });
+            
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔧 Real-time message broadcast:', { conversationId, messageId: message.id });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error in conversation:message WebSocket:', error);
+      }
+    });
+  });
+}
+
+// Also setup native WebSocket server for direct WebSocket connections
+import { WebSocketServer } from 'ws';
+import { ChatMessage } from './lib/models/ChatMessage.js';
+import { ChatSession } from './lib/models/ChatSession.js';
+
+const wss = new WebSocketServer({ 
+  server,
+  path: '/chat'
+});
+
+wss.on('connection', async (ws, req) => {
+  console.log('🔌 Native WebSocket client connected');
+  
+  let currentSessionId = null;
+  let currentUserId = null;
+  let currentUserName = 'Guest';
+
+  ws.on('message', async (data) => {
+    try {
+      await ensureConnection();
+      
+      const message = JSON.parse(data.toString());
+      
+      if (message.type === 'init') {
+        currentUserId = message.userId || undefined;
+        currentUserName = message.userName || 'Guest';
+        currentSessionId = message.sessionId || 
+          (currentUserId ? `user_${currentUserId}_${Date.now()}` : `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+        
+        // Create/update session
+        await ChatSession.findOneAndUpdate(
+          { sessionId: currentSessionId },
+          {
+            sessionId: currentSessionId,
+            userId: currentUserId,
+            userName: currentUserName,
+            status: 'active',
+            lastMessageAt: new Date()
+          },
+          { upsert: true, new: true }
+        );
+        
+        // Load history
+        const messages = await ChatMessage.find({ sessionId: currentSessionId })
+          .sort({ timestamp: 1 })
+          .limit(100)
+          .lean();
+        
+        ws.send(JSON.stringify({
+          type: 'history',
+          messages: messages.map(msg => ({
+            id: msg._id.toString(),
+            text: msg.message,
+            sender: msg.sender,
+            timestamp: msg.timestamp.toISOString(),
+            isRead: msg.isRead || false
+          }))
+        }));
+        
+        ws.send(JSON.stringify({ type: 'session', sessionId: currentSessionId }));
+      } else if (message.type === 'message' && currentSessionId) {
+        // Save user message
+        const userMsg = new ChatMessage({
+          sessionId: currentSessionId,
+          userId: currentUserId,
+          userName: currentUserName,
+          message: message.text.trim(),
+          sender: 'user',
+          timestamp: new Date(),
+          isRead: false
+        });
+        await userMsg.save();
+        
+        // Update session
+        await ChatSession.findOneAndUpdate(
+          { sessionId: currentSessionId },
+          { lastMessageAt: new Date(), $inc: { messageCount: 1 } }
+        );
+        
+        // Generate bot response
+        const botResponse = await generateBotResponse(message.text, currentUserName);
+        
+        // Save bot message
+        const botMsg = new ChatMessage({
+          sessionId: currentSessionId,
+          userId: currentUserId,
+          userName: 'Support Bot',
+          message: botResponse,
+          sender: 'bot',
+          timestamp: new Date(),
+          isRead: false
+        });
+        await botMsg.save();
+        
+        // Send bot response
+        ws.send(JSON.stringify({
+          type: 'message',
+          id: botMsg._id.toString(),
+          text: botResponse,
+          sender: 'bot',
+          timestamp: botMsg.timestamp.toISOString()
+        }));
+      }
+    } catch (error) {
+      console.error('WebSocket error:', error);
+      ws.send(JSON.stringify({ type: 'error', message: 'Failed to process message' }));
+    }
+  });
+  
+  ws.on('close', () => {
+    console.log('🔌 Native WebSocket client disconnected');
+  });
+});
+
+// Import generateBotResponse for native WebSocket
+import { generateBotResponse } from './api/chat-websocket.js';
+
+// Chat API routes
+app.use('/api/chat', chatRouter);
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
@@ -1426,13 +1781,14 @@ app.get('/api/health', (req, res) => {
       notifications: '/api/notifications',
       payments: '/api/payments',
       gemini: '/api/gemini',
+      chat: '/api/chat',
       health: '/api/health'
     }
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server with WebSocket support
+server.listen(PORT, () => {
   console.log(`🚀 Development API server running on http://localhost:${PORT}`);
   console.log(`📋 Available endpoints:`);
   console.log(`   - GET  /api/plans - Get all plans`);
@@ -1468,6 +1824,10 @@ app.listen(PORT, () => {
   console.log(`   - POST /api/payments?action=approve - Approve payment request`);
   console.log(`   - POST /api/payments?action=reject - Reject payment request`);
   console.log(`   - POST /api/gemini - AI/Gemini API (mock response in dev)`);
+  console.log(`   - POST /api/chat - Send chat message`);
+  console.log(`   - GET  /api/chat/history - Get chat history`);
+  console.log(`   - GET  /api/chat/sessions - Get chat sessions (admin)`);
+  console.log(`   - WebSocket /chat - Real-time chat (ws://localhost:${PORT}/chat)`);
   console.log(`   - GET  /api/admin - Admin health check`);
   console.log(`   - GET  /api/health - Server health check`);
   console.log(`\n🔗 Test the API:`);
