@@ -33,7 +33,8 @@ export default defineConfig({
         // Exclude server-only Firebase Admin files from client bundle
         if (id.includes('/lib/firebase-admin') || id.includes('\\lib\\firebase-admin') ||
             id.includes('/server/firebase-admin') || id.includes('\\server\\firebase-admin') ||
-            id.includes('/server/') || id.includes('\\server\\')) {
+            id.includes('/server/') || id.includes('\\server\\') ||
+            id.includes('firebase-admin-db')) {
           return true;
         }
         // Exclude models directory from client bundle (server-side only)
@@ -181,12 +182,29 @@ export default defineConfig({
         unused: true,
         collapse_vars: true,
         reduce_vars: true,
+        // Additional aggressive optimizations
+        arrows: true,
+        arguments: true,
+        booleans: true,
+        if_return: true,
+        join_vars: true,
+        loops: true,
+        sequences: true,
+        properties: true,
+        computed_props: true,
+        hoist_funs: true,
+        hoist_vars: false, // Keep false to avoid issues
+        keep_infinity: true,
       },
       format: {
         comments: false,
+        // Optimize output
+        ecma: 2020,
+        safari10: true,
       },
       mangle: {
         safari10: true,
+        properties: false, // Keep properties unmangled for React components
       },
     },
     // Optimize CSS
@@ -194,7 +212,7 @@ export default defineConfig({
     cssCodeSplit: true,
     // Disable source maps for production (faster builds, smaller bundles)
     sourcemap: process.env.NODE_ENV === 'development',
-    // Better browser support
+    // Better browser support - use modern ES for smaller bundles
     target: 'es2020',
     // Enable asset inlining for small files (reduces HTTP requests)
     assetsInlineLimit: 8192,
@@ -204,6 +222,9 @@ export default defineConfig({
     modulePreload: {
       polyfill: false, // Modern browsers don't need polyfill
     },
+    // Additional optimizations
+    assetsDir: 'assets',
+    emptyOutDir: true,
   },
   server: {
     port: 5173,  // FIXED: Changed from 5174 to standard Vite port 5173
@@ -256,7 +277,11 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'framer-motion'],
     // Exclude heavy dependencies from pre-bundling
-    exclude: ['@google/genai', 'mongodb', 'mongoose']
+    exclude: ['@google/genai', 'mongodb', 'mongoose'],
+    // Force optimization of specific packages
+    esbuildOptions: {
+      target: 'es2020',
+    },
   },
   // Enable esbuild optimizations in dev mode
   esbuild: {
