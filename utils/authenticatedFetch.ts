@@ -56,6 +56,8 @@ const refreshToken = async (): Promise<string | null> => {
       if (!refreshTokenValue) {
         console.warn('⚠️ No refresh token available');
         refreshTokenKnownInvalid = true;
+        // Clear all tokens to prevent inconsistent state with stale access tokens
+        clearAuthTokens();
         return null;
       }
 
@@ -288,8 +290,10 @@ export const authenticatedFetch = async (
             // The redirect will happen when the error is shown to the user
           }
         } else {
-          // Token refresh failed (refresh token likely invalid)
-          // clearAuthTokens already called in refreshToken function
+          // Token refresh failed (refresh token likely invalid or missing)
+          // clearAuthTokens already called in refreshToken function when:
+          // - Refresh token is missing from localStorage (line 60)
+          // - Refresh token is invalid per API response (401/400 at line 75)
           // Don't log again to avoid duplicate messages
         }
       } catch (refreshError) {

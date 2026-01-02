@@ -91,7 +91,13 @@ export function getFirebaseErrorMessage(status: FirebaseStatus | null | undefine
   }
   
   if (errorMessage.includes('DATABASE_URL')) {
-    return 'Firebase Database URL is not configured. Please set FIREBASE_DATABASE_URL.';
+    const isProd = typeof window !== 'undefined' && 
+      (window.location.hostname.includes('vercel.app') || 
+       window.location.hostname.includes('reride.co.in'));
+    if (isProd) {
+      return 'Firebase Database URL is not configured. Please set VITE_FIREBASE_DATABASE_URL in Vercel and trigger a new deployment (Vercel Dashboard → Deployments → Redeploy).';
+    }
+    return 'Firebase Database URL is not configured. Please set VITE_FIREBASE_DATABASE_URL in your .env.local file.';
   }
   
   if (errorMessage.includes('PERMISSION_DENIED')) {

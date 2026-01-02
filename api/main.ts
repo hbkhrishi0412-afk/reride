@@ -4619,11 +4619,50 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   } catch (error) {
-    logError('Conversations Handler Error:', error);
+    // Enhanced error logging with context
+    const errorDetails: any = {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      requestMethod: req.method,
+      requestUrl: req.url,
+      queryParams: req.query,
+    };
+    
+    if (error instanceof Error) {
+      errorDetails.stack = error.stack;
+      errorDetails.name = error.name;
+    } else if (error && typeof error === 'object') {
+      // Try to serialize the error object
+      try {
+        const errorObj = error as Record<string, any>;
+        if (Object.keys(errorObj).length > 0) {
+          errorDetails.errorObject = errorObj;
+        } else {
+          errorDetails.note = 'Error object is empty';
+        }
+      } catch (e) {
+        errorDetails.serializationError = 'Failed to serialize error object';
+      }
+    } else {
+      errorDetails.rawValue = String(error);
+    }
+    
+    logError('Conversations Handler Error:', errorDetails);
+    
+    // Check if it's a database connection error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('FIREBASE') || errorMessage.includes('Firebase') || errorMessage.includes('connect')) {
+      return res.status(503).json({
+        success: false,
+        reason: 'Database is currently unavailable. Please try again later.',
+        fallback: true
+      });
+    }
+    
     return res.status(500).json({
       success: false,
       reason: 'Failed to process conversation request',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMessage
     });
   }
 }
@@ -4735,11 +4774,50 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
 
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   } catch (error) {
-    logError('Notifications Handler Error:', error);
+    // Enhanced error logging with context
+    const errorDetails: any = {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      type: error instanceof Error ? error.constructor.name : typeof error,
+      requestMethod: req.method,
+      requestUrl: req.url,
+      queryParams: req.query,
+    };
+    
+    if (error instanceof Error) {
+      errorDetails.stack = error.stack;
+      errorDetails.name = error.name;
+    } else if (error && typeof error === 'object') {
+      // Try to serialize the error object
+      try {
+        const errorObj = error as Record<string, any>;
+        if (Object.keys(errorObj).length > 0) {
+          errorDetails.errorObject = errorObj;
+        } else {
+          errorDetails.note = 'Error object is empty';
+        }
+      } catch (e) {
+        errorDetails.serializationError = 'Failed to serialize error object';
+      }
+    } else {
+      errorDetails.rawValue = String(error);
+    }
+    
+    logError('Notifications Handler Error:', errorDetails);
+    
+    // Check if it's a database connection error
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (errorMessage.includes('FIREBASE') || errorMessage.includes('Firebase') || errorMessage.includes('connect')) {
+      return res.status(503).json({
+        success: false,
+        reason: 'Database is currently unavailable. Please try again later.',
+        fallback: true
+      });
+    }
+    
     return res.status(500).json({
       success: false,
       reason: 'Failed to process notification request',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMessage
     });
   }
 }

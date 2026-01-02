@@ -540,12 +540,25 @@ export function getDatabaseStatus(): {
     if (!isAvailable) {
       // Return unavailable status without throwing
       const isServerSide = typeof window === 'undefined';
+      // Check if variables might be set but not embedded (common issue)
+      const isClientSide = !isServerSide;
+      const isProd = isClientSide && typeof window !== 'undefined' && 
+        (window.location.hostname.includes('vercel.app') || 
+         window.location.hostname.includes('reride.co.in'));
+      
+      let details = '';
+      if (isClientSide && isProd) {
+        details = 'Please check VITE_FIREBASE_* environment variables (VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_DATABASE_URL). CRITICAL: VITE_FIREBASE_DATABASE_URL must be set for Realtime Database to work. ⚠️ IMPORTANT: If you just set these variables in Vercel, you MUST trigger a new deployment (Vercel Dashboard → Deployments → Redeploy) because Vite embeds environment variables at build time.';
+      } else if (isServerSide) {
+        details = 'Please check FIREBASE_* environment variables (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL). If you just set these in Vercel, trigger a new deployment.';
+      } else {
+        details = 'Please check VITE_FIREBASE_* environment variables (VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_DATABASE_URL). CRITICAL: VITE_FIREBASE_DATABASE_URL must be set for Realtime Database to work.';
+      }
+      
       return {
         available: false,
         error: 'Firebase database is not available',
-        details: isServerSide
-          ? 'Please check FIREBASE_* environment variables (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL)'
-          : 'Please check VITE_FIREBASE_* environment variables (VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_DATABASE_URL). CRITICAL: VITE_FIREBASE_DATABASE_URL must be set for Realtime Database to work.'
+        details
       };
     }
     
