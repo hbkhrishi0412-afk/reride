@@ -102,12 +102,19 @@
   ],
   "share_target": {
     "action": "/?share=true",
-    "method": "GET",
+    "method": "POST",
+    "enctype": "multipart/form-data",
     "params": {
       "title": "title",
       "text": "text",
       "url": "url"
-    }
+    },
+    "files": [
+      {
+        "name": "images",
+        "accept": ["image/*"]
+      }
+    ]
   },
   "related_applications": [],
   "prefer_related_applications": false,
