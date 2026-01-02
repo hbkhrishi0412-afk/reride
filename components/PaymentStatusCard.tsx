@@ -91,34 +91,40 @@ const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) =>
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.warn('Error formatting date:', dateString, error);
+      return 'Invalid date';
+    }
   };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-orange-500">
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-3">
-          <div className={`p-2 rounded-full ${getStatusColor(paymentRequest.status)}`}>
-            {getStatusIcon(paymentRequest.status)}
+          <div className={`p-2 rounded-full ${getStatusColor(paymentRequest.status || 'pending')}`}>
+            {getStatusIcon(paymentRequest.status || 'pending')}
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900">
               Payment Request Status
             </h3>
             <p className="text-sm text-gray-600">
-              {paymentRequest.planId.charAt(0).toUpperCase() + paymentRequest.planId.slice(1)} Plan - ₹{paymentRequest.amount.toLocaleString('en-IN')}/month
+              {paymentRequest.planId ? (paymentRequest.planId.charAt(0).toUpperCase() + paymentRequest.planId.slice(1)) : 'Unknown'} Plan - ₹{paymentRequest.amount ? paymentRequest.amount.toLocaleString('en-IN') : '0'}/month
             </p>
           </div>
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(paymentRequest.status)}`}>
-          {paymentRequest.status.charAt(0).toUpperCase() + paymentRequest.status.slice(1)}
+        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(paymentRequest.status || 'pending')}`}>
+          {paymentRequest.status ? (paymentRequest.status.charAt(0).toUpperCase() + paymentRequest.status.slice(1)) : 'Pending'}
         </span>
       </div>
 
@@ -175,7 +181,7 @@ const PaymentStatusCard: React.FC<PaymentStatusCardProps> = ({ currentUser }) =>
         {paymentRequest.status === 'approved' && (
           <div className="mt-3 p-3 bg-green-50 rounded-lg">
             <p className="text-sm text-green-800">
-              <strong>Congratulations!</strong> Your payment has been verified and your {paymentRequest.planId.charAt(0).toUpperCase() + paymentRequest.planId.slice(1)} plan is now active.
+              <strong>Congratulations!</strong> Your payment has been verified and your {paymentRequest.planId ? (paymentRequest.planId.charAt(0).toUpperCase() + paymentRequest.planId.slice(1)) : 'plan'} plan is now active.
             </p>
           </div>
         )}

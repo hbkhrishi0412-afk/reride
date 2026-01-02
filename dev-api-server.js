@@ -1145,13 +1145,228 @@ app.put('/api/notifications', (req, res) => {
   });
 });
 
+// Payments API endpoints (mock handlers for development)
+let mockPaymentRequests = [];
+
+app.get('/api/payments', (req, res) => {
+  const { action, sellerEmail, adminEmail, status } = req.query;
+  
+  if (action === 'status') {
+    // Get payment status for a seller
+    if (!sellerEmail) {
+      return res.status(400).json({ 
+        success: false, 
+        reason: 'Seller email is required' 
+      });
+    }
+    
+    // Find the most recent payment request for this seller
+    const sellerPayment = mockPaymentRequests
+      .filter(p => p.sellerEmail === sellerEmail)
+      .sort((a, b) => new Date(b.createdAt || b.requestedAt) - new Date(a.createdAt || a.requestedAt))[0];
+    
+    // If no payment request exists, return null (component handles this)
+    if (!sellerPayment) {
+      console.log('💳 GET /api/payments?action=status - No payment request found');
+      return res.json({
+        success: true,
+        paymentRequest: null,
+        paymentStatus: null
+      });
+    }
+    
+    // Return payment request in the expected format
+    const paymentRequest = {
+      id: sellerPayment.id?.toString() || Date.now().toString(),
+      sellerEmail: sellerPayment.sellerEmail,
+      planId: sellerPayment.planId || sellerPayment.plan || 'free',
+      amount: sellerPayment.amount || 0,
+      status: sellerPayment.status || 'pending',
+      paymentMethod: sellerPayment.paymentMethod,
+      transactionId: sellerPayment.transactionId,
+      requestedAt: sellerPayment.createdAt || sellerPayment.requestedAt || new Date().toISOString(),
+      approvedAt: sellerPayment.approvedAt,
+      rejectedAt: sellerPayment.rejectedAt,
+      rejectionReason: sellerPayment.rejectionReason
+    };
+    
+    console.log('💳 GET /api/payments?action=status - Returning payment request');
+    return res.json({
+      success: true,
+      paymentRequest,
+      paymentStatus: paymentRequest
+    });
+  }
+  
+  if (action === 'list') {
+    // Get all payment requests (admin view)
+    let filtered = [...mockPaymentRequests];
+    
+    if (status) {
+      filtered = filtered.filter(p => p.status === status);
+    }
+    
+    console.log('💳 GET /api/payments?action=list - Returning payment requests');
+    return res.json({
+      success: true,
+      paymentRequests: filtered
+    });
+  }
+  
+  // Default: return all payment requests
+  res.json({
+    success: true,
+    paymentRequests: mockPaymentRequests
+  });
+});
+
+app.post('/api/payments', (req, res) => {
+  const { action } = req.query;
+  
+  if (action === 'create') {
+    const { sellerEmail, amount, plan, packageId } = req.body;
+    
+    if (!sellerEmail || !amount || !plan) {
+      return res.status(400).json({ 
+        success: false, 
+        reason: 'Seller email, amount, and plan are required' 
+      });
+    }
+    
+    const paymentRequest = {
+      id: Date.now().toString(), // Store as string for consistency with API responses
+      sellerEmail,
+      amount,
+      planId: plan, // Use planId to match PaymentRequest interface
+      plan: plan, // Keep plan for backward compatibility
+      packageId,
+      status: 'pending',
+      requestedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    };
+    
+    mockPaymentRequests.push(paymentRequest);
+    
+    console.log('💳 POST /api/payments?action=create - Created payment request');
+    return res.status(201).json({
+      success: true,
+      paymentRequest,
+      message: 'Payment request created successfully'
+    });
+  }
+  
+  if (action === 'approve') {
+    const { paymentRequestId } = req.body;
+    
+    if (!paymentRequestId) {
+      return res.status(400).json({ 
+        success: false, 
+        reason: 'Payment request ID is required' 
+      });
+    }
+    
+    // Compare as strings to handle both string and number IDs
+    const payment = mockPaymentRequests.find(p => String(p.id) === String(paymentRequestId));
+    if (payment) {
+      payment.status = 'approved';
+      payment.approvedAt = new Date().toISOString();
+    }
+    
+    console.log('💳 POST /api/payments?action=approve - Approved payment request');
+    return res.json({
+      success: true,
+      message: 'Payment request approved successfully',
+      paymentRequestId
+    });
+  }
+  
+  if (action === 'reject') {
+    const { paymentRequestId, reason } = req.body;
+    
+    if (!paymentRequestId) {
+      return res.status(400).json({ 
+        success: false, 
+        reason: 'Payment request ID is required' 
+      });
+    }
+    
+    // Compare as strings to handle both string and number IDs
+    const payment = mockPaymentRequests.find(p => String(p.id) === String(paymentRequestId));
+    if (payment) {
+      payment.status = 'rejected';
+      payment.rejectedAt = new Date().toISOString();
+      payment.rejectionReason = reason || 'No reason provided';
+    }
+    
+    console.log('💳 POST /api/payments?action=reject - Rejected payment request');
+    return res.json({
+      success: true,
+      message: 'Payment request rejected',
+      paymentRequestId,
+      reason: reason || 'No reason provided'
+    });
+  }
+  
+  res.status(400).json({ 
+    success: false, 
+    reason: 'Action parameter is required. Valid actions: create, approve, reject' 
+  });
+});
+
+// Gemini AI API endpoint (mock handler for development)
+app.post('/api/gemini', (req, res) => {
+  const { payload } = req.body;
+  
+  if (!payload) {
+    return res.status(400).json({ 
+      success: false, 
+      reason: 'Payload is required' 
+    });
+  }
+  
+  // Mock AI response for development
+  const mockResponse = {
+    text: 'This is a mock AI response. In production, this would call the Gemini API. Make sure GEMINI_API_KEY is set in your environment variables.',
+    model: payload.model || 'gemini-2.5-flash',
+    timestamp: new Date().toISOString()
+  };
+  
+  // If there's a prompt, try to provide a basic response
+  if (payload.contents || payload.prompt) {
+    const prompt = typeof payload.contents === 'string' 
+      ? payload.contents 
+      : (payload.prompt || '');
+    
+    if (prompt.toLowerCase().includes('vehicle') || prompt.toLowerCase().includes('car')) {
+      mockResponse.text = 'Based on your vehicle description, here are some suggested features and specifications. This is a mock response for development purposes.';
+    }
+  }
+  
+  console.log('🤖 POST /api/gemini - Returning mock AI response');
+  
+  // Return response in the format expected by the Gemini service
+  res.json({
+    success: true,
+    text: mockResponse.text,
+    data: {
+      candidates: [{
+        content: {
+          parts: [{
+            text: mockResponse.text
+          }]
+        }
+      }]
+    }
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     message: 'API server is running',
     timestamp: new Date().toISOString(),
-    endpoints: {
+      endpoints: {
       plans: '/api/plans',
       admin: '/api/admin',
       vehicles: '/api/vehicles',
@@ -1161,6 +1376,8 @@ app.get('/api/health', (req, res) => {
       faqs: '/api/faqs',
       conversations: '/api/conversations',
       notifications: '/api/notifications',
+      payments: '/api/payments',
+      gemini: '/api/gemini',
       health: '/api/health'
     }
   });
@@ -1197,6 +1414,12 @@ app.listen(PORT, () => {
   console.log(`   - GET  /api/notifications - Get notifications (returns empty in dev)`);
   console.log(`   - POST /api/notifications - Save notification`);
   console.log(`   - PUT  /api/notifications - Update notification`);
+  console.log(`   - GET  /api/payments?action=status - Get payment status`);
+  console.log(`   - GET  /api/payments?action=list - List payment requests`);
+  console.log(`   - POST /api/payments?action=create - Create payment request`);
+  console.log(`   - POST /api/payments?action=approve - Approve payment request`);
+  console.log(`   - POST /api/payments?action=reject - Reject payment request`);
+  console.log(`   - POST /api/gemini - AI/Gemini API (mock response in dev)`);
   console.log(`   - GET  /api/admin - Admin health check`);
   console.log(`   - GET  /api/health - Server health check`);
   console.log(`\n🔗 Test the API:`);

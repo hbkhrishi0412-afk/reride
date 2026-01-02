@@ -2,7 +2,6 @@
   "rules": {
     "users": {
       "$userKey": {
-        // Public read for basic profile info (for seller profiles on vehicle listings)
         "name": { ".read": true },
         "email": { ".read": true },
         "avatarUrl": { ".read": true },
@@ -21,18 +20,12 @@
         "subscriptionPlan": { ".read": true },
         "location": { ".read": true },
         "status": { ".read": true },
-        
-        // Full read/write: Match by firebaseUid field (users are keyed by email, but have firebaseUid field)
         ".read": "auth != null && data.child('firebaseUid').val() == auth.uid",
         ".write": "auth != null && (data.child('firebaseUid').val() == auth.uid || (!data.exists() && newData.child('firebaseUid').val() == auth.uid))",
-        
-        // Password is NEVER readable, only writable by owner
         "password": {
           ".read": false,
           ".write": "auth != null && (data.child('firebaseUid').val() == auth.uid || (!data.exists() && newData.child('firebaseUid').val() == auth.uid))"
         },
-        
-        // Sensitive fields: Only readable by owner
         "mobile": {
           ".read": "auth != null && data.child('firebaseUid').val() == auth.uid"
         },
@@ -48,119 +41,75 @@
         "isBanned": {
           ".read": false
         },
-        
-        // Admin access: Check if authenticated user is admin by looking up their user record
-        // We need to find the user key that has firebaseUid == auth.uid, then check role
-        // This is complex, so we'll use a helper: check if any user with matching firebaseUid has admin role
         "$other": {
           ".read": "auth != null && data.child('firebaseUid').val() == auth.uid",
           ".write": "auth != null && data.child('firebaseUid').val() == auth.uid"
         }
       },
-      
-      // List access: Only for authenticated users (server should use Admin SDK)
       ".read": "auth != null",
       ".write": "auth != null"
     },
-    
     "vehicles": {
       "$vehicleId": {
-        // Public read for published vehicles (for browsing)
         ".read": "data.child('status').val() == 'published' || auth != null",
-        
-        // Write: Authenticated users can write (server validates sellerEmail match)
-        // For better security, you can add sellerEmail validation here, but it's complex
-        // because we'd need to look up user by firebaseUid to get email
         ".write": "auth != null",
-        
-        // Validate required fields
         ".validate": "!newData.exists() || newData.hasChildren(['make', 'model', 'price', 'sellerEmail'])"
       },
-      
-      // Public query access for published vehicles
       ".read": true,
       ".write": "auth != null"
     },
-    
     "conversations": {
       "$conversationId": {
-        // Read: Participants can read (customerId and sellerId are emails)
-        // We need to find user by firebaseUid, get their email, then match
-        // Simplified: Allow authenticated users (server validates participant match)
         ".read": "auth != null",
-        
-        // Write: Participants can write
         ".write": "auth != null",
-        
-        // Validate required fields
         ".validate": "!newData.exists() || newData.hasChildren(['customerId', 'sellerId', 'vehicleId'])"
       },
-      
-      // No list access
       ".read": false,
       ".write": false
     },
-    
     "notifications": {
       "$notificationId": {
-        // Read: Users can read their own notifications
-        // userId in notification should match user's email or we need to look up by firebaseUid
-        // Simplified: Allow authenticated users (server validates ownership)
         ".read": "auth != null",
         ".write": "auth != null"
       },
       ".read": false,
       ".write": false
     },
-    
     "vehicleData": {
-      // Public read for vehicle data (brands, models, variants)
       ".read": true,
-      // Write: Only authenticated (server validates admin role)
       ".write": "auth != null",
       "$key": {
         ".read": true,
         ".write": "auth != null"
       }
     },
-    
     "newCars": {
-      // Public read for new car listings
       ".read": true,
-      // Write: Only authenticated (server validates admin role)
       ".write": "auth != null",
       "$carId": {
         ".read": true,
         ".write": "auth != null"
       }
     },
-    
     "plans": {
-      // Public read for subscription plans
       ".read": true,
-      // Write: Only authenticated (server validates admin role)
       ".write": "auth != null",
       "$planId": {
         ".read": true,
         ".write": "auth != null"
       }
     },
-    
     "rateLimits": {
       "$userId": {
-        // Rate limits keyed by user ID (could be UID or email)
         ".read": "auth != null && (auth.uid == $userId || $userId == auth.uid)",
         ".write": "auth != null && (auth.uid == $userId || $userId == auth.uid)"
       },
       ".read": "auth != null",
       ".write": "auth != null"
     },
-    
-    // Default: Deny all other paths
     "$other": {
       ".read": false,
       ".write": false
     }
   }
 }
-

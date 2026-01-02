@@ -214,7 +214,13 @@ export default defineConfig({
     port: 5173,  // FIXED: Changed from 5174 to standard Vite port 5173
     // Development server optimizations
     hmr: {
-      overlay: true
+      overlay: true,
+      // Improve WebSocket connection reliability
+      protocol: 'ws',
+      host: 'localhost',
+      clientPort: 5173,
+      // Retry connection on failure
+      reconnect: true
     },
     // Enable file system caching for faster rebuilds
     fs: {
