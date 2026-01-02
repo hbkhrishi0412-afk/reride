@@ -2,13 +2,14 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
 import { View, VehicleCategory as CategoryEnum } from '../types';
 import { getConversations, saveConversations } from '../services/chatService';
-import { saveConversationWithSync, addMessageWithSync, processSyncQueue } from '../services/syncService';
-import { saveNotificationWithSync, updateNotificationWithSync } from '../services/syncService';
+import { saveConversationWithSync, addMessageWithSync } from '../services/syncService';
+import { saveNotificationWithSync } from '../services/syncService';
 import { getSettings } from '../services/settingsService';
 import { getAuditLog, logAction, saveAuditLog } from '../services/auditLogService';
 import { getFaqs, saveFaqs } from '../services/faqService';
 import { getSupportTickets } from '../services/supportTicketService';
 import { dataService } from '../services/dataService';
+import { getAuthHeaders } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
@@ -822,9 +823,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       // This ensures navigation always happens, and DETAIL view can handle missing vehicle gracefully
     }
     
-    // Only clear selectedVehicle if we're NOT navigating to DETAIL and NOT preserving it
-    // This prevents clearing the vehicle when navigating to DETAIL view
-    if (!preserveSelectedVehicle && view !== View.DETAIL) {
+    // Only clear selectedVehicle if we're NOT preserving it
+    // preserveSelectedVehicle is already true when navigating to DETAIL view
+    if (!preserveSelectedVehicle) {
       setSelectedVehicle(null);
     }
     
@@ -994,7 +995,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       // Initialize history state with current view (only on first load)
       if (window.history.state === null || !window.history.state.view) {
         const currentPath = window.location.pathname;
-        let initialView = View.HOME;
+        let initialView: View = View.HOME;
         if (currentPath === '/admin' || currentPath === '/admin/login') {
           initialView = View.ADMIN_LOGIN;
         } else if (currentPath === '/admin/new-cars') {
@@ -1009,20 +1010,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           previousView: View.HOME, 
           timestamp: Date.now() 
         };
-        // Store selectedVehicle ID if we're on DETAIL view (check both state and sessionStorage)
-        if (initialView === View.DETAIL) {
-          const storedVehicle = sessionStorage.getItem('selectedVehicle');
-          if (storedVehicle) {
-            try {
-              const vehicle = JSON.parse(storedVehicle);
-              if (vehicle?.id) {
-                initialState.selectedVehicleId = vehicle.id;
-              }
-            } catch {}
-          } else if (selectedVehicle?.id) {
-            initialState.selectedVehicleId = selectedVehicle.id;
-          }
-        }
+        // Note: initialView is never View.DETAIL based on current path mappings
+        // If DETAIL view initialization is needed in the future, add the path mapping above
         window.history.replaceState(initialState, '', currentPath);
       }
     } catch {}
@@ -1479,7 +1468,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   // Periodic sync queue processor - retry failed MongoDB saves
   useEffect(() => {
     const SYNC_INTERVAL = 30000; // 30 seconds
-    const MIN_SYNC_INTERVAL = 5000; // Minimum 5 seconds between syncs
 
     let syncInterval: NodeJS.Timeout | null = null;
     let isProcessing = false;
@@ -1600,6 +1588,166 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       saveAuditLog(auditLog);
     }
   }, [auditLog]);
+
+  // Real-time WebSocket listener for conversation updates (end-to-end sync)
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Connect to WebSocket for real-time updates
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = process.env.NODE_ENV === 'production' 
+      ? window.location.host 
+      : 'localhost:3001';
+    const wsUrl = `${wsProtocol}//${wsHost}`;
+    
+    // Use Socket.io client for real-time updates
+    let socket: any = null;
+    
+    (async () => {
+      try {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1606',message:'Socket.io connection attempt',data:{wsUrl,wsProtocol,wsHost},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
+        // #endregion
+        // Dynamically import socket.io-client
+        // @ts-ignore - socket.io-client types may not be available
+        const socketIoClient: any = await import('socket.io-client');
+        const io = socketIoClient.default || socketIoClient.io;
+        
+        // CRITICAL FIX: Add timeout and better error handling for socket.io connection
+        socket = io(wsUrl, {
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionAttempts: 3, // Reduced from 5 to fail faster
+          timeout: 5000, // 5 second connection timeout
+          // CRITICAL FIX: Disable automatic reconnection after max attempts to prevent spam
+          reconnectionDelayMax: 2000
+        });
+        
+        socket.on('connect', () => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1622',message:'Socket.io connected',data:{socketId:socket.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
+          // #endregion
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 Connected to WebSocket for real-time conversation updates');
+          }
+        });
+        
+        // CRITICAL FIX: Improve error handling - don't spam console with errors
+        let connectionErrorLogged = false;
+        socket.on('connect_error', (error: any) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1631',message:'Socket.io connect_error',data:{error:error?.message,wsUrl,errorCode:(error as any)?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
+          // #endregion
+          // CRITICAL FIX: Only log error once to prevent console spam
+          if (!connectionErrorLogged) {
+            connectionErrorLogged = true;
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('⚠️ Socket.io connection failed. Real-time updates disabled. Make sure API server is running on port 3001.');
+            }
+          }
+        });
+        
+        // CRITICAL FIX: Handle reconnection failures gracefully
+        socket.on('reconnect_attempt', () => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔄 Attempting to reconnect to WebSocket...');
+          }
+        });
+        
+        socket.on('reconnect_failed', () => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1648',message:'Socket.io reconnect_failed',data:{wsUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
+          // #endregion
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ WebSocket reconnection failed. Real-time updates will not be available until server is restarted.');
+          }
+          // CRITICAL FIX: Disable further reconnection attempts to prevent spam
+          socket.io.reconnect(false);
+        });
+        
+        // Listen for new messages from other users
+        socket.on('conversation:new-message', (data: { conversationId: string; message: any; conversation: any }) => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 Received real-time message:', data);
+          }
+          
+          // Update conversations state with new message
+          setConversations(prev => {
+            const existingConv = prev.find(c => c.id === data.conversationId);
+            if (existingConv) {
+              // Check if message already exists (prevent duplicates)
+              const messageExists = existingConv.messages.some(m => m.id === data.message.id);
+              if (messageExists) {
+                return prev; // Message already exists, no update needed
+              }
+              
+              // Update conversation with new message
+              const updated = prev.map(conv => 
+                conv.id === data.conversationId
+                  ? {
+                      ...conv,
+                      messages: [...conv.messages, data.message],
+                      lastMessageAt: data.conversation.lastMessageAt,
+                      isReadBySeller: data.conversation.isReadBySeller,
+                      isReadByCustomer: data.conversation.isReadByCustomer
+                    }
+                  : conv
+              );
+              
+              // Update activeChat if it's the same conversation
+              if (activeChat?.id === data.conversationId) {
+                const updatedConv = updated.find(c => c.id === data.conversationId);
+                if (updatedConv) {
+                  setActiveChat(updatedConv);
+                }
+              }
+              
+              // Save to localStorage
+              try {
+                saveConversations(updated);
+              } catch (error) {
+                console.error('Failed to save conversations to localStorage:', error);
+              }
+              
+              return updated;
+            }
+            return prev;
+          });
+        });
+        
+        socket.on('disconnect', () => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 Disconnected from WebSocket');
+          }
+        });
+        
+        socket.on('error', (error: any) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1696',message:'Socket.io error event',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
+          // #endregion
+          // CRITICAL FIX: Only log in development to prevent console spam
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ WebSocket error (non-critical):', error?.message || error);
+          }
+        });
+      } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1700',message:'Socket.io initialization failed',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
+        // #endregion
+        // CRITICAL FIX: Fail gracefully - app should work without WebSocket
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ Failed to initialize WebSocket for conversations. App will continue without real-time updates.');
+        }
+      }
+    })();
+    
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [currentUser, activeChat?.id]);
 
   // Sync activeChat when conversations change
   useEffect(() => {
@@ -2265,8 +2413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 const updateResponse = await fetch('/api/users', {
                   method: 'PUT',
                   headers: {
-                    'Content-Type': 'application/json',
-                    ...(await dataService.getAuthHeaders()),
+                    ...getAuthHeaders(),
                   },
                   body: JSON.stringify({
                     email: userData.email,
@@ -2678,6 +2825,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               const result = await addMessageWithSync(conversationId, newMessage);
               if (result.synced) {
                 console.log('✅ Message synced to MongoDB:', messageId);
+                
+                // Broadcast message via WebSocket for real-time end-to-end sync
+                try {
+                  // @ts-ignore - socket.io-client types may not be available
+                  const socketIoClient: any = await import('socket.io-client');
+                  const io = socketIoClient.default || socketIoClient.io;
+                  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                  const wsHost = process.env.NODE_ENV === 'production' 
+                    ? window.location.host 
+                    : 'localhost:3001';
+                  const wsUrl = `${wsProtocol}//${wsHost}`;
+                  const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
+                  
+                  socket.emit('conversation:message', {
+                    conversationId,
+                    message: newMessage
+                  });
+                  
+                  // Disconnect after sending
+                  setTimeout(() => socket.disconnect(), 100);
+                } catch (error) {
+                  console.warn('Failed to broadcast message via WebSocket:', error);
+                }
               } else if (result.queued) {
                 console.log('⏳ Message queued for sync (will retry):', messageId);
               }
@@ -2802,6 +2972,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               const result = await addMessageWithSync(conversationId, newMessage);
               if (result.synced) {
                 console.log('✅ Message synced to MongoDB:', messageId);
+                
+                // Broadcast message via WebSocket for real-time end-to-end sync
+                try {
+                  // @ts-ignore - socket.io-client types may not be available
+                  const socketIoClient: any = await import('socket.io-client');
+                  const io = socketIoClient.default || socketIoClient.io;
+                  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                  const wsHost = process.env.NODE_ENV === 'production' 
+                    ? window.location.host 
+                    : 'localhost:3001';
+                  const wsUrl = `${wsProtocol}//${wsHost}`;
+                  const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
+                  
+                  socket.emit('conversation:message', {
+                    conversationId,
+                    message: newMessage
+                  });
+                  
+                  // Disconnect after sending
+                  setTimeout(() => socket.disconnect(), 100);
+                } catch (error) {
+                  console.warn('Failed to broadcast message via WebSocket:', error);
+                }
               } else if (result.queued) {
                 console.log('⏳ Message queued for sync (will retry):', messageId);
               }
@@ -2891,13 +3084,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     },
     updateUser: async (email: string, updates: Partial<User>) => {
       try {
-        // Check if we're in development mode (localStorage)
-        const isDevelopment = isDevelopmentEnvironment() ||
-                             window.location.hostname === 'localhost' || 
-                             window.location.hostname === '127.0.0.1' ||
-                             window.location.hostname.includes('localhost') ||
-                             window.location.hostname.includes('127.0.0.1');
-        
         // CRITICAL: Never allow role to be updated via this function (security)
         const safeUpdates = { ...updates };
         delete safeUpdates.role; // Prevent role changes through profile updates

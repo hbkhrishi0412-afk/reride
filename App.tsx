@@ -121,6 +121,7 @@ const MobileHomePage = React.lazy(() => import('./components/MobileHomePage'));
 // Lazy-loaded non-critical components (loaded on demand)
 const CommandPalette = React.lazy(() => import('./components/CommandPalette'));
 const ChatWidget = React.lazy(() => import('./components/ChatWidget').then(module => ({ default: module.ChatWidget })));
+const SupportChatWidget = React.lazy(() => import('./components/SupportChatWidget'));
 
 // Preload critical components - optimized for faster loading
 const preloadCriticalComponents = () => {
@@ -588,7 +589,6 @@ const AppContent: React.FC = React.memo(() => {
               }
             }}
             recommendations={recommendations}
-            allVehicles={vehicles.filter(v => v.status === 'published')}
             onNavigate={navigate}
             onSelectCity={(city) => {
               setSelectedCity(city);
@@ -738,6 +738,10 @@ const AppContent: React.FC = React.memo(() => {
                 }
               }}
               onStartChat={(vehicle) => {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
+                }
+                
                 if (!currentUser) {
                   addToast('Please login to start a chat', 'info');
                   navigate(ViewEnum.LOGIN_PORTAL);
@@ -765,6 +769,11 @@ const AppContent: React.FC = React.memo(() => {
                     isReadByCustomer: true,
                     isFlagged: false
                   };
+                  
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('🔧 Creating new conversation:', newConversation.id);
+                  }
+                  
                   setConversations([...conversations, newConversation]);
                   
                   (async () => {
@@ -777,6 +786,14 @@ const AppContent: React.FC = React.memo(() => {
                   })();
                   
                   conversation = newConversation;
+                } else {
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('🔧 Using existing conversation:', conversation.id);
+                  }
+                }
+                
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔧 Setting activeChat:', conversation.id);
                 }
                 
                 setActiveChat(conversation);
@@ -2984,6 +3001,12 @@ const AppContent: React.FC = React.memo(() => {
             onNavigate={navigate}
             currentUser={currentUser}
             onLogout={handleLogout}
+          />
+        </Suspense>
+        {/* Support Chat Widget - Always available */}
+        <Suspense fallback={null}>
+          <SupportChatWidget
+            currentUser={currentUser}
           />
         </Suspense>
         {currentUser && activeChat && (

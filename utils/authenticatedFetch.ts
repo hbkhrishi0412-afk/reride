@@ -108,7 +108,17 @@ const refreshToken = async (): Promise<string | null> => {
       console.warn('⚠️ Token refresh response missing access token');
       return null;
     } catch (error) {
-      console.error('❌ Token refresh failed:', error);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authenticatedFetch.ts:110',message:'Token refresh exception',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-4'})}).catch(()=>{});
+      // #endregion
+      // CRITICAL FIX: Don't log as error for network issues - might be temporary
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        // Network error - might be temporary, don't mark token as invalid
+        console.warn('⚠️ Token refresh network error (may be temporary):', errorMessage);
+      } else {
+        console.error('❌ Token refresh failed:', error);
+      }
       return null;
     } finally {
       // Reset refresh state
@@ -266,11 +276,17 @@ export const authenticatedFetch = async (
 
     // Handle 401 Unauthorized - try to refresh token and retry
     // Skip refresh attempt if refresh token is known to be invalid
-    if (response.status === 401 && retryOn401 && !skipAuth && !refreshTokenKnownInvalid) {
+      if (response.status === 401 && retryOn401 && !skipAuth && !refreshTokenKnownInvalid) {
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authenticatedFetch.ts:269',message:'401 received - attempting token refresh',data:{url,retryOn401,skipAuth,refreshTokenKnownInvalid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-4'})}).catch(()=>{});
+        // #endregion
         console.log('🔄 401 received, attempting token refresh...');
         
         const newToken = await refreshToken();
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authenticatedFetch.ts:273',message:'Token refresh result',data:{hasNewToken:!!newToken,refreshTokenKnownInvalid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-4'})}).catch(()=>{});
+        // #endregion
         
         if (newToken) {
           console.log('✅ Token refreshed, retrying request...');
@@ -290,21 +306,41 @@ export const authenticatedFetch = async (
             return response; // Return original 401 response
           }
           
-          // If retry still returns 401, token refresh didn't help (maybe different issue)
+          // CRITICAL FIX: If retry still returns 401, check if it's clearly an auth issue
           if (response.status === 401) {
-            console.warn('⚠️ Request still returns 401 after token refresh - authentication issue persists');
-            // Clear tokens but don't mark refresh token as invalid here
-            // because we successfully refreshed it - the issue might be with the specific endpoint
-            clearAuthTokens();
+            console.warn('⚠️ Request still returns 401 after token refresh');
+            // Only clear tokens if it's clearly an auth issue, not a permission issue
+            try {
+              // CRITICAL FIX: Check if body has been consumed before cloning
+              // If bodyUsed is true, we can't clone, so check headers or status only
+              if (!response.bodyUsed) {
+                const errorText = await response.clone().text();
+                if (errorText.includes('expired') || errorText.includes('invalid token') || errorText.includes('Authentication failed')) {
+                  clearAuthTokens();
+                }
+              } else {
+                // Body already consumed, check status code only
+                // Be conservative - only clear if we're certain it's an auth issue
+                // For now, don't clear tokens if we can't read the error message
+                console.warn('⚠️ Response body already consumed, cannot check error message');
+              }
+            } catch (error) {
+              // If we can't read the error, be conservative and don't clear tokens
+              console.warn('⚠️ Could not read error response:', error);
+            }
             // Don't redirect immediately - let the caller handle the error first
             // The redirect will happen when the error is shown to the user
           }
         } else {
-          // Token refresh failed (refresh token likely invalid or missing)
-          // clearAuthTokens already called in refreshToken function when:
-          // - Refresh token is missing from localStorage (line 60)
-          // - Refresh token is invalid per API response (401/400 at line 75)
-          // Don't log again to avoid duplicate messages
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authenticatedFetch.ts:319',message:'Token refresh failed',data:{refreshTokenKnownInvalid,url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-4'})}).catch(()=>{});
+          // #endregion
+          // CRITICAL FIX: Don't clear tokens immediately - might be temporary network issue
+          console.warn('⚠️ Token refresh failed, but not clearing tokens yet');
+          // Only mark as invalid if we're certain it's an auth issue
+          if (refreshTokenKnownInvalid) {
+            clearAuthTokens();
+          }
         }
       } catch (refreshError) {
         // Error during token refresh - return original 401 response

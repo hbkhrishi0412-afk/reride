@@ -49,16 +49,31 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
-  // Auto-open chat when conversation starts or has new messages (only once)
+  // Auto-open chat when conversation starts (even with no messages) or has new messages
   useEffect(() => {
-    if (!hasOpenedOnce && conversation.messages.length > 0) {
+    // Auto-open when conversation is first set (even with no messages)
+    if (!hasOpenedOnce) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔧 Auto-opening chat - conversation has messages');
+        console.log('🔧 Auto-opening chat - conversation initialized', { 
+          conversationId: conversation.id,
+          hasMessages: conversation.messages.length > 0
+        });
       }
       setIsMinimized(false);
       setHasOpenedOnce(true);
+    } else if (conversation.messages.length > 0 && isMinimized) {
+      // Also auto-open if new messages arrive while minimized
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔧 Auto-opening chat - new messages received');
+      }
+      setIsMinimized(false);
     }
-  }, [conversation.messages.length, hasOpenedOnce, conversation.id]);
+  }, [conversation.id, conversation.messages.length, hasOpenedOnce, isMinimized]);
+  
+  // Reset hasOpenedOnce when conversation changes
+  useEffect(() => {
+    setHasOpenedOnce(false);
+  }, [conversation.id]);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -150,7 +165,47 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
 
   // Use React Portal to render at document body level (like Facebook Messenger)
   // This ensures fixed positioning works correctly regardless of parent containers
-  const portalTarget = typeof document !== 'undefined' ? document.body : null;
+  // Try to get document.body immediately, fallback to useEffect if not available
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatWidget.tsx:169',message:'Portal target initial state',data:{hasDocument:typeof document !== 'undefined',hasBody:typeof document !== 'undefined' && !!document.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-3'})}).catch(()=>{});
+    // #endregion
+    // Try to get document.body synchronously on initial render
+    if (typeof document !== 'undefined' && document.body) {
+      return document.body;
+    }
+    return null;
+  });
+  
+  // Ensure document.body is available before setting portal target
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatWidget.tsx:178',message:'Portal target useEffect',data:{hasPortalTarget:!!portalTarget,hasDocument:typeof document !== 'undefined',hasBody:typeof document !== 'undefined' && !!document.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-3'})}).catch(()=>{});
+    // #endregion
+    if (!portalTarget && typeof document !== 'undefined') {
+      // If body isn't ready, try again after a short delay
+      const checkBody = () => {
+        if (document.body) {
+          setPortalTarget(document.body);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatWidget.tsx:183',message:'Portal target set successfully',data:{hasBody:!!document.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-3'})}).catch(()=>{});
+          // #endregion
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 ChatWidget: Portal target set to document.body');
+          }
+        } else {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatWidget.tsx:189',message:'Portal target retry - body not ready',data:{hasBody:!!document.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-3'})}).catch(()=>{});
+          // #endregion
+          // Retry after a short delay
+          setTimeout(checkBody, 50);
+        }
+      };
+      checkBody();
+    } else if (portalTarget && process.env.NODE_ENV === 'development') {
+      console.log('🔧 ChatWidget: Portal target already set');
+    }
+  }, [portalTarget]);
 
   // Floating chat button - ALWAYS visible (like Facebook Messenger)
   const chatButton = (
@@ -159,13 +214,16 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
         position: 'fixed',
         bottom: isMobile ? '20px' : '24px',
         right: isMobile ? '20px' : '24px',
-        zIndex: 99999,
+        zIndex: 999999, // Increased z-index to ensure it's above everything
         pointerEvents: 'auto',
         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
         transform: isMinimized ? 'scale(1)' : 'scale(0.85)',
         opacity: isMinimized ? 1 : 0.6,
         // Ensure it's always on top
-        isolation: 'isolate'
+        isolation: 'isolate',
+        // Force visibility
+        visibility: 'visible',
+        display: 'block'
       }}
       onClick={(e) => {
         // Prevent event bubbling
@@ -357,16 +415,29 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   ) : null;
 
   // Render using Portal to ensure it's at document body level (bypasses any parent container positioning)
-  // If portal is not available (SSR), return null
+  // If portal is not available (SSR or initial render), return null
+  // The useEffect will set portalTarget once document.body is ready
   if (!portalTarget) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 ChatWidget: Waiting for portal target (document.body)');
+    }
     return null;
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔧 ChatWidget: Rendering chat button and window', { 
+      isMinimized, 
+      hasMessages: conversation.messages.length > 0,
+      portalTarget: !!portalTarget,
+      conversationId: conversation.id
+    });
   }
 
   // Ensure button is always rendered
   return (
     <>
       {/* Always render button (like Facebook Messenger) - this should always be visible */}
-      {createPortal(chatButton, portalTarget)}
+      {portalTarget && createPortal(chatButton, portalTarget)}
       {/* Render chat window when not minimized */}
       {!isMinimized && createPortal(chatWindow, portalTarget)}
       {isOfferModalOpen && (
