@@ -723,15 +723,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, []);
 
   const navigate = useCallback((view: View, params?: { city?: string }) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:725',message:'navigate called',data:{view,currentView,isHandlingPopState:isHandlingPopStateRef.current,hasParams:!!params},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     // Don't navigate if we're currently handling a popstate event
     // This prevents navigation loops when browser back/forward is used
     if (isHandlingPopStateRef.current) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:728',message:'navigate - skipped popstate',data:{view},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       if (process.env.NODE_ENV === 'development') {
         console.log('⏸️ Navigation skipped - handling popstate event');
       }
@@ -741,9 +735,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     // Prevent infinite redirect loops by checking if we're already on the target view
     // EXCEPTION: Allow navigation to DETAIL view even if already on DETAIL (different vehicle)
     if (view === currentView && !params?.city && view !== View.DETAIL) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:737',message:'navigate - early return same view',data:{view,currentView},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       return; // Already on this view, no need to navigate (except for DETAIL view)
     }
 
@@ -898,9 +889,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       if (process.env.NODE_ENV === 'development' && view === View.DETAIL) {
         console.log('🎯 Setting currentView to DETAIL');
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:904',message:'navigate - calling setCurrentView',data:{view,currentView,viewIsDetail:view===View.DETAIL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
       setCurrentView(view);
     }
 
@@ -3235,18 +3223,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     selectVehicle: (vehicle: Vehicle) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3225',message:'selectVehicle called',data:{vehicleId:vehicle?.id,vehicleMake:vehicle?.make,vehicleModel:vehicle?.model,hasVehicle:!!vehicle,hasVehicleId:!!vehicle?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       if (process.env.NODE_ENV === 'development') {
         console.log('🚗 selectVehicle called for:', vehicle.id, vehicle.make, vehicle.model);
       }
       
       // Validate vehicle object
       if (!vehicle || !vehicle.id) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3231',message:'selectVehicle - invalid vehicle',data:{hasVehicle:!!vehicle,hasVehicleId:!!vehicle?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         console.error('❌ selectVehicle called with invalid vehicle:', vehicle);
         return;
       }
@@ -3260,23 +3242,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         // Verify it was stored correctly
         const verifyStored = sessionStorage.getItem('selectedVehicle');
         if (!verifyStored || verifyStored !== vehicleJson) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3244',message:'selectVehicle - storage verification failed',data:{vehicleId:vehicle.id,hasStored:!!verifyStored,matches:verifyStored===vehicleJson},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
           console.error('❌ Vehicle storage verification failed');
           return;
         }
         
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3249',message:'selectVehicle - storage verified',data:{vehicleId:vehicle.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         if (process.env.NODE_ENV === 'development') {
           console.log('🚗 Vehicle stored and verified in sessionStorage:', vehicle.id, vehicle.make, vehicle.model);
         }
       } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3253',message:'selectVehicle - storage error',data:{vehicleId:vehicle.id,error:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         console.error('❌ Failed to store vehicle in sessionStorage:', error);
         // Don't continue if we can't store - navigation will fail
         return;
@@ -3290,9 +3263,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         console.log('🚗 Navigating to DETAIL view with vehicle:', vehicle.id, vehicle.make, vehicle.model);
       }
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3269',message:'selectVehicle - calling navigate',data:{vehicleId:vehicle.id,view:'DETAIL'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       // Navigate to DETAIL view immediately
       // The navigate function will check sessionStorage first (which we just set and verified),
       // so the vehicle will be available even if state hasn't updated yet

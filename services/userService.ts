@@ -289,6 +289,8 @@ export const getUsersLocal = async (): Promise<User[]> => {
 const updateUserLocal = async (userData: Partial<User> & { email: string }): Promise<User> => {
     let users = await getUsersLocal();
     let updatedUser: User | undefined;
+    const passwordWasUpdated = userData.password !== undefined;
+    
     users = users.map(u => {
         if (u.email === userData.email) {
             // Create updated user object, handling null values explicitly
@@ -311,8 +313,30 @@ const updateUserLocal = async (userData: Partial<User> & { email: string }): Pro
         }
         return u;
     });
-    localStorage.setItem('reRideUsers', JSON.stringify(users));
+    
+    // Check if user was found before proceeding
     if (!updatedUser) throw new Error("User not found to update.");
+    
+    // Only save to localStorage and clear cache if update succeeded
+    localStorage.setItem('reRideUsers', JSON.stringify(users));
+    
+    // CRITICAL FIX: When password is updated, clear session data to force fresh login
+    // BUT: Keep the localStorage update (reRideUsers) since we just saved the new password there
+    // Only execute this after confirming the update succeeded
+    if (passwordWasUpdated) {
+        console.log('🔐 Password updated - clearing session cache to force fresh authentication');
+        // Clear production cache if it exists (might have stale data)
+        localStorage.removeItem('reRideUsers_prod');
+        // Clear current user session to force re-authentication with new password
+        localStorage.removeItem('reRideCurrentUser');
+        if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem('currentUser');
+            sessionStorage.removeItem('accessToken');
+        }
+        // NOTE: We keep 'reRideUsers' because we just updated it with the new password
+        // The next login will use the updated password from localStorage
+    }
+    
     return updatedUser;
 };
 
@@ -337,6 +361,9 @@ const loginLocal = async (
         passwordLength: normalizedPassword.length,
         role 
     });
+    
+    // CRITICAL FIX: Warn if using cached data - password might be stale
+    console.warn('⚠️ loginLocal: Using localStorage cache - if password was recently updated, this may fail. Clear cache and try again.');
     
     const users = await getUsersLocal();
     
@@ -387,6 +414,7 @@ const loginLocal = async (
     
     if (!isPasswordValid) {
         console.log('❌ loginLocal: Password mismatch');
+        console.warn('💡 TIP: If you recently updated the password, clear localStorage cache: localStorage.removeItem("reRideUsers")');
         return { success: false, reason: 'Invalid credentials.' };
     }
     
@@ -449,11 +477,27 @@ const updateUserApi = async (userData: Partial<User> & { email: string }): Promi
         body: JSON.stringify(userData),
     });
     
+    // CRITICAL FIX: Check if password was updated from response header
+    const passwordWasUpdated = userData.password !== undefined || 
+                               (response.headers && response.headers.get('X-Password-Updated') === 'true');
+    
     // Use handleApiResponse to parse the response properly
     const result = await handleApiResponse<User>(response);
     
     if (!result.success) {
         throw new Error(result.reason || result.error || 'Failed to update user');
+    }
+    
+    // CRITICAL FIX: Clear cache when password is updated to force fresh login
+    if (passwordWasUpdated) {
+        console.log('🔐 Password updated via API - clearing localStorage cache to force fresh authentication');
+        // Clear both development and production caches
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem('reRideUsers');
+            localStorage.removeItem('reRideUsers_prod');
+            // Also clear any cached user data
+            localStorage.removeItem('reRideCurrentUser');
+        }
     }
     
     return result.data!;
@@ -754,10 +798,10 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
                              errorMessage.includes('Service temporarily unavailable');
       
       // If it's a network/server error, fallback to local storage immediately
-      // If it's "Invalid credentials" from API, also try local storage as fallback
-      // (in case password was updated locally but server sync failed)
-      if (isNetworkError || errorMessage.includes('Invalid credentials')) {
-        console.warn('⚠️  API login failed, falling back to local storage:', errorMessage);
+      // BUT: Don't fallback for "Invalid credentials" - this means password is wrong in database
+      // Only fallback for actual network/server errors
+      if (isNetworkError) {
+        console.warn('⚠️  API login failed due to network error, falling back to local storage:', errorMessage);
         try {
           const localResult = await loginLocal({ ...credentials, skipRoleCheck: true });
           if (localResult.success) {
@@ -766,14 +810,15 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
           } else {
             // Local storage also failed - return the original API error
             console.warn('⚠️  Local storage login also failed');
-            return { success: false, reason: errorMessage.includes('Invalid credentials') ? 'Invalid credentials.' : 'Login failed. Please check your connection and try again.' };
+            return { success: false, reason: 'Login failed. Please check your connection and try again.' };
           }
         } catch (localError) {
           console.error('❌ Local storage login error:', localError);
-          return { success: false, reason: errorMessage.includes('Invalid credentials') ? 'Invalid credentials.' : 'Login failed. Please check your connection and try again.' };
+          return { success: false, reason: 'Login failed. Please check your connection and try again.' };
         }
       } else {
-        // Other errors - return the error message
+        // Other errors (including Invalid credentials) - return the error message
+        // Don't fallback to localStorage for invalid credentials - password was updated in DB
         return { success: false, reason: errorMessage };
       }
     }

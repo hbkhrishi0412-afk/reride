@@ -1447,6 +1447,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
         // Remove password from response for security
         const { password: _, ...userWithoutPassword } = updatedUser;
+        
+        // CRITICAL FIX: Signal to frontend that password was updated so it can clear cache
+        if (updateFields.password) {
+          res.setHeader('X-Password-Updated', 'true');
+          logInfo('🔐 Password update completed - frontend should clear cache');
+        }
+        
         return res.status(200).json({ success: true, user: userWithoutPassword });
       } catch (dbError) {
         logError('❌ Database error during user update:', dbError);

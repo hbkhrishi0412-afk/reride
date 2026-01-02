@@ -526,15 +526,61 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
         try {
           const newToken = await refreshAuthToken();
           if (!newToken) {
+            // Refresh token is also expired - need to log in again
+            console.warn('⚠️ Both access and refresh tokens expired - clearing auth data');
+            
+            // Clear all authentication tokens and user data
+            try {
+              localStorage.removeItem('reRideAccessToken');
+              localStorage.removeItem('reRideRefreshToken');
+              localStorage.removeItem('reRideCurrentUser');
+              if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.removeItem('currentUser');
+                sessionStorage.removeItem('accessToken');
+              }
+            } catch (clearError) {
+              console.error('Error clearing tokens:', clearError);
+            }
+            
             setPasswordError('Your session has expired. Please log in again.');
             setIsChangingPassword(false);
+            
+            // Redirect to login after showing error message
+            setTimeout(() => {
+              if (typeof window !== 'undefined') {
+                // Reload page to trigger login redirect
+                window.location.reload();
+              }
+            }, 2000);
             return;
           }
           console.log('✅ Token refreshed successfully before password update');
         } catch (refreshError) {
           console.error('❌ Failed to refresh token before password update:', refreshError);
+          
+          // Clear all authentication tokens and user data
+          try {
+            localStorage.removeItem('reRideAccessToken');
+            localStorage.removeItem('reRideRefreshToken');
+            localStorage.removeItem('reRideCurrentUser');
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.removeItem('currentUser');
+              sessionStorage.removeItem('accessToken');
+            }
+          } catch (clearError) {
+            console.error('Error clearing tokens:', clearError);
+          }
+          
           setPasswordError('Your session has expired. Please log in again.');
           setIsChangingPassword(false);
+          
+          // Redirect to login after showing error message
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              // Reload page to trigger login redirect
+              window.location.reload();
+            }
+          }, 2000);
           return;
         }
       }
@@ -556,8 +602,34 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       const errorMessage = error instanceof Error ? error.message : 'Failed to update password. Please try again.';
       
       // Check if it's an authentication error
-      if (errorMessage.includes('Authentication expired') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
-        setPasswordError('Authentication expired. Please log in again and try again.');
+      if (errorMessage.includes('Authentication expired') || 
+          errorMessage.includes('Unauthorized') || 
+          errorMessage.includes('401') ||
+          errorMessage.includes('session has expired') ||
+          errorMessage.includes('Please log in again')) {
+        
+        // Clear all authentication tokens and user data
+        try {
+          localStorage.removeItem('reRideAccessToken');
+          localStorage.removeItem('reRideRefreshToken');
+          localStorage.removeItem('reRideCurrentUser');
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem('currentUser');
+            sessionStorage.removeItem('accessToken');
+          }
+        } catch (clearError) {
+          console.error('Error clearing tokens:', clearError);
+        }
+        
+        setPasswordError('Your session has expired. Please log in again.');
+        
+        // Redirect to login after showing error message
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            // Reload page to trigger login redirect
+            window.location.reload();
+          }
+        }, 2000);
       } else {
         setPasswordError(errorMessage);
       }
