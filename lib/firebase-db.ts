@@ -110,11 +110,21 @@ export function getFirebaseDatabase(): Database {
       // For server-side operations, database URL should be provided for reliability
       // Client-side can use default from firebaseConfig, but server-side should be explicit
       if (databaseURL && databaseURL.trim() !== '') {
+        // Ensure trailing slash for Firebase Realtime Database URLs
+        // Firebase Realtime Database requires URLs to end with '/'
+        let normalizedDatabaseURL = databaseURL.trim();
+        if (!normalizedDatabaseURL.endsWith('/')) {
+          normalizedDatabaseURL = normalizedDatabaseURL + '/';
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 Added trailing slash to database URL');
+          }
+        }
+        
         // Validate URL format
-        if (!databaseURL.startsWith('https://') || !databaseURL.includes('firebasedatabase')) {
+        if (!normalizedDatabaseURL.startsWith('https://') || !normalizedDatabaseURL.includes('firebasedatabase')) {
           console.warn('⚠️ FIREBASE_DATABASE_URL format may be incorrect. Expected format: https://your-project-default-rtdb.region.firebasedatabase.app/');
         }
-        database = getDatabase(app, databaseURL);
+        database = getDatabase(app, normalizedDatabaseURL);
       } else {
         if (isServerSide) {
           // Server-side: Warn but allow default (for backward compatibility)

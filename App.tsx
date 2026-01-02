@@ -486,6 +486,9 @@ const AppContent: React.FC = React.memo(() => {
 
   // Memoize renderView to prevent unnecessary re-renders
   const renderView = React.useCallback(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:488',message:'renderView called',data:{currentView},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     switch (currentView) {
       case ViewEnum.HOME:
         if (isMobileApp) {
@@ -664,7 +667,15 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.DETAIL:
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:666',message:'DETAIL case reached in switch',data:{currentView,selectedVehicleId:selectedVehicle?.id,hasSelectedVehicle:!!selectedVehicle},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
         // Enhanced recovery: Check both state and sessionStorage
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🎯 App.tsx: Rendering DETAIL view');
+          console.log('🎯 Current selectedVehicle from state:', selectedVehicle?.id, selectedVehicle?.make, selectedVehicle?.model);
+        }
+        
         let vehicleToDisplay = selectedVehicle;
         if (!vehicleToDisplay) {
           try {
@@ -672,19 +683,26 @@ const AppContent: React.FC = React.memo(() => {
             if (storedVehicle) {
               vehicleToDisplay = JSON.parse(storedVehicle);
               if (process.env.NODE_ENV === 'development') {
-                console.log('🔧 App.tsx: Recovered vehicle from sessionStorage for rendering:', vehicleToDisplay?.id);
+                console.log('🔧 App.tsx: Recovered vehicle from sessionStorage for rendering:', vehicleToDisplay?.id, vehicleToDisplay?.make, vehicleToDisplay?.model);
               }
               // Update state for future renders
               setSelectedVehicle(vehicleToDisplay);
+            } else {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('⚠️ App.tsx: No vehicle in sessionStorage');
+              }
             }
           } catch (error) {
             if (process.env.NODE_ENV === 'development') {
-              console.warn('🔧 App.tsx: Failed to recover vehicle from sessionStorage:', error);
+              console.error('❌ App.tsx: Failed to recover vehicle from sessionStorage:', error);
             }
           }
         }
         
         if (!vehicleToDisplay) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('❌ App.tsx: No vehicle to display - showing error message');
+          }
           return (
             <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
               <div className="text-center">
@@ -699,6 +717,10 @@ const AppContent: React.FC = React.memo(() => {
               </div>
             </div>
           );
+        }
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ App.tsx: Vehicle found, rendering VehicleDetail component:', vehicleToDisplay.id, vehicleToDisplay.make, vehicleToDisplay.model);
         }
         
         // Use MobileVehicleDetail for mobile app, VehicleDetail for desktop

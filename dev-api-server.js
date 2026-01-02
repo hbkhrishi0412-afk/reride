@@ -1088,53 +1088,101 @@ app.delete('/api/content', (req, res) => {
 
 // Conversations endpoints (mock handlers for development)
 app.get('/api/conversations', (req, res) => {
-  const { customerId, sellerId } = req.query;
-  // Return empty array - actual data comes from localStorage in dev
-  res.json({
-    success: true,
-    data: []
-  });
+  try {
+    const { customerId, sellerId } = req.query;
+    // Return empty array - actual data comes from localStorage in dev
+    res.json({
+      success: true,
+      data: []
+    });
+  } catch (error) {
+    console.error('Error in GET /api/conversations:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
 });
 
 app.post('/api/conversations', (req, res) => {
-  // Accept and return the conversation data (mock save)
-  res.json({
-    success: true,
-    data: req.body
-  });
+  try {
+    // Accept and return the conversation data (mock save)
+    res.json({
+      success: true,
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Error in POST /api/conversations:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
 });
 
 app.put('/api/conversations', (req, res) => {
-  // Accept message updates (mock update)
-  res.json({
-    success: true,
-    data: req.body
-  });
+  try {
+    // Accept message updates (mock update)
+    res.json({
+      success: true,
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Error in PUT /api/conversations:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
 });
 
 app.delete('/api/conversations', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Conversation deleted successfully'
-  });
+  try {
+    res.json({
+      success: true,
+      message: 'Conversation deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error in DELETE /api/conversations:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
 });
 
 // Notifications endpoints (mock handlers for development)
 app.get('/api/notifications', (req, res) => {
-  const { recipientEmail, isRead } = req.query;
-  // Return empty array - actual data comes from localStorage in dev
-  res.json({
-    success: true,
-    data: []
-  });
+  try {
+    const { recipientEmail, isRead } = req.query;
+    // Return empty array - actual data comes from localStorage in dev
+    res.json({
+      success: true,
+      data: []
+    });
+  } catch (error) {
+    console.error('Error in GET /api/notifications:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
 });
 
 app.post('/api/notifications', (req, res) => {
-  // Accept and return the notification data (mock save)
-  res.json({
-    success: true,
-    data: req.body
-  });
+  try {
+    // Accept and return the notification data (mock save)
+    res.json({
+      success: true,
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Error in POST /api/notifications:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
 });
 
 app.put('/api/notifications', (req, res) => {
@@ -1428,4 +1476,23 @@ app.listen(PORT, () => {
   console.log(`   curl http://localhost:${PORT}/api/vehicle-data`);
   console.log(`   curl http://localhost:${PORT}/api/vehicle-data-management`);
   console.log(`   curl http://localhost:${PORT}/api/admin`);
+});
+
+// Global error handler middleware (must be last)
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'An error occurred'
+  });
+});
+
+// 404 handler for undefined routes
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Route not found',
+    path: req.path
+  });
 });

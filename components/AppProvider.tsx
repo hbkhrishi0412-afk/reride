@@ -135,6 +135,7 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// Hook export - Fast Refresh compatible
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {
@@ -150,6 +151,7 @@ export const useApp = () => {
   return context;
 };
 
+// Component export - Fast Refresh compatible with displayName
 export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo(({ children }) => {
   // Track which notifications have already shown browser notifications
   const shownNotificationIdsRef = useRef<Set<number>>(new Set());
@@ -721,9 +723,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, []);
 
   const navigate = useCallback((view: View, params?: { city?: string }) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:725',message:'navigate called',data:{view,currentView,isHandlingPopState:isHandlingPopStateRef.current,hasParams:!!params},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     // Don't navigate if we're currently handling a popstate event
     // This prevents navigation loops when browser back/forward is used
     if (isHandlingPopStateRef.current) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:728',message:'navigate - skipped popstate',data:{view},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       if (process.env.NODE_ENV === 'development') {
         console.log('⏸️ Navigation skipped - handling popstate event');
       }
@@ -733,6 +741,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     // Prevent infinite redirect loops by checking if we're already on the target view
     // EXCEPTION: Allow navigation to DETAIL view even if already on DETAIL (different vehicle)
     if (view === currentView && !params?.city && view !== View.DETAIL) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:737',message:'navigate - early return same view',data:{view,currentView},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       return; // Already on this view, no need to navigate (except for DETAIL view)
     }
 
@@ -755,25 +766,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     setInitialSearchQuery('');
     
     // CRITICAL FIX: When navigating to DETAIL, ensure vehicle is available
-    // Check sessionStorage if state hasn't updated yet (React state updates are async)
-    if (view === View.DETAIL && !selectedVehicle) {
+    // Check sessionStorage FIRST (it's synchronous and always up-to-date)
+    // React state updates are async, so sessionStorage is the source of truth
+    if (view === View.DETAIL) {
+      let vehicleFound = false;
+      let vehicleToUse: Vehicle | null = null;
+      
       try {
+        // ALWAYS check sessionStorage first - it's the most reliable source
         const storedVehicle = sessionStorage.getItem('selectedVehicle');
         if (storedVehicle) {
-          const vehicleToRestore = JSON.parse(storedVehicle);
-          setSelectedVehicle(vehicleToRestore);
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 Restored vehicle from sessionStorage during navigation:', vehicleToRestore?.id);
+          try {
+            vehicleToUse = JSON.parse(storedVehicle);
+            if (vehicleToUse && vehicleToUse.id) {
+              vehicleFound = true;
+              // Always update state from sessionStorage when navigating to DETAIL
+              // This ensures state is in sync even if there was a race condition
+              setSelectedVehicle(vehicleToUse);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('🔧 Restored vehicle from sessionStorage during navigation:', vehicleToUse.id, vehicleToUse.make, vehicleToUse.model);
+              }
+            }
+          } catch (parseError) {
+            console.error('❌ Failed to parse vehicle from sessionStorage:', parseError);
+            // Clear corrupted data
+            sessionStorage.removeItem('selectedVehicle');
           }
+        }
+        
+        // If not found in sessionStorage, check state as fallback
+        if (!vehicleFound && selectedVehicle && selectedVehicle.id) {
+          vehicleToUse = selectedVehicle;
+          vehicleFound = true;
+          // Sync state to sessionStorage for consistency
+          try {
+            sessionStorage.setItem('selectedVehicle', JSON.stringify(selectedVehicle));
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔧 Synced vehicle from state to sessionStorage:', selectedVehicle.id);
+            }
+          } catch (error) {
+            console.warn('⚠️ Failed to sync vehicle to sessionStorage:', error);
+          }
+        }
+        
+        // If still no vehicle found, this is an error condition
+        if (!vehicleFound) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Attempted to navigate to DETAIL view without a vehicle in sessionStorage or state');
+            console.warn('⚠️ Current selectedVehicle:', selectedVehicle);
+            console.warn('⚠️ SessionStorage value:', sessionStorage.getItem('selectedVehicle'));
+          }
+          // DON'T redirect here - let the DETAIL view handle the error state
+          // This allows the user to see what went wrong instead of silently redirecting
+          // The DETAIL view will show "Vehicle Not Found" message
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('🔧 Failed to restore vehicle from sessionStorage during navigation:', error);
+          console.error('❌ Error checking for vehicle during navigation:', error);
         }
+        // Don't redirect on error - let DETAIL view handle it
       }
+      
+      // Continue with navigation regardless - let DETAIL view decide what to show
+      // This ensures navigation always happens, and DETAIL view can handle missing vehicle gracefully
     }
     
-    if (!preserveSelectedVehicle) setSelectedVehicle(null);
+    // Only clear selectedVehicle if we're NOT navigating to DETAIL and NOT preserving it
+    // This prevents clearing the vehicle when navigating to DETAIL view
+    if (!preserveSelectedVehicle && view !== View.DETAIL) {
+      setSelectedVehicle(null);
+    }
     
     if (view === View.USED_CARS && currentView !== View.HOME) setSelectedCategory('ALL');
     if (view === View.CITY_LANDING && params?.city) {
@@ -831,6 +893,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         setCurrentView(View.LOGIN_PORTAL);
       }
     } else {
+      // For all other views including DETAIL, set the current view
+      // DETAIL view will handle showing error if vehicle is missing
+      if (process.env.NODE_ENV === 'development' && view === View.DETAIL) {
+        console.log('🎯 Setting currentView to DETAIL');
+      }
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:904',message:'navigate - calling setCurrentView',data:{view,currentView,viewIsDetail:view===View.DETAIL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       setCurrentView(view);
     }
 
@@ -3165,38 +3235,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     selectVehicle: (vehicle: Vehicle) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3225',message:'selectVehicle called',data:{vehicleId:vehicle?.id,vehicleMake:vehicle?.make,vehicleModel:vehicle?.model,hasVehicle:!!vehicle,hasVehicleId:!!vehicle?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       if (process.env.NODE_ENV === 'development') {
         console.log('🚗 selectVehicle called for:', vehicle.id, vehicle.make, vehicle.model);
       }
       
       // Validate vehicle object
       if (!vehicle || !vehicle.id) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3231',message:'selectVehicle - invalid vehicle',data:{hasVehicle:!!vehicle,hasVehicleId:!!vehicle?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         console.error('❌ selectVehicle called with invalid vehicle:', vehicle);
         return;
       }
       
-      // Store vehicle in sessionStorage FIRST for persistence and recovery
+      // CRITICAL: Store vehicle in sessionStorage FIRST (synchronous, immediate)
+      // This ensures the vehicle is available even if state update is delayed
       try {
-        sessionStorage.setItem('selectedVehicle', JSON.stringify(vehicle));
+        const vehicleJson = JSON.stringify(vehicle);
+        sessionStorage.setItem('selectedVehicle', vehicleJson);
+        
+        // Verify it was stored correctly
+        const verifyStored = sessionStorage.getItem('selectedVehicle');
+        if (!verifyStored || verifyStored !== vehicleJson) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3244',message:'selectVehicle - storage verification failed',data:{vehicleId:vehicle.id,hasStored:!!verifyStored,matches:verifyStored===vehicleJson},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+          console.error('❌ Vehicle storage verification failed');
+          return;
+        }
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3249',message:'selectVehicle - storage verified',data:{vehicleId:vehicle.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         if (process.env.NODE_ENV === 'development') {
-          console.log('🚗 Vehicle stored in sessionStorage:', vehicle.id, vehicle.make, vehicle.model);
+          console.log('🚗 Vehicle stored and verified in sessionStorage:', vehicle.id, vehicle.make, vehicle.model);
         }
       } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3253',message:'selectVehicle - storage error',data:{vehicleId:vehicle.id,error:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         console.error('❌ Failed to store vehicle in sessionStorage:', error);
-        // Continue anyway - state update should still work
+        // Don't continue if we can't store - navigation will fail
+        return;
       }
       
-      // CRITICAL FIX: Set the selected vehicle state BEFORE navigating
-      // This ensures the vehicle is available when the DETAIL view renders
+      // Set the selected vehicle state (async, but sessionStorage is already set and verified)
+      // The navigate function will check sessionStorage first, so state update timing doesn't matter
       setSelectedVehicle(vehicle);
       
-      // Use navigate function to properly navigate to DETAIL view
-      // The navigate function will also check sessionStorage as a backup
       if (process.env.NODE_ENV === 'development') {
-        console.log('🚗 Navigating to DETAIL view with vehicle:', vehicle.id);
+        console.log('🚗 Navigating to DETAIL view with vehicle:', vehicle.id, vehicle.make, vehicle.model);
       }
       
-      // Ensure we navigate to DETAIL view - use View.DETAIL explicitly
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:3269',message:'selectVehicle - calling navigate',data:{vehicleId:vehicle.id,view:'DETAIL'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      // Navigate to DETAIL view immediately
+      // The navigate function will check sessionStorage first (which we just set and verified),
+      // so the vehicle will be available even if state hasn't updated yet
       navigate(View.DETAIL);
     },
     toggleWishlist: (vehicleId: number) => {
@@ -3301,3 +3400,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     </AppContext.Provider>
   );
 });
+
+// Add displayName for better debugging and Fast Refresh compatibility
+AppProvider.displayName = 'AppProvider';
