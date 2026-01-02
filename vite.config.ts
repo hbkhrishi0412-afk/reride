@@ -189,11 +189,6 @@ export default defineConfig({
         safari10: true,
       },
     },
-    // Remove console logs and debugger in production for smaller bundle
-    esbuild: {
-      drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
-      legalComments: 'none',
-    },
     // Optimize CSS
     cssMinify: true,
     cssCodeSplit: true,
@@ -218,9 +213,8 @@ export default defineConfig({
       // Improve WebSocket connection reliability
       protocol: 'ws',
       host: 'localhost',
-      clientPort: 5173,
-      // Retry connection on failure
-      reconnect: true
+      clientPort: 5173
+      // Note: reconnect is handled automatically by Vite, no need to specify
     },
     // Enable file system caching for faster rebuilds
     fs: {
