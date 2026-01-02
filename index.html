@@ -22,11 +22,12 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
     
-    <!-- Preconnect to external domains for faster loading -->
+    <!-- Preconnect to external domains for faster loading (preconnect is preferred over dns-prefetch) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- DNS prefetch for other external domains -->
     <link rel="dns-prefetch" href="https://nominatim.openstreetmap.org">
-    <link rel="dns-prefetch" href="https://i.pravatar.cc" />
+    <link rel="dns-prefetch" href="https://i.pravatar.cc">
     
     <!-- Load fonts with display=swap and media=print trick for async loading -->
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">

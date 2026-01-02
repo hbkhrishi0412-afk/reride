@@ -81,6 +81,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // CRITICAL FIX: Skip server-side files that should never be loaded in browser
+  // These files don't exist in the client build and will return HTML (404/index.html)
+  // causing MIME type errors when browser expects JavaScript
+  if (url.pathname.includes('/server/') || 
+      url.pathname.includes('/lib/firebase-admin') ||
+      url.pathname.includes('firebase-admin-db') ||
+      url.pathname.includes('/models/') ||
+      url.pathname.includes('/api/main.ts') ||
+      url.pathname.includes('/api/main.js')) {
+    // Don't intercept server-side files - let browser handle them naturally
+    // (they should never be requested, but if they are, let the 404 happen normally)
+    return;
+  }
+
   // API requests - Network First with Cache Fallback
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstStrategy(request, API_CACHE));
@@ -169,21 +183,31 @@ async function networkFirstStrategy(request, cacheName) {
   try {
     const networkResponse = await fetch(request);
     
-    // Cache successful responses
-    if (networkResponse.ok) {
+    // Don't cache error responses (4xx, 5xx) - let them pass through
+    if (!networkResponse.ok) {
+      // For error responses, try cache as fallback
       const cache = await caches.open(cacheName);
-      const responseToCache = networkResponse.clone();
-      const headers = new Headers(responseToCache.headers);
-      headers.set('sw-cache-date', Date.now().toString());
-      
-      const modifiedResponse = new Response(responseToCache.body, {
-        status: responseToCache.status,
-        statusText: responseToCache.statusText,
-        headers: headers
-      });
-      
-      cache.put(request, modifiedResponse.clone());
+      const cachedResponse = await cache.match(request);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      // Return the error response as-is
+      return networkResponse;
     }
+    
+    // Cache successful responses only
+    const cache = await caches.open(cacheName);
+    const responseToCache = networkResponse.clone();
+    const headers = new Headers(responseToCache.headers);
+    headers.set('sw-cache-date', Date.now().toString());
+    
+    const modifiedResponse = new Response(responseToCache.body, {
+      status: networkResponse.status,
+      statusText: networkResponse.statusText,
+      headers: headers
+    });
+    
+    cache.put(request, modifiedResponse.clone());
     
     return networkResponse;
   } catch (error) {
@@ -201,6 +225,18 @@ async function networkFirstStrategy(request, cacheName) {
       if (offlinePage) {
         return offlinePage;
       }
+    }
+    
+    // For API requests, return proper JSON error
+    if (request.url.includes('/api/')) {
+      return new Response(JSON.stringify({ 
+        error: 'Service unavailable', 
+        message: 'The service is currently unavailable. Please try again later.' 
+      }), { 
+        status: 503, 
+        statusText: 'Service Unavailable',
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     
     return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });

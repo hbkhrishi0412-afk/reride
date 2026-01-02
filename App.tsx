@@ -10,35 +10,16 @@ import {
   AuthenticationErrorBoundary
 } from './components/ErrorBoundaries';
 import Header from './components/Header';
-import MobileDashboard from './components/MobileDashboard';
-import MobileSearch from './components/MobileSearch';
-import MobileLayout from './components/MobileLayout';
 import Footer from './components/Footer';
 import ToastContainer from './components/ToastContainer';
-import CommandPalette from './components/CommandPalette';
-import { ChatWidget } from './components/ChatWidget';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
-// Mobile components
-import MobileVehicleDetail from './components/MobileVehicleDetail';
-import MobileInbox from './components/MobileInbox';
-import MobileProfile from './components/MobileProfile';
-import MobileWishlist from './components/MobileWishlist';
-import MobileComparison from './components/MobileComparison';
-import MobileSellerProfilePage from './components/MobileSellerProfilePage';
-import MobileSellCarPage from './components/MobileSellCarPage';
-import MobileNewCarsPage from './components/MobileNewCarsPage';
-import MobilePricingPage from './components/MobilePricingPage';
-import MobileSupportPage from './components/MobileSupportPage';
-import MobileFAQPage from './components/MobileFAQPage';
-import MobileBuyerDashboard from './components/MobileBuyerDashboard';
-import MobileRentalPage from './components/MobileRentalPage';
-import MobileDealerProfilesPage from './components/MobileDealerProfilesPage';
-import MobileCityLandingPage from './components/MobileCityLandingPage';
-import MobileHomePage from './components/MobileHomePage';
-import MobilePushNotificationManager from './components/MobilePushNotificationManager';
 import ShareTargetHandler from './components/ShareTargetHandler';
 import OfflineIndicator from './components/OfflineIndicator';
+// Layout/utility components that are always needed - keep as eager imports
+import MobileLayout from './components/MobileLayout';
+import MobileSearch from './components/MobileSearch';
+import MobilePushNotificationManager from './components/MobilePushNotificationManager';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage } from './types';
 import { parseDeepLink } from './utils/mobileFeatures';
 import { planService } from './services/planService';
@@ -54,6 +35,9 @@ const LoadingSpinner: React.FC = () => (
         </div>
     </div>
 );
+
+// Minimal loading fallback for non-critical lazy components
+const MinimalLoader: React.FC = () => null;
 
 // Lazy-loaded components with preloading
 const Home = React.lazy(() => import('./components/Home'));
@@ -114,6 +98,29 @@ const SellCarAdmin = React.lazy(() => import('./components/SellCarAdmin'));
 const AdminLogin = React.lazy(() => import('./AdminLogin'));
 const NewCarsAdmin = React.lazy(() => import('./components/NewCarsAdmin'));
 const NewCarsAdminLogin = React.lazy(() => import('./NewCarsAdminLogin'));
+
+// Lazy-loaded Mobile view components (only loaded when needed - reduces initial bundle size)
+const MobileDashboard = React.lazy(() => import('./components/MobileDashboard'));
+const MobileVehicleDetail = React.lazy(() => import('./components/MobileVehicleDetail'));
+const MobileInbox = React.lazy(() => import('./components/MobileInbox'));
+const MobileProfile = React.lazy(() => import('./components/MobileProfile'));
+const MobileWishlist = React.lazy(() => import('./components/MobileWishlist'));
+const MobileComparison = React.lazy(() => import('./components/MobileComparison'));
+const MobileSellerProfilePage = React.lazy(() => import('./components/MobileSellerProfilePage'));
+const MobileSellCarPage = React.lazy(() => import('./components/MobileSellCarPage'));
+const MobileNewCarsPage = React.lazy(() => import('./components/MobileNewCarsPage'));
+const MobilePricingPage = React.lazy(() => import('./components/MobilePricingPage'));
+const MobileSupportPage = React.lazy(() => import('./components/MobileSupportPage'));
+const MobileFAQPage = React.lazy(() => import('./components/MobileFAQPage'));
+const MobileBuyerDashboard = React.lazy(() => import('./components/MobileBuyerDashboard'));
+const MobileRentalPage = React.lazy(() => import('./components/MobileRentalPage'));
+const MobileDealerProfilesPage = React.lazy(() => import('./components/MobileDealerProfilesPage'));
+const MobileCityLandingPage = React.lazy(() => import('./components/MobileCityLandingPage'));
+const MobileHomePage = React.lazy(() => import('./components/MobileHomePage'));
+
+// Lazy-loaded non-critical components (loaded on demand)
+const CommandPalette = React.lazy(() => import('./components/CommandPalette'));
+const ChatWidget = React.lazy(() => import('./components/ChatWidget').then(module => ({ default: module.ChatWidget })));
 
 // Preload critical components - optimized for faster loading
 const preloadCriticalComponents = () => {
@@ -2658,47 +2665,49 @@ const AppContent: React.FC = React.memo(() => {
           />
           {currentUser && activeChat && (
             <ChatErrorBoundary>
-              <ChatWidget
-                conversation={activeChat}
-                currentUserRole={currentUser.role as 'customer' | 'seller'}
-                otherUserName={(() => {
-                  // Check role explicitly to determine other user name
-                  // ChatWidget is used for both customers and sellers
-                  const isCustomer = (currentUser.role as string) === 'customer';
-                  if (isCustomer) {
-                    const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
-                    return seller?.name || seller?.dealershipName || 'Seller';
-                  } else {
-                    return activeChat.customerName;
-                  }
-                })()}
-                onClose={() => setActiveChat(null)}
-                onSendMessage={(messageText, type, payload) => {
-                  // Use sendMessageWithType if type or payload is provided (for offers, etc.)
-                  if (type || payload) {
-                    sendMessageWithType(activeChat.id, messageText, type, payload);
-                  } else {
-                    sendMessage(activeChat.id, messageText);
-                  }
-                }}
-                typingStatus={typingStatus}
-                onUserTyping={(conversationId, _userRole) => {
-                  toggleTyping(conversationId, true);
-                }}
-                onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                  markAsRead(conversationId);
-                }}
-                onFlagContent={(type, id, reason) => {
-                  flagContent(type, id, reason);
-                }}
-                onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-                  if (process.env.NODE_ENV === 'development') {
-                    console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
-                  }
-                  onOfferResponse(conversationId, messageId, response, counterPrice);
-                  addToast(`Offer ${response}`, 'success');
-                }}
-              />
+              <Suspense fallback={<MinimalLoader />}>
+                <ChatWidget
+                  conversation={activeChat}
+                  currentUserRole={currentUser.role as 'customer' | 'seller'}
+                  otherUserName={(() => {
+                    // Check role explicitly to determine other user name
+                    // ChatWidget is used for both customers and sellers
+                    const isCustomer = (currentUser.role as string) === 'customer';
+                    if (isCustomer) {
+                      const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
+                      return seller?.name || seller?.dealershipName || 'Seller';
+                    } else {
+                      return activeChat.customerName;
+                    }
+                  })()}
+                  onClose={() => setActiveChat(null)}
+                  onSendMessage={(messageText, type, payload) => {
+                    // Use sendMessageWithType if type or payload is provided (for offers, etc.)
+                    if (type || payload) {
+                      sendMessageWithType(activeChat.id, messageText, type, payload);
+                    } else {
+                      sendMessage(activeChat.id, messageText);
+                    }
+                  }}
+                  typingStatus={typingStatus}
+                  onUserTyping={(conversationId, _userRole) => {
+                    toggleTyping(conversationId, true);
+                  }}
+                  onMarkMessagesAsRead={(conversationId, _readerRole) => {
+                    markAsRead(conversationId);
+                  }}
+                  onFlagContent={(type, id, reason) => {
+                    flagContent(type, id, reason);
+                  }}
+                  onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                    }
+                    onOfferResponse(conversationId, messageId, response, counterPrice);
+                    addToast(`Offer ${response}`, 'success');
+                  }}
+                />
+              </Suspense>
             </ChatErrorBoundary>
           )}
         </>
@@ -2774,35 +2783,37 @@ const AppContent: React.FC = React.memo(() => {
             />
             {currentUser && activeChat && (
               <ChatErrorBoundary>
-                <ChatWidget
-                  conversation={activeChat}
-                  currentUserRole={currentUser.role as 'customer' | 'seller'}
-                  otherUserName={(() => {
-                    const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
-                    return seller?.name || seller?.dealershipName || 'Seller';
-                  })()}
-                  onClose={() => setActiveChat(null)}
-                  onSendMessage={(messageText, _type, _payload) => {
-                    sendMessage(activeChat.id, messageText);
-                  }}
-                  typingStatus={typingStatus}
-                  onUserTyping={(conversationId, _userRole) => {
-                    toggleTyping(conversationId, true);
-                  }}
-                  onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                    markAsRead(conversationId);
-                  }}
-                  onFlagContent={(type, id, _reason) => {
-                    flagContent(type, id);
-                  }}
-                  onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-                    if (process.env.NODE_ENV === 'development') {
-                      console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
-                    }
-                    onOfferResponse(conversationId, messageId, response, counterPrice);
-                    addToast(`Offer ${response}`, 'success');
-                  }}
-                />
+                <Suspense fallback={<MinimalLoader />}>
+                  <ChatWidget
+                    conversation={activeChat}
+                    currentUserRole={currentUser.role as 'customer' | 'seller'}
+                    otherUserName={(() => {
+                      const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
+                      return seller?.name || seller?.dealershipName || 'Seller';
+                    })()}
+                    onClose={() => setActiveChat(null)}
+                    onSendMessage={(messageText, _type, _payload) => {
+                      sendMessage(activeChat.id, messageText);
+                    }}
+                    typingStatus={typingStatus}
+                    onUserTyping={(conversationId, _userRole) => {
+                      toggleTyping(conversationId, true);
+                    }}
+                    onMarkMessagesAsRead={(conversationId, _readerRole) => {
+                      markAsRead(conversationId);
+                    }}
+                    onFlagContent={(type, id, _reason) => {
+                      flagContent(type, id);
+                    }}
+                    onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                      if (process.env.NODE_ENV === 'development') {
+                        console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                      }
+                      onOfferResponse(conversationId, messageId, response, counterPrice);
+                      addToast(`Offer ${response}`, 'success');
+                    }}
+                  />
+                </Suspense>
               </ChatErrorBoundary>
             )}
           </>
@@ -2863,37 +2874,39 @@ const AppContent: React.FC = React.memo(() => {
         />
         {currentUser && activeChat && (
           <ChatErrorBoundary>
-            <ChatWidget
-              conversation={activeChat}
-              currentUserRole={currentUser.role as 'customer' | 'seller'}
-              otherUserName={(() => {
-                if (currentUser?.role === 'customer') {
-                  const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
-                  return seller?.name || seller?.dealershipName || 'Seller';
-                } else {
-                  return activeChat.customerName;
-                }
-              })()}
-              onClose={() => setActiveChat(null)}
-              onSendMessage={(messageText, _type, _payload) => {
-                sendMessage(activeChat.id, messageText);
-              }}
-              typingStatus={typingStatus}
-              onUserTyping={(conversationId, _userRole) => {
-                toggleTyping(conversationId, true);
-              }}
-              onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                markAsRead(conversationId);
-              }}
-              onFlagContent={(type, id, _reason) => {
-                flagContent(type, id);
-              }}
-              onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-                console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
-                onOfferResponse(conversationId, messageId, response, counterPrice);
-                addToast(`Offer ${response}`, 'success');
-              }}
-            />
+            <Suspense fallback={<MinimalLoader />}>
+              <ChatWidget
+                conversation={activeChat}
+                currentUserRole={currentUser.role as 'customer' | 'seller'}
+                otherUserName={(() => {
+                  if (currentUser?.role === 'customer') {
+                    const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
+                    return seller?.name || seller?.dealershipName || 'Seller';
+                  } else {
+                    return activeChat.customerName;
+                  }
+                })()}
+                onClose={() => setActiveChat(null)}
+                onSendMessage={(messageText, _type, _payload) => {
+                  sendMessage(activeChat.id, messageText);
+                }}
+                typingStatus={typingStatus}
+                onUserTyping={(conversationId, _userRole) => {
+                  toggleTyping(conversationId, true);
+                }}
+                onMarkMessagesAsRead={(conversationId, _readerRole) => {
+                  markAsRead(conversationId);
+                }}
+                onFlagContent={(type, id, _reason) => {
+                  flagContent(type, id);
+                }}
+                onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                  console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                  onOfferResponse(conversationId, messageId, response, counterPrice);
+                  addToast(`Offer ${response}`, 'success');
+                }}
+              />
+            </Suspense>
           </ChatErrorBoundary>
         )}
         </MobileLayout>
@@ -2948,15 +2961,18 @@ const AppContent: React.FC = React.memo(() => {
           toasts={toasts} 
           onRemove={removeToast} 
         />
-        <CommandPalette 
-          isOpen={isCommandPaletteOpen}
-          onClose={() => setIsCommandPaletteOpen(false)}
-          onNavigate={navigate}
-          currentUser={currentUser}
-          onLogout={handleLogout}
-        />
+        <Suspense fallback={<MinimalLoader />}>
+          <CommandPalette 
+            isOpen={isCommandPaletteOpen}
+            onClose={() => setIsCommandPaletteOpen(false)}
+            onNavigate={navigate}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+          />
+        </Suspense>
         {currentUser && activeChat && (
-          <ChatWidget
+          <Suspense fallback={<MinimalLoader />}>
+            <ChatWidget
             conversation={activeChat}
             currentUserRole={currentUser.role as 'customer' | 'seller'}
             otherUserName={currentUser?.role === 'customer' ? 
@@ -2978,12 +2994,13 @@ const AppContent: React.FC = React.memo(() => {
             onFlagContent={(type, id, _reason) => {
               flagContent(type, id);
             }}
-            onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+              onOfferResponse={(conversationId, messageId, response, counterPrice) => {
               console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
               onOfferResponse(conversationId, messageId, response, counterPrice);
               addToast(`Offer ${response}`, 'success');
             }}
-          />
+            />
+          </Suspense>
         )}
       </div>
     </>
