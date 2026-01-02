@@ -39,8 +39,12 @@ const SECURITY_CONFIG = {
       return secret;
     },
     _warned: false, // Flag to prevent duplicate warnings
-    ACCESS_TOKEN_EXPIRES_IN: '24h',
-    REFRESH_TOKEN_EXPIRES_IN: '7d',
+    // Token expiration times
+    // Access tokens: shorter-lived for security (compromised tokens expire faster)
+    // Refresh tokens: longer-lived for better UX (users don't need to re-login frequently)
+    // Options: '15m', '30m', '1h', '2h', '4h', '8h', '12h', '24h', '48h', '7d', '14d', '30d'
+    ACCESS_TOKEN_EXPIRES_IN: '48h', // Increased from '24h' to 48 hours for better UX
+    REFRESH_TOKEN_EXPIRES_IN: '30d', // Increased from '7d' to 30 days for better UX
     ISSUER: 'reride-app',
     AUDIENCE: 'reride-users'
   },

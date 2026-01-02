@@ -51,10 +51,6 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:53',message:'handleCardClick called',data:{vehicleId:vehicle.id,vehicleMake:vehicle.make,vehicleModel:vehicle.model,targetTag:((e.target as HTMLElement)?.tagName || 'unknown'),hasOnSelect:!!onSelect,onSelectType:typeof onSelect},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
     // Don't trigger if clicking directly on interactive elements
     const target = e.target as HTMLElement;
     
@@ -63,9 +59,6 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
         target.tagName === 'A' || 
         target.closest('button') ||
         target.closest('a')) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:62',message:'handleCardClick early return - interactive element clicked',data:{targetTag:target.tagName,hasClosestButton:!!target.closest('button'),hasClosestA:!!target.closest('a')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       return;
     }
     
@@ -76,9 +69,6 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
     
     // Validate onSelect exists
     if (!onSelect) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:71',message:'onSelect prop missing',data:{vehicleId:vehicle.id,hasOnSelect:false,onSelectType:typeof onSelect},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       console.error('❌ VehicleCard: onSelect prop is not defined!', {
         vehicleId: vehicle.id,
         hasOnSelect: !!onSelect,
@@ -89,19 +79,10 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
     
     // Call onSelect
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:82',message:'Calling onSelect',data:{vehicleId:vehicle.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       console.log('🚗 Calling onSelect with vehicle:', vehicle.id);
       onSelect(vehicle);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:84',message:'onSelect called successfully',data:{vehicleId:vehicle.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       console.log('🚗 onSelect called successfully');
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:86',message:'Error in handleCardClick',data:{vehicleId:vehicle.id,error:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       console.error('❌ Error in VehicleCard handleCardClick:', error);
     }
   };

@@ -486,9 +486,6 @@ const AppContent: React.FC = React.memo(() => {
 
   // Memoize renderView to prevent unnecessary re-renders
   const renderView = React.useCallback(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:488',message:'renderView called',data:{currentView},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-    // #endregion
     switch (currentView) {
       case ViewEnum.HOME:
         if (isMobileApp) {
@@ -667,9 +664,6 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.DETAIL:
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:666',message:'DETAIL case reached in switch',data:{currentView,selectedVehicleId:selectedVehicle?.id,hasSelectedVehicle:!!selectedVehicle},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-        // #endregion
         // Enhanced recovery: Check both state and sessionStorage
         if (process.env.NODE_ENV === 'development') {
           console.log('🎯 App.tsx: Rendering DETAIL view');

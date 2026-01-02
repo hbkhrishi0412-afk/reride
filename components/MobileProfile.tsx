@@ -216,19 +216,65 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
         try {
           const newToken = await refreshAuthToken();
           if (!newToken) {
+            // Refresh token is also expired - need to log in again
+            console.warn('⚠️ Both access and refresh tokens expired - clearing auth data');
+            
+            // Clear all authentication tokens and user data
+            try {
+              localStorage.removeItem('reRideAccessToken');
+              localStorage.removeItem('reRideRefreshToken');
+              localStorage.removeItem('reRideCurrentUser');
+              if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.removeItem('currentUser');
+                sessionStorage.removeItem('accessToken');
+              }
+            } catch (clearError) {
+              console.error('Error clearing tokens:', clearError);
+            }
+            
             if (addToast) {
               addToast('Your session has expired. Please log in again.', 'error');
             }
             setIsSaving(false);
+            
+            // Redirect to login after showing error message
+            setTimeout(() => {
+              if (typeof window !== 'undefined') {
+                // Reload page to trigger login redirect
+                window.location.reload();
+              }
+            }, 2000);
             return;
           }
           console.log('✅ Token refreshed successfully before password update');
         } catch (refreshError) {
           console.error('❌ Failed to refresh token before password update:', refreshError);
+          
+          // Clear all authentication tokens and user data
+          try {
+            localStorage.removeItem('reRideAccessToken');
+            localStorage.removeItem('reRideRefreshToken');
+            localStorage.removeItem('reRideCurrentUser');
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.removeItem('currentUser');
+              sessionStorage.removeItem('accessToken');
+            }
+          } catch (clearError) {
+            console.error('Error clearing tokens:', clearError);
+          }
+          
           if (addToast) {
             addToast('Your session has expired. Please log in again.', 'error');
           }
           setIsSaving(false);
+          
+          // Redirect to login after showing error message
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              // Reload page to trigger login redirect
+              window.location.reload();
+            }
+          }, 2000);
           return;
         }
       }
@@ -245,11 +291,40 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
     } catch (error) {
       console.error('Failed to update password:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to update password. Please try again.';
-      if (addToast) {
-        // Check if it's an authentication error
-        if (errorMessage.includes('Authentication expired') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
-          addToast('Authentication expired. Please log in again.', 'error');
-        } else {
+      
+      // Check if it's an authentication error
+      if (errorMessage.includes('Authentication expired') || 
+          errorMessage.includes('Unauthorized') || 
+          errorMessage.includes('401') ||
+          errorMessage.includes('session has expired') ||
+          errorMessage.includes('Please log in again')) {
+        
+        // Clear all authentication tokens and user data
+        try {
+          localStorage.removeItem('reRideAccessToken');
+          localStorage.removeItem('reRideRefreshToken');
+          localStorage.removeItem('reRideCurrentUser');
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.removeItem('currentUser');
+            sessionStorage.removeItem('accessToken');
+          }
+        } catch (clearError) {
+          console.error('Error clearing tokens:', clearError);
+        }
+        
+        if (addToast) {
+          addToast('Your session has expired. Please log in again.', 'error');
+        }
+        
+        // Redirect to login after showing error message
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            // Reload page to trigger login redirect
+            window.location.reload();
+          }
+        }, 2000);
+      } else {
+        if (addToast) {
           addToast(errorMessage, 'error');
         }
       }
