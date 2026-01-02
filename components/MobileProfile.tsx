@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import type { User } from '../types';
 import PasswordInput from './PasswordInput';
+import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetch.js';
 
 interface MobileProfileProps {
   currentUser: User;
@@ -207,6 +208,31 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
 
     setIsSaving(true);
     try {
+      // CRITICAL: Proactively refresh token before password update
+      // This prevents "session expired" errors during the update
+      // Password updates are critical operations that should not fail due to token expiration
+      if (!isTokenLikelyValid()) {
+        console.log('🔄 Token appears expired, refreshing before password update...');
+        try {
+          const newToken = await refreshAuthToken();
+          if (!newToken) {
+            if (addToast) {
+              addToast('Your session has expired. Please log in again.', 'error');
+            }
+            setIsSaving(false);
+            return;
+          }
+          console.log('✅ Token refreshed successfully before password update');
+        } catch (refreshError) {
+          console.error('❌ Failed to refresh token before password update:', refreshError);
+          if (addToast) {
+            addToast('Your session has expired. Please log in again.', 'error');
+          }
+          setIsSaving(false);
+          return;
+        }
+      }
+      
       const success = await onUpdatePassword({
         current: passwordData.current,
         new: passwordData.new
@@ -218,6 +244,15 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
       }
     } catch (error) {
       console.error('Failed to update password:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update password. Please try again.';
+      if (addToast) {
+        // Check if it's an authentication error
+        if (errorMessage.includes('Authentication expired') || errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+          addToast('Authentication expired. Please log in again.', 'error');
+        } else {
+          addToast(errorMessage, 'error');
+        }
+      }
     } finally {
       setIsSaving(false);
     }

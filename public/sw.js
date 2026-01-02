@@ -87,11 +87,21 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.includes('/server/') || 
       url.pathname.includes('/lib/firebase-admin') ||
       url.pathname.includes('firebase-admin-db') ||
+      url.pathname.includes('firebase-admin-db.js') ||
+      url.pathname.includes('firebase-admin-db.ts') ||
+      url.pathname.includes('/services/firebase-user-service') ||
+      url.pathname.includes('/services/firebase-vehicle-service') ||
+      url.pathname.includes('/services/firebase-conversation-service') ||
       url.pathname.includes('/models/') ||
       url.pathname.includes('/api/main.ts') ||
       url.pathname.includes('/api/main.js')) {
-    // Don't intercept server-side files - let browser handle them naturally
-    // (they should never be requested, but if they are, let the 404 happen normally)
+    // Don't intercept server-side files - return empty response to prevent MIME type errors
+    // This prevents the browser from trying to execute HTML as JavaScript
+    event.respondWith(new Response('', { 
+      status: 404, 
+      statusText: 'Not Found',
+      headers: { 'Content-Type': 'text/plain' }
+    }));
     return;
   }
 

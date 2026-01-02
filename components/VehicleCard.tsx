@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect } from 'react';
 import type { Vehicle } from '../types.js';
 import StarRating from './StarRating.js';
 import { getFirstValidImage } from '../utils/imageUtils.js';
@@ -27,6 +27,12 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   onViewSellerProfile, 
   onQuickView 
 }) => {
+  // Validate onSelect prop on mount
+  useEffect(() => {
+    if (!onSelect) {
+      console.error('❌ VehicleCard: onSelect prop is missing!', vehicle.id);
+    }
+  }, [onSelect, vehicle.id]);
   
   const handleCompareClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -44,11 +50,60 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
     onViewSellerProfile(vehicle.sellerEmail);
   };
 
-  const handleCardClick = () => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🚗 VehicleCard clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
+  const handleCardClick = (e: React.MouseEvent) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:53',message:'handleCardClick called',data:{vehicleId:vehicle.id,vehicleMake:vehicle.make,vehicleModel:vehicle.model,targetTag:((e.target as HTMLElement)?.tagName || 'unknown'),hasOnSelect:!!onSelect,onSelectType:typeof onSelect},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    // Don't trigger if clicking directly on interactive elements
+    const target = e.target as HTMLElement;
+    
+    // If clicking on a button, link, or SVG inside a button, don't navigate
+    if (target.tagName === 'BUTTON' || 
+        target.tagName === 'A' || 
+        target.closest('button') ||
+        target.closest('a')) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:62',message:'handleCardClick early return - interactive element clicked',data:{targetTag:target.tagName,hasClosestButton:!!target.closest('button'),hasClosestA:!!target.closest('a')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      return;
     }
-    onSelect(vehicle);
+    
+    // Log the click for debugging
+    console.log('🚗 VehicleCard clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
+    console.log('🚗 Click target:', target.tagName, target.className);
+    console.log('🚗 onSelect function exists:', typeof onSelect === 'function');
+    
+    // Validate onSelect exists
+    if (!onSelect) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:71',message:'onSelect prop missing',data:{vehicleId:vehicle.id,hasOnSelect:false,onSelectType:typeof onSelect},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      console.error('❌ VehicleCard: onSelect prop is not defined!', {
+        vehicleId: vehicle.id,
+        hasOnSelect: !!onSelect,
+        onSelectType: typeof onSelect
+      });
+      return;
+    }
+    
+    // Call onSelect
+    try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:82',message:'Calling onSelect',data:{vehicleId:vehicle.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      console.log('🚗 Calling onSelect with vehicle:', vehicle.id);
+      onSelect(vehicle);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:84',message:'onSelect called successfully',data:{vehicleId:vehicle.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      console.log('🚗 onSelect called successfully');
+    } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VehicleCard.tsx:86',message:'Error in handleCardClick',data:{vehicleId:vehicle.id,error:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      console.error('❌ Error in VehicleCard handleCardClick:', error);
+    }
   };
 
   const isFeatured = vehicle.isFeatured || vehicle.activeBoosts?.some(boost => 
@@ -61,6 +116,15 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
     <div 
       onClick={handleCardClick}
       className="group cursor-pointer bg-white dark:bg-gray-800 overflow-hidden flex flex-col rounded-2xl border border-gray-100 dark:border-gray-700"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCardClick(e as any);
+        }
+      }}
+      aria-label={`View details for ${vehicle.make} ${vehicle.model}`}
+      data-vehicle-id={vehicle.id}
       style={{
         fontFamily: "'Poppins', sans-serif",
         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -120,6 +184,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
         {/* Action Icons - Top Right (Compare & Favorite) */}
         <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
           <button
+            type="button"
             onClick={handleCompareClick}
             disabled={isCompareDisabled}
             className="p-2 rounded-full transition-colors flex items-center justify-center"
@@ -141,6 +206,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             </svg>
           </button>
           <button
+            type="button"
             onClick={handleWishlistClick}
             className="p-2 rounded-full transition-colors flex items-center justify-center"
             style={{
@@ -206,6 +272,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
           }}
         >
           By: <button 
+            type="button"
             onClick={handleSellerClick}
             className="font-semibold hover:underline focus:outline-none transition-colors cursor-pointer"
             style={{ 

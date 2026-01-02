@@ -24,12 +24,19 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
     setCities(uniqueCities);
   }, [allVehicles]);
 
-  const handleCityClick = (city: string) => {
+  const handleCityClick = (e: React.MouseEvent, city: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     onCitySelect(city);
     setIsOpen(false);
   };
 
-  const handleViewAllClick = () => {
+  const handleViewAllClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔵 CityDropdown: View all cars clicked');
+    }
     onViewAllCars();
     setIsOpen(false);
   };
@@ -62,10 +69,14 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
           <div 
             className="fixed inset-0 z-10" 
             onClick={() => setIsOpen(false)}
+            onMouseDown={(e) => e.preventDefault()} // Prevent backdrop from interfering
           />
           
           {/* Dropdown */}
-          <div className="absolute top-full left-0 mt-2 w-96 bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl shadow-2xl border border-purple-700 z-20 overflow-hidden">
+          <div 
+            className="absolute top-full left-0 mt-2 w-96 bg-gradient-to-br from-purple-900 to-purple-800 rounded-xl shadow-2xl border border-purple-700 z-20 overflow-hidden"
+            onClick={(e) => e.stopPropagation()} // Prevent clicks inside dropdown from closing it
+          >
             <div className="p-4">
               <div className="grid grid-cols-2 gap-4">
                 {/* Left Column */}
@@ -73,6 +84,7 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
                   <button
                     onClick={handleViewAllClick}
                     className="w-full text-left px-3 py-2 text-white font-semibold hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
+                    type="button"
                   >
                     View all cars
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,8 +95,9 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
                   {leftColumnCities.map((city) => (
                     <button
                       key={city}
-                      onClick={() => handleCityClick(city)}
+                      onClick={(e) => handleCityClick(e, city)}
                       className="w-full text-left px-3 py-2 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
+                      type="button"
                     >
                       Used cars in {city}
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -99,8 +112,9 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
                   {rightColumnCities.map((city) => (
                     <button
                       key={city}
-                      onClick={() => handleCityClick(city)}
+                      onClick={(e) => handleCityClick(e, city)}
                       className="w-full text-left px-3 py-2 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
+                      type="button"
                     >
                       Used cars in {city}
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

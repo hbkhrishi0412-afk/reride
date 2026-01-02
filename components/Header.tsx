@@ -157,9 +157,17 @@ const Header: React.FC<HeaderProps> = memo(({
                                     allVehicles={allVehicles}
                                     onCitySelect={(city) => {
                                         // Navigate to used cars with city filter
+                                        if (process.env.NODE_ENV === 'development') {
+                                            console.log('🔵 Header: City selected:', city);
+                                        }
                                         onNavigate(ViewEnum.USED_CARS, { city });
                                     }}
-                                    onViewAllCars={() => onNavigate(ViewEnum.USED_CARS)}
+                                    onViewAllCars={() => {
+                                        if (process.env.NODE_ENV === 'development') {
+                                            console.log('🔵 Header: View all cars clicked');
+                                        }
+                                        onNavigate(ViewEnum.USED_CARS);
+                                    }}
                                 />
                                 <SellerDropdown 
                                     allVehicles={allVehicles}

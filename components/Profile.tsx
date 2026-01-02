@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { User } from '../types.js';
 import PasswordInput from './PasswordInput.js';
+import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetch.js';
 
 interface ProfileProps {
   currentUser: User;
@@ -517,6 +518,27 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
     setIsChangingPassword(true);
     try {
+      // CRITICAL: Proactively refresh token before password update
+      // This prevents "session expired" errors during the update
+      // Password updates are critical operations that should not fail due to token expiration
+      if (!isTokenLikelyValid()) {
+        console.log('🔄 Token appears expired, refreshing before password update...');
+        try {
+          const newToken = await refreshAuthToken();
+          if (!newToken) {
+            setPasswordError('Your session has expired. Please log in again.');
+            setIsChangingPassword(false);
+            return;
+          }
+          console.log('✅ Token refreshed successfully before password update');
+        } catch (refreshError) {
+          console.error('❌ Failed to refresh token before password update:', refreshError);
+          setPasswordError('Your session has expired. Please log in again.');
+          setIsChangingPassword(false);
+          return;
+        }
+      }
+      
       const success = await onUpdatePassword({ 
         current: passwordData.current, 
         new: passwordData.new 

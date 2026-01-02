@@ -27,16 +27,34 @@ export default defineConfig({
       external: (id) => {
         // More performant and specific check for API files
         if (id.includes('node_modules')) return false;
+        
+        // Exclude all API routes
         if (id.startsWith('/api/') || id.includes('/api/')) {
           return id.endsWith('.ts') || id.endsWith('.js');
         }
+        
         // Exclude server-only Firebase Admin files from client bundle
+        // Check for both forward and backslash paths (Windows/Unix compatibility)
         if (id.includes('/lib/firebase-admin') || id.includes('\\lib\\firebase-admin') ||
             id.includes('/server/firebase-admin') || id.includes('\\server\\firebase-admin') ||
             id.includes('/server/') || id.includes('\\server\\') ||
-            id.includes('firebase-admin-db')) {
+            id.includes('firebase-admin-db') ||
+            id.includes('firebase-admin-db.js') ||
+            id.includes('firebase-admin-db.ts')) {
           return true;
         }
+        
+        // Exclude server-side service files that import firebase-admin-db
+        // These should only be used in API routes, not in client code
+        if (id.includes('/services/firebase-user-service') ||
+            id.includes('/services/firebase-vehicle-service') ||
+            id.includes('/services/firebase-conversation-service') ||
+            id.includes('\\services\\firebase-user-service') ||
+            id.includes('\\services\\firebase-vehicle-service') ||
+            id.includes('\\services\\firebase-conversation-service')) {
+          return true;
+        }
+        
         // Exclude models directory from client bundle (server-side only)
         if (id.includes('/models/') && (id.endsWith('.ts') || id.endsWith('.js'))) {
           return true;
@@ -235,7 +253,8 @@ export default defineConfig({
       protocol: 'ws',
       host: 'localhost',
       clientPort: 5173
-      // Note: reconnect is handled automatically by Vite, no need to specify
+      // Note: reconnect is handled automatically by Vite
+      // WebSocket errors in console are harmless - they occur when HMR reconnects
     },
     // Enable file system caching for faster rebuilds
     fs: {

@@ -131,6 +131,15 @@ export const resetRefreshTokenInvalidFlag = () => {
 };
 
 /**
+ * Public function to refresh authentication token
+ * Use this for proactive token refresh before critical operations (e.g., password updates)
+ * @returns Promise<string | null> - New access token or null if refresh failed
+ */
+export const refreshAuthToken = async (): Promise<string | null> => {
+  return refreshToken();
+};
+
+/**
  * Clear all authentication tokens
  * @param resetInvalidFlag - If true, reset the refreshTokenKnownInvalid flag (default: false)
  *                            Set to true when user logs in successfully, false when clearing due to invalid token
@@ -155,8 +164,9 @@ const clearAuthTokens = (resetInvalidFlag: boolean = false) => {
 /**
  * Check if current access token is valid (not expired)
  * This is a simple check - actual validation happens on server
+ * @returns true if token appears valid, false otherwise
  */
-const isTokenLikelyValid = (): boolean => {
+export const isTokenLikelyValid = (): boolean => {
   try {
     const token = localStorage.getItem('reRideAccessToken');
     if (!token) return false;
