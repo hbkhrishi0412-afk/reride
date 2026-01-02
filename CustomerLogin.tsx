@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { View, User } from './types';
 import { login, register } from './services/userService';
 import { signInWithGoogle, syncWithBackend } from './services/authService';
@@ -12,26 +12,50 @@ interface CustomerLoginProps {
   onForgotPassword: () => void;
 }
 
+// Cache localStorage reads to avoid repeated access
+let rememberedEmailCache: string | null = null;
+const getRememberedEmail = (): string | null => {
+  if (rememberedEmailCache === null && typeof window !== 'undefined') {
+    try {
+      rememberedEmailCache = localStorage.getItem('rememberedCustomerEmail');
+    } catch {
+      rememberedEmailCache = '';
+    }
+  }
+  return rememberedEmailCache;
+};
+
 const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNavigate, onForgotPassword }) => {
   const [mode, setMode] = useState<'login' | 'register' | 'otp'>('login');
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => getRememberedEmail() || '');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => !!getRememberedEmail());
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    const rememberedEmail = localStorage.getItem('rememberedCustomerEmail');
-    if (rememberedEmail) {
-      setEmail(rememberedEmail);
-      setRememberMe(true);
+  // Memoize form validation
+  const isFormValid = useMemo(() => {
+    if (mode === 'login') {
+      return !!(email.trim() && password.trim());
+    } else if (mode === 'register') {
+      return !!(name.trim() && mobile.trim() && email.trim() && password.trim());
     }
-  }, []);
+    return false;
+  }, [mode, name, mobile, email, password]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Early validation
+    if (!isFormValid) {
+      setError(mode === 'login' 
+        ? 'Please enter both email and password.' 
+        : 'Please fill in all registration fields.');
+      return;
+    }
+    
     setError('');
     setIsLoading(true);
 
@@ -39,20 +63,35 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
         let result: { success: boolean, user?: User, reason?: string };
 
         if (mode === 'login') {
-            if (!email || !password) throw new Error('Please enter both email and password.');
-            
-            // SECURITY: Removed hardcoded credentials - all authentication must go through proper API
-            
-            result = await login({ email, password, role: 'customer' });
+            result = await login({ email: email.trim(), password, role: 'customer' });
         } else {
-            if (!name || !mobile || !email || !password) throw new Error('Please fill in all registration fields.');
-            result = await register({ name, email, password, mobile, role: 'customer' });
+            result = await register({ 
+              name: name.trim(), 
+              email: email.trim(), 
+              password, 
+              mobile: mobile.trim(), 
+              role: 'customer' 
+            });
         }
 
         if (result.success && result.user) {
             if (mode === 'login') {
-                if (rememberMe) localStorage.setItem('rememberedCustomerEmail', email);
-                else localStorage.removeItem('rememberedCustomerEmail');
+                // Batch localStorage operations
+                if (rememberMe) {
+                  rememberedEmailCache = email.trim();
+                  try {
+                    localStorage.setItem('rememberedCustomerEmail', email.trim());
+                  } catch {
+                    // Ignore localStorage errors
+                  }
+                } else {
+                  rememberedEmailCache = null;
+                  try {
+                    localStorage.removeItem('rememberedCustomerEmail');
+                  } catch {
+                    // Ignore localStorage errors
+                  }
+                }
                 onLogin(result.user);
             } else {
                 onRegister(result.user);
@@ -65,9 +104,9 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
     } finally {
         setIsLoading(false);
     }
-  };
+  }, [mode, email, password, name, mobile, rememberMe, isFormValid, onLogin, onRegister]);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = useCallback(async () => {
     setError('');
     setIsLoading(true);
 
@@ -75,7 +114,7 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
       const result = await signInWithGoogle();
       
       if (result.success && result.firebaseUser) {
-        // Sync with backend
+        // Sync with backend - this is already optimized in authService
         const backendResult = await syncWithBackend(result.firebaseUser, 'customer', 'google');
         
         if (backendResult.success && backendResult.user) {
@@ -91,20 +130,20 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [onLogin]);
 
-  const toggleMode = () => {
+  const toggleMode = useCallback(() => {
     setError('');
     setName('');
     setMobile('');
-    if (!localStorage.getItem('rememberedCustomerEmail')) {
+    if (!getRememberedEmail()) {
       setEmail('');
     }
     setPassword('');
     setMode(prev => prev === 'login' ? 'register' : 'login');
-  };
+  }, []);
 
-  const isLogin = mode === 'login';
+  const isLogin = useMemo(() => mode === 'login', [mode]);
   const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-spinny-text-dark bg-spinny-white dark:bg-white focus:outline-none focus:ring-spinny-orange focus:border-spinny-orange focus:z-10 sm:text-sm";
 
 
@@ -268,4 +307,4 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
   );
 };
 
-export default CustomerLogin;
+export default memo(CustomerLogin);

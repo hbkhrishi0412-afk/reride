@@ -235,79 +235,101 @@ export const cleanupRecaptcha = () => {
   }
 };
 
+// Request deduplication cache for syncWithBackend
+const syncCache = new Map<string, Promise<{ success: boolean; user?: User; reason?: string }>>();
+const SYNC_CACHE_TTL = 3000; // 3 seconds cache
+
 // Register or login user with backend after Firebase authentication
 export const syncWithBackend = async (
   firebaseUser: any,
   role: 'customer' | 'seller',
   authProvider: 'google' | 'phone'
 ): Promise<{ success: boolean; user?: User; reason?: string }> => {
-  try {
-    const response = await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'oauth-login',
-        firebaseUid: firebaseUser.uid,
-        email: firebaseUser.email,
-        name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-        mobile: firebaseUser.phoneNumber || '',
-        avatarUrl: firebaseUser.photoURL || '',
-        role,
-        authProvider
-      })
-    });
-    
-    // Handle rate limiting (429) - return error without retry
-    if (response.status === 429) {
-      console.warn('⚠️ Rate limited during OAuth sync (429)');
-      return {
-        success: false,
-        reason: 'Too many requests. Please wait a moment and try again.'
-      };
-    }
-    
-    // Handle service unavailable (503) - return error without retry
-    if (response.status === 503) {
-      console.warn('⚠️ Service unavailable during OAuth sync (503)');
-      return {
-        success: false,
-        reason: 'Service temporarily unavailable. Please try again later.'
-      };
-    }
-    
-    // Handle other server errors
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ 
-        error: `HTTP ${response.status}: ${response.statusText}` 
-      }));
-      return {
-        success: false,
-        reason: errorData.reason || errorData.error || 'Failed to sync with backend'
-      };
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error: any) {
-    console.error('Backend sync error:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    // Check if it's a network/server error
-    if (errorMessage.includes('429') || errorMessage.includes('503') || 
-        errorMessage.includes('Too many requests') || 
-        errorMessage.includes('Service temporarily unavailable')) {
-      return {
-        success: false,
-        reason: errorMessage.includes('429') || errorMessage.includes('Too many requests')
-          ? 'Too many requests. Please wait a moment and try again.'
-          : 'Service temporarily unavailable. Please try again later.'
-      };
-    }
-    
-    return {
-      success: false,
-      reason: 'Failed to sync with backend'
-    };
+  // Create cache key
+  const cacheKey = `sync-${firebaseUser.uid}-${role}-${authProvider}`;
+  
+  // Check if there's a pending request
+  if (syncCache.has(cacheKey)) {
+    return syncCache.get(cacheKey)!;
   }
+  
+  // Create the request promise
+  const requestPromise = (async () => {
+    try {
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'oauth-login',
+          firebaseUid: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+          mobile: firebaseUser.phoneNumber || '',
+          avatarUrl: firebaseUser.photoURL || '',
+          role,
+          authProvider
+        })
+      });
+      
+      // Handle rate limiting (429) - return error without retry
+      if (response.status === 429) {
+        return {
+          success: false,
+          reason: 'Too many requests. Please wait a moment and try again.'
+        };
+      }
+      
+      // Handle service unavailable (503) - return error without retry
+      if (response.status === 503) {
+        return {
+          success: false,
+          reason: 'Service temporarily unavailable. Please try again later.'
+        };
+      }
+      
+      // Handle other server errors
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ 
+          error: `HTTP ${response.status}: ${response.statusText}` 
+        }));
+        return {
+          success: false,
+          reason: errorData.reason || errorData.error || 'Failed to sync with backend'
+        };
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Check if it's a network/server error
+      if (errorMessage.includes('429') || errorMessage.includes('503') || 
+          errorMessage.includes('Too many requests') || 
+          errorMessage.includes('Service temporarily unavailable')) {
+        return {
+          success: false,
+          reason: errorMessage.includes('429') || errorMessage.includes('Too many requests')
+            ? 'Too many requests. Please wait a moment and try again.'
+            : 'Service temporarily unavailable. Please try again later.'
+        };
+      }
+      
+      return {
+        success: false,
+        reason: 'Failed to sync with backend'
+      };
+    } finally {
+      // Remove from cache after a delay
+      setTimeout(() => {
+        syncCache.delete(cacheKey);
+      }, SYNC_CACHE_TTL);
+    }
+  })();
+  
+  // Store in cache
+  syncCache.set(cacheKey, requestPromise);
+  
+  return requestPromise;
 };
 

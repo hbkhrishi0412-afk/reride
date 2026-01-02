@@ -191,99 +191,109 @@ const handleResponse = async (response: Response): Promise<any> => {
 }
 
 // --- Local Development (localStorage) Functions ---
+// Cache for users to avoid repeated localStorage reads
+let usersCache: User[] | null = null;
+let usersCacheTimestamp = 0;
+const USERS_CACHE_TTL = 5000; // 5 seconds cache
 
 export const getUsersLocal = async (): Promise<User[]> => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
         return FALLBACK_USERS;
     }
+    
+    // Return cached users if still valid
+    const now = Date.now();
+    if (usersCache && (now - usersCacheTimestamp) < USERS_CACHE_TTL) {
+        return usersCache;
+    }
+    
     try {
-        console.log('getUsersLocal: Starting...');
         let usersJson = localStorage.getItem('reRideUsers');
         if (!usersJson || usersJson === '[]' || usersJson === 'null') {
-            console.log('getUsersLocal: No cached data or empty array, loading fallback data...');
             // Use FALLBACK_USERS directly instead of trying to import MOCK_USERS
-            // MOCK_USERS might be empty in constants/index.ts
             const usersToStore = FALLBACK_USERS;
-            localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
-            usersJson = JSON.stringify(usersToStore);
-            console.log(`✅ Populated local storage with ${usersToStore.length} users from FALLBACK_USERS`);
-        } else {
-            console.log('getUsersLocal: Using cached data');
-            // Validate that we have users with proper structure
-            const parsedUsers = JSON.parse(usersJson);
-            if (!Array.isArray(parsedUsers) || parsedUsers.length === 0) {
-                console.warn('getUsersLocal: Cached data is invalid, using FALLBACK_USERS');
-                const usersToStore = FALLBACK_USERS;
+            try {
                 localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
-                usersJson = JSON.stringify(usersToStore);
-            } else {
-                // Ensure critical test users (seller, customer, admin) exist with correct plain text passwords
-                // This fixes cases where passwords might have been incorrectly hashed or corrupted
-                const criticalUsers = FALLBACK_USERS.filter(fu => 
-                    ['seller@test.com', 'customer@test.com', 'admin@test.com'].includes(fu.email.toLowerCase())
-                );
+            } catch {
+                // Ignore localStorage errors
+            }
+            usersCache = usersToStore;
+            usersCacheTimestamp = now;
+            return usersToStore;
+        }
+        
+        // Validate that we have users with proper structure
+        const parsedUsers = JSON.parse(usersJson);
+        if (!Array.isArray(parsedUsers) || parsedUsers.length === 0) {
+            const usersToStore = FALLBACK_USERS;
+            try {
+                localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
+            } catch {
+                // Ignore localStorage errors
+            }
+            usersCache = usersToStore;
+            usersCacheTimestamp = now;
+            return usersToStore;
+        }
+        
+        // Ensure critical test users exist with correct plain text passwords
+        const criticalUsers = FALLBACK_USERS.filter(fu => 
+            ['seller@test.com', 'customer@test.com', 'admin@test.com'].includes(fu.email.toLowerCase())
+        );
+        
+        let needsUpdate = false;
+        const updatedUsers = parsedUsers.map((u: User) => {
+            const criticalUser = criticalUsers.find(cu => cu.email.toLowerCase() === (u.email || '').toLowerCase());
+            if (criticalUser) {
+                const storedPassword = (u.password || '').trim();
+                const expectedPassword = criticalUser.password.trim();
                 
-                let needsUpdate = false;
-                const updatedUsers = parsedUsers.map((u: User) => {
-                    const criticalUser = criticalUsers.find(cu => cu.email.toLowerCase() === (u.email || '').toLowerCase());
-                    if (criticalUser) {
-                        // Fix corrupted or incorrectly stored passwords
-                        const storedPassword = (u.password || '').trim();
-                        const expectedPassword = criticalUser.password.trim();
-                        
-                        // Check if password needs to be fixed:
-                        // 1. Password is hashed (starts with $2) - should be plain text in development
-                        // 2. Password is empty or missing
-                        // 3. Password doesn't match expected plain text value
-                        // 4. Password is corrupted (contains invalid characters or wrong length)
-                        const isHashed = storedPassword.startsWith('$2');
-                        const isEmpty = !storedPassword || storedPassword.length === 0;
-                        const isMismatched = storedPassword !== expectedPassword;
-                        const isCorrupted = storedPassword.length > 100 || storedPassword.includes('\n') || storedPassword.includes('\r');
-                        
-                        if (isHashed || isEmpty || isMismatched || isCorrupted) {
-                            const reason = isHashed ? 'hashed' : isEmpty ? 'empty' : isCorrupted ? 'corrupted' : 'mismatched';
-                            console.warn(`⚠️ getUsersLocal: Fixing ${reason} password for ${u.email} - resetting to plain text`);
-                            needsUpdate = true;
-                            // Reset to fallback user data to ensure all fields are correct
-                            return { ...criticalUser, ...u, password: expectedPassword };
-                        }
-                    }
-                    return u;
-                });
+                const isHashed = storedPassword.startsWith('$2');
+                const isEmpty = !storedPassword || storedPassword.length === 0;
+                const isMismatched = storedPassword !== expectedPassword;
+                const isCorrupted = storedPassword.length > 100 || storedPassword.includes('\n') || storedPassword.includes('\r');
                 
-                // Add any missing critical users
-                criticalUsers.forEach(criticalUser => {
-                    const exists = updatedUsers.some((u: User) => 
-                        (u.email || '').toLowerCase() === criticalUser.email.toLowerCase()
-                    );
-                    if (!exists) {
-                        console.warn(`⚠️ getUsersLocal: Missing critical user ${criticalUser.email} - adding from fallback`);
-                        needsUpdate = true;
-                        updatedUsers.push(criticalUser);
-                    }
-                });
-                
-                if (needsUpdate) {
-                    console.log('✅ getUsersLocal: Fixed corrupted user data in localStorage');
-                    localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
-                    usersJson = JSON.stringify(updatedUsers);
-                } else {
-                    usersJson = JSON.stringify(updatedUsers);
+                if (isHashed || isEmpty || isMismatched || isCorrupted) {
+                    needsUpdate = true;
+                    return { ...criticalUser, ...u, password: expectedPassword };
                 }
             }
+            return u;
+        });
+        
+        // Add any missing critical users
+        criticalUsers.forEach(criticalUser => {
+            const exists = updatedUsers.some((u: User) => 
+                (u.email || '').toLowerCase() === criticalUser.email.toLowerCase()
+            );
+            if (!exists) {
+                needsUpdate = true;
+                updatedUsers.push(criticalUser);
+            }
+        });
+        
+        if (needsUpdate) {
+            try {
+                localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
+            } catch {
+                // Ignore localStorage errors
+            }
         }
-        const users = JSON.parse(usersJson);
-        console.log('getUsersLocal: Successfully loaded', users.length, 'users');
-        // Log available emails for debugging
-        console.log('getUsersLocal: Available user emails:', users.map((u: User) => u.email));
-        return users;
+        
+        usersCache = updatedUsers;
+        usersCacheTimestamp = now;
+        return updatedUsers;
     } catch (error) {
         console.error('getUsersLocal: Error loading users:', error);
-        // Return FALLBACK_USERS as fallback
-        console.log('getUsersLocal: Returning FALLBACK_USERS as fallback');
-        return FALLBACK_USERS;
+        // Return cached or fallback
+        return usersCache || FALLBACK_USERS;
     }
+};
+
+// Invalidate cache when users are updated
+const invalidateUsersCache = () => {
+    usersCache = null;
+    usersCacheTimestamp = 0;
 };
 
 const updateUserLocal = async (userData: Partial<User> & { email: string }): Promise<User> => {
@@ -311,7 +321,12 @@ const updateUserLocal = async (userData: Partial<User> & { email: string }): Pro
         }
         return u;
     });
-    localStorage.setItem('reRideUsers', JSON.stringify(users));
+    try {
+        localStorage.setItem('reRideUsers', JSON.stringify(users));
+    } catch {
+        // Ignore localStorage errors
+    }
+    invalidateUsersCache();
     if (!updatedUser) throw new Error("User not found to update.");
     return updatedUser;
 };
@@ -319,7 +334,12 @@ const updateUserLocal = async (userData: Partial<User> & { email: string }): Pro
 const deleteUserLocal = async (email: string): Promise<{ success: boolean, email: string }> => {
     let users = await getUsersLocal();
     users = users.filter(u => u.email !== email);
-    localStorage.setItem('reRideUsers', JSON.stringify(users));
+    try {
+        localStorage.setItem('reRideUsers', JSON.stringify(users));
+    } catch {
+        // Ignore localStorage errors
+    }
+    invalidateUsersCache();
     return { success: true, email };
 };
 
@@ -332,11 +352,10 @@ const loginLocal = async (
     const normalizedEmail = (email || '').trim().toLowerCase();
     const normalizedPassword = (password || '').trim();
     
-    console.log('🔐 loginLocal: Attempting login', { 
-        email: normalizedEmail, 
-        passwordLength: normalizedPassword.length,
-        role 
-    });
+    // Early validation
+    if (!normalizedEmail || !normalizedPassword) {
+        return { success: false, reason: 'Invalid credentials.' };
+    }
     
     const users = await getUsersLocal();
     
@@ -344,11 +363,8 @@ const loginLocal = async (
     const user = users.find(u => (u.email || '').trim().toLowerCase() === normalizedEmail);
     
     if (!user) {
-        console.log('❌ loginLocal: User not found', { email: normalizedEmail, availableEmails: users.map(u => u.email) });
         return { success: false, reason: 'Invalid credentials.' };
     }
-    
-    console.log('✅ loginLocal: User found', { email: user.email, hasPassword: !!user.password });
     
     // SECURITY: For local storage in development, we use plain text comparison
     // localStorage is for development/testing only - in production, use API with proper password hashing
@@ -358,7 +374,6 @@ const loginLocal = async (
     
     // In development mode with localStorage, passwords should be stored as plain text
     // If password looks like a bcrypt hash, it might have been incorrectly stored
-    // We'll try bcrypt comparison first, but fall back to plain text if it fails
     if (storedPassword.startsWith('$2')) {
         // Password appears to be hashed - try bcrypt comparison if available
         try {
@@ -366,41 +381,27 @@ const loginLocal = async (
             const bcryptModule = await import('bcryptjs');
             const bcrypt = bcryptModule.default || bcryptModule;
             isPasswordValid = await bcrypt.compare(normalizedPassword, storedPassword);
-            console.log('🔍 loginLocal: Bcrypt comparison result', { isValid: isPasswordValid });
         } catch (error) {
             // Bcrypt not available or comparison failed - this is expected in browser
-            // For development localStorage, we should use plain text
-            console.warn('⚠️ loginLocal: Bcrypt unavailable in browser - this is normal for localStorage mode');
             // Cannot compare hashed password without bcrypt, so fail
             isPasswordValid = false;
         }
     } else {
         // Plain text password - direct comparison (development mode only)
         isPasswordValid = storedPassword === normalizedPassword;
-        console.log('🔍 loginLocal: Plain text comparison', { 
-            storedPasswordLength: storedPassword.length,
-            inputPasswordLength: normalizedPassword.length,
-            storedPassword: storedPassword.substring(0, 3) + '***', // Only show first 3 chars for security
-            match: isPasswordValid 
-        });
     }
     
     if (!isPasswordValid) {
-        console.log('❌ loginLocal: Password mismatch');
         return { success: false, reason: 'Invalid credentials.' };
     }
     
     if (!skipRoleCheck && role && user.role !== role) {
-        console.log('❌ loginLocal: Role mismatch', { expected: role, actual: user.role });
         return { success: false, reason: `User is not a registered ${role}.` };
     }
     
     if (user.status === 'inactive') {
-        console.log('❌ loginLocal: Account inactive');
         return { success: false, reason: 'Your account has been deactivated.' };
     }
-    
-    console.log('✅ loginLocal: Login successful', { email: user.email, role: user.role });
     
     // SECURITY: Remove password from response
     const { password: _, ...userWithoutPassword } = user;
@@ -420,7 +421,12 @@ const registerLocal = async (credentials: any): Promise<{ success: boolean, user
         subscriptionPlan: 'free', featuredCredits: 0, usedCertifications: 0,
     };
     users.push(newUser);
-    localStorage.setItem('reRideUsers', JSON.stringify(users));
+    try {
+        localStorage.setItem('reRideUsers', JSON.stringify(users));
+    } catch {
+        // Ignore localStorage errors
+    }
+    invalidateUsersCache();
     const { password: _, ...userWithoutPassword } = newUser;
     return { success: true, user: userWithoutPassword };
 };

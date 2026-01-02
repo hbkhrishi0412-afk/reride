@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { sendOTP, verifyOTP, syncWithBackend, initializeRecaptcha, cleanupRecaptcha } from '../services/authService';
 import { ConfirmationResult } from 'firebase/auth';
 import { User } from '../types';
@@ -20,31 +20,52 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
   const [otpSent, setOtpSent] = useState(false);
 
   useEffect(() => {
-    // Initialize reCAPTCHA when component mounts
-    initializeRecaptcha();
+    // Initialize reCAPTCHA when component mounts - lazy load
+    let mounted = true;
+    const initRecaptcha = async () => {
+      try {
+        if (mounted) {
+          initializeRecaptcha();
+        }
+      } catch (err) {
+        // Silently handle initialization errors
+      }
+    };
+    
+    // Delay initialization slightly to not block render
+    const timeoutId = setTimeout(initRecaptcha, 100);
     
     return () => {
-      // Cleanup on unmount
+      mounted = false;
+      clearTimeout(timeoutId);
       cleanupRecaptcha();
     };
   }, []);
 
-  const handleSendOTP = async (e: React.FormEvent) => {
+  // Memoize phone validation
+  const isValidPhone = useMemo(() => {
+    if (!phoneNumber) return false;
+    const phoneRegex = /^[6-9]\d{9}$/;
+    return phoneRegex.test(phoneNumber.replace(/^(\+91)?/, ''));
+  }, [phoneNumber]);
+
+  const handleSendOTP = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    if (!phoneNumber) {
+      setError('Please enter your phone number');
+      return;
+    }
+
+    if (!isValidPhone) {
+      setError('Please enter a valid 10-digit Indian mobile number');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      if (!phoneNumber) {
-        throw new Error('Please enter your phone number');
-      }
-
-      // Validate Indian phone number format
-      const phoneRegex = /^[6-9]\d{9}$/;
-      if (!phoneRegex.test(phoneNumber.replace(/^(\+91)?/, ''))) {
-        throw new Error('Please enter a valid 10-digit Indian mobile number');
-      }
-
       const result = await sendOTP(phoneNumber);
       
       if (result.success && result.confirmationResult) {
@@ -58,22 +79,25 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [phoneNumber, isValidPhone]);
 
-  const handleVerifyOTP = async (e: React.FormEvent) => {
+  const handleVerifyOTP = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    if (!confirmationResult) {
+      setError('Please request OTP first');
+      return;
+    }
+
+    if (!otp || otp.length !== 6) {
+      setError('Please enter the 6-digit OTP');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      if (!confirmationResult) {
-        throw new Error('Please request OTP first');
-      }
-
-      if (!otp || otp.length !== 6) {
-        throw new Error('Please enter the 6-digit OTP');
-      }
-
       const result = await verifyOTP(confirmationResult, otp);
       
       if (result.success && result.firebaseUser) {
@@ -93,14 +117,18 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [confirmationResult, otp, role, onLogin]);
 
-  const handleResendOTP = async () => {
+  const handleResendOTP = useCallback(async () => {
     setOtp('');
     setOtpSent(false);
     setConfirmationResult(null);
-    await handleSendOTP(new Event('submit') as any);
-  };
+    // Trigger send OTP after state updates
+    setTimeout(() => {
+      const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+      handleSendOTP(fakeEvent);
+    }, 0);
+  }, [handleSendOTP]);
 
   // Mobile App UI
   if (isMobileApp) {
@@ -331,5 +359,5 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
   );
 };
 
-export default OTPLogin;
+export default memo(OTPLogin);
 
