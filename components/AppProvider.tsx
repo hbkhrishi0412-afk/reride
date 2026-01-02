@@ -122,7 +122,7 @@ interface AppContextType {
   sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   markAsRead: (conversationId: string) => void;
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
-  flagContent: (type: 'vehicle' | 'conversation', id: number | string) => void;
+  flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => void;
   updateUser: (email: string, updates: Partial<User>) => Promise<void>;
   deleteUser: (email: string) => void;
   updateVehicle: (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => Promise<void>;
@@ -602,6 +602,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     } else if (user.role === 'seller') {
       console.log('🔄 Setting seller dashboard view after login');
       setCurrentView(View.SELLER_DASHBOARD);
+    } else if (user.role === 'customer') {
+      // Customers go to HOME (they can access BUYER_DASHBOARD from profile/navigation)
+      setCurrentView(View.HOME);
     } else {
       setCurrentView(View.HOME);
     }
@@ -653,6 +656,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     } else if (user.role === 'seller') {
       console.log('🔄 Setting seller dashboard view after registration');
       setCurrentView(View.SELLER_DASHBOARD);
+    } else if (user.role === 'customer') {
+      // Customers go to HOME (they can access BUYER_DASHBOARD from profile/navigation)
+      setCurrentView(View.HOME);
     } else {
       setCurrentView(View.HOME);
     }
@@ -725,8 +731,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     }
     
     // Prevent infinite redirect loops by checking if we're already on the target view
-    if (view === currentView && !params?.city) {
-      return; // Already on this view, no need to navigate
+    // EXCEPTION: Allow navigation to DETAIL view even if already on DETAIL (different vehicle)
+    if (view === currentView && !params?.city && view !== View.DETAIL) {
+      return; // Already on this view, no need to navigate (except for DETAIL view)
     }
 
     // Update previous view before changing current view
@@ -746,6 +753,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       setPublicSellerProfile(null); 
     }
     setInitialSearchQuery('');
+    
+    // CRITICAL FIX: When navigating to DETAIL, ensure vehicle is available
+    // Check sessionStorage if state hasn't updated yet (React state updates are async)
+    if (view === View.DETAIL && !selectedVehicle) {
+      try {
+        const storedVehicle = sessionStorage.getItem('selectedVehicle');
+        if (storedVehicle) {
+          const vehicleToRestore = JSON.parse(storedVehicle);
+          setSelectedVehicle(vehicleToRestore);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔧 Restored vehicle from sessionStorage during navigation:', vehicleToRestore?.id);
+          }
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('🔧 Failed to restore vehicle from sessionStorage during navigation:', error);
+        }
+      }
+    }
     
     if (!preserveSelectedVehicle) setSelectedVehicle(null);
     
@@ -826,8 +852,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       };
       
       // Store selectedVehicle ID for DETAIL view so we can restore it
-      if (view === View.DETAIL && selectedVehicle) {
-        historyState.selectedVehicleId = selectedVehicle.id;
+      // Check both state and sessionStorage (in case state hasn't updated yet)
+      let vehicleForDetail = selectedVehicle;
+      if (view === View.DETAIL && !vehicleForDetail) {
+        try {
+          const storedVehicle = sessionStorage.getItem('selectedVehicle');
+          if (storedVehicle) {
+            vehicleForDetail = JSON.parse(storedVehicle);
+          }
+        } catch (error) {
+          // Ignore sessionStorage errors
+        }
+      }
+      if (view === View.DETAIL && vehicleForDetail) {
+        historyState.selectedVehicleId = vehicleForDetail.id;
       }
       
       // CRITICAL FIX: Always use pushState to create history entries for back/forward navigation
@@ -1827,6 +1865,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             usedCertifications: userData.usedCertifications || 0,
           };
           
+          // Save to Firebase Realtime Database
+          try {
+            const { firebaseUserService } = await import('../services/firebase-user-service');
+            // Remove password before saving to Firebase (security)
+            const { password: _, ...userWithoutPassword } = createdUser;
+            await firebaseUserService.create(userWithoutPassword);
+            console.log('✅ User saved to Firebase Realtime Database:', createdUser.email);
+          } catch (firebaseError) {
+            // Log error but don't fail the entire operation if Firebase save fails
+            console.warn('⚠️ Failed to save user to Firebase Realtime Database:', firebaseError);
+            // Still show success toast since MongoDB save succeeded
+          }
+          
           setUsers(prev => [...prev, createdUser]);
           
           // Save to localStorage after MongoDB success
@@ -2548,6 +2599,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           // Save to MongoDB with sync queue fallback
           const updatedConversation = updated.find(conv => conv.id === conversationId);
           if (updatedConversation) {
+            // CRITICAL FIX: Update activeChat with the updated conversation to ensure UI updates immediately
+            // This ensures the ChatWidget receives the updated conversation with the new message
+            if (activeChat?.id === conversationId) {
+              setActiveChat(updatedConversation);
+            }
+            
             // Save entire conversation to MongoDB (with queue fallback)
             (async () => {
               const result = await saveConversationWithSync(updatedConversation);
@@ -2574,22 +2631,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           }
           return updated;
         });
-
-        // Update activeChat separately to avoid race conditions
-        if (activeChat?.id === conversationId) {
-          setActiveChat(prev => {
-            if (prev?.id === conversationId) {
-              return {
-                ...prev,
-                messages: [...prev.messages, newMessage],
-                lastMessageAt: newMessage.timestamp,
-                isReadBySeller: currentUser.role === 'seller' ? true : prev.isReadBySeller,
-                isReadByCustomer: currentUser.role === 'customer' ? true : prev.isReadByCustomer
-              };
-            }
-            return prev;
-          });
-        }
 
         // Create notification for the recipient using the conversation we found
         const recipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
@@ -2715,22 +2756,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           return updated;
         });
 
-        // Update activeChat separately to avoid race conditions
-        if (activeChat?.id === conversationId) {
-          setActiveChat(prev => {
-            if (prev?.id === conversationId) {
-              return {
-                ...prev,
-                messages: [...prev.messages, newMessage],
-                lastMessageAt: newMessage.timestamp,
-                isReadBySeller: currentUser.role === 'seller' ? true : prev.isReadBySeller,
-                isReadByCustomer: currentUser.role === 'customer' ? true : prev.isReadByCustomer
-              };
-            }
-            return prev;
-          });
-        }
-
         // Create notification for the recipient using the conversation we found
         const recipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
         const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
@@ -2794,17 +2819,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     toggleTyping: (conversationId: string, isTyping: boolean) => {
       setTypingStatus(isTyping ? { conversationId, userRole: (currentUser?.role === 'seller' ? 'seller' : 'customer') as 'seller' | 'customer' } : null);
     },
-    flagContent: (type: 'vehicle' | 'conversation', id: number | string) => {
+    flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => {
       if (type === 'vehicle') {
         setVehicles(prev => Array.isArray(prev) ? prev.map(vehicle => 
-          vehicle && vehicle.id === id ? { ...vehicle, isFlagged: true } : vehicle
+          vehicle && vehicle.id === id ? { ...vehicle, isFlagged: true, flagReason: reason } : vehicle
         ) : []);
       } else {
         setConversations(prev => Array.isArray(prev) ? prev.map(conv => 
-          conv && conv.id === id ? { ...conv, isFlagged: true } : conv
+          conv && conv.id === id ? { ...conv, isFlagged: true, flagReason: reason } : conv
         ) : []);
       }
-      addToast(`Content flagged for review`, 'warning');
+      addToast(`Content flagged for review${reason ? ': ' + reason : ''}`, 'warning');
     },
     updateUser: async (email: string, updates: Partial<User>) => {
       try {
@@ -3140,9 +3165,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       }
     },
     selectVehicle: (vehicle: Vehicle) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🚗 selectVehicle called for:', vehicle.id, vehicle.make, vehicle.model);
+      }
+      
+      // Validate vehicle object
+      if (!vehicle || !vehicle.id) {
+        console.error('❌ selectVehicle called with invalid vehicle:', vehicle);
+        return;
+      }
+      
+      // Store vehicle in sessionStorage FIRST for persistence and recovery
+      try {
+        sessionStorage.setItem('selectedVehicle', JSON.stringify(vehicle));
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🚗 Vehicle stored in sessionStorage:', vehicle.id, vehicle.make, vehicle.model);
+        }
+      } catch (error) {
+        console.error('❌ Failed to store vehicle in sessionStorage:', error);
+        // Continue anyway - state update should still work
+      }
+      
+      // CRITICAL FIX: Set the selected vehicle state BEFORE navigating
+      // This ensures the vehicle is available when the DETAIL view renders
       setSelectedVehicle(vehicle);
-      // Navigate to DETAIL view when a vehicle is selected
-      setCurrentView(View.DETAIL);
+      
+      // Use navigate function to properly navigate to DETAIL view
+      // The navigate function will also check sessionStorage as a backup
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🚗 Navigating to DETAIL view with vehicle:', vehicle.id);
+      }
+      
+      // Ensure we navigate to DETAIL view - use View.DETAIL explicitly
+      navigate(View.DETAIL);
     },
     toggleWishlist: (vehicleId: number) => {
       setWishlist(prev => 

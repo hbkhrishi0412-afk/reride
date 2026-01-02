@@ -657,7 +657,27 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.DETAIL:
-        if (!selectedVehicle) {
+        // Enhanced recovery: Check both state and sessionStorage
+        let vehicleToDisplay = selectedVehicle;
+        if (!vehicleToDisplay) {
+          try {
+            const storedVehicle = sessionStorage.getItem('selectedVehicle');
+            if (storedVehicle) {
+              vehicleToDisplay = JSON.parse(storedVehicle);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('🔧 App.tsx: Recovered vehicle from sessionStorage for rendering:', vehicleToDisplay?.id);
+              }
+              // Update state for future renders
+              setSelectedVehicle(vehicleToDisplay);
+            }
+          } catch (error) {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('🔧 App.tsx: Failed to recover vehicle from sessionStorage:', error);
+            }
+          }
+        }
+        
+        if (!vehicleToDisplay) {
           return (
             <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
               <div className="text-center">
@@ -678,7 +698,7 @@ const AppContent: React.FC = React.memo(() => {
         if (isMobileApp) {
           return (
             <MobileVehicleDetail
-              vehicle={selectedVehicle}
+              vehicle={vehicleToDisplay}
               onBack={() => goBack(ViewEnum.USED_CARS)}
               comparisonList={comparisonList}
               onToggleCompare={toggleCompare}
@@ -747,7 +767,7 @@ const AppContent: React.FC = React.memo(() => {
         
         return (
           <VehicleDetail
-            vehicle={selectedVehicle}
+            vehicle={vehicleToDisplay}
             onBack={() => goBack(ViewEnum.USED_CARS)}
             comparisonList={comparisonList}
             onToggleCompare={toggleCompare}
@@ -2653,8 +2673,13 @@ const AppContent: React.FC = React.memo(() => {
                   }
                 })()}
                 onClose={() => setActiveChat(null)}
-                onSendMessage={(messageText, _type, _payload) => {
-                  sendMessage(activeChat.id, messageText);
+                onSendMessage={(messageText, type, payload) => {
+                  // Use sendMessageWithType if type or payload is provided (for offers, etc.)
+                  if (type || payload) {
+                    sendMessageWithType(activeChat.id, messageText, type, payload);
+                  } else {
+                    sendMessage(activeChat.id, messageText);
+                  }
                 }}
                 typingStatus={typingStatus}
                 onUserTyping={(conversationId, _userRole) => {
@@ -2663,8 +2688,8 @@ const AppContent: React.FC = React.memo(() => {
                 onMarkMessagesAsRead={(conversationId, _readerRole) => {
                   markAsRead(conversationId);
                 }}
-                onFlagContent={(type, id, _reason) => {
-                  flagContent(type, id);
+                onFlagContent={(type, id, reason) => {
+                  flagContent(type, id, reason);
                 }}
                 onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                   if (process.env.NODE_ENV === 'development') {

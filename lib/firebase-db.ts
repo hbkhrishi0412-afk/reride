@@ -21,34 +21,31 @@ function getFirebaseApp(): FirebaseApp {
         // Initialize for server-side use
         // CRITICAL: For server-side (API routes, serverless), prioritize FIREBASE_* (without VITE_ prefix)
         // VITE_ prefixed variables are only available in client-side builds and may not be present in serverless environments
-        // Fallback to VITE_FIREBASE_* only for backward compatibility in client-side code
+        // On client-side, MUST use direct import.meta.env access (same as firebase.ts) for Vite to embed variables
         const isServerSide = typeof window === 'undefined';
         
-        // On client-side, use import.meta.env (Vite's way), on server-side use process.env
-        const clientEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
-        const firebaseConfig = {
-          // Prioritize FIREBASE_* for server-side, VITE_FIREBASE_* for client-side
-          apiKey: isServerSide 
-            ? (process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || '')
-            : (clientEnv?.VITE_FIREBASE_API_KEY || process.env?.VITE_FIREBASE_API_KEY || ''),
-          authDomain: isServerSide
-            ? (process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN || '')
-            : (clientEnv?.VITE_FIREBASE_AUTH_DOMAIN || process.env?.VITE_FIREBASE_AUTH_DOMAIN || ''),
-          projectId: isServerSide
-            ? (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '')
-            : (clientEnv?.VITE_FIREBASE_PROJECT_ID || process.env?.VITE_FIREBASE_PROJECT_ID || ''),
-          storageBucket: isServerSide
-            ? (process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '')
-            : (clientEnv?.VITE_FIREBASE_STORAGE_BUCKET || process.env?.VITE_FIREBASE_STORAGE_BUCKET || ''),
-          messagingSenderId: isServerSide
-            ? (process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '')
-            : (clientEnv?.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env?.VITE_FIREBASE_MESSAGING_SENDER_ID || ''),
-          appId: isServerSide
-            ? (process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID || '')
-            : (clientEnv?.VITE_FIREBASE_APP_ID || process.env?.VITE_FIREBASE_APP_ID || ''),
-          databaseURL: isServerSide
-            ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || '')
-            : (clientEnv?.VITE_FIREBASE_DATABASE_URL || process.env?.VITE_FIREBASE_DATABASE_URL || ''),
+        // CRITICAL FIX: On client-side, use DIRECT static access to import.meta.env (same as firebase.ts)
+        // This is required for Vite to statically analyze and embed the variables at build time
+        // DO NOT use dynamic access or process.env fallback on client-side
+        const firebaseConfig = isServerSide ? {
+          // Server-side: Use process.env (can use both FIREBASE_* and VITE_FIREBASE_*)
+          apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || '',
+          authDomain: process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+          projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '',
+          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+          messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+          appId: process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID || '',
+          databaseURL: process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL || '',
+        } : {
+          // Client-side: MUST use direct static import.meta.env access (Vite requirement)
+          // This matches the approach in lib/firebase.ts
+          apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+          authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+          projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+          storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+          messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+          appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+          databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || '',
         };
 
         // Validate required fields
@@ -84,12 +81,11 @@ export function getFirebaseDatabase(): Database {
       const isServerSide = typeof window === 'undefined';
       
       // Get database URL with proper priority
-      // CRITICAL: On client-side, Vite only exposes variables with VITE_ prefix via import.meta.env
+      // CRITICAL: On client-side, MUST use direct static import.meta.env access (same as firebase.ts)
       // On server-side, we can use process.env for both FIREBASE_* and VITE_FIREBASE_*
-      const clientEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
       const databaseURL = isServerSide
         ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL)
-        : (clientEnv?.VITE_FIREBASE_DATABASE_URL || '');
+        : (import.meta.env.VITE_FIREBASE_DATABASE_URL || '');
       
       // For client-side, also try to get from firebaseConfig if available (from lib/firebase.ts)
       // This is a fallback if VITE_FIREBASE_DATABASE_URL wasn't set but firebaseConfig has it
@@ -431,6 +427,18 @@ export async function findOneByField<T>(
   return { ...data, id } as T & { id: string };
 }
 
+// Helper function to safely get and validate environment variable value
+// Handles edge cases like empty strings, "undefined" strings, etc.
+function getEnvVarValue(env: any, key: string): string | undefined {
+  if (!env) return undefined;
+  const value = env[key];
+  // Check if value exists and is a valid non-empty string
+  if (value && typeof value === 'string' && value.trim() !== '' && value !== 'undefined' && value !== 'null') {
+    return value;
+  }
+  return undefined;
+}
+
 // Helper to check if database is available
 // Uses caching to avoid repeated expensive initialization checks
 export function isDatabaseAvailable(): boolean {
@@ -446,27 +454,45 @@ export function isDatabaseAvailable(): boolean {
     const isServerSide = typeof window === 'undefined';
     // On client-side, use import.meta.env (Vite's way), on server-side use process.env
     const clientEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
+    
+    // CRITICAL FIX: Use helper function to properly validate environment variables
+    // This handles edge cases like empty strings, "undefined" strings, etc.
     const hasApiKey = isServerSide 
-      ? (process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY)
-      : (clientEnv?.VITE_FIREBASE_API_KEY || '');
+      ? (getEnvVarValue(process.env, 'FIREBASE_API_KEY') || getEnvVarValue(process.env, 'VITE_FIREBASE_API_KEY'))
+      : getEnvVarValue(clientEnv, 'VITE_FIREBASE_API_KEY');
     const hasProjectId = isServerSide
-      ? (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID)
-      : (clientEnv?.VITE_FIREBASE_PROJECT_ID || '');
+      ? (getEnvVarValue(process.env, 'FIREBASE_PROJECT_ID') || getEnvVarValue(process.env, 'VITE_FIREBASE_PROJECT_ID'))
+      : getEnvVarValue(clientEnv, 'VITE_FIREBASE_PROJECT_ID');
     // Also check for database URL on client-side (critical for Realtime Database)
     const hasDatabaseURL = isServerSide
-      ? (process.env.FIREBASE_DATABASE_URL || process.env.VITE_FIREBASE_DATABASE_URL)
-      : (clientEnv?.VITE_FIREBASE_DATABASE_URL || '');
+      ? (getEnvVarValue(process.env, 'FIREBASE_DATABASE_URL') || getEnvVarValue(process.env, 'VITE_FIREBASE_DATABASE_URL'))
+      : getEnvVarValue(clientEnv, 'VITE_FIREBASE_DATABASE_URL');
     
     // If basic config is missing, cache and return false without trying to initialize
     if (!hasApiKey || !hasProjectId) {
+      const isProd = !isServerSide && typeof window !== 'undefined' && 
+        (window.location.hostname.includes('vercel.app') || 
+         window.location.hostname.includes('reride.co.in'));
       const isDev = process.env.NODE_ENV === 'development' || 
                     process.env.VERCEL_ENV === 'development' || 
                     process.env.NODE_ENV !== 'production';
-      if (isDev) {
+      
+      // Always log in production to help debug (but don't expose to users in UI)
+      if (isProd || isDev) {
         console.warn('⚠️ Firebase database not available: Missing required environment variables.');
         console.warn('💡 Make sure Firebase environment variables are set correctly.');
-        console.warn('   Server-side: FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.');
-        console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_DATABASE_URL, etc.');
+        if (isServerSide) {
+          console.warn('   Server-side: FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.');
+        } else {
+          console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_DATABASE_URL, etc.');
+          // Debug info for production
+          if (isProd) {
+            console.warn('🔍 Debug: Available env vars:', clientEnv ? Object.keys(clientEnv).filter(k => k.startsWith('VITE_FIREBASE')).join(', ') : 'none');
+            console.warn('🔍 Debug: API Key present:', !!getEnvVarValue(clientEnv, 'VITE_FIREBASE_API_KEY'));
+            console.warn('🔍 Debug: Project ID present:', !!getEnvVarValue(clientEnv, 'VITE_FIREBASE_PROJECT_ID'));
+            console.warn('🔍 Debug: Database URL present:', !!getEnvVarValue(clientEnv, 'VITE_FIREBASE_DATABASE_URL'));
+          }
+        }
       }
       availabilityCache = { available: false, timestamp: now };
       return false;
@@ -481,6 +507,7 @@ export function isDatabaseAvailable(): boolean {
       if (isProd) {
         console.error('❌ VITE_FIREBASE_DATABASE_URL is missing in production. Database will not work.');
         console.error('💡 Set VITE_FIREBASE_DATABASE_URL in Vercel environment variables and redeploy.');
+        console.error('💡 CRITICAL: After setting variables in Vercel, you MUST trigger a new deployment!');
       } else {
         console.warn('⚠️ VITE_FIREBASE_DATABASE_URL is missing. Database may not work correctly.');
         console.warn('💡 Add VITE_FIREBASE_DATABASE_URL to your .env.local file.');
@@ -503,19 +530,26 @@ export function isDatabaseAvailable(): boolean {
   } catch (error) {
     // Never throw - always return false to prevent function crashes
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const isServerSide = typeof window === 'undefined';
     
-    // Always log errors in development/debug environments
+    // Always log errors in development/debug environments and production
+    const isProd = !isServerSide && typeof window !== 'undefined' && 
+      (window.location.hostname.includes('vercel.app') || 
+       window.location.hostname.includes('reride.co.in'));
     const isDev = process.env.NODE_ENV === 'development' || 
                   process.env.VERCEL_ENV === 'development' || 
                   process.env.NODE_ENV !== 'production';
     
-    if (isDev) {
+    if (isDev || isProd) {
       console.warn('⚠️ Firebase database not available:', errorMessage);
       console.warn('💡 Make sure Firebase environment variables are set correctly.');
-      console.warn('   Server-side: FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.');
-      console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, etc.');
+      if (isServerSide) {
+        console.warn('   Server-side: FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_DATABASE_URL, etc.');
+      } else {
+        console.warn('   Client-side: VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, etc.');
+      }
     } else {
-      // In production, log to console but don't expose details to users
+      // In other environments, log to console but don't expose details to users
       console.error('❌ Firebase database unavailable. Check configuration.');
     }
     
