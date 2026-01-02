@@ -80,3 +80,4 @@ SESSION: {
 - Client-side checks are for optimization only - server validation is authoritative
 - JWT_SECRET environment variable must be set in production (currently uses fallback in dev)
 
+

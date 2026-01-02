@@ -69,3 +69,4 @@ ChatSessionSchema.index({ lastMessageAt: -1 });
 
 export const ChatSession = mongoose.models.ChatSession || mongoose.model<IChatSession>('ChatSession', ChatSessionSchema);
 
+

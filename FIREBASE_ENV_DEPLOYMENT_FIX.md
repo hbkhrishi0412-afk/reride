@@ -177,3 +177,4 @@ If issues persist:
 2. Check `FIREBASE_PRODUCTION_DEBUGGING_GUIDE.md` for debugging tips
 3. Review Vercel deployment logs for specific errors
 
+
