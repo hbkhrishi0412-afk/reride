@@ -58,11 +58,21 @@ export const validatePassword = async (password: string, hash: string): Promise<
       return false;
     }
     
-    return await bcrypt.compare(password, hash);
+    // Check if the stored password is a bcrypt hash (starts with $2a$, $2b$, or $2y$)
+    // If it's a hash, use bcrypt.compare(). If it's plain text, do direct comparison.
+    // This provides backward compatibility with existing plain text passwords in the database.
+    if (hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$')) {
+      // It's a bcrypt hash - use bcrypt comparison
+      return await bcrypt.compare(password, hash);
+    } else {
+      // It's plain text - do direct comparison (for backward compatibility)
+      // NOTE: This is only for migration purposes. All new passwords should be hashed.
+      console.warn('⚠️ Password stored as plain text in database. Please update to hashed password for security.');
+      return password.trim() === hash.trim();
+    }
   } catch (error) {
     // Log the error but return false to treat it as an authentication failure
-    // This handles cases where the hash is invalid (e.g., plain text password in DB)
-    console.warn('Password validation error (likely invalid hash in DB):', error);
+    console.warn('Password validation error:', error);
     return false;
   }
 };
