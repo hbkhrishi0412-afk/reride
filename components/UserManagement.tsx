@@ -8,7 +8,7 @@ interface UserManagementProps {
     currentUser: User;
     onToggleUserStatus: (email: string) => void;
     onDeleteUser: (email: string) => void;
-    onCreateUser: (userData: Omit<User, 'status'>) => { success: boolean, reason: string };
+    onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
     onNavigate: (view: View) => void;
 }
 
@@ -26,10 +26,11 @@ const initialFormState: Omit<User, 'status' | 'createdAt'> = {
 // Create User Modal
 const CreateUserModal: React.FC<{
     onClose: () => void;
-    onCreateUser: (userData: Omit<User, 'status'>) => { success: boolean, reason: string };
+    onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
 }> = ({ onClose, onCreateUser }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -37,22 +38,35 @@ const CreateUserModal: React.FC<{
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setIsLoading(true);
+        
         if (!formData.name || !formData.email || !formData.password || !formData.mobile) {
             setError('All fields are required.');
+            setIsLoading(false);
             return;
         }
         if (formData.password.length < 6) {
             setError('Password must be at least 6 characters long.');
+            setIsLoading(false);
             return;
         }
-        const result = onCreateUser({ ...formData, createdAt: new Date().toISOString() });
-        if (result.success) {
-            onClose();
-        } else {
-            setError(result.reason);
+        
+        try {
+            const result = await onCreateUser({ ...formData, createdAt: new Date().toISOString() });
+            if (result.success) {
+                onClose();
+                // Reset form
+                setFormData(initialFormState);
+            } else {
+                setError(result.reason);
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to create user');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -98,8 +112,10 @@ const CreateUserModal: React.FC<{
                         </div>
                     </div>
                     <div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-white-dark text-spinny-text-dark rounded-md hover:bg-white">Cancel</button>
-                        <button type="submit" className="px-4 py-2 btn-brand-primary text-white rounded-md">Create User</button>
+                        <button type="button" onClick={onClose} disabled={isLoading} className="px-4 py-2 bg-white-dark text-spinny-text-dark rounded-md hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
+                        <button type="submit" disabled={isLoading} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isLoading ? 'Creating...' : 'Create User'}
+                        </button>
                     </div>
                 </form>
             </div>

@@ -154,15 +154,21 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     if (forcedRole) return;
     setSelectedRole(role);
     setError('');
-    setName('');
-    setMobile('');
-    setPassword('');
-    setMode('login');
+    // Only clear form fields if we're in login mode
+    // During registration, keep the form data so user doesn't lose their input
+    if (mode === 'login') {
+      setName('');
+      setMobile('');
+      setPassword('');
+    }
+    // Don't change the mode - keep it as is (login or register)
   };
 
   const isLogin = mode === 'login';
-  const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm rounded-md";
-  const mobileFormInputClass = "w-full px-4 py-2.5 text-sm bg-white/95 backdrop-blur-sm border-0.5 border-white/30 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white transition-all";
+  // Premium form input styling with glassmorphism and depth
+  const formInputClass = "w-full px-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 bg-white/80 backdrop-blur-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:bg-white focus:shadow-lg transition-all duration-300 text-sm font-medium";
+  const mobileFormInputClass = "w-full px-4 py-3.5 text-sm bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:bg-white focus:shadow-lg transition-all duration-300 font-medium";
+  const selectInputClass = "w-full px-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:bg-white focus:shadow-lg transition-all duration-300 text-sm cursor-pointer font-medium";
 
   // Handle OTP mode
   if (mode === 'otp') {
@@ -192,466 +198,530 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     );
   }
 
-  // Mobile App UI
+  // Mobile App UI - Premium Design
   if (isMobileApp) {
     return (
-      <div 
-        className="w-full min-h-screen flex flex-col items-center justify-center p-4"
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-8 px-4"
         style={{
-          background: 'linear-gradient(180deg, #6366F1 0%, #8B5CF6 40%, #A855F7 70%, #EC4899 100%)',
-          minHeight: '100vh'
-        }}
-      >
-        <div className="w-full max-w-md space-y-3">
-          {/* Logo and Welcome - Compact Design */}
-          <div className="text-center mb-2">
-            <div className="flex justify-center mb-2">
-              <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center border border-white/30">
-                <Logo 
-                  className="scale-100 filter brightness-0 invert" 
-                  showText={false}
-                  onClick={() => onNavigate(View.USED_CARS)}
-                />
-              </div>
-            </div>
-            <h1 className="text-lg font-bold text-white mb-0.5 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
-              {isLogin ? roleConfig[selectedRole].loginTitle : roleConfig[selectedRole].registerTitle}
-            </h1>
-            <p className="text-white/80 text-xs">
-              {isLogin ? 'Sign in to continue' : 'Create your account to get started'}
-            </p>
-          </div>
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
+          backgroundSize: '400% 400%',
+          animation: 'gradient 15s ease infinite'
+        }}>
+        {/* Animated background elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/10 rounded-full blur-2xl animate-pulse"></div>
+          <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-white/10 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        </div>
 
-          {/* Role Selection (if not forced) */}
-          {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
-            <div className="flex gap-2 mb-3">
-              {allowedRoles.map((role) => (
-                <button
-                  key={role}
-                  onClick={() => handleRoleChange(role)}
-                  className={`flex-1 py-2 px-3 rounded-xl font-semibold text-xs transition-all ${
-                    selectedRole === role
-                      ? 'bg-white text-purple-600 shadow-lg scale-105'
-                      : 'bg-white/20 text-white border border-white/30'
-                  }`}
-                  style={{
-                    backdropFilter: 'blur(10px)',
-                    WebkitBackdropFilter: 'blur(10px)'
-                  }}
-                >
-                  {roleConfig[role].title}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Form Card */}
-          <div 
-            className="bg-white/95 backdrop-blur-xl rounded-2xl p-4 shadow-2xl border border-white/30"
+        <div className="w-full max-w-md relative z-10">
+          <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6"
             style={{
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
-            }}
-          >
-            <form className="space-y-3" onSubmit={handleSubmit}>
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+            }}>
+            {/* Logo and Title - Premium Design */}
+            <div className="text-center mb-6">
+              <div className="flex justify-center mb-4">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-purple-600 rounded-xl blur-md opacity-50"></div>
+                  <div className="relative bg-white/90 backdrop-blur-sm p-3 rounded-xl shadow-lg">
+                    <Logo 
+                      className="scale-100" 
+                      showText={true}
+                      onClick={() => onNavigate(View.USED_CARS)}
+                    />
+                  </div>
+                </div>
+              </div>
+              <h1 className="text-2xl font-extrabold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-1">
+                {isLogin ? 'Welcome Back' : 'Create Account'}
+              </h1>
+              <p className="mt-1 text-sm font-medium text-gray-600">
+                {isLogin ? 'Sign in to continue' : 'Get started with ReRide'}
+              </p>
+            </div>
+            <form className="space-y-4" onSubmit={handleSubmit}>
               {!isLogin && (
                 <>
+                  {/* Role Selection Dropdown - Only during registration */}
+                  {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
+                    <div>
+                      <label htmlFor="mobile-account-type" className="block text-sm font-semibold text-gray-700 mb-2">
+                        I want to <span className="text-orange-600">*</span>
+                      </label>
+                      <select
+                        id="mobile-account-type"
+                        name="account-type"
+                        value={selectedRole}
+                        onChange={(e) => handleRoleChange(e.target.value as UserRole)}
+                        className={mobileFormInputClass}
+                        required
+                      >
+                        {allowedRoles.map((role) => (
+                          <option key={role} value={role}>
+                            {roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div>
-                    <label htmlFor="mobile-name" className="sr-only">Full name</label>
+                    <label htmlFor="mobile-name" className="block text-sm font-semibold text-gray-700 mb-2">
+                      Full Name <span className="text-red-500">*</span>
+                    </label>
                     <input
                       id="mobile-name"
                       type="text"
                       autoComplete="name"
                       required
                       className={mobileFormInputClass}
-                      placeholder="Full name"
+                      placeholder="Enter your full name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      aria-label="Full name"
                     />
                   </div>
                   <div>
-                    <label htmlFor="mobile-tel" className="sr-only">Mobile number</label>
+                    <label htmlFor="mobile-tel" className="block text-sm font-semibold text-gray-700 mb-2">
+                      Mobile Number <span className="text-red-500">*</span>
+                    </label>
                     <input
                       id="mobile-tel"
                       type="tel"
                       autoComplete="tel"
                       required
                       className={mobileFormInputClass}
-                      placeholder="Mobile number"
+                      placeholder="Enter your mobile number"
                       value={mobile}
                       onChange={(e) => setMobile(e.target.value)}
-                      aria-label="Mobile number"
                     />
                   </div>
                 </>
               )}
               <div>
-                <label htmlFor="mobile-email" className="sr-only">Email address</label>
+                <label htmlFor="mobile-email" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
                 <input
                   id="mobile-email"
                   type="email"
                   autoComplete="email"
                   required
                   className={mobileFormInputClass}
-                  placeholder="Email address"
+                  placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  aria-label="Email address"
                 />
               </div>
-              <PasswordInput
-                id="password"
-                name="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-                className={mobileFormInputClass}
-                autoComplete="current-password"
-                required
-                showLabel={false}
-              />
+              <div>
+                <label htmlFor="mobile-password" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <PasswordInput
+                  id="mobile-password"
+                  name="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className={mobileFormInputClass}
+                  autoComplete={isLogin ? "current-password" : "new-password"}
+                  required
+                  showLabel={false}
+                />
+              </div>
 
-              {isLogin && (
-                <div className="flex items-center justify-between text-sm">
-                  <label htmlFor="mobile-remember" className="flex items-center text-gray-700">
-                    <input
-                      id="mobile-remember"
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 text-orange-600 rounded mr-2"
-                      aria-label="Remember me"
-                    />
-                    Remember me
-                  </label>
-                  <button
-                    type="button"
-                    onClick={onForgotPassword}
-                    className="text-orange-600 font-semibold"
-                  >
-                    Forgot password?
-                  </button>
+            {isLogin && (
+              <div className="flex items-center justify-between text-sm">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    id="mobile-remember"
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded cursor-pointer"
+                  />
+                  <span className="ml-2 text-gray-700">Remember me</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={onForgotPassword}
+                  className="text-orange-600 hover:text-orange-700 font-medium"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 rounded-md p-3">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-2.5" role="alert" aria-live="polite">
-                  <p className="text-red-600 text-xs text-center font-medium">{error}</p>
-                </div>
-              )}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="group relative w-full flex justify-center py-4 px-6 border border-transparent rounded-xl text-sm font-bold text-white overflow-hidden transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: 'linear-gradient(135deg, #FF6B35 0%, #F7931E 50%, #FF6B35 100%)',
+                backgroundSize: '200% 200%',
+                boxShadow: '0 10px 25px rgba(255, 107, 53, 0.4)'
+              }}
+            >
+              <span className="relative z-10 flex items-center">
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {isLogin ? 'Sign In' : 'Create Account'}
+                    <svg className="ml-2 w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </>
+                )}
+              </span>
+            </button>
+          </form>
 
+          {/* Social Login */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white/95 backdrop-blur-sm text-gray-500 font-medium">Or continue with</span>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-3">
               <button
-                type="submit"
+                type="button"
+                onClick={handleGoogleSignIn}
                 disabled={isLoading}
-                className="w-full py-3 rounded-xl font-bold text-sm text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-2 focus:outline-offset-2 focus:outline-orange-500"
-                style={{
-                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
-                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
-                  transform: isLoading ? 'none' : 'scale(1)',
-                }}
-                onMouseDown={(e) => {
-                  if (!isLoading) e.currentTarget.style.transform = 'scale(0.97)';
-                }}
-                onMouseUp={(e) => {
-                  if (!isLoading) e.currentTarget.style.transform = 'scale(1)';
-                }}
-                aria-label={isLoading ? 'Processing' : (isLogin ? 'Sign in' : 'Create account')}
+                className="group w-full inline-flex justify-center items-center py-3 px-4 border-2 border-gray-200 rounded-xl bg-white/80 backdrop-blur-sm text-sm font-semibold text-gray-700 hover:bg-white hover:border-gray-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-300 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
               >
-                {isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+                <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Google
               </button>
-            </form>
 
-            {/* Social Login */}
-            <div className="mt-4">
-              <div className="relative mb-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200"></div>
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="px-2 bg-white text-gray-500 font-medium">Or continue with</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={isLoading}
-                  className="flex items-center justify-center py-2.5 px-3 bg-white border border-gray-200 rounded-xl font-semibold text-xs text-gray-700 transition-all disabled:opacity-50 active:scale-95"
-                >
-                  <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                  </svg>
-                  Google
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setMode('otp')}
-                  disabled={isLoading}
-                  className="flex items-center justify-center py-2.5 px-3 bg-white border border-gray-200 rounded-xl font-semibold text-xs text-gray-700 transition-all disabled:opacity-50 active:scale-95"
-                >
-                  <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  Phone OTP
-                </button>
-              </div>
-            </div>
-
-            {/* Toggle Mode */}
-            <div className="mt-4 text-center">
               <button
+                type="button"
+                onClick={() => setMode('otp')}
+                disabled={isLoading}
+                className="group w-full inline-flex justify-center items-center py-3 px-4 border-2 border-gray-200 rounded-xl bg-white/80 backdrop-blur-sm text-sm font-semibold text-gray-700 hover:bg-white hover:border-gray-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-300 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Phone OTP
+              </button>
+            </div>
+          </div>
+
+          {/* Toggle between Login and Register */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                type="button"
                 onClick={toggleMode}
-                className="text-xs font-semibold text-gray-600"
+                className="font-semibold text-orange-600 hover:text-orange-700"
               >
-                {isLogin 
-                  ? `Don't have an account? ` 
-                  : `Already have an account? `
-                }
-                <span className="text-orange-600">{isLogin ? 'Register' : 'Sign In'}</span>
+                {isLogin ? 'Create Account' : 'Sign In'}
               </button>
-            </div>
+            </p>
+          </div>
 
-            {/* Guest Access */}
-            <div className="mt-3 text-center">
-              <button
-                onClick={() => onNavigate(View.USED_CARS)}
-                className="text-xs font-medium text-gray-500"
-              >
-                Continue as guest →
-              </button>
-            </div>
+          {/* Guest Access */}
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => onNavigate(View.USED_CARS)}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Continue as guest →
+            </button>
+          </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // Desktop UI (existing)
+  // Desktop UI - Premium Design
   return (
-    <div className="w-full max-w-4xl mx-auto">
-      <div className="bg-white rounded-xl shadow-soft-xl overflow-hidden">
-        <div className="flex flex-col lg:flex-row">
-          {/* Left Side - Role Selection */}
-          <div className="lg:w-1/3 bg-gradient-to-br from-orange-500 to-blue-600 p-8 text-white">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-12 px-4 sm:px-6 lg:px-8"
+      style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
+        backgroundSize: '400% 400%',
+        animation: 'gradient 15s ease infinite'
+      }}>
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8 lg:p-10"
+          style={{
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+          }}>
+          {/* Logo and Title - Premium Design */}
+          <div className="text-center mb-8">
             <div className="flex justify-center mb-6">
-              <Logo 
-                className="scale-125 filter brightness-0 invert" 
-                showText={false}
-                onClick={() => onNavigate(View.USED_CARS)}
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-purple-600 rounded-2xl blur-lg opacity-50 animate-pulse"></div>
+                <div className="relative bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg">
+                  <Logo 
+                    className="scale-110" 
+                    showText={true}
+                    onClick={() => onNavigate(View.USED_CARS)}
+                  />
+                </div>
+              </div>
+            </div>
+            <h2 className="text-3xl font-extrabold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-2">
+              {isLogin ? 'Welcome Back' : 'Create Account'}
+            </h2>
+            <p className="mt-2 text-sm font-medium text-gray-600">
+              {isLogin ? 'Sign in to continue to your account' : 'Get started with ReRide today'}
+            </p>
+          </div>
+
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {!isLogin && (
+              <>
+                {/* Role Selection Dropdown - Only during registration */}
+                {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
+                  <div>
+                    <label htmlFor="account-type" className="block text-sm font-semibold text-gray-700 mb-2">
+                      I want to <span className="text-orange-600">*</span>
+                    </label>
+                    <select
+                      id="account-type"
+                      name="account-type"
+                      value={selectedRole}
+                      onChange={(e) => handleRoleChange(e.target.value as UserRole)}
+                      className={selectInputClass}
+                      required
+                    >
+                      {allowedRoles.map((role) => (
+                        <option key={role} value={role}>
+                          {roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label htmlFor="full-name" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="full-name"
+                    name="name"
+                    type="text"
+                    autoComplete="name"
+                    required
+                    className={formInputClass}
+                    placeholder="Enter your full name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="mobile-number" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Mobile Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="mobile-number"
+                    name="mobile"
+                    type="tel"
+                    autoComplete="tel"
+                    required
+                    className={formInputClass}
+                    placeholder="Enter your mobile number"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+            <div>
+              <label htmlFor="email-address" className="block text-sm font-semibold text-gray-700 mb-2">
+                Email Address <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="email-address"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                className={formInputClass}
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-            <h2 className="text-2xl font-bold text-center mb-2">Welcome to ReRide</h2>
-            <p className="text-center text-orange-100 mb-8">Choose your role to continue</p>
-            
-            <div className="space-y-4">
-              {!hideRolePicker && Object.entries(roleConfig)
-                .filter(([role]) => allowedRoles.includes(role as UserRole))
-                .map(([role, config]) => (
-                  <button
-                    key={role}
-                    onClick={() => handleRoleChange(role as UserRole)}
-                    className={`w-full p-4 rounded-lg text-left transition-all duration-200 ${
-                      selectedRole === role 
-                        ? 'bg-white bg-opacity-20 border-2 border-white' 
-                        : 'bg-white bg-opacity-10 hover:bg-opacity-20'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{config.icon}</span>
-                      <div>
-                        <div className="font-semibold">{config.title}</div>
-                        <div className="text-sm text-orange-100">{config.description}</div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+            <div>
+              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+                Password <span className="text-red-500">*</span>
+              </label>
+              <PasswordInput
+                id="password"
+                name="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className={formInputClass}
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                required
+                showLabel={false}
+              />
             </div>
 
-            <div className="mt-8 text-center">
+            {isLogin && (
+              <div className="flex items-center justify-between text-sm">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    id="remember-me"
+                    name="remember-me"
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded cursor-pointer"
+                  />
+                  <span className="ml-2 text-gray-700">Remember me</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={onForgotPassword}
+                  className="text-orange-600 hover:text-orange-700 font-medium"
+                >
+                  Forgot password?
+                </button>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 rounded-md p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </span>
+              ) : (
+                isLogin ? 'Sign In' : 'Create Account'
+              )}
+            </button>
+          </form>
+
+          {/* Social Login Options */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white/95 backdrop-blur-sm text-gray-500 font-medium">Or continue with</span>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-3">
               <button
-                onClick={() => onNavigate(View.USED_CARS)}
-                className="text-orange-100 hover:text-white transition-colors text-sm font-medium"
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={isLoading}
+                className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
               >
-                Or continue as a guest →
+                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Google
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode('otp')}
+                disabled={isLoading}
+                className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Phone OTP
               </button>
             </div>
           </div>
 
-          {/* Right Side - Login/Register Form */}
-          <div className="lg:w-2/3 p-8">
-            <div className="max-w-md mx-auto">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold text-gray-900">
-                  {isLogin ? roleConfig[selectedRole].loginTitle : roleConfig[selectedRole].registerTitle}
-                </h2>
-                <p className="mt-2 text-gray-600">
-                  {isLogin ? 'Sign in to your account' : 'Create your account'}
-                </p>
-              </div>
+          {/* Toggle between Login and Register */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                type="button"
+                onClick={toggleMode}
+                className="font-semibold text-orange-600 hover:text-orange-700"
+              >
+                {isLogin ? 'Create Account' : 'Sign In'}
+              </button>
+            </p>
+          </div>
 
-              <form className="space-y-6" onSubmit={handleSubmit}>
-                <div className="space-y-4">
-                  {!isLogin && (
-                    <>
-                      <div>
-                        <label htmlFor="full-name" className="sr-only">Full name</label>
-                        <input
-                          id="full-name"
-                          name="name"
-                          type="text"
-                          autoComplete="name"
-                          required
-                          className={formInputClass}
-                          placeholder="Full name"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="mobile-number" className="sr-only">Mobile number</label>
-                        <input
-                          id="mobile-number"
-                          name="mobile"
-                          type="tel"
-                          autoComplete="tel"
-                          required
-                          className={formInputClass}
-                          placeholder="Mobile number"
-                          value={mobile}
-                          onChange={(e) => setMobile(e.target.value)}
-                        />
-                      </div>
-                    </>
-                  )}
-                  <div>
-                    <label htmlFor="email-address" className="sr-only">Email address</label>
-                    <input
-                      id="email-address"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      required
-                      className={formInputClass}
-                      placeholder="Email address"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                  <PasswordInput
-                    id="password"
-                    name="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Password"
-                    className={formInputClass}
-                    autoComplete="current-password"
-                    required
-                    showLabel={false}
-                  />
-                </div>
-
-                {isLogin && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <input
-                        id="remember-me"
-                        name="remember-me"
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                        className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                        Remember me
-                      </label>
-                    </div>
-                    <div className="text-sm">
-                      <button
-                        type="button"
-                        onClick={onForgotPassword}
-                        className="font-medium text-orange-600 hover:text-orange-500"
-                      >
-                        Forgot your password?
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                    <p className="text-red-600 text-sm text-center">{error}</p>
-                  </div>
-                )}
-
-                <div>
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors disabled:opacity-50"
-                  >
-                    {isLoading ? 'Processing...' : (isLogin ? 'Sign in' : 'Create Account')}
-                  </button>
-                </div>
-              </form>
-
-              {/* Social Login Options */}
-              <div className="mt-6">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300"></div>
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">Or continue with</span>
-                  </div>
-                </div>
-
-                <div className="mt-6 grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignIn}
-                    disabled={isLoading}
-                    className="w-full inline-flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors disabled:opacity-50"
-                  >
-                    <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                    </svg>
-                    Google
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setMode('otp')}
-                    disabled={isLoading}
-                    className="w-full inline-flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors disabled:opacity-50"
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                    Phone OTP
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-6 text-center">
-                <button
-                  onClick={toggleMode}
-                  className="font-medium text-orange-600 hover:text-orange-500"
-                >
-                  {isLogin 
-                    ? `Don't have a ${selectedRole} account? Register` 
-                    : `Already have a ${selectedRole} account? Sign in`
-                  }
-                </button>
-              </div>
-            </div>
+          {/* Guest Access */}
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => onNavigate(View.USED_CARS)}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Continue as guest →
+            </button>
           </div>
         </div>
       </div>
