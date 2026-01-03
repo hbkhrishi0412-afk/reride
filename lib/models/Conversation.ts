@@ -127,3 +127,6 @@ ConversationSchema.index({ vehicleId: 1, customerId: 1 });
 export const Conversation = mongoose.models.Conversation || mongoose.model<IConversation>('Conversation', ConversationSchema);
 
 
+
+
+

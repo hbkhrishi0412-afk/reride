@@ -351,8 +351,8 @@ export const validatePasswordStrength = (password: string): { isValid: boolean; 
     errors.push('Password must contain at least one special character');
   }
   
-  // Check for common weak passwords
-  if (config.PASSWORD.COMMON_PASSWORDS.includes(password.toLowerCase())) {
+  // Check for common weak passwords (only if list is not empty)
+  if (config.PASSWORD.COMMON_PASSWORDS.length > 0 && config.PASSWORD.COMMON_PASSWORDS.includes(password.toLowerCase())) {
     errors.push('Password is too common, please choose a stronger password');
   }
   
@@ -363,7 +363,10 @@ export const validatePasswordStrength = (password: string): { isValid: boolean; 
 };
 
 export const validateMobile = (mobile: string): boolean => {
-  return validator.isMobilePhone(mobile, 'en-IN') && mobile.length === config.VALIDATION.MOBILE_LENGTH;
+  // Indian mobile numbers are exactly 10 digits and start with 6-9
+  const cleaned = mobile.replace(/\D/g, ''); // Remove all non-digits
+  // Validate: exactly 10 digits and starts with 6, 7, 8, or 9 (valid Indian mobile prefixes)
+  return cleaned.length === 10 && /^[6-9]\d{9}$/.test(cleaned);
 };
 
 interface UserInputData {
@@ -420,7 +423,7 @@ export const validateUserInput = async (userData: unknown): Promise<ValidationRe
   
   // Validate mobile
   if (!sanitizedData.mobile || !validateMobile(sanitizedData.mobile)) {
-    errors.push(`Valid ${config.VALIDATION.MOBILE_LENGTH}-digit mobile number is required`);
+    errors.push(`Valid 10-digit mobile number is required`);
   }
   
   // Validate role

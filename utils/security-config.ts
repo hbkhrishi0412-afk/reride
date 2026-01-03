@@ -6,14 +6,14 @@ export const SECURITY_CONFIG = {
   PASSWORD: {
     MIN_LENGTH: 8,
     MAX_LENGTH: 128,
-    REQUIRE_UPPERCASE: true,
-    REQUIRE_LOWERCASE: true,
-    REQUIRE_NUMBERS: true,
-    REQUIRE_SPECIAL_CHARS: true,
+    REQUIRE_UPPERCASE: false, // Optional for better UX, but recommended
+    REQUIRE_LOWERCASE: true, // Required for security
+    REQUIRE_NUMBERS: true, // Required for security
+    REQUIRE_SPECIAL_CHARS: false, // Optional for better UX, but recommended
     COMMON_PASSWORDS: [
-      'password', '123456', 'qwerty', 'abc123', 'password123',
+      'password', '123456', '12345678', 'qwerty', 'abc123', 'password123',
       'admin', 'letmein', 'welcome', 'monkey', 'dragon',
-      'master', 'hello', 'login', 'pass', '1234'
+      'master', 'hello', 'login', 'pass', '1234', '1234567890'
     ]
   },
 
@@ -29,8 +29,8 @@ export const SECURITY_CONFIG = {
     // Access tokens: shorter-lived for security (compromised tokens expire faster)
     // Refresh tokens: longer-lived for better UX (users don't need to re-login frequently)
     // Options: '15m', '30m', '1h', '2h', '4h', '8h', '12h', '24h', '48h', '7d', '14d', '30d'
-    ACCESS_TOKEN_EXPIRES_IN: '48h', // Increased from '24h' to 48 hours for better UX
-    REFRESH_TOKEN_EXPIRES_IN: '30d', // Increased from '7d' to 30 days for better UX
+    ACCESS_TOKEN_EXPIRES_IN: '24h', // Balance between security and UX
+    REFRESH_TOKEN_EXPIRES_IN: '14d', // Balance between security and UX
     ISSUER: 'reride-app',
     AUDIENCE: 'reride-users'
   },

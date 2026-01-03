@@ -1,9 +1,25 @@
 // Development API server for testing Plan Management
+// 
+// REAL-TIME UPDATES: This server emits Socket.io events for all database operations
+// to enable real-time synchronization across all connected clients in production.
+// 
+// Events emitted:
+// - plans:created, plans:updated, plans:deleted
+// - vehicles:created, vehicles:updated, vehicles:deleted, vehicles:boosted, 
+//   vehicles:refreshed, vehicles:certified, vehicles:featured, vehicles:sold, vehicles:unsold
+// - users:updated, users:deleted
+// - faqs:created, faqs:updated, faqs:deleted
+// - vehicle-data:created, vehicle-data:updated, vehicle-data:deleted
+// - payments:created, payments:approved, payments:rejected
+// - notifications:created, notifications:updated
+// - conversations:saved, conversations:updated, conversations:deleted
+// - conversation:new-message (for real-time chat)
+//
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { WebSocketServer } from 'ws';
 
 const app = express();
 const server = createServer(app);
@@ -216,6 +232,10 @@ app.post('/api/plans', (req, res) => {
     ...req.body,
   };
   mockPlans.push(newPlan);
+  // Emit real-time update
+  if (io) {
+    io.emit('plans:created', { plan: newPlan, plans: mockPlans });
+  }
   res.status(201).json(newPlan);
 });
 
@@ -229,6 +249,10 @@ app.put('/api/plans', (req, res) => {
   }
   
   mockPlans[planIndex] = { ...mockPlans[planIndex], ...updateData };
+  // Emit real-time update
+  if (io) {
+    io.emit('plans:updated', { plan: mockPlans[planIndex], plans: mockPlans });
+  }
   res.json(mockPlans[planIndex]);
 });
 
@@ -245,7 +269,12 @@ app.delete('/api/plans', (req, res) => {
     return res.status(404).json({ error: 'Plan not found' });
   }
   
+  const deletedPlan = mockPlans[planIndex];
   mockPlans.splice(planIndex, 1);
+  // Emit real-time update
+  if (io) {
+    io.emit('plans:deleted', { planId, plans: mockPlans });
+  }
   res.json({ success: true, message: 'Plan deleted successfully' });
 });
 
@@ -324,6 +353,11 @@ app.post('/api/vehicles', (req, res) => {
       vehicle.listingExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     }
     
+    // Emit real-time update
+    if (io) {
+      io.emit('vehicles:refreshed', { vehicle });
+    }
+    
     return res.status(200).json({ success: true, vehicle });
   }
 
@@ -371,6 +405,11 @@ app.post('/api/vehicles', (req, res) => {
     vehicle.activeBoosts.push(boostInfo);
     vehicle.isFeatured = true;
     
+    // Emit real-time update
+    if (io) {
+      io.emit('vehicles:boosted', { vehicle });
+    }
+    
     return res.status(200).json({ success: true, vehicle });
   }
 
@@ -385,6 +424,11 @@ app.post('/api/vehicles', (req, res) => {
     vehicle.certificationStatus = 'requested';
     vehicle.certificationRequestedAt = new Date().toISOString();
     
+    // Emit real-time update
+    if (io) {
+      io.emit('vehicles:certified', { vehicle });
+    }
+    
     return res.status(200).json({ success: true, vehicle });
   }
 
@@ -398,6 +442,11 @@ app.post('/api/vehicles', (req, res) => {
     
     vehicle.isFeatured = true;
     vehicle.featuredAt = new Date().toISOString();
+    
+    // Emit real-time update
+    if (io) {
+      io.emit('vehicles:featured', { vehicle });
+    }
     
     return res.status(200).json({ success: true, vehicle });
   }
@@ -414,6 +463,11 @@ app.post('/api/vehicles', (req, res) => {
     vehicle.listingStatus = 'sold';
     vehicle.soldAt = new Date().toISOString();
     
+    // Emit real-time update
+    if (io) {
+      io.emit('vehicles:sold', { vehicle });
+    }
+    
     return res.status(200).json({ success: true, vehicle });
   }
 
@@ -429,6 +483,11 @@ app.post('/api/vehicles', (req, res) => {
     vehicle.listingStatus = 'active';
     vehicle.soldAt = undefined;
     
+    // Emit real-time update
+    if (io) {
+      io.emit('vehicles:unsold', { vehicle });
+    }
+    
     return res.status(200).json({ success: true, vehicle });
   }
 
@@ -440,6 +499,10 @@ app.post('/api/vehicles', (req, res) => {
     createdAt: new Date().toISOString()
   };
   mockVehicles.unshift(newVehicle);
+  // Emit real-time update
+  if (io) {
+    io.emit('vehicles:created', { vehicle: newVehicle });
+  }
   res.status(201).json(newVehicle);
 });
 
@@ -449,6 +512,10 @@ app.put('/api/vehicles', (req, res) => {
   const idx = mockVehicles.findIndex(v => v.id === id);
   if (idx === -1) return res.status(404).json({ success: false, reason: 'Vehicle not found' });
   mockVehicles[idx] = { ...mockVehicles[idx], ...patch };
+  // Emit real-time update
+  if (io) {
+    io.emit('vehicles:updated', { vehicle: mockVehicles[idx] });
+  }
   res.json(mockVehicles[idx]);
 });
 
@@ -458,6 +525,10 @@ app.delete('/api/vehicles', (req, res) => {
   const before = mockVehicles.length;
   mockVehicles = mockVehicles.filter(v => v.id !== id);
   if (before === mockVehicles.length) return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+  // Emit real-time update
+  if (io) {
+    io.emit('vehicles:deleted', { vehicleId: id });
+  }
   res.json({ success: true, id });
 });
 
@@ -674,6 +745,11 @@ app.post('/api/vehicle-data-management', (req, res) => {
     
     mockVehicleDataDb.push(newItem);
     
+    // Emit real-time update
+    if (io) {
+      io.emit('vehicle-data:created', { data: newItem });
+    }
+    
     res.status(201).json({
       success: true,
       message: 'Vehicle data created successfully',
@@ -715,6 +791,11 @@ app.put('/api/vehicle-data-management', (req, res) => {
   
   mockVehicleDataDb[itemIndex] = { ...mockVehicleDataDb[itemIndex], ...updateData };
   
+  // Emit real-time update
+  if (io) {
+    io.emit('vehicle-data:updated', { data: mockVehicleDataDb[itemIndex] });
+  }
+  
   res.json({
     success: true,
     message: 'Vehicle data updated successfully',
@@ -743,7 +824,13 @@ app.delete('/api/vehicle-data-management', (req, res) => {
     });
   }
   
+  const deletedItem = mockVehicleDataDb[itemIndex];
   mockVehicleDataDb.splice(itemIndex, 1);
+  
+  // Emit real-time update
+  if (io) {
+    io.emit('vehicle-data:deleted', { id });
+  }
   
   res.json({
     success: true,
@@ -919,6 +1006,12 @@ app.put('/api/users', (req, res) => {
   
   console.log('✅ Updated mock user:', email);
   
+  // Emit real-time update
+  if (io) {
+    const { password, ...userWithoutPassword } = updatedUser;
+    io.emit('users:updated', { user: userWithoutPassword });
+  }
+  
   // Return user without password
   const { password, ...userWithoutPassword } = updatedUser;
   
@@ -940,6 +1033,11 @@ app.delete('/api/users', (req, res) => {
   
   if (before === mockUsers.length) {
     return res.status(404).json({ success: false, reason: 'User not found.' });
+  }
+  
+  // Emit real-time update
+  if (io) {
+    io.emit('users:deleted', { email });
   }
   
   res.json({ success: true, email });
@@ -1005,6 +1103,11 @@ app.post('/api/faqs', (req, res) => {
     _id: newFaq._id
   };
   
+  // Emit real-time update
+  if (io) {
+    io.emit('faqs:created', { faq: createdFaq });
+  }
+  
   console.log('➕ POST /api/faqs - Created new FAQ');
   res.status(201).json({
     success: true,
@@ -1052,6 +1155,11 @@ app.put('/api/content', (req, res) => {
     updatedAt: new Date().toISOString()
   };
   
+  // Emit real-time update
+  if (io) {
+    io.emit('faqs:updated', { faq: mockFaqs[faqIndex] });
+  }
+  
   console.log('✏️ PUT /api/content?type=faqs - Updated FAQ');
   res.json({
     success: true,
@@ -1088,6 +1196,11 @@ app.delete('/api/content', (req, res) => {
     });
   }
   
+  // Emit real-time update
+  if (io) {
+    io.emit('faqs:deleted', { faqId: id });
+  }
+  
   console.log('🗑️ DELETE /api/content?type=faqs - Deleted FAQ');
   res.json({
     success: true,
@@ -1095,59 +1208,41 @@ app.delete('/api/content', (req, res) => {
   });
 });
 
-// Conversations endpoints (mock handlers for development)
+// Initialize MongoDB connection functions (will be replaced if modules load successfully)
+// DISABLED: MongoDB is not needed when using Firebase
+let ensureConnection = async () => {
+  // No-op: MongoDB is disabled, Firebase handles conversations in production
+  // This function exists to prevent errors when called, but does nothing
+};
+let Conversation = null;
+
+// DISABLED: MongoDB module loading - Firebase handles conversations in production
+// Try to load MongoDB models early (optional)
+// (async () => {
+//   try {
+//     const dbModule = await import('./lib/db.js');
+//     ensureConnection = dbModule.ensureConnection;
+//     const conversationModule = await import('./lib/models/Conversation.js');
+//     Conversation = conversationModule.Conversation;
+//     console.log('✅ MongoDB models loaded');
+//   } catch (error) {
+//     console.warn('⚠️ MongoDB models not available (conversations will use mock data):', error.message);
+//   }
+// })();
+
+// Conversations endpoints
+// NOTE: Firebase handles conversations in production, localStorage handles them in development
+// These endpoints provide API compatibility but actual data storage is handled client-side
 app.get('/api/conversations', async (req, res) => {
   try {
-    // CRITICAL FIX: Handle MongoDB connection failures gracefully
-    try {
-      await ensureConnection();
-    } catch (dbError) {
-      console.warn('⚠️ MongoDB connection failed for GET /api/conversations:', dbError);
-      // Return empty array when DB is unavailable - frontend will use localStorage
-      return res.json({
-        success: true,
-        data: [],
-        warning: 'Database unavailable - using local storage'
-      });
-    }
-    
-    const { customerId, sellerId } = req.query;
-    
-    // Build query
-    const query = {};
-    if (customerId) {
-      query.customerId = customerId;
-    }
-    if (sellerId) {
-      query.sellerId = sellerId;
-    }
-    
-    // Fetch conversations from MongoDB
-    const conversations = await Conversation.find(query)
-      .sort({ lastMessageAt: -1 })
-      .lean();
-    
-    // Convert MongoDB documents to frontend format
-    const formattedConversations = conversations.map(conv => ({
-      id: conv.id,
-      customerId: conv.customerId,
-      customerName: conv.customerName,
-      sellerId: conv.sellerId,
-      vehicleId: conv.vehicleId,
-      vehicleName: conv.vehicleName,
-      vehiclePrice: conv.vehiclePrice,
-      messages: conv.messages || [],
-      lastMessageAt: conv.lastMessageAt,
-      isReadBySeller: conv.isReadBySeller || false,
-      isReadByCustomer: conv.isReadByCustomer !== undefined ? conv.isReadByCustomer : true,
-      isFlagged: conv.isFlagged || false,
-      flagReason: conv.flagReason,
-      flaggedAt: conv.flaggedAt
-    }));
-    
-    res.json({
+    // Conversations are stored client-side (localStorage in dev, Firebase in production)
+    // This endpoint exists for API compatibility but returns empty array
+    // Clients should use localStorage/Firebase directly for conversation data
+    return res.json({
       success: true,
-      data: formattedConversations
+      data: [],
+      info: 'Conversations are stored client-side (localStorage/Firebase). Use client-side storage APIs to retrieve conversations.',
+      warning: 'This endpoint returns empty array. Use localStorage.getItem("reRideConversations") in development or Firebase in production.'
     });
   } catch (error) {
     console.error('Error in GET /api/conversations:', error);
@@ -1161,61 +1256,19 @@ app.get('/api/conversations', async (req, res) => {
 
 app.post('/api/conversations', async (req, res) => {
   try {
-    // CRITICAL FIX: Handle MongoDB connection failures gracefully
-    try {
-      await ensureConnection();
-    } catch (dbError) {
-      console.warn('⚠️ MongoDB connection failed for POST /api/conversations:', dbError);
-      // Return success but indicate data is stored locally only
-      return res.json({
-        success: true,
-        data: req.body,
-        warning: 'Database unavailable - data stored locally only'
-      });
-    }
-    
+    // MongoDB is disabled - Firebase handles conversations in production
     const conversationData = req.body;
     
-    // Save or update conversation in MongoDB
-    const conversation = await Conversation.findOneAndUpdate(
-      { id: conversationData.id },
-      {
-        id: conversationData.id,
-        customerId: conversationData.customerId,
-        customerName: conversationData.customerName,
-        sellerId: conversationData.sellerId,
-        vehicleId: conversationData.vehicleId,
-        vehicleName: conversationData.vehicleName,
-        vehiclePrice: conversationData.vehiclePrice,
-        messages: conversationData.messages || [],
-        lastMessageAt: conversationData.lastMessageAt || new Date().toISOString(),
-        isReadBySeller: conversationData.isReadBySeller !== undefined ? conversationData.isReadBySeller : false,
-        isReadByCustomer: conversationData.isReadByCustomer !== undefined ? conversationData.isReadByCustomer : true,
-        isFlagged: conversationData.isFlagged || false,
-        flagReason: conversationData.flagReason,
-        flaggedAt: conversationData.flaggedAt
-      },
-      { upsert: true, new: true }
-    );
+    // Emit real-time update (Socket.io still works)
+    if (io) {
+      io.emit('conversations:saved', { conversation: conversationData });
+    }
     
-    res.json({
+    // Return success - Firebase handles persistence in production
+    return res.json({
       success: true,
-      data: {
-        id: conversation.id,
-        customerId: conversation.customerId,
-        customerName: conversation.customerName,
-        sellerId: conversation.sellerId,
-        vehicleId: conversation.vehicleId,
-        vehicleName: conversation.vehicleName,
-        vehiclePrice: conversation.vehiclePrice,
-        messages: conversation.messages || [],
-        lastMessageAt: conversation.lastMessageAt,
-        isReadBySeller: conversation.isReadBySeller,
-        isReadByCustomer: conversation.isReadByCustomer,
-        isFlagged: conversation.isFlagged,
-        flagReason: conversation.flagReason,
-        flaggedAt: conversation.flaggedAt
-      }
+      data: conversationData,
+      info: 'Using Firebase for conversations - MongoDB not required'
     });
   } catch (error) {
     console.error('Error in POST /api/conversations:', error);
@@ -1229,19 +1282,7 @@ app.post('/api/conversations', async (req, res) => {
 
 app.put('/api/conversations', async (req, res) => {
   try {
-    // CRITICAL FIX: Handle MongoDB connection failures gracefully
-    try {
-      await ensureConnection();
-    } catch (dbError) {
-      console.warn('⚠️ MongoDB connection failed for PUT /api/conversations:', dbError);
-      // Return success but indicate data is stored locally only
-      return res.json({
-        success: true,
-        data: req.body,
-        warning: 'Database unavailable - data stored locally only'
-      });
-    }
-    
+    // MongoDB is disabled - Firebase handles conversations in production
     const { conversationId, message } = req.body;
     
     if (!conversationId) {
@@ -1251,50 +1292,19 @@ app.put('/api/conversations', async (req, res) => {
       });
     }
     
-    // Find conversation
-    const conversation = await Conversation.findOne({ id: conversationId });
-    if (!conversation) {
-      return res.status(404).json({
-        success: false,
-        error: 'Conversation not found'
+    // Emit real-time update (Socket.io still works)
+    if (io && message) {
+      io.emit('conversation:new-message', {
+        conversationId,
+        message
       });
     }
     
-    // Add message to conversation
-    if (message) {
-      conversation.messages.push(message);
-      conversation.lastMessageAt = message.timestamp || new Date().toISOString();
-      
-      // Update read status based on sender
-      if (message.sender === 'seller') {
-        conversation.isReadBySeller = true;
-        conversation.isReadByCustomer = false;
-      } else if (message.sender === 'user') {
-        conversation.isReadByCustomer = true;
-        conversation.isReadBySeller = false;
-      }
-    }
-    
-    await conversation.save();
-    
-    res.json({
+    // Return success - Firebase handles persistence in production
+    return res.json({
       success: true,
-      data: {
-        id: conversation.id,
-        customerId: conversation.customerId,
-        customerName: conversation.customerName,
-        sellerId: conversation.sellerId,
-        vehicleId: conversation.vehicleId,
-        vehicleName: conversation.vehicleName,
-        vehiclePrice: conversation.vehiclePrice,
-        messages: conversation.messages || [],
-        lastMessageAt: conversation.lastMessageAt,
-        isReadBySeller: conversation.isReadBySeller,
-        isReadByCustomer: conversation.isReadByCustomer,
-        isFlagged: conversation.isFlagged,
-        flagReason: conversation.flagReason,
-        flaggedAt: conversation.flaggedAt
-      }
+      data: { conversationId, message },
+      info: 'Using Firebase for conversations - MongoDB not required'
     });
   } catch (error) {
     console.error('Error in PUT /api/conversations:', error);
@@ -1308,15 +1318,33 @@ app.put('/api/conversations', async (req, res) => {
 
 app.delete('/api/conversations', (req, res) => {
   try {
+    const { conversationId } = req.body || req.query;
+    
+    // Validate conversationId is provided
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'conversationId is required',
+        message: 'Please provide a conversationId to delete'
+      });
+    }
+    
+    // Emit real-time update (Firebase handles actual deletion in production)
+    if (io) {
+      io.emit('conversations:deleted', { conversationId });
+    }
+    
     res.json({
       success: true,
-      message: 'Conversation deleted successfully'
+      message: 'Conversation deleted successfully',
+      info: 'Using Firebase for conversations - MongoDB not required'
     });
   } catch (error) {
     console.error('Error in DELETE /api/conversations:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Failed to delete conversation'
     });
   }
 });
@@ -1341,10 +1369,15 @@ app.get('/api/notifications', (req, res) => {
 
 app.post('/api/notifications', (req, res) => {
   try {
+    const notification = req.body;
+    // Emit real-time update to specific recipient
+    if (io && notification.recipientEmail) {
+      io.emit('notifications:created', { notification });
+    }
     // Accept and return the notification data (mock save)
     res.json({
       success: true,
-      data: req.body
+      data: notification
     });
   } catch (error) {
     console.error('Error in POST /api/notifications:', error);
@@ -1356,10 +1389,15 @@ app.post('/api/notifications', (req, res) => {
 });
 
 app.put('/api/notifications', (req, res) => {
+  const notification = req.body;
+  // Emit real-time update
+  if (io && notification.recipientEmail) {
+    io.emit('notifications:updated', { notification });
+  }
   // Accept notification updates (mock update)
   res.json({
     success: true,
-    data: req.body
+    data: notification
   });
 });
 
@@ -1465,6 +1503,11 @@ app.post('/api/payments', (req, res) => {
     
     mockPaymentRequests.push(paymentRequest);
     
+    // Emit real-time update
+    if (io) {
+      io.emit('payments:created', { paymentRequest });
+    }
+    
     console.log('💳 POST /api/payments?action=create - Created payment request');
     return res.status(201).json({
       success: true,
@@ -1488,6 +1531,11 @@ app.post('/api/payments', (req, res) => {
     if (payment) {
       payment.status = 'approved';
       payment.approvedAt = new Date().toISOString();
+      
+      // Emit real-time update
+      if (io) {
+        io.emit('payments:approved', { paymentRequest: payment });
+      }
     }
     
     console.log('💳 POST /api/payments?action=approve - Approved payment request');
@@ -1514,6 +1562,11 @@ app.post('/api/payments', (req, res) => {
       payment.status = 'rejected';
       payment.rejectedAt = new Date().toISOString();
       payment.rejectionReason = reason || 'No reason provided';
+      
+      // Emit real-time update
+      if (io) {
+        io.emit('payments:rejected', { paymentRequest: payment });
+      }
     }
     
     console.log('💳 POST /api/payments?action=reject - Rejected payment request');
@@ -1578,19 +1631,47 @@ app.post('/api/gemini', (req, res) => {
   });
 });
 
-// Import chat API
-import chatRouter from './api/chat.js';
-import { setupChatWebSocket } from './api/chat-websocket.js';
+// Import chat API and other optional modules (wrapped in async IIFE)
+// DISABLED: MongoDB-dependent chat modules not needed when using Firebase
+let chatRouter = null;
+let ChatMessage = null;
+let ChatSession = null;
+let setupChatWebSocket = null;
+let generateBotResponse = null;
 
-// Import MongoDB models for conversations
-import { ensureConnection } from './lib/db.js';
-import { Conversation } from './lib/models/Conversation.js';
+// DISABLED: Chat API routes require MongoDB - Firebase handles chat in production
+// (async () => {
+//   try {
+//     const chatModule = await import('./api/chat.js');
+//     chatRouter = chatModule.default;
+//     app.use('/api/chat', chatRouter);
+//     console.log('✅ Chat API routes loaded');
+//   } catch (error) {
+//     console.warn('⚠️ Chat API routes not available (this is OK for dev server):', error.message);
+//   }
+// })();
 
-// Setup WebSocket for chat (Socket.io)
-if (io) {
-  setupChatWebSocket(io);
-  
-  // Real-time conversation sync - broadcast messages to both customer and seller
+// DISABLED: Chat WebSocket setup requires MongoDB - Firebase handles chat in production
+// (async () => {
+//   try {
+//     const chatWebSocketModule = await import('./api/chat-websocket.js');
+//     setupChatWebSocket = chatWebSocketModule.setupChatWebSocket;
+//     
+//     if (setupChatWebSocket && io) {
+//       setupChatWebSocket(io);
+//     }
+//   } catch (error) {
+//     console.warn('⚠️ Chat WebSocket setup not available:', error.message);
+//   }
+// })();
+
+// Setup Socket.io conversation sync if MongoDB models are available
+// NOTE: MongoDB is disabled - Conversation is null because Firebase handles conversations in production.
+// The Socket.io events emitted by POST/DELETE endpoints (conversations:saved, conversations:deleted) 
+// are for CLIENT-SIDE listeners, not for server-side MongoDB synchronization.
+// Clients should listen to these events to update their local state (localStorage/Firebase).
+// To enable MongoDB-based server-side synchronization, uncomment the MongoDB model loading code above (lines 1218-1230).
+if (io && Conversation) {
   io.on('connection', (socket) => {
     socket.on('conversation:message', async (data) => {
       try {
@@ -1643,125 +1724,132 @@ if (io) {
   });
 }
 
+// DISABLED: Native WebSocket server requires MongoDB - Firebase handles chat in production
 // Also setup native WebSocket server for direct WebSocket connections
-import { WebSocketServer } from 'ws';
-import { ChatMessage } from './lib/models/ChatMessage.js';
-import { ChatSession } from './lib/models/ChatSession.js';
-
-const wss = new WebSocketServer({ 
-  server,
-  path: '/chat'
-});
-
-wss.on('connection', async (ws, req) => {
-  console.log('🔌 Native WebSocket client connected');
-  
-  let currentSessionId = null;
-  let currentUserId = null;
-  let currentUserName = 'Guest';
-
-  ws.on('message', async (data) => {
-    try {
-      await ensureConnection();
-      
-      const message = JSON.parse(data.toString());
-      
-      if (message.type === 'init') {
-        currentUserId = message.userId || undefined;
-        currentUserName = message.userName || 'Guest';
-        currentSessionId = message.sessionId || 
-          (currentUserId ? `user_${currentUserId}_${Date.now()}` : `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
-        
-        // Create/update session
-        await ChatSession.findOneAndUpdate(
-          { sessionId: currentSessionId },
-          {
-            sessionId: currentSessionId,
-            userId: currentUserId,
-            userName: currentUserName,
-            status: 'active',
-            lastMessageAt: new Date()
-          },
-          { upsert: true, new: true }
-        );
-        
-        // Load history
-        const messages = await ChatMessage.find({ sessionId: currentSessionId })
-          .sort({ timestamp: 1 })
-          .limit(100)
-          .lean();
-        
-        ws.send(JSON.stringify({
-          type: 'history',
-          messages: messages.map(msg => ({
-            id: msg._id.toString(),
-            text: msg.message,
-            sender: msg.sender,
-            timestamp: msg.timestamp.toISOString(),
-            isRead: msg.isRead || false
-          }))
-        }));
-        
-        ws.send(JSON.stringify({ type: 'session', sessionId: currentSessionId }));
-      } else if (message.type === 'message' && currentSessionId) {
-        // Save user message
-        const userMsg = new ChatMessage({
-          sessionId: currentSessionId,
-          userId: currentUserId,
-          userName: currentUserName,
-          message: message.text.trim(),
-          sender: 'user',
-          timestamp: new Date(),
-          isRead: false
-        });
-        await userMsg.save();
-        
-        // Update session
-        await ChatSession.findOneAndUpdate(
-          { sessionId: currentSessionId },
-          { lastMessageAt: new Date(), $inc: { messageCount: 1 } }
-        );
-        
-        // Generate bot response
-        const botResponse = await generateBotResponse(message.text, currentUserName);
-        
-        // Save bot message
-        const botMsg = new ChatMessage({
-          sessionId: currentSessionId,
-          userId: currentUserId,
-          userName: 'Support Bot',
-          message: botResponse,
-          sender: 'bot',
-          timestamp: new Date(),
-          isRead: false
-        });
-        await botMsg.save();
-        
-        // Send bot response
-        ws.send(JSON.stringify({
-          type: 'message',
-          id: botMsg._id.toString(),
-          text: botResponse,
-          sender: 'bot',
-          timestamp: botMsg.timestamp.toISOString()
-        }));
-      }
-    } catch (error) {
-      console.error('WebSocket error:', error);
-      ws.send(JSON.stringify({ type: 'error', message: 'Failed to process message' }));
-    }
-  });
-  
-  ws.on('close', () => {
-    console.log('🔌 Native WebSocket client disconnected');
-  });
-});
-
-// Import generateBotResponse for native WebSocket
-import { generateBotResponse } from './api/chat-websocket.js';
-
-// Chat API routes
-app.use('/api/chat', chatRouter);
+// (async () => {
+//   try {
+//     const chatMessageModule = await import('./lib/models/ChatMessage.js');
+//     const chatSessionModule = await import('./lib/models/ChatSession.js');
+//     const chatWebSocketModule = await import('./api/chat-websocket.js');
+//     
+//     ChatMessage = chatMessageModule.ChatMessage;
+//     ChatSession = chatSessionModule.ChatSession;
+//     generateBotResponse = chatWebSocketModule.generateBotResponse;
+//   
+//   const wss = new WebSocketServer({ 
+//     server,
+//     path: '/chat'
+//   });
+//
+//   wss.on('connection', async (ws, req) => {
+//     console.log('🔌 Native WebSocket client connected');
+//     
+//     let currentSessionId = null;
+//     let currentUserId = null;
+//     let currentUserName = 'Guest';
+//
+//     ws.on('message', async (data) => {
+//       try {
+//         await ensureConnection();
+//         
+//         const message = JSON.parse(data.toString());
+//         
+//         if (message.type === 'init') {
+//           currentUserId = message.userId || undefined;
+//           currentUserName = message.userName || 'Guest';
+//           currentSessionId = message.sessionId || 
+//             (currentUserId ? `user_${currentUserId}_${Date.now()}` : `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+//           
+//           // Create/update session
+//           await ChatSession.findOneAndUpdate(
+//             { sessionId: currentSessionId },
+//             {
+//               sessionId: currentSessionId,
+//               userId: currentUserId,
+//               userName: currentUserName,
+//               status: 'active',
+//               lastMessageAt: new Date()
+//             },
+//             { upsert: true, new: true }
+//           );
+//           
+//           // Load history
+//           const messages = await ChatMessage.find({ sessionId: currentSessionId })
+//             .sort({ timestamp: 1 })
+//             .limit(100)
+//             .lean();
+//           
+//           ws.send(JSON.stringify({
+//             type: 'history',
+//             messages: messages.map(msg => ({
+//               id: msg._id.toString(),
+//               text: msg.message,
+//               sender: msg.sender,
+//               timestamp: msg.timestamp.toISOString(),
+//               isRead: msg.isRead || false
+//             }))
+//           }));
+//           
+//           ws.send(JSON.stringify({ type: 'session', sessionId: currentSessionId }));
+//         } else if (message.type === 'message' && currentSessionId) {
+//           // Save user message
+//           const userMsg = new ChatMessage({
+//             sessionId: currentSessionId,
+//             userId: currentUserId,
+//             userName: currentUserName,
+//             message: message.text.trim(),
+//             sender: 'user',
+//             timestamp: new Date(),
+//             isRead: false
+//           });
+//           await userMsg.save();
+//           
+//           // Update session
+//           await ChatSession.findOneAndUpdate(
+//             { sessionId: currentSessionId },
+//             { lastMessageAt: new Date(), $inc: { messageCount: 1 } }
+//           );
+//           
+//           // Generate bot response
+//           const botResponse = await generateBotResponse(message.text, currentUserName);
+//           
+//           // Save bot message
+//           const botMsg = new ChatMessage({
+//             sessionId: currentSessionId,
+//             userId: currentUserId,
+//             userName: 'Support Bot',
+//             message: botResponse,
+//             sender: 'bot',
+//             timestamp: new Date(),
+//             isRead: false
+//           });
+//           await botMsg.save();
+//           
+//           // Send bot response
+//           ws.send(JSON.stringify({
+//             type: 'message',
+//             id: botMsg._id.toString(),
+//             text: botResponse,
+//             sender: 'bot',
+//             timestamp: botMsg.timestamp.toISOString()
+//           }));
+//         }
+//       } catch (error) {
+//         console.error('WebSocket error:', error);
+//         ws.send(JSON.stringify({ type: 'error', message: 'Failed to process message' }));
+//       }
+//     });
+//     
+//     ws.on('close', () => {
+//       console.log('🔌 Native WebSocket client disconnected');
+//     });
+//   });
+//   
+//     console.log('✅ Native WebSocket server setup');
+//   } catch (error) {
+//     console.warn('⚠️ Native WebSocket server not available (this is OK for dev server):', error.message);
+//   }
+// })();
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -1781,7 +1869,7 @@ app.get('/api/health', (req, res) => {
       notifications: '/api/notifications',
       payments: '/api/payments',
       gemini: '/api/gemini',
-      chat: '/api/chat',
+      // chat: '/api/chat', // Disabled - Firebase handles chat in production
       health: '/api/health'
     }
   });
@@ -1824,10 +1912,10 @@ server.listen(PORT, () => {
   console.log(`   - POST /api/payments?action=approve - Approve payment request`);
   console.log(`   - POST /api/payments?action=reject - Reject payment request`);
   console.log(`   - POST /api/gemini - AI/Gemini API (mock response in dev)`);
-  console.log(`   - POST /api/chat - Send chat message`);
-  console.log(`   - GET  /api/chat/history - Get chat history`);
-  console.log(`   - GET  /api/chat/sessions - Get chat sessions (admin)`);
-  console.log(`   - WebSocket /chat - Real-time chat (ws://localhost:${PORT}/chat)`);
+  // console.log(`   - POST /api/chat - Send chat message (disabled - Firebase handles chat)`);
+  // console.log(`   - GET  /api/chat/history - Get chat history (disabled - Firebase handles chat)`);
+  // console.log(`   - GET  /api/chat/sessions - Get chat sessions (disabled - Firebase handles chat)`);
+  // console.log(`   - WebSocket /chat - Real-time chat (disabled - Firebase handles chat)`);
   console.log(`   - GET  /api/admin - Admin health check`);
   console.log(`   - GET  /api/health - Server health check`);
   console.log(`\n🔗 Test the API:`);

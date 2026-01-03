@@ -71,3 +71,6 @@ ChatMessageSchema.index({ userId: 1, timestamp: 1 });
 export const ChatMessage = mongoose.models.ChatMessage || mongoose.model<IChatMessage>('ChatMessage', ChatMessageSchema);
 
 
+
+
+
