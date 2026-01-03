@@ -30,22 +30,31 @@ export const logError = (...args: any[]): void => {
   // Process arguments to extract error information properly
   const processedArgs = args.map(arg => {
     if (arg instanceof Error) {
-      // Extract Error properties explicitly
-      return {
+      // Extract Error properties explicitly and sanitize sensitive fields
+      const errorObj: Record<string, any> = {
         name: arg.name,
         message: arg.message,
         stack: arg.stack,
-        ...(Object.getOwnPropertyNames(arg).reduce((acc, key) => {
-          if (key !== 'name' && key !== 'message' && key !== 'stack') {
-            try {
-              acc[key] = (arg as any)[key];
-            } catch {
-              // Skip non-enumerable or problematic properties
-            }
-          }
-          return acc;
-        }, {} as Record<string, any>))
       };
+      
+      // Extract custom properties from Error object
+      Object.getOwnPropertyNames(arg).forEach(key => {
+        if (key !== 'name' && key !== 'message' && key !== 'stack') {
+          try {
+            errorObj[key] = (arg as any)[key];
+          } catch {
+            // Skip non-enumerable or problematic properties
+          }
+        }
+      });
+      
+      // Sanitize sensitive fields from Error object
+      delete errorObj.password;
+      delete errorObj.token;
+      delete errorObj.secret;
+      delete errorObj.apiKey;
+      
+      return errorObj;
     }
     if (typeof arg === 'object' && arg !== null) {
       // Remove sensitive fields
