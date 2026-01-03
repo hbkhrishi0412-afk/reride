@@ -750,30 +750,88 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       if (!user) {
-        // Auto-create admin user if missing (development/testing only)
-        if (normalizedEmail === 'admin@test.com' && sanitizedData.role === 'admin') {
-          try {
-            logInfo('⚠️ Admin user not found, auto-creating admin@test.com...');
-            const adminPassword = await hashPassword('password');
-            const newAdmin = await firebaseUserService.create({
-              email: 'admin@test.com',
-              password: adminPassword,
+        // Auto-create test users if missing (development/testing only)
+        // SECURITY: Only allow in non-production environments
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+        
+        if (!isProduction) {
+          const testUsers = {
+            'admin@test.com': {
+              password: 'password',
               name: 'Admin User',
               mobile: '9876543210',
               location: 'Mumbai, Maharashtra',
-              role: 'admin',
-              status: 'active',
+              role: 'admin' as const,
+              status: 'active' as const,
               isVerified: true,
-              subscriptionPlan: 'premium',
+              subscriptionPlan: 'premium' as const,
               featuredCredits: 100,
+            },
+            'seller@test.com': {
+              password: 'password',
+              name: 'Prestige Motors',
+              mobile: '+91-98765-43210',
+              location: 'Delhi, NCR',
+              role: 'seller' as const,
+              status: 'active' as const,
+              isVerified: true,
+              subscriptionPlan: 'premium' as const,
+              featuredCredits: 5,
+              usedCertifications: 1,
+              dealershipName: 'Prestige Motors',
+              bio: 'Specializing in luxury and performance electric vehicles since 2020.',
+              logoUrl: 'https://i.pravatar.cc/100?u=seller',
+              avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com',
+            },
+            'customer@test.com': {
+              password: 'password',
+              name: 'Test Customer',
+              mobile: '9876543212',
+              location: 'Bangalore, Karnataka',
+              role: 'customer' as const,
+              status: 'active' as const,
+              isVerified: false,
+              subscriptionPlan: 'free' as const,
+              featuredCredits: 0,
+              avatarUrl: 'https://i.pravatar.cc/150?u=customer@test.com',
+            }
+          };
+
+          const testUserConfig = testUsers[normalizedEmail as keyof typeof testUsers];
+          
+          if (testUserConfig && sanitizedData.role === testUserConfig.role) {
+          try {
+            logInfo(`⚠️ ${testUserConfig.role} user not found, auto-creating ${normalizedEmail}...`);
+            
+            // Check Firebase availability before creating
+            if (!USE_FIREBASE) {
+              logError('❌ Cannot auto-create user: Firebase not available');
+              throw new Error('Firebase database is not available');
+            }
+            
+            const hashedPassword = await hashPassword(testUserConfig.password);
+            const newUser = await firebaseUserService.create({
+              email: normalizedEmail,
+              password: hashedPassword,
+              ...testUserConfig,
               authProvider: 'email',
               createdAt: new Date().toISOString()
             });
-            user = newAdmin;
-            logInfo('✅ Admin user auto-created successfully');
+            user = newUser;
+            logInfo(`✅ ${testUserConfig.role} user auto-created successfully`, {
+              email: newUser.email,
+              id: newUser.id,
+              role: newUser.role
+            });
           } catch (createError) {
-            logError('❌ Failed to auto-create admin user:', createError);
+            logError(`❌ Failed to auto-create ${testUserConfig.role} user:`, createError);
+            // Log detailed error for debugging
+            const errorDetails = createError instanceof Error 
+              ? { message: createError.message, stack: createError.stack }
+              : createError;
+            logError('Auto-create error details:', errorDetails);
             // Fall through to return error
+          }
           }
         }
         
@@ -3457,15 +3515,15 @@ async function seedUsers(productionSecret?: string): Promise<UserType[]> {
     throw new Error('Production seeding requires secret key');
   }
   
-  // Use environment variables for seed passwords or use default "password"
+  // Use environment variables for seed passwords or generate random passwords
   const adminPasswordEnv = process.env.SEED_ADMIN_PASSWORD;
   const sellerPasswordEnv = process.env.SEED_SELLER_PASSWORD;
   const customerPasswordEnv = process.env.SEED_CUSTOMER_PASSWORD;
   
-  // Use default "password" if env vars not set (for development/testing)
-  const adminPasswordPlain = adminPasswordEnv || 'password';
-  const sellerPasswordPlain = sellerPasswordEnv || 'password';
-  const customerPasswordPlain = customerPasswordEnv || 'password';
+  // Generate random passwords if env vars not set (prevents predictable passwords)
+  const adminPasswordPlain = adminPasswordEnv || generateRandomPassword();
+  const sellerPasswordPlain = sellerPasswordEnv || generateRandomPassword();
+  const customerPasswordPlain = customerPasswordEnv || generateRandomPassword();
   
   // Hash passwords before inserting
   const adminPassword = await hashPassword(adminPasswordPlain);

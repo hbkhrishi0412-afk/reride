@@ -108,7 +108,16 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           onRegister(result.user);
         }
       } else {
-        throw new Error(result.reason || 'An unknown error occurred.');
+        // Check if error includes detected role hint
+        const errorMessage = result.reason || 'An unknown error occurred.';
+        const detectedRole = (result as any).detectedRole;
+        if (detectedRole && allowedRoles.includes(detectedRole as UserRole)) {
+          // Auto-switch to detected role and show helpful message
+          setSelectedRole(detectedRole as UserRole);
+          setError(`Please select "${detectedRole.charAt(0).toUpperCase() + detectedRole.slice(1)}" as your account type and try again.`);
+        } else {
+          throw new Error(errorMessage);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to authenticate.');
@@ -240,30 +249,32 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               </p>
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
+              {/* Role Selection Dropdown - Show during both login and registration */}
+              {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
+                <div>
+                  <label htmlFor="mobile-account-type" className="block text-sm font-semibold text-gray-700 mb-2">
+                    {isLogin ? 'Account Type' : 'I want to'} <span className="text-orange-600">*</span>
+                  </label>
+                  <select
+                    id="mobile-account-type"
+                    name="account-type"
+                    value={selectedRole}
+                    onChange={(e) => handleRoleChange(e.target.value as UserRole)}
+                    className={mobileFormInputClass}
+                    required
+                  >
+                    {allowedRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {isLogin 
+                          ? roleConfig[role].title 
+                          : (roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {!isLogin && (
                 <>
-                  {/* Role Selection Dropdown - Only during registration */}
-                  {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
-                    <div>
-                      <label htmlFor="mobile-account-type" className="block text-sm font-semibold text-gray-700 mb-2">
-                        I want to <span className="text-orange-600">*</span>
-                      </label>
-                      <select
-                        id="mobile-account-type"
-                        name="account-type"
-                        value={selectedRole}
-                        onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                        className={mobileFormInputClass}
-                        required
-                      >
-                        {allowedRoles.map((role) => (
-                          <option key={role} value={role}>
-                            {roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles'}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
                   <div>
                     <label htmlFor="mobile-name" className="block text-sm font-semibold text-gray-700 mb-2">
                       Full Name <span className="text-red-500">*</span>
@@ -510,30 +521,32 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
+            {/* Role Selection Dropdown - Show during both login and registration */}
+            {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
+              <div>
+                <label htmlFor="account-type" className="block text-sm font-semibold text-gray-700 mb-2">
+                  {isLogin ? 'Account Type' : 'I want to'} <span className="text-orange-600">*</span>
+                </label>
+                <select
+                  id="account-type"
+                  name="account-type"
+                  value={selectedRole}
+                  onChange={(e) => handleRoleChange(e.target.value as UserRole)}
+                  className={selectInputClass}
+                  required
+                >
+                  {allowedRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {isLogin 
+                        ? roleConfig[role].title 
+                        : (roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {!isLogin && (
               <>
-                {/* Role Selection Dropdown - Only during registration */}
-                {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
-                  <div>
-                    <label htmlFor="account-type" className="block text-sm font-semibold text-gray-700 mb-2">
-                      I want to <span className="text-orange-600">*</span>
-                    </label>
-                    <select
-                      id="account-type"
-                      name="account-type"
-                      value={selectedRole}
-                      onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                      className={selectInputClass}
-                      required
-                    >
-                      {allowedRoles.map((role) => (
-                        <option key={role} value={role}>
-                          {roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
                 <div>
                   <label htmlFor="full-name" className="block text-sm font-semibold text-gray-700 mb-2">
                     Full Name <span className="text-red-500">*</span>
