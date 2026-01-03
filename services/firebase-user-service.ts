@@ -43,23 +43,74 @@ const dbSnapshotToArray = isServerSide ? adminSnapshotToArray : snapshotToArray;
 export const firebaseUserService = {
   // Create a new user
   async create(userData: Omit<User, 'id'>): Promise<User> {
-    const emailKey = emailToKey(userData.email);
-    const id = await dbCreate(DB_PATHS.USERS, {
-      ...userData,
-      email: userData.email.toLowerCase().trim(),
-    }, emailKey);
+    // CRITICAL: Normalize email before creating key to ensure consistency
+    const normalizedEmail = userData.email.toLowerCase().trim();
+    const emailKey = emailToKey(normalizedEmail);
     
-    return {
-      id,
+    // Prepare user data with normalized email
+    const userToSave = {
       ...userData,
+      email: normalizedEmail, // Always store normalized email
+    };
+    
+    // Save to Firebase with emailKey as the document key
+    const returnedKey = await dbCreate(DB_PATHS.USERS, userToSave, emailKey);
+    
+    // CRITICAL: Use emailKey as id (not the userId from userData if it exists)
+    // This ensures the id matches the Firebase key for consistent lookups
+    return {
+      ...userToSave,
+      id: emailKey, // Always use emailKey as the id for consistency
     };
   },
 
   // Find user by email
   async findByEmail(email: string): Promise<User | null> {
-    const emailKey = emailToKey(email);
-    const user = await dbRead<User>(DB_PATHS.USERS, emailKey);
-    return user ? { ...user, id: emailKey } : null;
+    // CRITICAL: Normalize email before creating key
+    const normalizedEmail = email.toLowerCase().trim();
+    const emailKey = emailToKey(normalizedEmail);
+    
+    try {
+      // Primary lookup: Use emailKey to find user
+      const user = await dbRead<User>(DB_PATHS.USERS, emailKey);
+      
+      if (user) {
+        // Ensure email is normalized in returned user
+        return { 
+          ...user, 
+          id: emailKey, // Use emailKey as id for consistency
+          email: user.email?.toLowerCase().trim() || normalizedEmail
+        };
+      }
+      
+      // Fallback: If not found by key, try querying by email field
+      // This handles edge cases where users might have been saved with different key formats
+      try {
+        const usersByEmail = await dbQueryByField<User>(DB_PATHS.USERS, 'email', normalizedEmail);
+        if (usersByEmail && Object.keys(usersByEmail).length > 0) {
+          // Get first matching user
+          const foundKey = Object.keys(usersByEmail)[0];
+          const foundUser = usersByEmail[foundKey];
+          
+          // Return user with normalized email and correct id
+          return {
+            ...foundUser,
+            id: foundKey, // Use the actual key from database
+            email: normalizedEmail
+          };
+        }
+      } catch (queryError) {
+        // Query failed, continue with null return
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('⚠️ Fallback email query failed:', queryError);
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('❌ Error finding user by email:', error);
+      return null;
+    }
   },
 
   // Find user by ID
@@ -81,18 +132,33 @@ export const firebaseUserService = {
 
   // Update user
   async update(email: string, updates: Partial<User>): Promise<void> {
-    const emailKey = emailToKey(email);
+    // CRITICAL: Normalize email before creating key
+    const normalizedEmail = email.toLowerCase().trim();
+    const emailKey = emailToKey(normalizedEmail);
+    
+    // If email is being updated, normalize it
+    if (updates.email) {
+      updates.email = updates.email.toLowerCase().trim();
+    }
+    
     await dbUpdate(DB_PATHS.USERS, emailKey, updates);
   },
 
   // Update user by ID
   async updateById(id: string, updates: Partial<User>): Promise<void> {
+    // If email is being updated, normalize it
+    if (updates.email) {
+      updates.email = updates.email.toLowerCase().trim();
+    }
+    
     await dbUpdate(DB_PATHS.USERS, id, updates);
   },
 
   // Delete user
   async delete(email: string): Promise<void> {
-    const emailKey = emailToKey(email);
+    // CRITICAL: Normalize email before creating key
+    const normalizedEmail = email.toLowerCase().trim();
+    const emailKey = emailToKey(normalizedEmail);
     await dbDelete(DB_PATHS.USERS, emailKey);
   },
 

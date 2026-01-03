@@ -1602,7 +1602,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     }
     
     // Connect to WebSocket for real-time updates (development only)
-    const wsProtocol = 'ws:';
+    // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
+    // This prevents mixed content errors when app is served over HTTPS
+    const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = 'localhost:3001';
     const wsUrl = `${wsProtocol}//${wsHost}`;
     
@@ -2821,7 +2823,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                     // @ts-ignore - socket.io-client types may not be available
                     const socketIoClient: any = await import('socket.io-client');
                     const io = socketIoClient.default || socketIoClient.io;
-                    const wsUrl = 'ws://localhost:3001';
+                    // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
+                    // This prevents mixed content errors when app is served over HTTPS
+                    const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${wsProtocol}//localhost:3001`;
                     const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
                     
                     socket.emit('conversation:message', {
@@ -2968,7 +2973,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                     // @ts-ignore - socket.io-client types may not be available
                     const socketIoClient: any = await import('socket.io-client');
                     const io = socketIoClient.default || socketIoClient.io;
-                    const wsUrl = 'ws://localhost:3001';
+                    // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
+                    // This prevents mixed content errors when app is served over HTTPS
+                    const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${wsProtocol}//localhost:3001`;
                     const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
                     
                     socket.emit('conversation:message', {
