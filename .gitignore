@@ -73,4 +73,8 @@ credentials/
 config/secrets.json
 firebase-service-account.json
 
+# Firebase configuration (contains project-specific settings)
+.firebaserc
+firebase.json
+
 .env*.local

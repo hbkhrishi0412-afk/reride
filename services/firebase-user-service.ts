@@ -54,7 +54,7 @@ export const firebaseUserService = {
     };
     
     // Save to Firebase with emailKey as the document key
-    const returnedKey = await dbCreate(DB_PATHS.USERS, userToSave, emailKey);
+    await dbCreate(DB_PATHS.USERS, userToSave, emailKey);
     
     // CRITICAL: Use emailKey as id (not the userId from userData if it exists)
     // This ensures the id matches the Firebase key for consistent lookups
