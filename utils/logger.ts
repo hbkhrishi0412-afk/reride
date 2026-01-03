@@ -27,23 +27,43 @@ export const logWarn = (...args: any[]): void => {
  * Log error messages (always logged, but sanitized in production)
  */
 export const logError = (...args: any[]): void => {
+  // Process arguments to extract error information properly
+  const processedArgs = args.map(arg => {
+    if (arg instanceof Error) {
+      // Extract Error properties explicitly
+      return {
+        name: arg.name,
+        message: arg.message,
+        stack: arg.stack,
+        ...(Object.getOwnPropertyNames(arg).reduce((acc, key) => {
+          if (key !== 'name' && key !== 'message' && key !== 'stack') {
+            try {
+              acc[key] = (arg as any)[key];
+            } catch {
+              // Skip non-enumerable or problematic properties
+            }
+          }
+          return acc;
+        }, {} as Record<string, any>))
+      };
+    }
+    if (typeof arg === 'object' && arg !== null) {
+      // Remove sensitive fields
+      const sanitized = { ...arg };
+      delete (sanitized as any).password;
+      delete (sanitized as any).token;
+      delete (sanitized as any).secret;
+      delete (sanitized as any).apiKey;
+      return sanitized;
+    }
+    return arg;
+  });
+
   if (isDevelopment) {
-    console.error(...args);
+    console.error(...processedArgs);
   } else {
     // In production, log errors but sanitize sensitive data
-    const sanitized = args.map(arg => {
-      if (typeof arg === 'object' && arg !== null) {
-        // Remove sensitive fields
-        const sanitized = { ...arg };
-        delete (sanitized as any).password;
-        delete (sanitized as any).token;
-        delete (sanitized as any).secret;
-        delete (sanitized as any).apiKey;
-        return sanitized;
-      }
-      return arg;
-    });
-    console.error(...sanitized);
+    console.error(...processedArgs);
   }
 };
 
