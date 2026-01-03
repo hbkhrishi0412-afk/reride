@@ -562,7 +562,7 @@ async function mainHandler(
       return await handleNewCars(req, res, handlerOptions);
     } else if (pathname.includes('/system') || pathname.endsWith('/system')) {
       return await handleSystem(req, res, handlerOptions);
-    } else if (pathname.includes('/utils') || pathname.endsWith('/utils') || pathname.includes('/test-connection')) {
+    } else if (pathname.includes('/utils') || pathname.endsWith('/utils') || pathname.includes('/test-connection') || pathname.includes('/test-firebase-writes')) {
       return await handleUtils(req, res, handlerOptions);
     } else if (pathname.includes('/ai') || pathname.endsWith('/ai') || pathname.includes('/gemini')) {
       return await handleAI(req, res, handlerOptions);
@@ -3702,6 +3702,188 @@ async function handleTestConnection(_req: VercelRequest, res: VercelResponse) {
   }
 }
 
+// Firebase write operations test handler
+async function handleTestFirebaseWrites(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ 
+      success: false, 
+      reason: 'Method not allowed. Use POST to run tests.' 
+    });
+  }
+
+  try {
+    console.log('🧪 Testing Firebase write operations...');
+    
+    if (!USE_FIREBASE) {
+      return res.status(503).json({
+        success: false,
+        message: 'Firebase is not configured',
+        timestamp: new Date().toISOString(),
+        details: {
+          connection: 'failed',
+          database: 'unreachable',
+          reason: 'Firebase environment variables not set'
+        }
+      });
+    }
+
+    const testResults: {
+      create: { success: boolean; error?: string; testId?: string };
+      update: { success: boolean; error?: string };
+      modify: { success: boolean; error?: string };
+      delete: { success: boolean; error?: string };
+    } = {
+      create: { success: false },
+      update: { success: false },
+      modify: { success: false },
+      delete: { success: false },
+    };
+
+    const testCollection = 'test_firebase_writes';
+    const testId = `test_${Date.now()}`;
+
+    // Test 1: CREATE Operation
+    try {
+      console.log(`📋 Test 1: CREATE - Creating test document ${testId}`);
+      const testData = {
+        testField: 'original_value',
+        testNumber: 100,
+        testBoolean: true,
+        createdAt: new Date().toISOString(),
+      };
+      
+      await adminCreate(testCollection, testData, testId);
+      
+      // Verify create
+      const created = await adminRead(testCollection, testId);
+      if (created && created.testField === 'original_value') {
+        testResults.create = { success: true, testId };
+        console.log(`✅ CREATE test passed: ${testId}`);
+      } else {
+        testResults.create = { success: false, error: 'Created document verification failed', testId };
+        console.log(`❌ CREATE test failed: Verification failed`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      testResults.create = { success: false, error: errorMessage, testId };
+      console.error(`❌ CREATE test failed:`, errorMessage);
+    }
+
+    // Test 2: UPDATE Operation (only if CREATE succeeded)
+    if (testResults.create.success) {
+      try {
+        console.log(`📋 Test 2: UPDATE - Updating test document ${testId}`);
+        const updates = {
+          testField: 'updated_value',
+          testNumber: 200,
+          updatedAt: new Date().toISOString(),
+        };
+        
+        await adminUpdate(testCollection, testId, updates);
+        
+        // Verify update
+        const updated = await adminRead(testCollection, testId);
+        if (updated && updated.testField === 'updated_value' && updated.testNumber === 200) {
+          testResults.update = { success: true };
+          console.log(`✅ UPDATE test passed: ${testId}`);
+        } else {
+          testResults.update = { success: false, error: 'Update verification failed' };
+          console.log(`❌ UPDATE test failed: Verification failed`);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        testResults.update = { success: false, error: errorMessage };
+        console.error(`❌ UPDATE test failed:`, errorMessage);
+      }
+    } else {
+      testResults.update = { success: false, error: 'Skipped: CREATE test failed' };
+    }
+
+    // Test 3: MODIFY Operation (partial update)
+    if (testResults.update.success) {
+      try {
+        console.log(`📋 Test 3: MODIFY - Partially updating test document ${testId}`);
+        const partialUpdates = {
+          testNumber: 300,
+        };
+        
+        await adminUpdate(testCollection, testId, partialUpdates);
+        
+        // Verify modify
+        const modified = await adminRead(testCollection, testId);
+        if (modified && modified.testNumber === 300 && modified.testField === 'updated_value') {
+          testResults.modify = { success: true };
+          console.log(`✅ MODIFY test passed: ${testId}`);
+        } else {
+          testResults.modify = { success: false, error: 'Modify verification failed' };
+          console.log(`❌ MODIFY test failed: Verification failed`);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        testResults.modify = { success: false, error: errorMessage };
+        console.error(`❌ MODIFY test failed:`, errorMessage);
+      }
+    } else {
+      testResults.modify = { success: false, error: 'Skipped: UPDATE test failed' };
+    }
+
+    // Test 4: DELETE Operation (only if previous tests succeeded)
+    if (testResults.create.success) {
+      try {
+        console.log(`📋 Test 4: DELETE - Deleting test document ${testId}`);
+        await adminDelete(testCollection, testId);
+        
+        // Verify delete
+        const deleted = await adminRead(testCollection, testId);
+        if (!deleted) {
+          testResults.delete = { success: true };
+          console.log(`✅ DELETE test passed: ${testId}`);
+        } else {
+          testResults.delete = { success: false, error: 'Delete verification failed - document still exists' };
+          console.log(`❌ DELETE test failed: Document still exists`);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        testResults.delete = { success: false, error: errorMessage };
+        console.error(`❌ DELETE test failed:`, errorMessage);
+      }
+    } else {
+      testResults.delete = { success: false, error: 'Skipped: CREATE test failed' };
+    }
+
+    // Calculate overall success
+    const allTestsPassed = Object.values(testResults).every(test => test.success);
+    const passedCount = Object.values(testResults).filter(test => test.success).length;
+    const totalCount = Object.keys(testResults).length;
+
+    return res.status(allTestsPassed ? 200 : 500).json({
+      success: allTestsPassed,
+      message: allTestsPassed 
+        ? `All ${totalCount} Firebase write operation tests passed!`
+        : `${passedCount}/${totalCount} tests passed`,
+      timestamp: new Date().toISOString(),
+      results: testResults,
+      summary: {
+        total: totalCount,
+        passed: passedCount,
+        failed: totalCount - passedCount,
+        testId: testResults.create.testId,
+        collection: testCollection,
+      },
+    });
+
+  } catch (error) {
+    console.error('❌ Firebase write operations test failed:', error);
+    
+    return res.status(500).json({
+      success: false,
+      message: 'Firebase write operations test failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
 // Utils handler - consolidates utils.ts
 async function handleUtils(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
@@ -3709,6 +3891,8 @@ async function handleUtils(req: VercelRequest, res: VercelResponse, _options: Ha
 
   if (pathname.includes('/test-connection') || pathname.endsWith('/test-connection')) {
     return await handleTestConnection(req, res);
+  } else if (pathname.includes('/test-firebase-writes') || pathname.endsWith('/test-firebase-writes')) {
+    return await handleTestFirebaseWrites(req, res);
   } else {
     return res.status(404).json({ success: false, reason: 'Utility endpoint not found' });
   }

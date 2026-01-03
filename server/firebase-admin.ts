@@ -64,9 +64,18 @@ if (!admin.apps.length) {
     const databaseURL = process.env.FIREBASE_DATABASE_URL || 
                         `https://${serviceAccount.project_id || 'default'}.firebaseio.com`;
     
+    // Remove trailing slash if present (Firebase Admin SDK handles this, but be explicit)
+    const cleanDatabaseURL = databaseURL.endsWith('/') ? databaseURL.slice(0, -1) : databaseURL;
+    
+    console.log('🔧 Initializing Firebase Admin SDK...', {
+      projectId: serviceAccount.project_id,
+      databaseURL: cleanDatabaseURL,
+      hasCustomURL: !!process.env.FIREBASE_DATABASE_URL,
+    });
+    
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      databaseURL,
+      databaseURL: cleanDatabaseURL,
     });
     
     console.log('✅ Firebase Admin initialized successfully');

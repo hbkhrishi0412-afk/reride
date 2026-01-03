@@ -89,19 +89,56 @@ export async function adminUpdate<T extends Record<string, unknown>>(
   key: string,
   updates: Partial<T>
 ): Promise<void> {
-  const db = getFirebaseAdminDatabase();
-  const refPath = db.ref(`${collection}/${key}`);
-  // Add updatedAt timestamp to match client SDK behavior
-  await refPath.update({
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  });
+  try {
+    const db = getFirebaseAdminDatabase();
+    const refPath = db.ref(`${collection}/${key}`);
+    
+    // Log the update operation for debugging
+    console.log(`🔄 Firebase Admin Update: ${collection}/${key}`, {
+      updateKeys: Object.keys(updates),
+      databaseURL: db.app.options.databaseURL,
+    });
+    
+    // Add updatedAt timestamp to match client SDK behavior
+    const updateData = {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    
+    await refPath.update(updateData);
+    
+    console.log(`✅ Firebase Admin Update successful: ${collection}/${key}`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Firebase Admin Update failed: ${collection}/${key}`, {
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+      updates: Object.keys(updates),
+    });
+    throw error; // Re-throw to ensure errors are not silently swallowed
+  }
 }
 
 export async function adminDelete(collection: string, key: string): Promise<void> {
-  const db = getFirebaseAdminDatabase();
-  const refPath = db.ref(`${collection}/${key}`);
-  await refPath.remove();
+  try {
+    const db = getFirebaseAdminDatabase();
+    const refPath = db.ref(`${collection}/${key}`);
+    
+    console.log(`🗑️ Firebase Admin Delete: ${collection}/${key}`, {
+      databaseURL: db.app.options.databaseURL,
+    });
+    
+    await refPath.remove();
+    
+    console.log(`✅ Firebase Admin Delete successful: ${collection}/${key}`);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`❌ Firebase Admin Delete failed: ${collection}/${key}`, {
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    throw error; // Re-throw to ensure errors are not silently swallowed
+  }
 }
 
 export async function adminQueryByField<T>(

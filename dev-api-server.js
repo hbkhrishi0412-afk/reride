@@ -867,10 +867,17 @@ app.post('/api/users', (req, res) => {
   const { action } = req.body;
   
   if (action === 'login') {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
     const user = mockUsers.find(u => u.email === email && u.password === password);
     if (!user) {
       return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
+    }
+    // Validate role if provided
+    if (role && user.role !== role) {
+      return res.status(403).json({ 
+        success: false, 
+        reason: `User is not a registered ${role}.` 
+      });
     }
     return res.json({ 
       success: true, 
