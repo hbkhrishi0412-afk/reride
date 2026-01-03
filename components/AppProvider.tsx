@@ -1590,14 +1590,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, [auditLog]);
 
   // Real-time WebSocket listener for conversation updates (end-to-end sync)
+  // NOTE: Socket.io is only used in development. In production, Firebase handles real-time conversations.
   useEffect(() => {
     if (!currentUser) return;
     
-    // Connect to WebSocket for real-time updates
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = process.env.NODE_ENV === 'production' 
-      ? window.location.host 
-      : 'localhost:3001';
+    // Only initialize Socket.io in development mode
+    // In production, Firebase handles conversations, so Socket.io is not needed
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    if (!isDevelopment) {
+      return; // Skip Socket.io initialization in production
+    }
+    
+    // Connect to WebSocket for real-time updates (development only)
+    const wsProtocol = 'ws:';
+    const wsHost = 'localhost:3001';
     const wsUrl = `${wsProtocol}//${wsHost}`;
     
     // Use Socket.io client for real-time updates
@@ -1605,9 +1611,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     
     (async () => {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1606',message:'Socket.io connection attempt',data:{wsUrl,wsProtocol,wsHost},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
-        // #endregion
         // Dynamically import socket.io-client
         // @ts-ignore - socket.io-client types may not be available
         const socketIoClient: any = await import('socket.io-client');
@@ -1625,9 +1628,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         });
         
         socket.on('connect', () => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1622',message:'Socket.io connected',data:{socketId:socket.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
-          // #endregion
           if (process.env.NODE_ENV === 'development') {
             console.log('🔧 Connected to WebSocket for real-time conversation updates');
           }
@@ -1636,9 +1636,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         // CRITICAL FIX: Improve error handling - don't spam console with errors
         let connectionErrorLogged = false;
         socket.on('connect_error', (error: any) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1631',message:'Socket.io connect_error',data:{error:error?.message,wsUrl,errorCode:(error as any)?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
-          // #endregion
           // CRITICAL FIX: Only log error once to prevent console spam
           if (!connectionErrorLogged) {
             connectionErrorLogged = true;
@@ -1656,9 +1653,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         });
         
         socket.on('reconnect_failed', () => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1648',message:'Socket.io reconnect_failed',data:{wsUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
-          // #endregion
           if (process.env.NODE_ENV === 'development') {
             console.warn('⚠️ WebSocket reconnection failed. Real-time updates will not be available until server is restarted.');
           }
@@ -1723,18 +1717,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         });
         
         socket.on('error', (error: any) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1696',message:'Socket.io error event',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
-          // #endregion
           // CRITICAL FIX: Only log in development to prevent console spam
           if (process.env.NODE_ENV === 'development') {
             console.warn('⚠️ WebSocket error (non-critical):', error?.message || error);
           }
         });
       } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AppProvider.tsx:1700',message:'Socket.io initialization failed',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-3'})}).catch(()=>{});
-        // #endregion
         // CRITICAL FIX: Fail gracefully - app should work without WebSocket
         if (process.env.NODE_ENV === 'development') {
           console.warn('⚠️ Failed to initialize WebSocket for conversations. App will continue without real-time updates.');
@@ -2826,28 +2814,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               if (result.synced) {
                 console.log('✅ Message synced to MongoDB:', messageId);
                 
-                // Broadcast message via WebSocket for real-time end-to-end sync
-                try {
-                  // @ts-ignore - socket.io-client types may not be available
-                  const socketIoClient: any = await import('socket.io-client');
-                  const io = socketIoClient.default || socketIoClient.io;
-                  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                  const wsHost = process.env.NODE_ENV === 'production' 
-                    ? window.location.host 
-                    : 'localhost:3001';
-                  const wsUrl = `${wsProtocol}//${wsHost}`;
-                  const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
-                  
-                  socket.emit('conversation:message', {
-                    conversationId,
-                    message: newMessage
-                  });
-                  
-                  // Disconnect after sending
-                  setTimeout(() => socket.disconnect(), 100);
-                } catch (error) {
-                  console.warn('Failed to broadcast message via WebSocket:', error);
+                // Broadcast message via WebSocket for real-time end-to-end sync (development only)
+                // In production, Firebase handles real-time sync, so Socket.io is not needed
+                if (process.env.NODE_ENV === 'development') {
+                  try {
+                    // @ts-ignore - socket.io-client types may not be available
+                    const socketIoClient: any = await import('socket.io-client');
+                    const io = socketIoClient.default || socketIoClient.io;
+                    const wsUrl = 'ws://localhost:3001';
+                    const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
+                    
+                    socket.emit('conversation:message', {
+                      conversationId,
+                      message: newMessage
+                    });
+                    
+                    // Disconnect after sending
+                    setTimeout(() => socket.disconnect(), 100);
+                  } catch (error) {
+                    console.warn('Failed to broadcast message via WebSocket:', error);
+                  }
                 }
+                // In production, Firebase handles real-time sync automatically
               } else if (result.queued) {
                 console.log('⏳ Message queued for sync (will retry):', messageId);
               }
@@ -2973,28 +2961,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
               if (result.synced) {
                 console.log('✅ Message synced to MongoDB:', messageId);
                 
-                // Broadcast message via WebSocket for real-time end-to-end sync
-                try {
-                  // @ts-ignore - socket.io-client types may not be available
-                  const socketIoClient: any = await import('socket.io-client');
-                  const io = socketIoClient.default || socketIoClient.io;
-                  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                  const wsHost = process.env.NODE_ENV === 'production' 
-                    ? window.location.host 
-                    : 'localhost:3001';
-                  const wsUrl = `${wsProtocol}//${wsHost}`;
-                  const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
-                  
-                  socket.emit('conversation:message', {
-                    conversationId,
-                    message: newMessage
-                  });
-                  
-                  // Disconnect after sending
-                  setTimeout(() => socket.disconnect(), 100);
-                } catch (error) {
-                  console.warn('Failed to broadcast message via WebSocket:', error);
+                // Broadcast message via WebSocket for real-time end-to-end sync (development only)
+                // In production, Firebase handles real-time sync, so Socket.io is not needed
+                if (process.env.NODE_ENV === 'development') {
+                  try {
+                    // @ts-ignore - socket.io-client types may not be available
+                    const socketIoClient: any = await import('socket.io-client');
+                    const io = socketIoClient.default || socketIoClient.io;
+                    const wsUrl = 'ws://localhost:3001';
+                    const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
+                    
+                    socket.emit('conversation:message', {
+                      conversationId,
+                      message: newMessage
+                    });
+                    
+                    // Disconnect after sending
+                    setTimeout(() => socket.disconnect(), 100);
+                  } catch (error) {
+                    console.warn('Failed to broadcast message via WebSocket:', error);
+                  }
                 }
+                // In production, Firebase handles real-time sync automatically
               } else if (result.queued) {
                 console.log('⏳ Message queued for sync (will retry):', messageId);
               }
