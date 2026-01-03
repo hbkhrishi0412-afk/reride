@@ -725,20 +725,32 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(400).json({ success: false, reason: 'Invalid email format.' });
       }
       
-      // Normalize email to lowercase for consistent database lookup
+      // CRITICAL: Normalize email to lowercase for consistent database lookup
+      // This MUST match the normalization used when saving users
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
       
       // Use Firebase only
       let user: UserType | null = null;
       
       try {
+        // CRITICAL: Use normalized email for lookup
         user = await firebaseUserService.findByEmail(normalizedEmail);
+        
+        // If user not found, log for debugging (but don't reveal to user for security)
+        if (!user) {
+          logWarn('⚠️ Login attempt - user not found:', {
+            normalizedEmail,
+            emailFormat: sanitizedData.email,
+            role: sanitizedData.role
+          });
+        }
       } catch (error) {
         logError('❌ Firebase user lookup error:', error);
         return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
       }
 
       if (!user) {
+        // Don't reveal whether email exists or not (security best practice)
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
       }
       
@@ -884,17 +896,17 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           logInfo('🔐 Password hashed successfully for user:', normalizedEmail);
         }
 
-        // Generate unique ID to avoid collisions
-        const userId = Date.now() + Math.floor(Math.random() * 1000);
+        // CRITICAL FIX: Don't generate userId - firebase-user-service will use emailKey as id
+        // This ensures consistent id format matching the Firebase key
 
-        const userData = {
-          id: userId.toString(),
+        const userData: Omit<UserType, 'id'> = {
           email: normalizedEmail,
           password: hashedPassword,
           name: sanitizedData.name,
           mobile: sanitizedData.mobile,
           role: sanitizedData.role,
           location: '', // Default empty location, can be updated later
+          authProvider: 'email', // CRITICAL: Set authProvider for email/password users
           status: 'active' as const,
           isVerified: false,
           subscriptionPlan: 'free' as const,
