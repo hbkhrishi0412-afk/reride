@@ -5,7 +5,6 @@ import {
   updateData, 
   deleteData, 
   queryByField, 
-  findOneByField,
   snapshotToArray,
   DB_PATHS 
 } from '../lib/firebase-db.js';
@@ -16,7 +15,6 @@ import {
   adminUpdate,
   adminDelete,
   adminQueryByField,
-  adminFindOneByField,
   snapshotToArray as adminSnapshotToArray
 } from '../server/firebase-admin-db.js';
 import type { User } from '../types.js';
@@ -36,7 +34,6 @@ const dbCreate = isServerSide ? adminCreate : create;
 const dbUpdate = isServerSide ? adminUpdate : updateData;
 const dbDelete = isServerSide ? adminDelete : deleteData;
 const dbQueryByField = isServerSide ? adminQueryByField : queryByField;
-const dbFindOneByField = isServerSide ? adminFindOneByField : findOneByField;
 const dbSnapshotToArray = isServerSide ? adminSnapshotToArray : snapshotToArray;
 
 // User service for Firebase Realtime Database
@@ -117,11 +114,6 @@ export const firebaseUserService = {
   async findById(id: string): Promise<User | null> {
     const user = await dbRead<User>(DB_PATHS.USERS, id);
     return user ? { ...user, id } : null;
-  },
-
-  // Find user by Firebase UID
-  async findByFirebaseUid(firebaseUid: string): Promise<User | null> {
-    return await dbFindOneByField<User>(DB_PATHS.USERS, 'firebaseUid', firebaseUid);
   },
 
   // Get all users

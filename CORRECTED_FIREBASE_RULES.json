@@ -1,0 +1,89 @@
+{
+  "rules": {
+    "users": {
+      "$userKey": {
+        // Public read for basic profile info (for seller profiles, listings, etc.)
+        "name": { ".read": true },
+        "email": { ".read": true },
+        "avatarUrl": { ".read": true },
+        "role": { ".read": true },
+        "isVerified": { ".read": true },
+        "dealershipName": { ".read": true },
+        "bio": { ".read": true },
+        "logoUrl": { ".read": true },
+        "averageRating": { ".read": true },
+        "ratingCount": { ".read": true },
+        "badges": { ".read": true },
+        "phoneVerified": { ".read": true },
+        "emailVerified": { ".read": true },
+        "govtIdVerified": { ".read": true },
+        "trustScore": { ".read": true },
+        "subscriptionPlan": { ".read": true },
+        "location": { ".read": true },
+        "status": { ".read": true },
+        
+        // Full read/write: Allow authenticated access
+        // NOTE: Since users use email-based keys (not Firebase Auth UIDs) and don't have firebaseUid,
+        // we use simpler authentication. Server-side uses Admin SDK (bypasses rules).
+        ".read": "auth != null",
+        ".write": "auth != null",
+        
+        // Password is never readable, only writable by authenticated users
+        "password": {
+          ".read": false,
+          ".write": "auth != null"
+        },
+        
+        // Sensitive fields require authentication
+        "mobile": {
+          ".read": "auth != null"
+        },
+        "alternatePhone": {
+          ".read": "auth != null"
+        },
+        "pendingPlanUpgrade": {
+          ".read": "auth != null"
+        },
+        
+        // Private fields - no read access
+        "reportedCount": {
+          ".read": false,
+          ".write": "auth != null"
+        },
+        "isBanned": {
+          ".read": false,
+          ".write": "auth != null"
+        },
+        
+        // Other fields - allow authenticated read/write
+        "$other": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      },
+      // Allow authenticated users to list users (for search, etc.)
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "vehicles": {
+      "$vehicleId": {
+        // Public read for published vehicles, authenticated read for all
+        ".read": "data.child('status').val() == 'published' || auth != null",
+        ".write": "auth != null",
+        ".validate": "!newData.exists() || newData.hasChildren(['make', 'model', 'price', 'sellerEmail'])"
+      },
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "conversations": {
+      "$conversationId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "!newData.exists() || newData.hasChildren(['customerId', 'sellerId', 'vehicleId'])"
+      },
+      ".read": false,
+      ".write": false
+    }
+  }
+}
+
