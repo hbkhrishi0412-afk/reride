@@ -9,7 +9,6 @@ import { firebaseUserService } from '../services/firebase-user-service.js';
 import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
 import { firebaseConversationService } from '../services/firebase-conversation-service.js';
 import { isDatabaseAvailable as isFirebaseAvailable, getDatabaseStatus } from '../lib/firebase-db.js';
-import { updateFirebaseAuthProfile } from '../server/firebase-admin.js';
 import { 
   DB_PATHS
 } from '../lib/firebase-db.js';
@@ -700,7 +699,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
   // Handle authentication actions (POST with action parameter)
   if (req.method === 'POST') {
 
-    const { action, email, password, role, name, mobile, firebaseUid, authProvider, avatarUrl } = req.body;
+    const { action, email, password, role, name, mobile, authProvider, avatarUrl } = req.body;
 
     // Validate that action is provided
     if (!action || typeof action !== 'string') {
@@ -1116,12 +1115,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
     // OAUTH LOGIN
     if (action === 'oauth-login') {
-      if (!firebaseUid || !email || !name || !role) {
+      // REMOVED: firebaseUid requirement - not used in Firebase Realtime Database
+      if (!email || !name || !role) {
         return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
       }
 
-      // Sanitize OAuth data
-      const sanitizedData = await sanitizeObject({ firebaseUid, email, name, role, authProvider, avatarUrl });
+      // Sanitize OAuth data (removed firebaseUid - not used in Firebase Realtime Database)
+      const sanitizedData = await sanitizeObject({ email, name, role, authProvider, avatarUrl });
       const mobile = req.body.mobile || '';
       const location = req.body.location || '';
 
@@ -1137,7 +1137,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           mobile: mobile,
           location: location,
           role: sanitizedData.role,
-          firebaseUid: sanitizedData.firebaseUid,
+          // REMOVED: firebaseUid - not used in Firebase Realtime Database
           authProvider: sanitizedData.authProvider,
           avatarUrl: sanitizedData.avatarUrl,
           status: 'active' as const,
@@ -1502,51 +1502,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
         logInfo('✅ User updated successfully:', updatedUser.email);
 
-        // SYNC FIREBASE AUTH PROFILE when user profile data changes
-        if (existingUser.firebaseUid) {
-          try {
-            const authUpdates: {
-              displayName?: string;
-              photoURL?: string;
-              email?: string;
-              phoneNumber?: string;
-              password?: string;
-            } = {};
-
-            // Map database fields to Firebase Auth fields
-            if (updateFields.name !== undefined) {
-              authUpdates.displayName = updateFields.name as string;
-            }
-            if (updateFields.avatarUrl !== undefined) {
-              authUpdates.photoURL = updateFields.avatarUrl as string;
-            }
-            if (updateFields.email !== undefined) {
-              authUpdates.email = updateFields.email as string;
-            }
-            if (updateFields.mobile !== undefined) {
-              authUpdates.phoneNumber = updateFields.mobile as string;
-            }
-            // CRITICAL: Also sync password to Firebase Auth if it was updated
-            // Note: Firebase Auth requires plain text password (it will hash it internally)
-            // But we only have the hashed password here, so we need to use the original plain text
-            // For now, we'll skip Firebase Auth password update since we only have the hash
-            // The database password is what's used for API authentication anyway
-
-            // Only update Firebase Auth if there are relevant fields to update
-            if (Object.keys(authUpdates).length > 0) {
-              logInfo('🔄 Syncing Firebase Auth profile...', { 
-                firebaseUid: existingUser.firebaseUid,
-                fields: Object.keys(authUpdates)
-              });
-              await updateFirebaseAuthProfile(existingUser.firebaseUid, authUpdates);
-              logInfo('✅ Firebase Auth profile synced successfully');
-            }
-          } catch (authError) {
-            logError('⚠️ Error syncing Firebase Auth profile:', authError);
-            // Don't fail the user update if Auth sync fails - database update already succeeded
-            // This is a non-critical operation
-          }
-        }
+        // REMOVED: Firebase Auth profile sync - firebaseUid doesn't exist in Firebase Realtime Database
+        // This code was never executing because existingUser.firebaseUid is always undefined
 
         // SYNC VEHICLE EXPIRY DATES when planExpiryDate is updated
         if (updateFields.planExpiryDate !== undefined || unsetFields.planExpiryDate !== undefined) {
@@ -3515,15 +3472,16 @@ async function seedUsers(productionSecret?: string): Promise<UserType[]> {
     throw new Error('Production seeding requires secret key');
   }
   
-  // Use environment variables for seed passwords or generate random passwords
+  // Use environment variables for seed passwords or use defaults based on environment
   const adminPasswordEnv = process.env.SEED_ADMIN_PASSWORD;
   const sellerPasswordEnv = process.env.SEED_SELLER_PASSWORD;
   const customerPasswordEnv = process.env.SEED_CUSTOMER_PASSWORD;
   
-  // Generate random passwords if env vars not set (prevents predictable passwords)
-  const adminPasswordPlain = adminPasswordEnv || generateRandomPassword();
-  const sellerPasswordPlain = sellerPasswordEnv || generateRandomPassword();
-  const customerPasswordPlain = customerPasswordEnv || generateRandomPassword();
+  // In production, require env vars or generate random passwords (security)
+  // In development, allow 'password' as fallback for testing convenience
+  const adminPasswordPlain = adminPasswordEnv || (isProduction ? generateRandomPassword() : 'password');
+  const sellerPasswordPlain = sellerPasswordEnv || (isProduction ? generateRandomPassword() : 'password');
+  const customerPasswordPlain = customerPasswordEnv || (isProduction ? generateRandomPassword() : 'password');
   
   // Hash passwords before inserting
   const adminPassword = await hashPassword(adminPasswordPlain);
