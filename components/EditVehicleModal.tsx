@@ -110,20 +110,67 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         }));
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            const files = Array.from(e.target.files);
-            files.forEach((file: File) => {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const result = reader.result;
-                    if (typeof result === 'string') {
-                        setFormData(prev => ({ ...prev, images: [...prev.images, result] }));
-                    }
-                };
-                reader.readAsDataURL(file);
-            });
-            e.target.value = '';
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files) return;
+        
+        const files = Array.from(e.target.files);
+        const input = e.target;
+        
+        try {
+            // Use the same upload service as Dashboard for consistency
+            const { uploadImages, validateImageFile } = await import('../services/imageUploadService');
+            
+            // Validate all files first
+            for (const file of files) {
+                const validation = validateImageFile(file);
+                if (!validation.valid) {
+                    alert(validation.error || 'Invalid image file');
+                    if (input) input.value = '';
+                    return;
+                }
+            }
+            
+            // Upload images using the service (resizes and stores in database)
+            const uploadResults = await uploadImages(files, 'vehicles');
+            
+            // Check for upload errors
+            const failedUploads = uploadResults.filter(r => !r.success);
+            if (failedUploads.length > 0) {
+                const errorMessage = failedUploads.map(r => r.error).join(', ');
+                alert(`Failed to upload ${failedUploads.length} file(s): ${errorMessage}`);
+                if (input) input.value = '';
+                return;
+            }
+            
+            // Get successful upload URLs (base64 data URLs)
+            const successfulUrls = uploadResults
+                .filter(r => r.success && r.url)
+                .map(r => r.url!);
+            
+            if (successfulUrls.length > 0) {
+                // Limit total images to prevent vehicle object from becoming too large
+                const currentImages = formData.images || [];
+                const maxImages = 10;
+                const remainingSlots = maxImages - currentImages.length;
+                
+                if (remainingSlots <= 0) {
+                    alert(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`);
+                    if (input) input.value = '';
+                    return;
+                }
+                
+                const imagesToAdd = successfulUrls.slice(0, remainingSlots);
+                if (successfulUrls.length > remainingSlots) {
+                    alert(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`);
+                }
+                
+                setFormData(prev => ({ ...prev, images: [...prev.images, ...imagesToAdd] }));
+            }
+        } catch (error) {
+            console.error('Error uploading images:', error);
+            alert('Failed to upload images. Please try again.');
+        } finally {
+            if (input) input.value = '';
         }
     };
 

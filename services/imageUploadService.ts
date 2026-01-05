@@ -152,6 +152,26 @@ async function uploadToFirebaseRealtimeDB(file: File, folder: string): Promise<U
 }
 
 /**
+ * Normalizes MIME type to standard format
+ * Converts non-standard types like 'image/jpg' to 'image/jpeg'
+ * @param mimeType - The MIME type to normalize
+ * @returns Normalized MIME type
+ */
+function normalizeMimeType(mimeType: string): string {
+  // Normalize common non-standard MIME types
+  const mimeTypeMap: Record<string, string> = {
+    'image/jpg': 'image/jpeg',
+    'image/jpeg': 'image/jpeg',
+    'image/png': 'image/png',
+    'image/webp': 'image/webp',
+    'image/gif': 'image/gif',
+  };
+  
+  const normalized = mimeType.toLowerCase().trim();
+  return mimeTypeMap[normalized] || mimeType;
+}
+
+/**
  * Resizes an image to fit within specified dimensions while maintaining aspect ratio
  * @param file - The image file to resize
  * @param maxWidth - Maximum width (default: 1200px)
@@ -196,6 +216,9 @@ async function resizeImage(
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
+        // Normalize MIME type before using it (fixes 'image/jpg' -> 'image/jpeg')
+        const normalizedMimeType = normalizeMimeType(file.type);
+
         // Convert canvas to blob
         canvas.toBlob(
           (blob) => {
@@ -204,14 +227,14 @@ async function resizeImage(
               return;
             }
 
-            // Create a new File from the blob
+            // Create a new File from the blob with normalized MIME type
             const resizedFile = new File([blob], file.name, {
-              type: file.type,
+              type: normalizedMimeType,
               lastModified: Date.now(),
             });
             resolve(resizedFile);
           },
-          file.type,
+          normalizedMimeType, // Use normalized MIME type for toBlob()
           quality
         );
       };
@@ -254,14 +277,18 @@ async function convertFileToBase64(file: File): Promise<string> {
  * Validates if a file is a valid image
  */
 export const validateImageFile = (file: File): { valid: boolean; error?: string } => {
-  const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+  // Normalize MIME type before validation
+  const normalizedType = normalizeMimeType(file.type);
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  
+  // Check against normalized type
+  if (!validTypes.includes(normalizedType)) {
+    return { valid: false, error: 'Invalid image type. Please upload JPEG, PNG, WebP, or GIF.' };
+  }
+  
   // Increased max size to 5MB since we resize images before uploading
   // Images will be resized to max 1200x800px, so even large originals will be compressed
   const maxSize = 5 * 1024 * 1024; // 5MB (will be resized and compressed)
-  
-  if (!validTypes.includes(file.type)) {
-    return { valid: false, error: 'Invalid image type. Please upload JPEG, PNG, WebP, or GIF.' };
-  }
   
   if (file.size > maxSize) {
     return { valid: false, error: 'Image size exceeds 5MB limit. Please use a smaller image file.' };

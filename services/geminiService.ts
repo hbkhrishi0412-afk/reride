@@ -236,14 +236,43 @@ Respond ONLY with a single JSON object matching this schema. If a value is not a
 
     try {
         const jsonText = await callGeminiAPI(requestPayload);
+        
+        // Check if the response indicates an error
+        if (!jsonText || jsonText.trim() === '' || jsonText.trim() === '{}') {
+            console.error("Empty response from Gemini API");
+            return { structuredSpecs: {}, featureSuggestions: { "Error": ["AI service returned empty response. Please try again."] } };
+        }
+        
         const parsed = JSON.parse(jsonText.trim());
+        
+        // Validate the response structure
+        if (!parsed || typeof parsed !== 'object') {
+            console.error("Invalid JSON response from Gemini API:", jsonText);
+            return { structuredSpecs: {}, featureSuggestions: { "Error": ["Invalid response from AI service. Please try again."] } };
+        }
+        
         return {
             structuredSpecs: parsed.structuredSpecs || {},
             featureSuggestions: parsed.featureSuggestions || {}
         };
     } catch (error) {
         console.error("Error fetching AI vehicle suggestions from proxy:", error);
-        return { structuredSpecs: {}, featureSuggestions: { "Error": ["Could not fetch suggestions."] } };
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        
+        // Provide more helpful error messages
+        if (errorMessage.includes('AI_API_UNAVAILABLE') || errorMessage.includes('404')) {
+            return { structuredSpecs: {}, featureSuggestions: { "Error": ["AI service is not available. Please check your API configuration."] } };
+        }
+        
+        if (errorMessage.includes('GEMINI_API_KEY')) {
+            return { structuredSpecs: {}, featureSuggestions: { "Error": ["AI API key is not configured. Please contact support."] } };
+        }
+        
+        if (errorMessage.includes('JSON')) {
+            return { structuredSpecs: {}, featureSuggestions: { "Error": ["Invalid response format from AI service. Please try again."] } };
+        }
+        
+        return { structuredSpecs: {}, featureSuggestions: { "Error": [`Could not fetch suggestions: ${errorMessage}`] } };
     }
 };
 

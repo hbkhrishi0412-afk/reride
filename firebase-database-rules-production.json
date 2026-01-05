@@ -107,6 +107,23 @@
       ".read": "auth != null",
       ".write": "auth != null"
     },
+    "images": {
+      // Public read access for images (so they can be displayed)
+      ".read": true,
+      
+      // Authenticated users can write images (for vehicle/user uploads)
+      ".write": "auth != null",
+      
+      "$folder": {
+        ".read": true,
+        ".write": "auth != null",
+        
+        "$imageId": {
+          ".read": true,
+          ".write": "auth != null"
+        }
+      }
+    },
     "$other": {
       ".read": false,
       ".write": false

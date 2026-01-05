@@ -2776,6 +2776,32 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         ? [req.body.images] 
         : [];
     
+    // Validate images array size to prevent vehicle object from exceeding Firebase limits
+    // Firebase Realtime Database has 16MB limit per node
+    // Each base64 image can be ~1-1.5MB, so limit to 10 images max
+    if (normalizedImages.length > 10) {
+      logWarn('⚠️ Vehicle has too many images, limiting to 10', { 
+        provided: normalizedImages.length,
+        sellerEmail: req.body.sellerEmail 
+      });
+      normalizedImages.splice(10); // Keep only first 10 images
+    }
+    
+    // Estimate total size of images (base64 strings)
+    const totalImageSize = normalizedImages.reduce((total, img) => {
+      return total + (typeof img === 'string' ? img.length : 0);
+    }, 0);
+    
+    // Warn if images are very large (approaching 16MB limit)
+    const maxRecommendedSize = 10 * 1024 * 1024; // 10MB (leaving room for other vehicle data)
+    if (totalImageSize > maxRecommendedSize) {
+      logWarn('⚠️ Vehicle images are very large, may approach Firebase size limits', {
+        totalSize: `${(totalImageSize / 1024 / 1024).toFixed(2)} MB`,
+        imageCount: normalizedImages.length,
+        sellerEmail: req.body.sellerEmail
+      });
+    }
+    
     const vehicleData = {
       id: Date.now(),
       ...req.body,
