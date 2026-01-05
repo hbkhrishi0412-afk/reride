@@ -95,3 +95,5 @@ Run the test script to verify Firebase writes work.
 3. ✅ Test Firebase write operations
 4. ✅ Add better error handling/logging
 
+
+

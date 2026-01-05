@@ -521,6 +521,11 @@ const deleteUserApi = async (email: string): Promise<{ success: boolean, email: 
 };
 
 const authApi = async (body: any, retryCount = 0): Promise<any> => {
+    // Validate that action field is present (required by API)
+    if (!body || typeof body !== 'object' || !body.action || typeof body.action !== 'string') {
+        throw new Error('authApi: Missing required "action" field in request body. Please include action: "login", "register", "oauth-login", or "refresh-token".');
+    }
+    
     // Create a unique key for request deduplication based on action and credentials
     const requestKey = body.action === 'login' 
         ? `auth-${body.action}-${body.email}-${body.role || ''}`
@@ -537,10 +542,16 @@ const authApi = async (body: any, retryCount = 0): Promise<any> => {
     // Create the request promise
     const requestPromise = (async () => {
         try {
+            // Ensure action is included in the request body
+            const requestBody = {
+                ...body,
+                action: body.action // Explicitly ensure action is present
+            };
+            
             const response = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
+                body: JSON.stringify(requestBody),
             });
             
             // Handle rate limiting (429) - don't retry immediately, wait and use fallback

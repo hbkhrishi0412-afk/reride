@@ -96,55 +96,33 @@ export const validatePassword = async (password: string, hash: string): Promise<
       return false;
     }
     
-    // Always try bcrypt.compare first - this works for:
-    // 1. Real bcrypt hashes (starting with $2a$, $2b$, $2y$)
-    // 2. Test mocks (which implement their own comparison logic)
-    try {
-      const bcryptResult = await bcrypt.compare(password, hash);
-      
-      // If bcrypt.compare returns true, the password is valid
-      if (bcryptResult) {
-        return true;
-      }
-      
-      // If bcrypt.compare returns false, check if it's a real bcrypt hash
-      // Real bcrypt hashes start with $2a$, $2b$, or $2y$
-      const isBcryptHash = hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
-      
-      // If it's a real bcrypt hash, bcrypt.compare already checked it and returned false
-      // So the password is invalid
-      if (isBcryptHash) {
+    // CRITICAL FIX: Check if hash is a bcrypt hash BEFORE trying bcrypt.compare
+    // This prevents errors when comparing plain text passwords
+    const isBcryptHash = hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
+    
+    if (isBcryptHash) {
+      // Hash is a bcrypt hash, use bcrypt.compare
+      try {
+        const bcryptResult = await bcrypt.compare(password, hash);
+        return bcryptResult;
+      } catch (bcryptError) {
+        // If bcrypt.compare throws an error, the hash format is invalid
+        console.warn('bcrypt.compare error (invalid hash format):', bcryptError);
         return false;
       }
+    } else {
+      // Hash is NOT a bcrypt hash (likely plain text)
+      // Use plain text comparison for backward compatibility
+      const normalizedPassword = password.trim();
+      const normalizedHash = hash.trim();
       
-      // If it's not a bcrypt hash (e.g., plain text in database or test mock),
-      // and bcrypt.compare returned false, fall through to plain text comparison
-      // This handles backward compatibility with existing plain text passwords
-    } catch (bcryptError) {
-      // If bcrypt.compare throws an error, it could be:
-      // 1. A corrupted bcrypt hash (invalid format)
-      // 2. A plain text password that happens to start with $2a$, $2b$, or $2y$
-      // To maintain backward compatibility, we always fall through to plain text comparison
-      // rather than assuming it's a corrupted bcrypt hash and rejecting immediately
-      // The plain text comparison will handle both cases correctly
+      // Only log warning in non-production environments to avoid log noise
       if (process.env.NODE_ENV !== 'production') {
-        console.warn('bcrypt.compare threw an error, falling back to plain text comparison:', bcryptError);
+        console.warn('⚠️ Password stored as plain text in database. Please update to hashed password for security.');
       }
-      // Fall through to plain text comparison for backward compatibility
+      
+      return constantTimeCompare(normalizedPassword, normalizedHash);
     }
-    
-    // Fallback: Plain text comparison for backward compatibility
-    // This handles existing plain text passwords in the database
-    // Uses constant-time comparison to prevent timing attacks
-    const normalizedPassword = password.trim();
-    const normalizedHash = hash.trim();
-    
-    // Only log warning in non-production environments to avoid log noise
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('⚠️ Password stored as plain text in database. Please update to hashed password for security.');
-    }
-    
-    return constantTimeCompare(normalizedPassword, normalizedHash);
   } catch (error) {
     // Log the error but return false to treat it as an authentication failure
     console.warn('Password validation error:', error);
