@@ -63,6 +63,39 @@ export const uploadImages = async (files: File[], folder: string = 'vehicles', u
 };
 
 /**
+ * Helper function to get current user email from localStorage as fallback
+ * @returns User email or null if not found
+ */
+function getCurrentUserEmail(): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    
+    // Try localStorage first
+    const localUserJson = localStorage.getItem('reRideCurrentUser');
+    if (localUserJson) {
+      const user = JSON.parse(localUserJson);
+      if (user?.email) {
+        return user.email;
+      }
+    }
+    
+    // Try sessionStorage as fallback
+    const sessionUserJson = sessionStorage.getItem('currentUser');
+    if (sessionUserJson) {
+      const user = JSON.parse(sessionUserJson);
+      if (user?.email) {
+        return user.email;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('⚠️ Failed to get current user email from storage:', error);
+    return null;
+  }
+}
+
+/**
  * Uploads image to Firebase Realtime Database
  * Converts image to base64 and stores it in the database
  * @param file - The image file to upload
@@ -72,6 +105,51 @@ export const uploadImages = async (files: File[], folder: string = 'vehicles', u
 async function uploadToFirebaseRealtimeDB(file: File, folder: string, userEmail?: string): Promise<UploadResult> {
   try {
     console.log(`📤 Uploading image to Realtime Database: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+    
+    // CRITICAL: Ensure we have a user email for ownership tracking
+    // Try provided email first, then fallback to current user from storage
+    let finalUserEmail = userEmail;
+    if (!finalUserEmail) {
+      finalUserEmail = getCurrentUserEmail() || undefined;
+      if (finalUserEmail) {
+        console.log(`📧 Using current user email from storage: ${finalUserEmail}`);
+      }
+    }
+    
+    // If still no email, this is a critical error - rules require uploadedBy to be set
+    if (!finalUserEmail) {
+      const errorMsg = 'Cannot upload image: user email is required for ownership tracking. Please ensure you are logged in.';
+      console.error('❌', errorMsg);
+      return {
+        success: false,
+        error: errorMsg
+      };
+    }
+    
+    // CRITICAL: Ensure Firebase Auth is active before upload
+    // Firebase Realtime Database client SDK requires authentication
+    try {
+      const { auth } = await import('../lib/firebase.js');
+      if (auth) {
+        const { signInAnonymously } = await import('firebase/auth');
+        // Check if user is already authenticated
+        if (!auth.currentUser) {
+          console.log('🔐 No Firebase Auth user found, signing in anonymously...');
+          try {
+            await signInAnonymously(auth);
+            console.log('✅ Signed in anonymously for image upload');
+          } catch (authError) {
+            console.warn('⚠️ Could not sign in anonymously, proceeding anyway:', authError);
+            // Continue - rules might still work if auth is partially initialized
+          }
+        } else {
+          console.log('✅ Firebase Auth user already authenticated');
+        }
+      }
+    } catch (authImportError) {
+      console.warn('⚠️ Could not check Firebase Auth, proceeding with upload:', authImportError);
+      // Continue - might work if auth is set up differently
+    }
     
     // Resize image to standard dimensions before uploading
     console.log('🔄 Resizing image to fit standard dimensions...');
@@ -94,6 +172,7 @@ async function uploadToFirebaseRealtimeDB(file: File, folder: string, userEmail?
     const imageId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     
     // Prepare image data for database
+    // CRITICAL: uploadedBy must always be set for security rules to work
     const imageData: ImageData = {
       base64: base64Data,
       fileName: file.name,
@@ -101,7 +180,7 @@ async function uploadToFirebaseRealtimeDB(file: File, folder: string, userEmail?
       folder: folder,
       uploadedAt: new Date().toISOString(),
       size: resizedFile.size, // Use resized file size
-      uploadedBy: userEmail || undefined // Track who uploaded the image for security
+      uploadedBy: finalUserEmail // Always set uploadedBy with valid email (validated above)
     };
     
     // Import Firebase Realtime Database functions

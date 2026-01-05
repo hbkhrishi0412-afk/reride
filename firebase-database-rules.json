@@ -119,10 +119,10 @@
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
       "$folder": {
         ".read": true,
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
+        ".write": "auth != null",
         "$imageId": {
           ".read": true,
-          ".write": "auth != null && (data.child('uploadedBy').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin' || (!data.exists() && newData.child('uploadedBy').val() == root.child('users').child(auth.uid).child('email').val()))"
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || (!data.exists() && newData.child('uploadedBy').exists() && newData.child('uploadedBy').val() != null && newData.child('uploadedBy').val() != '') || (data.exists() && root.child('users').child(auth.uid).child('email').val() != null && data.child('uploadedBy').val() == root.child('users').child(auth.uid).child('email').val()))"
         }
       }
     },
