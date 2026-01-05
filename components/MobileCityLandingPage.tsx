@@ -33,7 +33,7 @@ export const MobileCityLandingPage: React.FC<MobileCityLandingPageProps> = ({
 }) => {
   const cityStats = useMemo(() => getCityStats(vehicles, city), [vehicles, city]);
   const cityVehicles = useMemo(
-    () => vehicles.filter(v => v.city === city && v.status === 'published').slice(0, 50),
+    () => vehicles.filter(v => v.city === city && v.status === 'published'),
     [vehicles, city]
   );
 

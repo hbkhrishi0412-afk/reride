@@ -3261,7 +3261,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           
           // Show success message
           if (updates.password) {
-            addToast('Password updated successfully in MongoDB!', 'success');
+            addToast('Password updated successfully!', 'success');
           } else {
             addToast('Profile updated successfully!', 'success');
           }

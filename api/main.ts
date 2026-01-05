@@ -811,8 +811,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             const hashedPassword = await hashPassword(testUserConfig.password);
             const newUser = await firebaseUserService.create({
               email: normalizedEmail,
-              password: hashedPassword,
               ...testUserConfig,
+              password: hashedPassword, // Override with hashed password after spreading testUserConfig
               authProvider: 'email',
               createdAt: new Date().toISOString()
             });
