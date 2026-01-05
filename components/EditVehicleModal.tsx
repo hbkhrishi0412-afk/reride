@@ -131,7 +131,8 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             }
             
             // Upload images using the service (resizes and stores in database)
-            const uploadResults = await uploadImages(files, 'vehicles');
+            // Pass seller email from vehicle for ownership tracking
+            const uploadResults = await uploadImages(files, 'vehicles', vehicle.sellerEmail);
             
             // Check for upload errors
             const failedUploads = uploadResults.filter(r => !r.success);
@@ -164,7 +165,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                     alert(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`);
                 }
                 
-                setFormData(prev => ({ ...prev, images: [...prev.images, ...imagesToAdd] }));
+                setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...imagesToAdd] }));
             }
         } catch (error) {
             console.error('Error uploading images:', error);
@@ -175,7 +176,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     };
 
     const handleRemoveImageUrl = (urlToRemove: string) => {
-        setFormData(prev => ({...prev, images: prev.images.filter(url => url !== urlToRemove)}));
+        setFormData(prev => ({...prev, images: (prev.images || []).filter(url => url !== urlToRemove)}));
     };
 
     const validateForm = (): boolean => {
