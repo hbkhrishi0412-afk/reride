@@ -1,1 +1,0 @@
-Look in `src/server`, specifically in files like `db.ts`, `connection.ts`, or any configuration files related to the Mongoose connection. That's where the model error might be.
