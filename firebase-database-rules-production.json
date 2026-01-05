@@ -52,16 +52,16 @@
     "vehicles": {
       "$vehicleId": {
         ".read": "data.child('status').val() == 'published' || auth != null",
-        ".write": "auth != null",
+        ".write": "auth != null && (data.child('sellerEmail').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin' || (!data.exists() && newData.child('sellerEmail').val() == root.child('users').child(auth.uid).child('email').val()))",
         ".validate": "!newData.exists() || newData.hasChildren(['make', 'model', 'price', 'sellerEmail'])"
       },
       ".read": true,
-      ".write": "auth != null"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
     },
     "conversations": {
       "$conversationId": {
-        ".read": "auth != null",
-        ".write": "auth != null",
+        ".read": "auth != null && (data.child('customerId').val() == root.child('users').child(auth.uid).child('email').val() || data.child('sellerId').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && (data.child('customerId').val() == root.child('users').child(auth.uid).child('email').val() || data.child('sellerId').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin' || (!data.exists() && (newData.child('customerId').val() == root.child('users').child(auth.uid).child('email').val() || newData.child('sellerId').val() == root.child('users').child(auth.uid).child('email').val())))",
         ".validate": "!newData.exists() || newData.hasChildren(['customerId', 'sellerId', 'vehicleId'])"
       },
       ".read": false,
@@ -69,34 +69,34 @@
     },
     "notifications": {
       "$notificationId": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && (data.child('recipientEmail').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin')",
+        ".write": "auth != null && (data.child('recipientEmail').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin' || (!data.exists() && newData.child('recipientEmail').val() == root.child('users').child(auth.uid).child('email').val()))"
       },
       ".read": false,
       ".write": false
     },
     "vehicleData": {
       ".read": true,
-      ".write": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
       "$key": {
         ".read": true,
-        ".write": "auth != null"
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
       }
     },
     "newCars": {
       ".read": true,
-      ".write": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
       "$carId": {
         ".read": true,
-        ".write": "auth != null"
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
       }
     },
     "plans": {
       ".read": true,
-      ".write": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
       "$planId": {
         ".read": true,
-        ".write": "auth != null"
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
       }
     },
     "rateLimits": {
@@ -108,19 +108,14 @@
       ".write": "auth != null"
     },
     "images": {
-      // Public read access for images (so they can be displayed)
       ".read": true,
-      
-      // Authenticated users can write images (for vehicle/user uploads)
-      ".write": "auth != null",
-      
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
       "$folder": {
         ".read": true,
-        ".write": "auth != null",
-        
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
         "$imageId": {
           ".read": true,
-          ".write": "auth != null"
+          ".write": "auth != null && (data.child('uploadedBy').val() == root.child('users').child(auth.uid).child('email').val() || root.child('users').child(auth.uid).child('role').val() == 'admin' || (!data.exists() && newData.child('uploadedBy').val() == root.child('users').child(auth.uid).child('email').val()))"
         }
       }
     },

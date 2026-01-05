@@ -18,15 +18,17 @@ interface ImageData extends Record<string, unknown> {
   folder: string;
   uploadedAt: string;
   size: number;
+  uploadedBy?: string; // User email who uploaded the image
 }
 
 /**
  * Uploads a single image file to Firebase Realtime Database
  * @param file - The image file to upload
  * @param folder - Optional folder path in database (e.g., 'vehicles', 'users')
+ * @param userEmail - Optional email of the user uploading the image (for ownership tracking)
  * @returns Promise with upload result containing the image data URL and ID
  */
-export const uploadImage = async (file: File, folder: string = 'vehicles'): Promise<UploadResult> => {
+export const uploadImage = async (file: File, folder: string = 'vehicles', userEmail?: string): Promise<UploadResult> => {
   try {
     // Validate file first
     const validation = validateImageFile(file);
@@ -38,7 +40,7 @@ export const uploadImage = async (file: File, folder: string = 'vehicles'): Prom
     }
 
     // Use Firebase Realtime Database for image storage
-    return await uploadToFirebaseRealtimeDB(file, folder);
+    return await uploadToFirebaseRealtimeDB(file, folder, userEmail);
   } catch (error) {
     console.error('❌ Image upload error:', error);
     return {
@@ -52,18 +54,22 @@ export const uploadImage = async (file: File, folder: string = 'vehicles'): Prom
  * Uploads multiple images
  * @param files - Array of image files
  * @param folder - Optional folder path
+ * @param userEmail - Optional email of the user uploading the images (for ownership tracking)
  * @returns Promise with array of upload results
  */
-export const uploadImages = async (files: File[], folder: string = 'vehicles'): Promise<UploadResult[]> => {
-  const uploadPromises = files.map(file => uploadImage(file, folder));
+export const uploadImages = async (files: File[], folder: string = 'vehicles', userEmail?: string): Promise<UploadResult[]> => {
+  const uploadPromises = files.map(file => uploadImage(file, folder, userEmail));
   return Promise.all(uploadPromises);
 };
 
 /**
  * Uploads image to Firebase Realtime Database
  * Converts image to base64 and stores it in the database
+ * @param file - The image file to upload
+ * @param folder - Folder path in database (e.g., 'vehicles', 'users')
+ * @param userEmail - Optional email of the user uploading the image (for ownership tracking)
  */
-async function uploadToFirebaseRealtimeDB(file: File, folder: string): Promise<UploadResult> {
+async function uploadToFirebaseRealtimeDB(file: File, folder: string, userEmail?: string): Promise<UploadResult> {
   try {
     console.log(`📤 Uploading image to Realtime Database: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
     
@@ -94,7 +100,8 @@ async function uploadToFirebaseRealtimeDB(file: File, folder: string): Promise<U
       contentType: resizedFile.type,
       folder: folder,
       uploadedAt: new Date().toISOString(),
-      size: resizedFile.size // Use resized file size
+      size: resizedFile.size, // Use resized file size
+      uploadedBy: userEmail || undefined // Track who uploaded the image for security
     };
     
     // Import Firebase Realtime Database functions

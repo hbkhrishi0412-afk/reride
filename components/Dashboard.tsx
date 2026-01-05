@@ -1049,7 +1049,8 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             }
             
             // Upload images to cloud storage (or convert to base64 if not configured)
-            const uploadResults = await uploadImages(files, 'vehicles');
+            // Pass seller email for ownership tracking
+            const uploadResults = await uploadImages(files, 'vehicles', seller?.email);
             
             // Check for upload errors
             const failedUploads = uploadResults.filter(r => !r.success);
