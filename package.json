@@ -42,7 +42,8 @@
     "db:check-prod": "node check-production-db.js",
     "db:check": "node test-mongodb-simple.js",
     "test:prod": "node test-production-api.js",
-    "migrate:mongodb-to-firebase": "node scripts/migrate-mongodb-to-firebase.js"
+    "migrate:mongodb-to-firebase": "node scripts/migrate-mongodb-to-firebase.js",
+    "hash-passwords": "node scripts/hash-user-passwords.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
