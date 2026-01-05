@@ -870,7 +870,9 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         setIsGeneratingSuggestions(true);
         setAiSuggestions(null);
         try {
+            console.log('🤖 Fetching AI suggestions for:', { make, model, year, variant });
             const suggestions = await getAiVehicleSuggestions({ make, model, year, variant });
+            console.log('📋 AI Suggestions received:', suggestions);
             setAiSuggestions(suggestions);
 
             // Auto-apply structured specs if the fields are empty
@@ -878,16 +880,33 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 const updates: Partial<Vehicle> = {};
                 for (const key in suggestions.structuredSpecs) {
                     const specKey = key as keyof typeof suggestions.structuredSpecs;
-                    if (!formData[specKey] || formData[specKey] === 'N/A') {
-                        updates[specKey] = suggestions.structuredSpecs[specKey];
+                    const currentValue = formData[specKey];
+                    const suggestedValue = suggestions.structuredSpecs[specKey];
+                    
+                    // Only apply if:
+                    // 1. Field is empty (empty string, null, undefined) OR equals 'N/A'
+                    // 2. Suggested value exists and is not 'N/A'
+                    const isEmpty = !currentValue || currentValue === '' || currentValue === 'N/A';
+                    const hasValidSuggestion = suggestedValue && suggestedValue !== 'N/A' && suggestedValue !== '';
+                    
+                    if (isEmpty && hasValidSuggestion) {
+                        updates[specKey] = suggestedValue as any;
+                        console.log(`✅ Will auto-fill ${specKey}: "${currentValue}" → "${suggestedValue}"`);
+                    } else {
+                        console.log(`⏭️ Skipping ${specKey}: isEmpty=${isEmpty}, hasValidSuggestion=${hasValidSuggestion}, current="${currentValue}", suggested="${suggestedValue}"`);
                     }
                 }
                 if (Object.keys(updates).length > 0) {
+                    console.log('✅ Auto-filling Vehicle Specifications:', updates);
                     setFormData(prev => ({ ...prev, ...updates }));
+                } else {
+                    console.log('⚠️ No updates to apply - fields may already have values or AI returned N/A');
                 }
+            } else {
+                console.warn('⚠️ No structuredSpecs in AI response');
             }
         } catch (error) {
-            console.error("Failed to fetch AI suggestions:", error);
+            console.error("❌ Failed to fetch AI suggestions:", error);
             setAiSuggestions({ structuredSpecs: {}, featureSuggestions: { "Error": ["Could not fetch suggestions."] } });
         } finally {
             setIsGeneratingSuggestions(false);
@@ -1036,7 +1055,11 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             const failedUploads = uploadResults.filter(r => !r.success);
             if (failedUploads.length > 0) {
                 const errorMessage = failedUploads.map(r => r.error).join(', ');
+                console.error('❌ Image upload failed:', errorMessage);
                 alert(`Failed to upload ${failedUploads.length} file(s): ${errorMessage}`);
+                setIsUploading(false);
+                if (input) input.value = '';
+                return;
             }
             
             // Get successful upload URLs
@@ -1046,7 +1069,26 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             
             if (successfulUrls.length > 0) {
                 if (type === 'image') {
-                    setFormData(prev => ({ ...prev, images: [...prev.images, ...successfulUrls] }));
+                    // Limit total images to prevent vehicle object from becoming too large
+                    // Firebase Realtime Database has 16MB limit per node
+                    const currentImages = formData.images || [];
+                    const maxImages = 10; // Limit to 10 images per vehicle
+                    const remainingSlots = maxImages - currentImages.length;
+                    
+                    if (remainingSlots <= 0) {
+                        alert(`Maximum ${maxImages} images allowed per vehicle. Please remove some images before adding more.`);
+                        setIsUploading(false);
+                        if (input) input.value = '';
+                        return;
+                    }
+                    
+                    const imagesToAdd = successfulUrls.slice(0, remainingSlots);
+                    if (successfulUrls.length > remainingSlots) {
+                        alert(`Only ${remainingSlots} image(s) added. Maximum ${maxImages} images allowed per vehicle.`);
+                    }
+                    
+                    setFormData(prev => ({ ...prev, images: [...prev.images, ...imagesToAdd] }));
+                    console.log(`✅ Successfully uploaded ${imagesToAdd.length} image(s) (${currentImages.length + imagesToAdd.length}/${maxImages} total)`);
                 } else {
                     const docType = (document.getElementById('document-type') as HTMLSelectElement).value as VehicleDocument['name'];
                     const newDocs: VehicleDocument[] = successfulUrls.map((url, idx) => ({ 
@@ -1056,6 +1098,9 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     }));
                     setFormData(prev => ({ ...prev, documents: [...(prev.documents || []), ...newDocs] }));
                 }
+            } else {
+                console.warn('⚠️ No images were successfully uploaded');
+                alert('No images were uploaded. Please try again.');
             }
         } catch (error) { 
             console.error("Error uploading files:", error);
@@ -1341,9 +1386,9 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         </div>
                         <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
                             {formData.images.map((url, index) => (
-                                <div key={index} className="relative group">
-                                    <img src={getSafeImageSrc(url)} className="w-full h-24 object-cover rounded-lg shadow-sm" alt={`Vehicle thumbnail ${index + 1}`} />
-                                    <button type="button" onClick={() => handleRemoveImageUrl(url)} className="absolute top-1 right-1 bg-spinny-orange text-white rounded-full h-6 w-6 flex items-center justify-center text-sm opacity-0 group-hover:opacity-100">&times;</button>
+                                <div key={index} className="relative group aspect-square bg-gray-100 rounded-lg overflow-hidden">
+                                    <img src={getSafeImageSrc(url)} className="w-full h-full object-cover rounded-lg shadow-sm" alt={`Vehicle thumbnail ${index + 1}`} />
+                                    <button type="button" onClick={() => handleRemoveImageUrl(url)} className="absolute top-1 right-1 bg-spinny-orange text-white rounded-full h-6 w-6 flex items-center justify-center text-sm opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
                                 </div>
                             ))}
                         </div>
