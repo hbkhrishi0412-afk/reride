@@ -349,7 +349,7 @@ const deleteUserLocal = async (email: string): Promise<{ success: boolean, email
 
 const loginLocal = async (
     credentials: any & { skipRoleCheck?: boolean }
-): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
+): Promise<{ success: boolean, user?: User, reason?: string }> => {
     const { email, password, role, skipRoleCheck } = credentials;
     
     // Normalize email (trim and lowercase for comparison)
@@ -420,12 +420,7 @@ const loginLocal = async (
     
     if (!skipRoleCheck && role && user.role !== role) {
         console.log('❌ loginLocal: Role mismatch', { expected: role, actual: user.role });
-        // Provide helpful error message that suggests the correct role
-        return { 
-            success: false, 
-            reason: `This account is registered as a ${user.role}. Please select "${user.role.charAt(0).toUpperCase() + user.role.slice(1)}" as your account type.`,
-            detectedRole: user.role // Include detected role for UI to use
-        };
+        return { success: false, reason: `User is not a registered ${role}.` };
     }
     
     if (user.status === 'inactive') {
@@ -521,11 +516,6 @@ const deleteUserApi = async (email: string): Promise<{ success: boolean, email: 
 };
 
 const authApi = async (body: any, retryCount = 0): Promise<any> => {
-    // Validate that action field is present (required by API)
-    if (!body || typeof body !== 'object' || !body.action || typeof body.action !== 'string') {
-        throw new Error('authApi: Missing required "action" field in request body. Please include action: "login", "register", "oauth-login", or "refresh-token".');
-    }
-    
     // Create a unique key for request deduplication based on action and credentials
     const requestKey = body.action === 'login' 
         ? `auth-${body.action}-${body.email}-${body.role || ''}`
@@ -542,16 +532,10 @@ const authApi = async (body: any, retryCount = 0): Promise<any> => {
     // Create the request promise
     const requestPromise = (async () => {
         try {
-            // Ensure action is included in the request body
-            const requestBody = {
-                ...body,
-                action: body.action // Explicitly ensure action is present
-            };
-            
             const response = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
+                body: JSON.stringify(body),
             });
             
             // Handle rate limiting (429) - don't retry immediately, wait and use fallback
@@ -758,36 +742,6 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       
       if (!result.success) {
         console.warn('⚠️ API login failed:', result.reason);
-        
-        // If role mismatch, try to auto-detect by trying without role or with alternate roles
-        if (result.reason && result.reason.includes('not a registered')) {
-          console.log('🔄 Role mismatch detected, attempting to auto-detect user role...');
-          
-          // Try login without role specification to let backend determine it
-          try {
-            const autoDetectResult = await authApi({ 
-              action: 'login', 
-              email: credentials.email, 
-              password: credentials.password 
-              // Don't include role - let backend determine it
-            });
-            
-            if (autoDetectResult.success && autoDetectResult.user) {
-              console.log('✅ Auto-detected role:', autoDetectResult.user.role);
-              
-              // Store tokens if provided
-              if (autoDetectResult.accessToken && autoDetectResult.refreshToken) {
-                storeTokens(autoDetectResult.accessToken, autoDetectResult.refreshToken);
-                localStorage.setItem('reRideCurrentUser', JSON.stringify(autoDetectResult.user));
-              }
-              
-              return autoDetectResult;
-            }
-          } catch (autoDetectError) {
-            console.warn('⚠️ Auto-detection failed, returning original error');
-          }
-        }
-        
         return result;
       }
       
@@ -871,22 +825,7 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
   } else {
     // Development mode - use local storage directly
     console.log('💻 Development mode - using local storage directly');
-    
-    // First try with role check to detect mismatches
-    const result = await loginLocal({ ...credentials, skipRoleCheck: false });
-    
-    // If role mismatch, return result with detected role hint
-    if (!result.success && result.reason && result.reason.includes('registered as')) {
-      return result; // Return the helpful error message
-    }
-    
-    // If credentials are wrong, return as-is
-    if (!result.success) {
-      return result;
-    }
-    
-    // Success - return result
-    return result;
+    return await loginLocal({ ...credentials, skipRoleCheck: true });
   }
 };
 export const register = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
