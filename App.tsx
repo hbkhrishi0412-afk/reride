@@ -25,6 +25,7 @@ import { parseDeepLink } from './utils/mobileFeatures';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
+import { matchesCity } from './utils/cityMapping';
 
 // Simple loading component
 const LoadingSpinner: React.FC = () => (
@@ -599,14 +600,16 @@ const AppContent: React.FC = React.memo(() => {
 
       case ViewEnum.USED_CARS:
         // Filter vehicles for buy/sale (exclude rental vehicles)
-        // Only filter by status and listingType here - let VehicleList handle all other filters
+        // Filter by status, listingType, and city if selected
         const filteredVehicles = vehicles.filter(v => {
           if (!v) return false;
           const isPublished = v.status === 'published';
           // Exclude rental vehicles from buy/sale listings
           const isNotRental = v.listingType !== 'rental' || v.listingType === undefined;
+          // Apply city filter if a city is selected (using city mapping for accurate matching)
+          const matchesCityFilter = matchesCity(v.city, selectedCity);
           
-          return isPublished && isNotRental;
+          return isPublished && isNotRental && matchesCityFilter;
         });
         
         // Debug logging in development
@@ -615,7 +618,9 @@ const AppContent: React.FC = React.memo(() => {
             totalVehicles: vehicles.length,
             publishedVehicles: vehicles.filter(v => v.status === 'published').length,
             rentalVehicles: vehicles.filter(v => v.listingType === 'rental').length,
-            filteredVehicles: filteredVehicles.length
+            selectedCity: selectedCity || 'none',
+            filteredVehicles: filteredVehicles.length,
+            sampleVehicleCities: vehicles.slice(0, 5).map(v => v.city).filter(Boolean)
           });
         }
         
@@ -658,6 +663,10 @@ const AppContent: React.FC = React.memo(() => {
               currentUser={currentUser}
               onSaveSearch={(search) => {
                 addToast(`Search "${search.name}" saved successfully!`, 'success');
+              }}
+              selectedCity={selectedCity}
+              onCityChange={(city) => {
+                setSelectedCity(city);
               }}
             />
           </VehicleListErrorBoundary>
@@ -891,8 +900,8 @@ const AppContent: React.FC = React.memo(() => {
           const rentalVehicles = vehicles.filter(v => {
             const isRental = v.listingType === 'rental';
             const isPublished = v.status === 'published';
-            const matchesCity = !selectedCity || v.city === selectedCity;
-            return isRental && isPublished && matchesCity;
+            const matchesCityFilter = matchesCity(v.city, selectedCity);
+            return isRental && isPublished && matchesCityFilter;
           });
           return (
             <MobileRentalPage
@@ -920,10 +929,10 @@ const AppContent: React.FC = React.memo(() => {
           const isRental = v.listingType === 'rental';
           const isPublished = v.status === 'published';
           
-          // Apply city filter if selected
-          const matchesCity = !selectedCity || v.city === selectedCity;
+          // Apply city filter if selected (using city mapping for accurate matching)
+          const matchesCityFilter = matchesCity(v.city, selectedCity);
           
-          return isRental && isPublished && matchesCity;
+          return isRental && isPublished && matchesCityFilter;
         });
         
         return (

@@ -833,8 +833,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     if (view === View.CITY_LANDING && params?.city) {
       updateSelectedCity(params.city);
     }
-    if (view === View.USED_CARS && params?.city) {
-      updateSelectedCity(params.city);
+    if (view === View.USED_CARS) {
+      // Explicitly check if city parameter exists and is not empty
+      if (params && params.city !== undefined && params.city !== '') {
+        // Set city filter when city is provided
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔵 AppProvider: Setting city filter to:', params.city);
+        }
+        updateSelectedCity(params.city);
+      } else {
+        // Clear city filter when no city parameter or empty string (View all cars)
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔵 AppProvider: Clearing city filter');
+        }
+        updateSelectedCity('');
+      }
     }
     
     // Prevent redirect loops: Only redirect if not already on login page

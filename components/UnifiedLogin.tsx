@@ -86,7 +86,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     setIsLoading(true);
 
     try {
-      let result: { success: boolean, user?: User, reason?: string };
+      let result: { success: boolean, user?: User, reason?: string, detectedRole?: string };
 
       if (mode === 'login') {
         if (!email || !password) throw new Error('Please enter both email and password.');
@@ -110,7 +110,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       } else {
         // Check if error includes detected role hint
         const errorMessage = result.reason || 'An unknown error occurred.';
-        const detectedRole = (result as any).detectedRole;
+        const detectedRole = result.detectedRole;
         if (detectedRole && allowedRoles.includes(detectedRole as UserRole)) {
           // Auto-switch to detected role and show helpful message
           setSelectedRole(detectedRole as UserRole);
@@ -131,10 +131,16 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     setIsLoading(true);
 
     try {
+      // Google sign-in is only available for customer and seller roles
+      if (selectedRole === 'admin') {
+        throw new Error('Google sign-in is not available for admin accounts');
+      }
+
       const result = await signInWithGoogle();
       
       if (result.success && result.firebaseUser) {
-        const backendResult = await syncWithBackend(result.firebaseUser, selectedRole, 'google');
+        // Type assertion: we've already checked that selectedRole is not 'admin'
+        const backendResult = await syncWithBackend(result.firebaseUser, selectedRole as 'customer' | 'seller', 'google');
         
         if (backendResult.success && backendResult.user) {
           onLogin(backendResult.user);
@@ -181,6 +187,24 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
   // Handle OTP mode
   if (mode === 'otp') {
+    // OTP login is only available for customer and seller roles
+    if (selectedRole === 'admin') {
+      return (
+        <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">OTP Login Not Available</h2>
+            <p className="text-gray-600 mb-6">OTP login is not available for admin accounts. Please use email and password login.</p>
+            <button
+              onClick={() => setMode('login')}
+              className="w-full px-4 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (isMobileApp) {
       return (
         <div className="w-full min-h-screen flex items-center justify-center p-6" style={{
@@ -189,7 +213,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           <div className="w-full max-w-md">
             <OTPLogin 
               onLogin={onLogin} 
-              role={selectedRole} 
+              role={selectedRole as 'customer' | 'seller'} 
               onCancel={() => setMode('login')} 
             />
           </div>
@@ -200,7 +224,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
         <OTPLogin 
           onLogin={onLogin} 
-          role={selectedRole} 
+          role={selectedRole as 'customer' | 'seller'} 
           onCancel={() => setMode('login')} 
         />
       </div>
