@@ -158,15 +158,17 @@ const Header: React.FC<HeaderProps> = memo(({
                                     onCitySelect={(city) => {
                                         // Navigate to used cars with city filter
                                         if (process.env.NODE_ENV === 'development') {
-                                            console.log('🔵 Header: City selected:', city);
+                                            console.log('🔵 Header: City selected from dropdown:', city);
                                         }
-                                        onNavigate(ViewEnum.USED_CARS, { city });
+                                        // Ensure city is passed correctly
+                                        onNavigate(ViewEnum.USED_CARS, { city: city || '' });
                                     }}
                                     onViewAllCars={() => {
                                         if (process.env.NODE_ENV === 'development') {
-                                            console.log('🔵 Header: View all cars clicked');
+                                            console.log('🔵 Header: View all cars clicked - clearing city filter');
                                         }
-                                        onNavigate(ViewEnum.USED_CARS);
+                                        // Explicitly pass empty city to clear filter
+                                        onNavigate(ViewEnum.USED_CARS, { city: '' });
                                     }}
                                 />
                                 <SellerDropdown 

@@ -30,6 +30,8 @@ interface VehicleListProps {
   userLocation?: string;
   currentUser?: { email: string; name: string } | null;
   onSaveSearch?: (search: SavedSearch) => void;
+  selectedCity?: string;
+  onCityChange?: (city: string) => void;
 }
 
 // Base items per page - increased from 12 for better browsing experience
@@ -107,7 +109,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   onViewSellerProfile, 
   userLocation = '', 
   currentUser, 
-  onSaveSearch 
+  onSaveSearch,
+  selectedCity,
+  onCityChange
 }) => {
   const [aiSearchQuery, setAiSearchQuery] = useState(initialSearchQuery);
   const [isAiSearching, setIsAiSearching] = useState(false);
@@ -393,6 +397,61 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       }
     }
   }, [userLocation, indianStates, isStateFilterUserSet]);
+
+  // Sync selectedCity with state filter - when city is selected, update state filter
+  useEffect(() => {
+    if (!selectedCity || !onCityChange) return; // Only sync if props are provided
+    
+    if (selectedCity.trim() !== '' && indianStates.length > 0) {
+      // Import city mapping utility
+      import('../utils/cityMapping').then(({ getStateCodeForCity }) => {
+        import('../constants').then(({ CITIES_BY_STATE }) => {
+          const stateCode = getStateCodeForCity(selectedCity, CITIES_BY_STATE);
+          if (stateCode && stateCode !== stateFilter) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔵 VehicleList: Updating state filter to', stateCode, 'for city', selectedCity);
+            }
+            setStateFilter(stateCode);
+            setIsStateFilterUserSet(true); // Mark as user-set since it came from city selection
+          }
+        });
+      });
+    } else if (selectedCity.trim() === '') {
+      // If city is cleared, also clear state filter if it was set from city
+      // We'll clear it if it was user-set (likely came from city selection)
+      if (isStateFilterUserSet && stateFilter) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔵 VehicleList: Clearing state filter because city was cleared');
+        }
+        setStateFilter('');
+        setIsStateFilterUserSet(false);
+      }
+    }
+  }, [selectedCity]); // Only depend on selectedCity
+
+  // Sync state filter changes back to city (clear city when state changes manually)
+  const prevStateFilterRef = useRef(stateFilter);
+  useEffect(() => {
+    if (!onCityChange || !selectedCity) return; // Only sync if props are provided
+    
+    // Only sync if state filter was manually changed (not from city selection)
+    if (prevStateFilterRef.current !== stateFilter && isStateFilterUserSet) {
+      // Check if the current city matches the new state
+      import('../utils/cityMapping').then(({ getStateCodeForCity }) => {
+        import('../constants').then(({ CITIES_BY_STATE }) => {
+          const cityStateCode = getStateCodeForCity(selectedCity, CITIES_BY_STATE);
+          if (cityStateCode !== stateFilter) {
+            // City doesn't match the selected state, clear city
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔵 VehicleList: Clearing city because state filter changed to', stateFilter);
+            }
+            onCityChange('');
+          }
+        });
+      });
+    }
+    prevStateFilterRef.current = stateFilter;
+  }, [stateFilter, isStateFilterUserSet, selectedCity, onCityChange]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Vehicle } from '../types';
+import { getDisplayNameForCity, CITY_MAPPING } from '../utils/cityMapping';
 
 interface CityDropdownProps {
   allVehicles: Vehicle[];
@@ -11,17 +12,28 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
   const [isOpen, setIsOpen] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
 
-  // Extract unique cities from vehicles data
+  // Extract unique cities from vehicles data and normalize to display names
   useEffect(() => {
-    const uniqueCities = Array.from(
+    // Get all unique city names from vehicles
+    const uniqueCityNames = Array.from(
       new Set(
         allVehicles
           .filter(vehicle => vehicle.status === 'published' && vehicle.city)
-          .map(vehicle => vehicle.city)
+          .map(vehicle => vehicle.city!)
       )
-    ).sort();
+    );
 
-    setCities(uniqueCities);
+    // Convert to display names and deduplicate
+    const displayNames = uniqueCityNames.map(city => getDisplayNameForCity(city));
+    const uniqueDisplayNames = Array.from(new Set(displayNames)).sort();
+
+    // Prioritize cities from CITY_MAPPING (main cities) and show them first
+    const mainCities = Object.keys(CITY_MAPPING).filter(city => 
+      uniqueDisplayNames.includes(city)
+    );
+    const otherCities = uniqueDisplayNames.filter(city => !mainCities.includes(city));
+    
+    setCities([...mainCities, ...otherCities]);
   }, [allVehicles]);
 
   const handleCityClick = (e: React.MouseEvent, city: string) => {
@@ -37,8 +49,10 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
     if (process.env.NODE_ENV === 'development') {
       console.log('🔵 CityDropdown: View all cars clicked');
     }
-    onViewAllCars();
+    // Close dropdown immediately to prevent backdrop interference
     setIsOpen(false);
+    // Call navigation immediately - it's synchronous so this should work
+    onViewAllCars();
   };
 
   // Split cities into two columns
@@ -68,8 +82,12 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
           {/* Backdrop */}
           <div 
             className="fixed inset-0 z-10" 
-            onClick={() => setIsOpen(false)}
-            onMouseDown={(e) => e.preventDefault()} // Prevent backdrop from interfering
+            onClick={(e) => {
+              // Only close if clicking directly on backdrop (not on dropdown content)
+              if (e.target === e.currentTarget) {
+                setIsOpen(false);
+              }
+            }}
           />
           
           {/* Dropdown */}
@@ -83,6 +101,10 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
                 <div className="space-y-2">
                   <button
                     onClick={handleViewAllClick}
+                    onMouseDown={(e) => {
+                      // Prevent backdrop from interfering with button click
+                      e.stopPropagation();
+                    }}
                     className="w-full text-left px-3 py-2 text-white font-semibold hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
                     type="button"
                   >

@@ -349,7 +349,7 @@ const deleteUserLocal = async (email: string): Promise<{ success: boolean, email
 
 const loginLocal = async (
     credentials: any & { skipRoleCheck?: boolean }
-): Promise<{ success: boolean, user?: User, reason?: string }> => {
+): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
     const { email, password, role, skipRoleCheck } = credentials;
     
     // Normalize email (trim and lowercase for comparison)
@@ -420,7 +420,11 @@ const loginLocal = async (
     
     if (!skipRoleCheck && role && user.role !== role) {
         console.log('❌ loginLocal: Role mismatch', { expected: role, actual: user.role });
-        return { success: false, reason: `User is not a registered ${role}.` };
+        return { 
+            success: false, 
+            reason: `User is not a registered ${role}.`,
+            detectedRole: user.role 
+        };
     }
     
     if (user.status === 'inactive') {
@@ -712,7 +716,7 @@ export const updateUser = async (userData: Partial<User> & { email: string }): P
   }
 };
 export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
-export const login = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
+export const login = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
   console.log('🚀 Login attempt:', { email: credentials.email, role: credentials.role, isDevelopment, hostname: window.location.hostname, port: window.location.port });
   
   // Validate required fields before making API request
@@ -742,7 +746,12 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       
       if (!result.success) {
         console.warn('⚠️ API login failed:', result.reason);
-        return result;
+        // Pass through detectedRole if API provided it
+        return {
+          success: result.success,
+          reason: result.reason,
+          detectedRole: result.detectedRole
+        };
       }
       
       // Validate user object structure (critical for seller dashboard)
@@ -767,6 +776,12 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
           received: result.user.role,
           email: result.user.email
         });
+        // Return error with detected role for UI to auto-switch
+        return { 
+          success: false, 
+          reason: `User is not a registered ${credentials.role}.`,
+          detectedRole: result.user.role 
+        };
       }
       
       // Store JWT tokens if provided
@@ -781,7 +796,13 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
         role: result.user.role,
         userId: result.user.id
       });
-      return result;
+      // Pass through detectedRole if API provided it
+      return {
+        success: result.success,
+        user: result.user,
+        reason: result.reason,
+        detectedRole: result.detectedRole
+      };
     } catch (error) {
       // Check if it's a network/server error (should fallback) vs invalid credentials
       const errorMessage = error instanceof Error ? error.message : String(error);
