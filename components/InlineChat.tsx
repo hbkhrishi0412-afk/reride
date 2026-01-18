@@ -13,6 +13,9 @@ interface InlineChatProps {
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onMakeOffer?: () => void;
+  onStartCall?: (phone: string) => void;
+  callTargetPhone?: string;
+  callTargetName?: string;
   className?: string;
   height?: string;
 }
@@ -41,6 +44,9 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   onFlagContent, 
   onOfferResponse, 
   onMakeOffer,
+  onStartCall,
+  callTargetPhone,
+  callTargetName,
   className = "",
   height = "h-96"
 }) => {
@@ -118,6 +124,18 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
           <p className="text-sm text-gray-600">Chat with {otherUserName}</p>
         </div>
         <div className="flex items-center gap-2">
+          {callTargetPhone && (
+            <button
+              onClick={() => onStartCall ? onStartCall(callTargetPhone) : window.open(`tel:${callTargetPhone}`)}
+              className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"
+              aria-label={`Call ${callTargetName || 'contact'}`}
+              title={`Call ${callTargetName || 'contact'}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M2.003 5.884c-.005-1.054.917-1.93 1.97-1.823 1.022.105 1.936.563 2.654 1.282l1.12 1.12a1 1 0 01.106 1.31l-.723 1.085c-.195.293-.164.68.09.935l3.142 3.142a.75.75 0 00.935.09l1.085-.723a1 1 0 011.31.106l1.12 1.12a4.25 4.25 0 011.282 2.654c.107 1.053-.769 1.975-1.823 1.97-2.54-.012-5.02-.998-6.918-2.897-1.898-1.898-2.884-4.378-2.897-6.918z" clipRule="evenodd" />
+              </svg>
+            </button>
+          )}
           <button 
             onClick={handleFlagClick} 
             disabled={conversation.isFlagged} 

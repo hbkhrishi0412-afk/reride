@@ -3,6 +3,23 @@ import { queueRequest } from '../utils/requestQueue';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
+// Attach JWT if it exists so protected conversation routes succeed
+const getAuthHeaders = (): Record<string, string> => {
+  try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return { 'Content-Type': 'application/json' };
+    }
+    const token = localStorage.getItem('reRideAccessToken');
+    if (!token) return { 'Content-Type': 'application/json' };
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    };
+  } catch {
+    return { 'Content-Type': 'application/json' };
+  }
+};
+
 /**
  * Save conversation to MongoDB
  */
@@ -13,9 +30,7 @@ export async function saveConversationToMongoDB(conversation: Conversation): Pro
     // #endregion
     const response = await fetch(`${API_BASE_URL}/conversations`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify(conversation),
     });
 
@@ -49,9 +64,7 @@ export async function addMessageToConversation(conversationId: string, message: 
     // #endregion
     const response = await fetch(`${API_BASE_URL}/conversations`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ conversationId, message }),
     });
 
@@ -92,7 +105,7 @@ export async function getConversationsFromMongoDB(customerId?: string, sellerId?
           ? `${API_BASE_URL}/conversations?${queryString}`
           : `${API_BASE_URL}/conversations`;
 
-        const response = await fetch(url);
+        const response = await fetch(url, { headers: getAuthHeaders() });
 
         // Handle 404 gracefully - API route might not be available in development
         // Silently fall back to localStorage (no console error - this is expected in dev)

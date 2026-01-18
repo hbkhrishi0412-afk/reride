@@ -116,13 +116,11 @@
     },
     "images": {
       ".read": true,
-      ".write": "auth != null",
       "$folder": {
         ".read": true,
-        ".write": "auth != null",
         "$imageId": {
           ".read": true,
-          ".write": "auth != null && ((!data.exists() && newData.child('uploadedBy').exists() && newData.child('uploadedBy').val() != null && newData.child('uploadedBy').val() != '') || (data.exists() && data.child('uploadedBy').val() != null && newData.child('uploadedBy').val() == data.child('uploadedBy').val()))"
+          ".write": "auth != null && newData.child('uploadedBy').exists() && newData.child('uploadedBy').val() != null && newData.child('uploadedBy').val() != ''"
         }
       }
     },

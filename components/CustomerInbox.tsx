@@ -49,6 +49,16 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
     return seller?.name || seller?.dealershipName || 'Seller';
   }, [users]);
 
+  const getSellerPhone = useCallback((sellerId: string) => {
+    const seller = users.find(u => u.email === sellerId);
+    return seller?.mobile || seller?.phone || '';
+  }, [users]);
+
+  const handleStartCall = useCallback((phone: string) => {
+    if (!phone) return;
+    window.open(`tel:${phone}`);
+  }, []);
+
   const sortedConversations = useMemo(() => {
     return [...conversations].sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
   }, [conversations]);
@@ -296,6 +306,9 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
                       conversation={selectedConv}
                       currentUserRole="customer"
                       otherUserName={getSellerName(selectedConv.sellerId)}
+                      callTargetPhone={getSellerPhone(selectedConv.sellerId)}
+                      callTargetName={getSellerName(selectedConv.sellerId)}
+                      onStartCall={handleStartCall}
                       onSendMessage={(messageText, type, payload) => {
                           if (type === 'offer' && payload) {
                               onSendMessage(selectedConv.vehicleId, messageText, type, payload);
