@@ -3,6 +3,23 @@ import { queueRequest } from '../utils/requestQueue';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
+// Attach JWT so notification APIs that require auth work in production
+const getAuthHeaders = (): Record<string, string> => {
+  try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return { 'Content-Type': 'application/json' };
+    }
+    const token = localStorage.getItem('reRideAccessToken');
+    if (!token) return { 'Content-Type': 'application/json' };
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    };
+  } catch {
+    return { 'Content-Type': 'application/json' };
+  }
+};
+
 /**
  * Save notification to MongoDB
  */
@@ -13,9 +30,7 @@ export async function saveNotificationToMongoDB(notification: Notification): Pro
     // #endregion
     const response = await fetch(`${API_BASE_URL}/notifications`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify(notification),
     });
 
@@ -56,7 +71,7 @@ export async function getNotificationsFromMongoDB(recipientEmail?: string, isRea
           ? `${API_BASE_URL}/notifications?${queryString}`
           : `${API_BASE_URL}/notifications`;
 
-        const response = await fetch(url);
+        const response = await fetch(url, { headers: getAuthHeaders() });
 
         // Handle 404 gracefully - silently fall back (expected in dev)
         if (response.status === 404) {
@@ -92,9 +107,7 @@ export async function updateNotificationInMongoDB(notificationId: number, update
   try {
     const response = await fetch(`${API_BASE_URL}/notifications`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ notificationId, updates }),
     });
 
