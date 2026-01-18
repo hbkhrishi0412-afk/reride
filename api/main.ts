@@ -172,6 +172,43 @@ const authenticateRequest = (req: VercelRequest): AuthResult => {
   }
 };
 
+const requireAuth = (
+  req: VercelRequest,
+  res: VercelResponse,
+  context: string
+): AuthResult | null => {
+  const auth = authenticateRequest(req);
+  if (!auth.isValid) {
+    logWarn(`⚠️ ${context} - Authentication failed:`, auth.error);
+    res.status(401).json({
+      success: false,
+      reason: auth.error || 'Authentication required.',
+      error: 'Invalid or expired authentication token'
+    });
+    return null;
+  }
+  return auth;
+};
+
+const requireAdmin = (
+  req: VercelRequest,
+  res: VercelResponse,
+  context: string
+): AuthResult | null => {
+  const auth = requireAuth(req, res, context);
+  if (!auth) {
+    return null;
+  }
+  if (auth.user?.role !== 'admin') {
+    res.status(403).json({
+      success: false,
+      reason: 'Forbidden. Admin access required.'
+    });
+    return null;
+  }
+  return auth;
+};
+
 // Rate limiting using MongoDB for serverless compatibility
 const config = getSecurityConfig();
 
@@ -851,13 +888,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       // Verify password using bcrypt
       const isPasswordValid = await validatePassword(sanitizedData.password, user.password);
       if (!isPasswordValid) {
-        // CRITICAL FIX: Log more details for debugging
-        logWarn('⚠️ Password validation failed:', {
-          email: normalizedEmail,
-          hasPassword: !!user.password,
-          passwordStartsWith: user.password?.substring(0, 4),
-          authProvider: user.authProvider
-        });
+        // SECURITY: Log minimal details - don't expose password hash prefixes
+        if (process.env.NODE_ENV !== 'production') {
+          logWarn('⚠️ Password validation failed:', {
+            email: normalizedEmail,
+            hasPassword: !!user.password,
+            authProvider: user.authProvider
+          });
+        }
         
         // CRITICAL FIX: Check if user just registered (password might not be hashed yet)
         if (user.authProvider === 'email' && !user.password?.startsWith('$2')) {
@@ -945,6 +983,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
       // Sanitize and validate input data
       const sanitizedData = await sanitizeObject({ email, password, name, mobile, role });
+      
+      // SECURITY: Block admin role self-registration - admin accounts must be created internally
+      if (sanitizedData.role === 'admin') {
+        return res.status(403).json({ 
+          success: false, 
+          reason: 'Admin accounts cannot be created through public registration. Admin accounts must be provisioned internally.' 
+        });
+      }
+      
       const validation = await validateUserInput(sanitizedData);
       
       if (!validation.isValid) {
@@ -1125,6 +1172,23 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       const mobile = req.body.mobile || '';
       const location = req.body.location || '';
 
+      // SECURITY: Block admin role in OAuth registration - admin accounts must be created internally
+      if (sanitizedData.role === 'admin') {
+        return res.status(403).json({ 
+          success: false, 
+          reason: 'Admin accounts cannot be created via OAuth. Admin accounts must be provisioned internally.' 
+        });
+      }
+      
+      // Validate role is one of allowed OAuth roles
+      const allowedOauthRoles = ['customer', 'seller'] as const;
+      if (!allowedOauthRoles.includes(sanitizedData.role as typeof allowedOauthRoles[number])) {
+        return res.status(400).json({ 
+          success: false, 
+          reason: `Invalid role for OAuth registration. Allowed roles: ${allowedOauthRoles.join(', ')}` 
+        });
+      }
+
       // Normalize email to lowercase for consistent database lookup
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
       let user = await firebaseUserService.findByEmail(normalizedEmail);
@@ -1270,17 +1334,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     return res.status(200).end();
   }
 
-  // GET - Get all users
-  // NOTE: This endpoint does NOT require authentication - it's a public endpoint
-  // Invalid or expired tokens in Authorization header are ignored
+  // GET - Get users (authenticated)
   if (req.method === 'GET') {
     const { action, email } = req.query;
-    
+    const auth = requireAuth(req, res, 'GET /users');
+    if (!auth) {
+      return;
+    }
+
     if (action === 'trust-score' && email) {
       try {
         // Sanitize and normalize email
         const sanitizedEmail = await sanitizeString(String(email));
         const normalizedEmail = sanitizedEmail.toLowerCase().trim();
+        const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+
+        if (auth.user?.role !== 'admin' && normalizedAuthEmail !== normalizedEmail) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized access to trust score.' });
+        }
+
         const user = await firebaseUserService.findByEmail(normalizedEmail);
         if (!user) {
           return res.status(404).json({ success: false, reason: 'User not found' });
@@ -1303,9 +1375,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
     }
     
+    if (auth.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, reason: 'Forbidden. Admin access required.' });
+    }
+    
     try {
-      // GET /api/users is a public endpoint - no authentication required
-      // If Authorization header is present but invalid, we ignore it
       const users = await firebaseUserService.findAll();
       // SECURITY FIX: Normalize all users to remove passwords
       const normalizedUsers = users.map(user => normalizeUser(user)).filter((u): u is NormalizedUser => u !== null);
@@ -1871,6 +1945,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       if (req.method === 'POST') {
         try {
+      if (!requireAdmin(req, res, 'Vehicle data update')) {
+        return;
+      }
           // Save vehicle data to Firebase using Admin SDK (bypasses security rules)
           await adminUpdate(DB_PATHS.VEHICLE_DATA, 'default', {
             data: req.body,
@@ -1997,6 +2074,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
       // DEBUG ENDPOINT: Return all vehicles including unpublished (for testing)
       if (action === 'debug-all') {
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+        if (isProduction) {
+          return res.status(403).json({ success: false, reason: 'Debug endpoint disabled in production' });
+        }
+        const adminAuth = requireAdmin(req, res, 'Debug vehicles');
+        if (!adminAuth) {
+          return;
+        }
         const allVehicles = await firebaseVehicleService.findAll();
         const statusCounts = {
           published: allVehicles.filter(v => v.status === 'published').length,
@@ -3177,17 +3262,26 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, _options: Han
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   }
 
-  // Allow production seeding with secret key
+  // SECURITY: Require secret key for seeding - never use default in production
   const secretKey = req.headers['x-seed-secret'] || req.body?.secretKey;
-  const validSecret = process.env.SEED_SECRET_KEY || 'reride-seed-2024-production';
+  const validSecret = process.env.SEED_SECRET_KEY;
   const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
   
-  // In production, require secret key
-  if (isProduction && secretKey !== validSecret) {
-    return res.status(403).json({
-      success: false,
-      reason: 'Invalid or missing secret key for production seeding. Provide x-seed-secret header or secretKey in body.'
-    });
+  // In production, require valid secret key from environment
+  if (isProduction) {
+    if (!validSecret) {
+      logError('❌ SEED_SECRET_KEY not configured in production');
+      return res.status(503).json({
+        success: false,
+        reason: 'Seeding is disabled in production without SEED_SECRET_KEY configuration.'
+      });
+    }
+    if (!secretKey || secretKey !== validSecret) {
+      return res.status(403).json({
+        success: false,
+        reason: 'Invalid or missing secret key for production seeding. Provide x-seed-secret header or secretKey in body.'
+      });
+    }
   }
 
   if (!USE_FIREBASE) {
@@ -3202,27 +3296,15 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, _options: Han
     const users = await seedUsers(isProduction ? secretKey : undefined);
     const vehicles = await seedVehicles();
     
+    // SECURITY: Don't return credentials in response - they should be logged separately or retrieved via admin panel
     return res.status(200).json({
       success: true,
       message: 'Database seeded successfully',
       data: { 
         users: { inserted: users.length }, 
         vehicles: { inserted: vehicles.length } 
-      },
-      credentials: {
-        admin: {
-          email: 'admin@test.com',
-          password: process.env.SEED_ADMIN_PASSWORD || 'password'
-        },
-        sellers: [{
-          email: 'seller@test.com',
-          password: process.env.SEED_SELLER_PASSWORD || 'password'
-        }],
-        customers: [{
-          email: 'customer@test.com',
-          password: process.env.SEED_CUSTOMER_PASSWORD || 'password'
-        }]
       }
+      // SECURITY: Credentials removed from response - use admin panel to view user details
     });
   } catch (error) {
     return res.status(500).json({
@@ -3280,6 +3362,9 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, _optio
 
     if (req.method === 'POST') {
       try {
+        if (!requireAdmin(req, res, 'Vehicle data update')) {
+          return;
+        }
         // Save vehicle data to Firebase using Admin SDK (bypasses security rules)
         await adminUpdate(DB_PATHS.VEHICLE_DATA, 'default', {
           data: req.body,
@@ -4328,24 +4413,35 @@ async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, faqsPath
 // Support Tickets Handler
 async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
   const ticketsPath = `${DB_PATHS.VEHICLE_DATA}/supportTickets`;
+  const auth = requireAuth(req, res, 'Support tickets');
+  if (!auth) {
+    return;
+  }
 
   switch (req.method) {
     case 'GET':
-      return await handleGetSupportTickets(req, res, ticketsPath);
+      return await handleGetSupportTickets(req, res, ticketsPath, auth);
     case 'POST':
-      return await handleCreateSupportTicket(req, res, ticketsPath);
+      return await handleCreateSupportTicket(req, res, ticketsPath, auth);
     case 'PUT':
-      return await handleUpdateSupportTicket(req, res, ticketsPath);
+      return await handleUpdateSupportTicket(req, res, ticketsPath, auth);
     case 'DELETE':
-      return await handleDeleteSupportTicket(req, res, ticketsPath);
+      return await handleDeleteSupportTicket(req, res, ticketsPath, auth);
     default:
       return res.status(405).json({ error: 'Method not allowed' });
   }
 }
 
-async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, ticketsPath: string) {
+async function handleGetSupportTickets(
+  req: VercelRequest,
+  res: VercelResponse,
+  ticketsPath: string,
+  auth: AuthResult
+) {
   try {
     const { userEmail, status } = req.query;
+    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const isAdmin = auth.user?.role === 'admin';
     
     const allTickets = await adminReadAll<Record<string, unknown>>(ticketsPath);
     // CRITICAL: Spread data first, then set id to preserve string ID from key
@@ -4354,7 +4450,12 @@ async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, 
     if (userEmail && typeof userEmail === 'string') {
       // Sanitize email
       const sanitizedEmail = await sanitizeString(userEmail);
+      if (!isAdmin && normalizedAuthEmail !== sanitizedEmail.toLowerCase().trim()) {
+        return res.status(403).json({ success: false, error: 'Unauthorized access to support tickets' });
+      }
       tickets = tickets.filter(ticket => ((ticket as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() === sanitizedEmail.toLowerCase().trim());
+    } else if (!isAdmin) {
+      return res.status(403).json({ success: false, error: 'Unauthorized access to support tickets' });
     }
     
     if (status && typeof status === 'string') {
@@ -4386,9 +4487,16 @@ async function handleGetSupportTickets(req: VercelRequest, res: VercelResponse, 
   }
 }
 
-async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse, ticketsPath: string) {
+async function handleCreateSupportTicket(
+  req: VercelRequest,
+  res: VercelResponse,
+  ticketsPath: string,
+  auth: AuthResult
+) {
   try {
     const ticketData = req.body;
+    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const isAdmin = auth.user?.role === 'admin';
     
     if (!ticketData.userEmail || !ticketData.userName || !ticketData.subject || !ticketData.message) {
       return res.status(400).json({
@@ -4397,9 +4505,15 @@ async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse
       });
     }
 
+    const sanitizedEmail = (await sanitizeString(String(ticketData.userEmail))).toLowerCase().trim();
+    if (!isAdmin && sanitizedEmail !== normalizedAuthEmail) {
+      return res.status(403).json({ success: false, error: 'Unauthorized support ticket creation' });
+    }
+
     const id = `ticket_${Date.now()}`;
     const ticket = {
       ...ticketData,
+      userEmail: isAdmin ? sanitizedEmail : normalizedAuthEmail,
       id,
       status: 'Open',
       createdAt: new Date().toISOString(),
@@ -4423,10 +4537,17 @@ async function handleCreateSupportTicket(req: VercelRequest, res: VercelResponse
   }
 }
 
-async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse, ticketsPath: string) {
+async function handleUpdateSupportTicket(
+  req: VercelRequest,
+  res: VercelResponse,
+  ticketsPath: string,
+  auth: AuthResult
+) {
   try {
     const { id } = req.query;
     const updateData = req.body;
+    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const isAdmin = auth.user?.role === 'admin';
 
     if (!id) {
       return res.status(400).json({
@@ -4441,6 +4562,15 @@ async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse
         success: false,
         error: 'Support ticket not found'
       });
+    }
+
+    const existingOwnerEmail = ((existing as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() || '';
+    if (!isAdmin && existingOwnerEmail !== normalizedAuthEmail) {
+      return res.status(403).json({ success: false, error: 'Unauthorized support ticket update' });
+    }
+
+    if (!isAdmin && updateData?.userEmail) {
+      delete updateData.userEmail;
     }
 
     await adminUpdate(ticketsPath, String(id), {
@@ -4461,15 +4591,32 @@ async function handleUpdateSupportTicket(req: VercelRequest, res: VercelResponse
   }
 }
 
-async function handleDeleteSupportTicket(req: VercelRequest, res: VercelResponse, ticketsPath: string) {
+async function handleDeleteSupportTicket(
+  req: VercelRequest,
+  res: VercelResponse,
+  ticketsPath: string,
+  auth: AuthResult
+) {
   try {
     const { id } = req.query;
+    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const isAdmin = auth.user?.role === 'admin';
 
     if (!id) {
       return res.status(400).json({
         success: false,
         error: 'Support ticket ID is required'
       });
+    }
+
+    const existing = await adminRead<Record<string, unknown>>(ticketsPath, String(id));
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Support ticket not found' });
+    }
+
+    const existingOwnerEmail = ((existing as Record<string, unknown>).userEmail as string)?.toLowerCase().trim() || '';
+    if (!isAdmin && existingOwnerEmail !== normalizedAuthEmail) {
+      return res.status(403).json({ success: false, error: 'Unauthorized support ticket deletion' });
     }
 
     await adminDelete(ticketsPath, String(id));
@@ -4932,6 +5079,13 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       });
     }
 
+    const auth = requireAuth(req, res, 'Conversations');
+    if (!auth) {
+      return;
+    }
+    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const isAdmin = auth.user?.role === 'admin';
+
     // GET - Retrieve conversations
     if (req.method === 'GET') {
       const { customerId, sellerId, conversationId } = req.query;
@@ -4942,15 +5096,31 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         if (!conversation) {
           return res.status(404).json({ success: false, reason: 'Conversation not found' });
         }
+        const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
+        const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
+        if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized access to conversation' });
+        }
         return res.status(200).json({ success: true, data: conversation });
       }
       
       let conversations;
       if (customerId) {
+        const normalizedCustomerId = String(customerId).toLowerCase().trim();
+        if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
+        }
         conversations = await firebaseConversationService.findByCustomerId(String(customerId));
       } else if (sellerId) {
+        const normalizedSellerId = String(sellerId).toLowerCase().trim();
+        if (!isAdmin && normalizedAuthEmail !== normalizedSellerId) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
+        }
         conversations = await firebaseConversationService.findBySellerId(String(sellerId));
       } else {
+        if (!isAdmin) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
+        }
         conversations = await firebaseConversationService.findAll();
       }
       
@@ -4970,6 +5140,12 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       
       if (!conversationData.id) {
         return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
+      }
+
+      const normalizedCustomerId = String(conversationData.customerId || '').toLowerCase().trim();
+      const normalizedSellerId = String(conversationData.sellerId || '').toLowerCase().trim();
+      if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
       }
 
       // Check if conversation exists
@@ -4992,14 +5168,22 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
       }
 
-      await firebaseConversationService.addMessage(String(conversationId), message);
       const conversation = await firebaseConversationService.findById(String(conversationId));
 
       if (!conversation) {
         return res.status(404).json({ success: false, reason: 'Conversation not found' });
       }
 
-      return res.status(200).json({ success: true, data: conversation });
+      const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
+      const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
+      if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
+      }
+
+      await firebaseConversationService.addMessage(String(conversationId), message);
+      const updatedConversation = await firebaseConversationService.findById(String(conversationId));
+
+      return res.status(200).json({ success: true, data: updatedConversation });
     }
 
     // DELETE - Delete conversation
@@ -5008,6 +5192,17 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       
       if (!conversationId) {
         return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
+      }
+
+      const conversation = await firebaseConversationService.findById(String(conversationId));
+      if (!conversation) {
+        return res.status(404).json({ success: false, reason: 'Conversation not found' });
+      }
+
+      const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
+      const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
+      if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized conversation deletion' });
       }
 
       await firebaseConversationService.delete(String(conversationId));
@@ -5074,6 +5269,13 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       });
     }
 
+    const auth = requireAuth(req, res, 'Notifications');
+    if (!auth) {
+      return;
+    }
+    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const isAdmin = auth.user?.role === 'admin';
+
     // GET - Retrieve notifications
     if (req.method === 'GET') {
       const { recipientEmail, isRead, notificationId } = req.query;
@@ -5083,6 +5285,10 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         const notification = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
         if (!notification) {
           return res.status(404).json({ success: false, reason: 'Notification not found' });
+        }
+        const recipient = ((notification as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() || '';
+        if (!isAdmin && recipient !== normalizedAuthEmail) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized access to notification' });
         }
         return res.status(200).json({ success: true, data: { id: notificationId, ...notification } });
       }
@@ -5095,7 +5301,12 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       if (recipientEmail) {
         const emailValue = Array.isArray(recipientEmail) ? recipientEmail[0] : recipientEmail;
         const normalizedEmail = emailValue.toLowerCase().trim();
+        if (!isAdmin && normalizedAuthEmail !== normalizedEmail) {
+          return res.status(403).json({ success: false, reason: 'Unauthorized access to notifications' });
+        }
         notifications = notifications.filter(n => ((n as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() === normalizedEmail);
+      } else if (!isAdmin) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized access to notifications' });
       }
       
       if (isRead !== undefined) {
@@ -5124,9 +5335,12 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
 
       // Normalize email
       const normalizedEmail = notificationData.recipientEmail.toLowerCase().trim();
+      if (!isAdmin && normalizedEmail !== normalizedAuthEmail) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized notification creation' });
+      }
       const notification = {
         ...notificationData,
-        recipientEmail: normalizedEmail,
+        recipientEmail: isAdmin ? normalizedEmail : normalizedAuthEmail,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -5147,6 +5361,10 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       if (!existing) {
         return res.status(404).json({ success: false, reason: 'Notification not found' });
       }
+      const recipient = ((existing as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() || '';
+      if (!isAdmin && recipient !== normalizedAuthEmail) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized notification update' });
+      }
 
       await adminUpdate(DB_PATHS.NOTIFICATIONS, String(notificationId), {
         ...updates,
@@ -5163,6 +5381,14 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       
       if (!notificationId) {
         return res.status(400).json({ success: false, reason: 'Notification ID is required' });
+      }
+      const existing = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
+      if (!existing) {
+        return res.status(404).json({ success: false, reason: 'Notification not found' });
+      }
+      const recipient = ((existing as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() || '';
+      if (!isAdmin && recipient !== normalizedAuthEmail) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized notification deletion' });
       }
 
       await adminDelete(DB_PATHS.NOTIFICATIONS, String(notificationId));
@@ -5236,6 +5462,9 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(200).json(plans);
 
       case 'POST':
+        if (!requireAdmin(req, res, 'Create plan')) {
+          return;
+        }
         // Create new plan
         const newPlanData = req.body;
         if (!newPlanData || !newPlanData.name) {
@@ -5248,6 +5477,9 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(201).json(createdPlan);
 
       case 'PUT':
+        if (!requireAdmin(req, res, 'Update plan')) {
+          return;
+        }
         // Update existing plan
         const { planId: updatePlanId, ...updateData } = req.body;
         if (!updatePlanId) {
@@ -5268,6 +5500,9 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(200).json(updatedPlan);
 
       case 'DELETE':
+        if (!requireAdmin(req, res, 'Delete plan')) {
+          return;
+        }
         // Delete plan
         const { planId: deletePlanId } = req.query;
         if (!deletePlanId || typeof deletePlanId !== 'string') {

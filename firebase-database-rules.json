@@ -116,13 +116,13 @@
     },
     "images": {
       ".read": true,
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
+      ".write": "auth != null",
       "$folder": {
         ".read": true,
         ".write": "auth != null",
         "$imageId": {
           ".read": true,
-          ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() == 'admin' || (!data.exists() && newData.child('uploadedBy').exists() && newData.child('uploadedBy').val() != null && newData.child('uploadedBy').val() != '') || (data.exists() && root.child('users').child(auth.uid).child('email').val() != null && data.child('uploadedBy').val() == root.child('users').child(auth.uid).child('email').val()))"
+          ".write": "auth != null && ((!data.exists() && newData.child('uploadedBy').exists() && newData.child('uploadedBy').val() != null && newData.child('uploadedBy').val() != '') || (data.exists() && data.child('uploadedBy').val() != null && newData.child('uploadedBy').val() == data.child('uploadedBy').val()))"
         }
       }
     },

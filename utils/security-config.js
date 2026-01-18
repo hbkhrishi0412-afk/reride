@@ -93,7 +93,7 @@ const SECURITY_CONFIG = {
     NAME_MIN_LENGTH: 2,
     NAME_MAX_LENGTH: 100,
     MOBILE_LENGTH: 10,
-    ALLOWED_ROLES: ['customer', 'seller', 'admin']
+    ALLOWED_ROLES: ['customer', 'seller']
   },
 
   // Session Management
