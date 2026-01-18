@@ -56,3 +56,4 @@ After deploying, check that the image upload rule looks like this in Firebase Co
 - **Still permission denied?** Check browser console for detailed Firebase errors
 - **Anonymous auth not working?** Verify it's enabled in Authentication → Sign-in method
 
+
