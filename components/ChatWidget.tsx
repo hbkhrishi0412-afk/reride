@@ -16,6 +16,10 @@ interface ChatWidgetProps {
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onMakeOffer?: () => void; // For seller dashboard
+  onStartCall?: (phone: string) => void;
+  callTargetPhone?: string;
+  callTargetName?: string;
+  isInlineLaunch?: boolean;
 }
 
 const EMOJIS = ['😀', '😂', '👍', '❤️', '🙏', '😊', '🔥', '🎉', '🚗', '🤔', '👋', '👀'];
@@ -31,9 +35,9 @@ const TypingIndicator: React.FC<{ name: string }> = ({ name }) => (
     </div>
 );
 
-export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, currentUserRole, otherUserName, onClose, onSendMessage, typingStatus, onUserTyping, onMarkMessagesAsRead, onFlagContent, onOfferResponse, onMakeOffer }) => {
+export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, currentUserRole, otherUserName, onClose, onSendMessage, typingStatus, onUserTyping, onMarkMessagesAsRead, onFlagContent, onOfferResponse, onMakeOffer, onStartCall, callTargetPhone, callTargetName, isInlineLaunch }) => {
   const [inputText, setInputText] = useState('');
-  const [isMinimized, setIsMinimized] = useState(true); // Start minimized like Facebook Messenger
+  const [isMinimized, setIsMinimized] = useState(!isInlineLaunch); // Inline launches (CTA click) start opened
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
@@ -207,18 +211,21 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
     }
   }, [portalTarget]);
 
-  // Floating chat button - ALWAYS visible (like Facebook Messenger)
+  // Use a very high z-index so chat floats over any page content/banners/footers
+  const FLOATING_Z_INDEX = 2147482000; // near max, safely above other overlays
+
+  // Floating chat button - ALWAYS visible (OLX-style dock)
   const chatButton = (
     <div 
       style={{ 
         position: 'fixed',
         bottom: isMobile ? '20px' : '24px',
         right: isMobile ? '20px' : '24px',
-        zIndex: 999999, // Increased z-index to ensure it's above everything
+        zIndex: FLOATING_Z_INDEX,
         pointerEvents: 'auto',
         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
-        transform: isMinimized ? 'scale(1)' : 'scale(0.85)',
-        opacity: isMinimized ? 1 : 0.6,
+        transform: isMinimized ? 'scale(1)' : 'scale(0.92)',
+        opacity: isMinimized ? 1 : 0.85,
         // Ensure it's always on top
         isolation: 'isolate',
         // Force visibility
@@ -238,26 +245,34 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
               }
               handleToggleMinimize();
             }}
-            className="relative w-14 h-14 rounded-full text-white shadow-2xl flex items-center justify-center font-bold transition-all duration-300 hover:scale-110 active:scale-95"
+            className="relative w-16 h-14 rounded-full text-white shadow-2xl flex items-center justify-center font-semibold transition-all duration-300 hover:scale-105 active:scale-95"
             style={{ 
-              background: 'linear-gradient(135deg, #0084FF 0%, #0066CC 100%)',
-              boxShadow: '0 4px 16px rgba(0, 132, 255, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+              background: 'linear-gradient(135deg, #5f48ff 0%, #7b5bff 100%)',
+              boxShadow: '0 8px 24px rgba(95,72,255,0.35), 0 0 0 1px rgba(0,0,0,0.05)',
               cursor: 'pointer',
               border: 'none',
               outline: 'none',
-              // Ensure button is clickable
               WebkitTapHighlightColor: 'transparent',
-              userSelect: 'none'
+              userSelect: 'none',
+              paddingLeft: isMinimized ? '10px' : '0px',
+              paddingRight: isMinimized ? '12px' : '0px',
+              gap: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
             aria-label={isMinimized ? "Open chat" : "Minimize chat"}
         >
             {isMinimized ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
+              <>
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-lg font-bold">
+                  {otherUserName.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm text-white truncate max-w-[90px]">{otherUserName}</span>
+              </>
             ) : (
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
               </svg>
             )}
             {/* Notification badge if there are unread messages */}
@@ -273,58 +288,68 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   // Chat window - slides up from bottom (like Facebook Messenger)
   const chatWindow = !isMinimized ? (
     <div 
-      className="flex flex-col bg-white rounded-t-2xl shadow-2xl overflow-hidden"
+      className="flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
       style={{ 
         position: 'fixed',
-        bottom: isMobile ? '80px' : '90px',
-        right: isMobile ? '20px' : '24px',
-        width: isMobile ? 'calc(100vw - 40px)' : '360px',
-        maxWidth: 'calc(100vw - 48px)',
-        height: isMobile ? 'calc(100vh - 100px)' : '500px',
-        maxHeight: 'calc(100vh - 100px)',
-        zIndex: 99998,
+        bottom: isMobile ? '16px' : '20px',
+        right: isMobile ? '16px' : '20px',
+        width: isMobile ? 'calc(100vw - 32px)' : '360px',
+        maxWidth: 'calc(100vw - 32px)',
+        height: isMobile ? 'calc(100vh - 80px)' : '460px',
+        maxHeight: 'calc(100vh - 80px)',
+        zIndex: FLOATING_Z_INDEX,
         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
         opacity: isExiting || isAnimating ? 0 : 1,
         transform: isExiting || isAnimating ? 'translateY(calc(100% + 20px))' : 'translateY(0)',
         pointerEvents: isExiting ? 'none' : 'auto',
-        boxShadow: '0 -4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05)',
-        borderTopLeftRadius: '16px',
-        borderTopRightRadius: '16px'
+        boxShadow: '0 12px 40px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04)',
+        borderRadius: '16px'
       }}
       onClick={(e) => {
         // Prevent clicks inside chat from closing it
         e.stopPropagation();
       }}
     >
-        {/* Header - Facebook Messenger style */}
-        <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-blue-500 to-blue-600">
+        {/* Header - OLX-like compact bar */}
+        <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-white">
             <div className="flex items-center gap-3 flex-grow min-w-0">
-                {/* Avatar circle */}
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-semibold text-sm">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 text-white flex items-center justify-center flex-shrink-0 shadow-inner">
+                    <span className="font-semibold text-sm">
                         {otherUserName.charAt(0).toUpperCase()}
                     </span>
                 </div>
                 <div className="flex-grow min-w-0">
-                    <h3 className="text-sm font-semibold text-white truncate">{otherUserName}</h3>
-                    <p className="text-xs text-white/90 truncate">{conversation.vehicleName}</p>
+                    <h3 className="text-sm font-semibold text-gray-900 truncate">{otherUserName}</h3>
+                    <p className="text-xs text-gray-500 truncate">{conversation.vehicleName}</p>
                 </div>
             </div>
             <div className="flex items-center gap-1">
-                <button onClick={handleFlagClick} disabled={conversation.isFlagged} className="disabled:opacity-50 p-2 text-white hover:bg-white/20 rounded-full transition-colors" aria-label="Report conversation" title={conversation.isFlagged ? "This conversation has been reported" : "Report conversation"}>
+                {callTargetPhone && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onStartCall ? onStartCall(callTargetPhone) : window.open(`tel:${callTargetPhone}`); }}
+                    className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
+                    aria-label={`Call ${callTargetName || 'contact'}`}
+                    title={`Call ${callTargetName || 'contact'}`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M2.003 5.884c-.005-1.054.917-1.93 1.97-1.823 1.022.105 1.936.563 2.654 1.282l1.12 1.12a1 1 0 01.106 1.31l-.723 1.085c-.195.293-.164.68.09.935l3.142 3.142a.75.75 0 00.935.09l1.085-.723a1 1 0 011.31.106l1.12 1.12a4.25 4.25 0 011.282 2.654c.107 1.053-.769 1.975-1.823 1.97-2.54-.012-5.02-.998-6.918-2.897-1.898-1.898-2.884-4.378-2.897-6.918z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                )}
+                <button onClick={handleFlagClick} disabled={conversation.isFlagged} className="disabled:opacity-50 p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Report conversation" title={conversation.isFlagged ? "This conversation has been reported" : "Report conversation"}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 6a3 3 0 013-3h10a1 1 0 01.8 1.6L14.25 8l2.55 3.4A1 1 0 0116 13H6a1 1 0 01-1-1V6z" clipRule="evenodd" /></svg>
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); handleToggleMinimize(); }} className="p-2 text-white hover:bg-white/20 rounded-full transition-colors" aria-label="Minimize chat">
+                <button onClick={(e) => { e.stopPropagation(); handleToggleMinimize(); }} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Minimize chat">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); handleClose(); }} className="p-2 text-white hover:bg-white/20 rounded-full transition-colors" aria-label="Close chat">
+                <button onClick={(e) => { e.stopPropagation(); handleClose(); }} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Close chat">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
             </div>
         </div>
 
-        {/* Messages - Facebook Messenger style */}
-        <div className="flex-grow p-4 overflow-y-auto bg-gray-50 space-y-3" style={{ backgroundColor: '#F0F2F5' }}>
+        {/* Messages - compact list */}
+        <div className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3" style={{ backgroundColor: '#F7F7F9' }}>
             {conversation.messages.length === 0 ? (
               <div className="flex items-center justify-center h-full text-gray-500">
                 <div className="text-center">
@@ -341,10 +366,10 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                       {msg.sender === 'system' && <div className="text-center text-xs text-gray-600 dark:text-gray-400 italic py-2 w-full">{msg.text}</div>}
                       {msg.sender !== 'system' && (
                           <>
-                              <div className={`px-3 py-2 max-w-xs ${ msg.sender === senderType ? 'text-white rounded-2xl rounded-tr-sm' : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm'}`} style={msg.sender === senderType ? { background: 'linear-gradient(135deg, #0084FF 0%, #0066CC 100%)' } : { backgroundColor: '#FFFFFF', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)' }}>
+                              <div className={`px-3 py-2 max-w-xs text-sm leading-5 ${ msg.sender === senderType ? 'text-white rounded-2xl rounded-tr-sm' : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm'}`} style={msg.sender === senderType ? { background: 'linear-gradient(135deg, #5f48ff 0%, #7b5bff 100%)' } : { backgroundColor: '#FFFFFF', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)' }}>
                                   {msg.type === 'offer' ? <OfferMessage msg={msg} currentUserRole={currentUserRole} listingPrice={conversation.vehiclePrice} onRespond={(messageId, response, counterPrice) => onOfferResponse(conversation.id, messageId, response, counterPrice)} /> : <p className="text-sm break-words">{msg.text}</p>}
                               </div>
-                              <div className="text-xs text-gray-400 mt-1 px-1 flex items-center">
+                              <div className="text-[11px] text-gray-400 mt-1 px-1 flex items-center gap-1">
                                   {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                   {msg.sender === senderType && <ReadReceiptIcon isRead={msg.isRead} />}
                               </div>
@@ -387,22 +412,20 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                     value={inputText}
                     onChange={handleInputChange}
                     placeholder="Type a message..."
-                    className="flex-grow bg-gray-100 rounded-full px-4 py-2.5 focus:outline-none border-0 text-sm" 
+                    className="flex-grow bg-gray-100 rounded-full px-4 py-2 focus:outline-none border border-transparent text-sm transition-colors"
                     style={{ 
-                        border: 'none',
-                        outline: 'none',
-                        boxShadow: 'none',
                         WebkitAppearance: 'none',
                         MozAppearance: 'none',
-                        appearance: 'none',
-                        backgroundColor: '#F0F2F5'
+                        appearance: 'none'
                     }}
                     onFocus={(e) => { 
                         e.currentTarget.style.backgroundColor = '#FFFFFF';
-                        e.currentTarget.style.boxShadow = '0 0 0 1px rgba(0, 132, 255, 0.2)'; 
+                        e.currentTarget.style.border = '1px solid rgba(95,72,255,0.35)';
+                        e.currentTarget.style.boxShadow = '0 0 0 2px rgba(95,72,255,0.12)';
                     }} 
                     onBlur={(e) => { 
-                        e.currentTarget.style.backgroundColor = '#F0F2F5';
+                        e.currentTarget.style.backgroundColor = '#F3F4F6';
+                        e.currentTarget.style.border = '1px solid transparent';
                         e.currentTarget.style.boxShadow = ''; 
                     }}
                 />

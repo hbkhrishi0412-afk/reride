@@ -291,6 +291,45 @@ const AppContent: React.FC = React.memo(() => {
     onOfferResponse,
   } = useApp();
 
+  // Persist active chat id so the dock can reopen the last thread (OLX-like behavior)
+  React.useEffect(() => {
+    if (!currentUser) {
+      try { localStorage.removeItem('reRideActiveChat'); } catch {}
+      return;
+    }
+    if (activeChat?.id) {
+      try {
+        localStorage.setItem('reRideActiveChat', JSON.stringify({
+          id: activeChat.id,
+          updatedAt: Date.now(),
+        }));
+      } catch {}
+    }
+  }, [activeChat?.id, currentUser?.email]);
+
+  // Restore last active chat if present and belongs to the logged-in user
+  React.useEffect(() => {
+    if (!currentUser || activeChat) return;
+    try {
+      const stored = localStorage.getItem('reRideActiveChat');
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      const storedId = parsed?.id;
+      if (!storedId) return;
+      const normalizedEmail = currentUser.email?.toLowerCase().trim();
+      const isCustomer = currentUser.role === 'customer';
+      const candidate = conversations.find(c => {
+        if (!c) return false;
+        const custMatch = c.customerId?.toLowerCase().trim() === normalizedEmail;
+        const sellerMatch = c.sellerId?.toLowerCase().trim() === normalizedEmail;
+        return isCustomer ? custMatch : sellerMatch;
+      });
+      if (candidate && candidate.id === storedId) {
+        setActiveChat(candidate);
+      }
+    } catch {}
+  }, [currentUser?.email, currentUser?.role, conversations, activeChat, setActiveChat]);
+
   // Debug: Log when activeChat changes (must be after destructuring)
   React.useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
@@ -2712,19 +2751,32 @@ const AppContent: React.FC = React.memo(() => {
                   conversation={activeChat}
                   currentUserRole={currentUser.role as 'customer' | 'seller'}
                   otherUserName={(() => {
-                    // Check role explicitly to determine other user name
-                    // ChatWidget is used for both customers and sellers
                     const isCustomer = (currentUser.role as string) === 'customer';
                     if (isCustomer) {
                       const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
                       return seller?.name || seller?.dealershipName || 'Seller';
-                    } else {
-                      return activeChat.customerName;
                     }
+                    return activeChat.customerName;
                   })()}
+                  callTargetPhone={(() => {
+                    const isCustomer = (currentUser.role as string) === 'customer';
+                    const lookupEmail = isCustomer ? activeChat.sellerId : activeChat.customerId;
+                    const contact = lookupEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === lookupEmail.toLowerCase().trim()) : undefined;
+                    return contact?.mobile || (contact as any)?.phone || '';
+                  })()}
+                  callTargetName={(() => {
+                    const isCustomer = (currentUser.role as string) === 'customer';
+                    const lookupEmail = isCustomer ? activeChat.sellerId : activeChat.customerId;
+                    const contact = lookupEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === lookupEmail.toLowerCase().trim()) : undefined;
+                    return contact?.name || (contact as any)?.dealershipName || (isCustomer ? 'Seller' : activeChat.customerName);
+                  })()}
+                  isInlineLaunch={true}
+                  onStartCall={(phone) => {
+                    if (!phone) return;
+                    window.open(`tel:${phone}`);
+                  }}
                   onClose={() => setActiveChat(null)}
                   onSendMessage={(messageText, type, payload) => {
-                    // Use sendMessageWithType if type or payload is provided (for offers, etc.)
                     if (type || payload) {
                       sendMessageWithType(activeChat.id, messageText, type, payload);
                     } else {

@@ -3193,6 +3193,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   conversation={selectedConv}
                   currentUserRole="seller"
                   otherUserName={selectedConv.customerName}
+                  callTargetPhone={(() => {
+                    const contact = users?.find?.(u => u && u.email && u.email.toLowerCase().trim() === selectedConv.customerId?.toLowerCase().trim());
+                    return contact?.mobile || (contact as any)?.phone || '';
+                  })()}
+                  callTargetName={selectedConv.customerName}
+                  isInlineLaunch={true}
+                  onStartCall={(phone) => { if (phone) window.open(`tel:${phone}`); }}
                   onClose={() => setSelectedConv(null)}
                   onSendMessage={(messageText) => onSellerSendMessage(selectedConv.id, messageText)}
                   typingStatus={typingStatus}
@@ -3436,6 +3443,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             conversation={selectedConv}
             currentUserRole="seller"
             otherUserName={selectedConv.customerName}
+            callTargetPhone={(() => {
+              const contact = users?.find?.(u => u && u.email && u.email.toLowerCase().trim() === selectedConv.customerId?.toLowerCase().trim());
+              return contact?.mobile || (contact as any)?.phone || '';
+            })()}
+            callTargetName={selectedConv.customerName}
+            isInlineLaunch={true}
+            onStartCall={(phone) => { if (phone) window.open(`tel:${phone}`); }}
             onSendMessage={(messageText, type, payload) => onSellerSendMessage(selectedConv.id, messageText, type, payload)}
             onClose={() => setSelectedConv(null)}
             onUserTyping={onUserTyping}
