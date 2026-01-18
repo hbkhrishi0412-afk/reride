@@ -43,7 +43,12 @@
     "db:check": "node test-mongodb-simple.js",
     "test:prod": "node test-production-api.js",
     "migrate:mongodb-to-firebase": "node scripts/migrate-mongodb-to-firebase.js",
-    "hash-passwords": "node scripts/hash-user-passwords.js"
+    "hash-passwords": "node scripts/hash-user-passwords.js",
+    "cap:sync": "npx cap sync",
+    "cap:sync:android": "npx cap sync android",
+    "cap:open:android": "npx cap open android",
+    "cap:build": "npm run build && npx cap sync",
+    "cap:build:android": "npm run build && npx cap sync android"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -70,6 +75,9 @@
     "ws": "^8.16.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.0.1",
+    "@capacitor/cli": "^8.0.1",
+    "@capacitor/core": "^8.0.1",
     "@playwright/test": "^1.56.1",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^14.0.0",
