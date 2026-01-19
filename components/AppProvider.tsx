@@ -1136,6 +1136,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     const loadInitialData = async () => {
       try {
         setIsLoading(true);
+
+        const getCachedArray = <T,>(key: string): T[] | null => {
+          try {
+            const cached = localStorage.getItem(key);
+            if (!cached) return null;
+            const parsed = JSON.parse(cached);
+            return Array.isArray(parsed) ? parsed : null;
+          } catch (error) {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`Failed to read cached data for ${key}:`, error);
+            }
+            return null;
+          }
+        };
+
+        // Fast path: use cached data for quick first paint while API loads
+        const cachedVehicles = typeof window !== 'undefined' ? getCachedArray<Vehicle>('reRideVehicles') : null;
+        const cachedUsers = typeof window !== 'undefined' ? getCachedArray<User>('reRideUsers') : null;
+        const hasCachedData = Array.isArray(cachedVehicles) || Array.isArray(cachedUsers);
+
+        if (hasCachedData) {
+          if (Array.isArray(cachedVehicles)) {
+            setVehicles(cachedVehicles);
+            setRecommendations(cachedVehicles.slice(0, 6));
+          }
+          if (Array.isArray(cachedUsers)) {
+            setUsers(cachedUsers);
+          }
+          // Show UI immediately; background fetch will refresh data
+          setIsLoading(false);
+        }
         
         // CRITICAL: Set a maximum timeout to prevent infinite loading
         // If loading takes more than 5 seconds, force completion (balanced timeout for better UX)

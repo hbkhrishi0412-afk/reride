@@ -1545,10 +1545,19 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       logInfo('📝 Found user, applying update operation...');
+
+      // Ensure the email field is normalized in the stored record for reliable lookups
+      const existingEmailNormalized = existingUser.email ? existingUser.email.toLowerCase().trim() : '';
+      if (!existingEmailNormalized || existingEmailNormalized !== normalizedEmail) {
+        updateFields.email = normalizedEmail;
+        firebaseUpdates.email = normalizedEmail;
+      }
       
       // Update user in Firebase
       try {
-        await firebaseUserService.update(normalizedEmail, firebaseUpdates);
+        const emailKey = normalizedEmail.replace(/[.#$[\]]/g, '_');
+        const targetUserId = existingUser.id || emailKey;
+        await firebaseUserService.updateById(targetUserId, firebaseUpdates);
         logInfo('✅ User update operation completed in Firebase');
         
         // Fetch updated user
