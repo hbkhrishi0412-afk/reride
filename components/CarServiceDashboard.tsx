@@ -37,6 +37,18 @@ const statusOptions: { value: RequestStatus; label: string }[] = [
   { value: 'completed', label: 'Completed' },
 ];
 
+const serviceOptions = [
+  'General',
+  'Periodic Service',
+  'Engine & Transmission',
+  'AC & Cooling',
+  'Electrical & Battery',
+  'Brakes & Suspension',
+  'Body Work & Paint',
+  'Tyres & Alignment',
+  'Detailing & Cleaning',
+];
+
 const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) => {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -98,6 +110,11 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     try {
       if (!form.title.trim()) {
         setError('Title is required');
+        setCreating(false);
+        return;
+      }
+      if (!form.serviceType.trim()) {
+        setError('Service type is required');
         setCreating(false);
         return;
       }
@@ -221,12 +238,18 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Service Type</label>
-              <input
-                type="text"
+              <select
                 value={form.serviceType}
                 onChange={(e) => setForm({ ...form, serviceType: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                required
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {serviceOptions.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Customer Name</label>

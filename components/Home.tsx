@@ -121,6 +121,11 @@ const Home: React.FC<HomeProps> = ({
         container.scrollBy({ left: delta, behavior: 'smooth' });
     };
 
+    const handleStartService = (serviceId: string) => {
+        sessionStorage.setItem('service_cart_prefill', JSON.stringify({ serviceId }));
+        onNavigate(ViewEnum.SERVICE_CART);
+    };
+
     const showSkeletons = featuredVehicles.length === 0 && recommendations.length === 0 && recentVehicles.length === 0;
 
     const skeletonCard = (key: string) => (
@@ -967,6 +972,60 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* Popular Packages / Entry to Service Cart */}
+            <div className="py-16 px-4 bg-white">
+                <div className="max-w-6xl mx-auto">
+                    <div className="text-left mb-6">
+                        <p className="text-xs font-bold text-purple-700 uppercase tracking-wide">Popular packages</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mt-2">Fixed, transparent pricing</h2>
+                        <p className="text-gray-600 mt-2">No hidden costs. Approve estimates digitally before work starts.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {[
+                            {
+                                id: 'pkg-comprehensive',
+                                title: 'Essential Service',
+                                price: 'Starting ₹2,499',
+                                bullets: ['Engine oil change', 'Filter set', 'Top-up fluids', '25-point safety check'],
+                            },
+                            {
+                                id: 'pkg-standard',
+                                title: 'Deep Detailing',
+                                price: 'Starting ₹3,999',
+                                bullets: ['Foam wash', 'Interior shampoo', 'Wax & polish', 'Ozone treatment'],
+                            },
+                            {
+                                id: 'pkg-care-plus',
+                                title: 'Care Plus',
+                                price: 'Custom quote',
+                                bullets: ['Brake service', 'Alignment & balancing', 'Battery health', 'Pickup & drop'],
+                            },
+                        ].map(pkg => (
+                            <div key={pkg.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex flex-col gap-3">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-bold text-gray-900">{pkg.title}</h3>
+                                    <span className="text-sm font-semibold text-purple-700">{pkg.price}</span>
+                                </div>
+                                <ul className="space-y-2 text-sm text-gray-700">
+                                    {pkg.bullets.map((b, idx) => (
+                                        <li key={idx} className="flex items-start gap-2">
+                                            <span className="text-green-500 mt-0.5">✓</span>
+                                            <span>{b}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <button
+                                    onClick={() => handleStartService(pkg.id)}
+                                    className="mt-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-md transition-colors"
+                                >
+                                    Book this package
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
 
             {/* Car Service Section - Premium Style */}
             <div 

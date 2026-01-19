@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { View as ViewEnum } from '../types';
 import '../lib/firebase'; // ensure firebase client is initialized
 
@@ -20,10 +20,12 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
   const [availability, setAvailability] = useState('weekdays');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResetMessage(null);
     setLoading(true);
     try {
       const auth = getAuth();
@@ -60,6 +62,7 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResetMessage(null);
     setLoading(true);
     try {
       if (!name || !phone || !city) {
@@ -205,7 +208,33 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
               className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">For service providers only.</span>
+            <button
+              type="button"
+              onClick={async () => {
+                setError(null);
+                setResetMessage(null);
+                if (!email) {
+                  setError('Enter your email to reset password.');
+                  return;
+                }
+                try {
+                  const auth = getAuth();
+                  await sendPasswordResetEmail(auth, email);
+                  setResetMessage('Password reset email sent.');
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : 'Failed to send reset email';
+                  setError(message);
+                }
+              }}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              Forgot password?
+            </button>
+          </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
+          {resetMessage && <p className="text-sm text-green-600">{resetMessage}</p>}
           <button
             type="submit"
             disabled={loading}

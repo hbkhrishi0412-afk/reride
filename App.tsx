@@ -121,6 +121,7 @@ const MobileRentalPage = React.lazy(() => import('./components/MobileRentalPage'
 const MobileDealerProfilesPage = React.lazy(() => import('./components/MobileDealerProfilesPage'));
 const MobileCityLandingPage = React.lazy(() => import('./components/MobileCityLandingPage'));
 const MobileHomePage = React.lazy(() => import('./components/MobileHomePage'));
+const ServiceCart = React.lazy(() => import('./components/ServiceCart'));
 
 // Lazy-loaded non-critical components (loaded on demand)
 const CommandPalette = React.lazy(() => import('./components/CommandPalette'));
@@ -294,6 +295,20 @@ const AppContent: React.FC = React.memo(() => {
     onOfferResponse,
   } = useApp();
   const [serviceProvider, setServiceProvider] = React.useState<any>(null);
+
+  // Simple handler for service cart submissions (wire to real API as needed)
+  const handleServiceRequestSubmit = React.useCallback(async (payload: any) => {
+    try {
+      // TODO: integrate real POST endpoint for service requests
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Service request payload', payload);
+      }
+      addToast('Service request submitted', 'success');
+    } catch (error) {
+      console.error('Failed to submit service request', error);
+      addToast('Failed to submit service request', 'error');
+    }
+  }, [addToast]);
 
   // Persist active chat id so the dock can reopen the last thread (OLX-like behavior)
   React.useEffect(() => {
@@ -2162,6 +2177,15 @@ const AppContent: React.FC = React.memo(() => {
       case ViewEnum.CAR_SERVICES:
         return <CarServices onNavigate={navigate} />;
 
+      case ViewEnum.SERVICE_CART:
+        return (
+          <ServiceCart
+            isLoggedIn={!!currentUser}
+            onLogin={() => navigate(ViewEnum.LOGIN_PORTAL)}
+            onSubmitRequest={handleServiceRequestSubmit}
+          />
+        );
+
       case ViewEnum.PRICING:
         if (isMobileApp) {
           return (
@@ -2549,6 +2573,8 @@ const AppContent: React.FC = React.memo(() => {
         return 'Car Service Login';
       case ViewEnum.CAR_SERVICE_DASHBOARD:
         return 'Car Service Dashboard';
+      case ViewEnum.SERVICE_CART:
+        return 'Service Cart';
       case ViewEnum.SUPPORT:
         return 'Support';
       case ViewEnum.FAQ:
@@ -3053,6 +3079,7 @@ const AppContent: React.FC = React.memo(() => {
         <Header 
           onNavigate={navigate}
           currentUser={currentUser}
+          serviceProvider={serviceProvider}
           onLogout={handleLogout}
           compareCount={comparisonList.length}
           wishlistCount={wishlist.length}

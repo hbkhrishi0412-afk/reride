@@ -10,6 +10,11 @@ import SellerDropdown from './SellerDropdown';
 interface HeaderProps {
     onNavigate: (view: ViewEnum) => void;
     currentUser: User | null;
+    serviceProvider?: {
+        name?: string;
+        email?: string;
+        city?: string;
+    } | null;
     onLogout: () => void;
     compareCount: number;
     wishlistCount: number;
@@ -29,6 +34,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = memo(({
     onNavigate,
     currentUser,
+    serviceProvider = null,
     onLogout,
     compareCount,
     wishlistCount,
@@ -300,6 +306,19 @@ const Header: React.FC<HeaderProps> = memo(({
                                             </div>
                                         )}
                                     </div>
+                                ) : serviceProvider ? (
+                                    <div className="flex items-center gap-3 px-3 py-2 bg-white rounded-lg border border-gray-200 shadow-sm">
+                                        <div className="text-right leading-tight">
+                                            <p className="text-sm font-semibold text-gray-900">{serviceProvider.name || 'Service Provider'}</p>
+                                            <p className="text-xs text-gray-500">{serviceProvider.email || ''}</p>
+                                        </div>
+                                        <button 
+                                            onClick={onLogout} 
+                                            className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+                                        >
+                                            Logout
+                                        </button>
+                                    </div>
                                 ) : (
                                     <button 
                                         onClick={() => handleNavigate(ViewEnum.LOGIN_PORTAL)} 
@@ -334,7 +353,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             <hr className="border-gray-200"/>
                             <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Compare ({compareCount})</button>
                             <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Wishlist ({wishlistCount})</button>
-                            {currentUser && currentUser.role === 'customer' && (
+                            {(currentUser && currentUser.role === 'customer') && (
                                 <>
                                     <button onClick={() => handleNavigate(ViewEnum.BUYER_DASHBOARD)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">My Dashboard</button>
                                     <button onClick={() => handleNavigate(ViewEnum.INBOX)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Inbox ({inboxCount})</button>
@@ -346,6 +365,14 @@ const Header: React.FC<HeaderProps> = memo(({
                                     {currentUser.role === 'seller' && <button onClick={() => handleNavigate(ViewEnum.SELLER_DASHBOARD)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Dashboard</button>}
                                     {currentUser.role === 'admin' && <button onClick={() => handleNavigate(ViewEnum.ADMIN_PANEL)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Admin Panel</button>}
                                     <button onClick={() => handleNavigate(ViewEnum.PROFILE)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">My Profile</button>
+                                    <button onClick={onLogout} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Logout</button>
+                                </>
+                            ) : serviceProvider ? (
+                                <>
+                                    <div className="px-4 py-2 text-left">
+                                        <p className="font-semibold text-spinny-text-dark text-sm">{serviceProvider.name || 'Service Provider'}</p>
+                                        {serviceProvider.city && <p className="text-xs text-gray-500">{serviceProvider.city}</p>}
+                                    </div>
                                     <button onClick={onLogout} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Logout</button>
                                 </>
                             ) : (
