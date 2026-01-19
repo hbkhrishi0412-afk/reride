@@ -53,6 +53,9 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 Sell Your Car
               </a>
+              <a href="#" onClick={(e) => handleNav(e, View.CAR_SERVICES)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
+                Car Services
+              </a>
               <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 New Cars
               </a>
