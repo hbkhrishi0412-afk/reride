@@ -380,33 +380,52 @@ export const handleApiResponse = async <T = any>(
   response: Response
 ): Promise<{ success: boolean; data?: T; error?: string; reason?: string }> => {
   if (!response.ok) {
-    // Handle 401 - already handled by authenticatedFetch, but log it
-    if (response.status === 401) {
-      return {
-        success: false,
-        error: 'Unauthorized',
-        reason: 'Your session has expired. Please log in again.',
-      };
-    }
-
-    // Try to parse error response
+    // Try to parse error response first to get specific error message
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
       try {
         const errorData = await response.json();
+        // Use API's specific error message if available
+        const apiReason = errorData.reason || errorData.message || errorData.error;
+        
+        // For 401, use API's message if available, otherwise use generic
+        if (response.status === 401) {
+          return {
+            success: false,
+            error: 'Unauthorized',
+            reason: apiReason || 'Your session has expired. Please log in again.',
+          };
+        }
+        
         return {
           success: false,
           error: errorData.error || `HTTP ${response.status}`,
-          reason: errorData.reason || errorData.message || errorData.error || response.statusText,
+          reason: apiReason || response.statusText,
         };
       } catch {
         // If JSON parsing fails, return status text
+        if (response.status === 401) {
+          return {
+            success: false,
+            error: 'Unauthorized',
+            reason: 'Your session has expired. Please log in again.',
+          };
+        }
         return {
           success: false,
           error: `HTTP ${response.status}`,
           reason: response.statusText,
         };
       }
+    }
+    
+    // Non-JSON response - handle 401 specially
+    if (response.status === 401) {
+      return {
+        success: false,
+        error: 'Unauthorized',
+        reason: 'Your session has expired. Please log in again.',
+      };
     }
 
     // Non-JSON error response

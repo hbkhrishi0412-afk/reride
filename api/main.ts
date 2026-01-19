@@ -1421,7 +1421,28 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       // Normalize emails for comparison (critical for production)
       const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
       const normalizedRequestEmail = email ? String(email).toLowerCase().trim() : '';
+      
+      // Enhanced logging for debugging authorization issues
+      if (process.env.NODE_ENV !== 'production') {
+        logInfo('🔐 Authorization check:', {
+          authEmail: auth.user?.email,
+          normalizedAuthEmail,
+          requestEmail: email,
+          normalizedRequestEmail,
+          isAdmin: auth.user?.role === 'admin',
+          emailsMatch: normalizedAuthEmail === normalizedRequestEmail,
+          willAllow: auth.user && (auth.user.role === 'admin' || normalizedAuthEmail === normalizedRequestEmail)
+        });
+      }
+      
       if (!auth.user || (auth.user.role !== 'admin' && normalizedAuthEmail !== normalizedRequestEmail)) {
+        logWarn('⚠️ Authorization failed for user update:', {
+          authEmail: auth.user?.email,
+          normalizedAuthEmail,
+          requestEmail: email,
+          normalizedRequestEmail,
+          isAdmin: auth.user?.role === 'admin'
+        });
         return res.status(403).json({ success: false, reason: 'Unauthorized: You can only update your own profile.' });
       }
       
