@@ -67,22 +67,32 @@ const packages = [
   {
     name: 'Essential Service',
     price: 'Starting ₹2,499',
+    serviceId: 'pkg-comprehensive',
     highlights: ['Engine oil change', 'Filter set', 'Top-up fluids', '25-point safety check'],
   },
   {
     name: 'Deep Detailing',
     price: 'Starting ₹3,999',
+    serviceId: 'pkg-standard',
     highlights: ['Foam wash', 'Interior shampoo', 'Wax & polish', 'Ozone treatment'],
   },
   {
     name: 'Care Plus',
     price: 'Custom quote',
+    serviceId: 'pkg-care-plus',
     highlights: ['Brake service', 'Alignment & balancing', 'Battery health', 'Pickup & drop'],
   },
 ];
 
 const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
-  const handleBook = () => onNavigate?.(ViewEnum.SUPPORT);
+  const handleBook = (pkg?: { name: string; price: string; highlights?: string[]; serviceId?: string }) => {
+    if (pkg?.serviceId) {
+      sessionStorage.setItem('service_cart_prefill', JSON.stringify({ serviceId: pkg.serviceId }));
+    } else {
+      sessionStorage.removeItem('service_cart_prefill');
+    }
+    onNavigate?.(ViewEnum.SERVICE_CART);
+  };
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -107,12 +117,6 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
                 className="px-6 py-3 rounded-xl bg-white text-blue-700 font-semibold shadow-lg hover:shadow-xl transition-transform hover:-translate-y-0.5"
               >
                 Book a Service
-              </button>
-              <button
-                onClick={() => onNavigate?.(ViewEnum.CAR_SERVICE_LOGIN)}
-                className="px-6 py-3 rounded-xl bg-white/15 border border-white/40 text-white font-semibold hover:bg-white/10 transition-colors"
-              >
-                Service Provider Login
               </button>
               <button
                 onClick={handleBook}
@@ -202,7 +206,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
                   ))}
                 </ul>
                 <button
-                  onClick={handleBook}
+                  onClick={() => handleBook(pkg)}
                   className="mt-auto inline-flex justify-center px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
                 >
                   Book this package
