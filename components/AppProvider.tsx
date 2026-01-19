@@ -3130,7 +3130,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         
         // Debug logging for partnerBanks updates
         if (safeUpdates.partnerBanks !== undefined) {
-          console.log('💳 Updating partnerBanks:', { email, partnerBanks: safeUpdates.partnerBanks, count: safeUpdates.partnerBanks?.length || 0 });
+          console.log('💳 Updating partnerBanks:', { 
+            email, 
+            normalizedEmail: email?.toLowerCase().trim(),
+            partnerBanks: safeUpdates.partnerBanks, 
+            count: safeUpdates.partnerBanks?.length || 0,
+            currentUserEmail: currentUser?.email,
+            emailsMatch: currentUser?.email?.toLowerCase().trim() === email?.toLowerCase().trim()
+          });
         }
         
         // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state/localStorage only on success
@@ -3138,35 +3145,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
         try {
           console.log('📡 Sending user update request to API (real-time MongoDB update)...', { email, hasPassword: !!updates.password });
           
-          // PROACTIVE TOKEN REFRESH: For critical operations like password updates, 
+          // PROACTIVE TOKEN REFRESH: For all profile updates (password, partnerBanks, etc.)
           // proactively refresh token before making the request to prevent session expiration errors
-          if (updates.password) {
+          // This is especially important for seller account updates
+          if (updates.password || updates.partnerBanks !== undefined || Object.keys(updates).length > 0) {
             try {
-              const { refreshAccessToken } = await import('../services/userService');
-              console.log('🔄 Proactively refreshing token before password update...');
-              const refreshResult = await refreshAccessToken();
-              if (refreshResult.success && refreshResult.accessToken) {
-                console.log('✅ Token refreshed proactively before password update');
+              // Check if token is likely expired first
+              const { isTokenLikelyValid } = await import('../utils/authenticatedFetch');
+              const tokenValid = isTokenLikelyValid();
+              
+              if (!tokenValid) {
+                console.log('🔄 Token appears expired, proactively refreshing before profile update...', { 
+                  hasPassword: !!updates.password, 
+                  hasPartnerBanks: updates.partnerBanks !== undefined,
+                  updateFields: Object.keys(updates)
+                });
+                
+                const { refreshAccessToken } = await import('../services/userService');
+                const refreshResult = await refreshAccessToken();
+                
+                if (refreshResult.success && refreshResult.accessToken) {
+                  console.log('✅ Token refreshed proactively before profile update');
+                } else {
+                  console.warn('⚠️ Proactive token refresh failed:', refreshResult.reason);
+                  // If refresh token itself is expired, we need to inform the user
+                  if (refreshResult.reason?.includes('expired') || refreshResult.reason?.includes('Session expired')) {
+                    throw new Error('REFRESH_TOKEN_EXPIRED');
+                  }
+                }
               } else {
-                console.warn('⚠️ Proactive token refresh failed, but continuing with request (will retry on 401)');
+                console.log('✅ Token appears valid, proceeding with update');
               }
             } catch (refreshError) {
+              const errorMsg = refreshError instanceof Error ? refreshError.message : String(refreshError);
+              if (errorMsg === 'REFRESH_TOKEN_EXPIRED') {
+                // Refresh token is expired - user needs to log in again
+                addToast('Your session has expired. Please log in again.', 'error');
+                throw new Error('AUTH_REFRESH_EXPIRED');
+              }
               console.warn('⚠️ Error during proactive token refresh:', refreshError);
               // Continue with request - authenticatedFetch will handle 401 and retry
             }
           }
           
           // Use authenticated fetch with automatic token refresh
+          // CRITICAL: Normalize email to ensure consistency with JWT token
+          const normalizedEmail = email ? email.toLowerCase().trim() : email;
           const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+          
+          // Log the update attempt with normalized email
+          console.log('📡 Sending profile update request...', {
+            email: normalizedEmail,
+            currentUserEmail: currentUser?.email,
+            emailsMatch: currentUser?.email?.toLowerCase().trim() === normalizedEmail,
+            updateFields: Object.keys(safeUpdates),
+            hasPartnerBanks: safeUpdates.partnerBanks !== undefined
+          });
+          
           const response = await authenticatedFetch('/api/users', {
             method: 'PUT',
             body: JSON.stringify({
-              email: email,
+              email: normalizedEmail,
               ...safeUpdates
             })
           });
           
-          console.log('📥 API response received:', { status: response.status, ok: response.ok });
+          console.log('📥 API response received:', { status: response.status, ok: response.ok, statusText: response.statusText });
           
           // Use the response handler for consistent error handling
           const { handleApiResponse } = await import('../utils/authenticatedFetch');
@@ -3178,16 +3222,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             // Handle 401 Unauthorized - token refresh should have been attempted by authenticatedFetch
             // If we still get 401, it means token refresh failed - user needs to re-login
             if (response.status === 401) {
-              console.error('❌ 401 Unauthorized - Token refresh failed. MongoDB update NOT saved.');
+              console.error('❌ 401 Unauthorized - Token refresh failed. MongoDB update NOT saved.', {
+                email,
+                updateFields: Object.keys(safeUpdates),
+                hasPartnerBanks: safeUpdates.partnerBanks !== undefined
+              });
               const errorReason = apiResult.reason || apiResult.error || 'Authentication expired';
-              // Avoid duplicate "log in again" messages
-              const cleanReason = errorReason.includes('log in again') 
-                ? errorReason 
-                : `${errorReason}. Please log in again and try again.`;
+              
+              // More user-friendly error message
+              let userMessage = 'Your session has expired. Please log in again.';
+              if (errorReason.includes('Token has expired') || errorReason.includes('expired')) {
+                userMessage = 'Your session has expired. Please log in again.';
+              } else if (errorReason.includes('Invalid token') || errorReason.includes('invalid')) {
+                userMessage = 'Your session is invalid. Please log in again.';
+              } else if (errorReason.includes('Authentication')) {
+                userMessage = 'Authentication failed. Please log in again.';
+              }
+              
               if (updates.password) {
-                addToast(`Password update failed: ${cleanReason}`, 'error');
+                addToast(`Password update failed: ${userMessage}`, 'error');
               } else {
-                addToast(`Profile update failed: ${cleanReason}`, 'error');
+                addToast(`Profile update failed: ${userMessage}`, 'error');
               }
               // Don't update localStorage - MongoDB update failed, so we shouldn't save locally
               // Throw a specific error that we can check in catch block to avoid duplicate messages
@@ -3319,8 +3374,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
           if (apiError instanceof Error) {
             const errorMsg = apiError.message;
             
-            // Skip if error was already handled (e.g., 401 with toast already shown)
-            if (errorMsg === 'AUTH_401_ALREADY_HANDLED') {
+            // Skip if error was already handled (e.g., 401 with toast already shown, or refresh token expired)
+            if (errorMsg === 'AUTH_401_ALREADY_HANDLED' || errorMsg === 'AUTH_REFRESH_EXPIRED') {
               return; // Error already shown, don't show duplicate
             }
             
