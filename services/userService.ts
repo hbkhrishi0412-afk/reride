@@ -804,44 +804,10 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
         detectedRole: result.detectedRole
       };
     } catch (error) {
-      // Check if it's a network/server error (should fallback) vs invalid credentials
+      // Production: do NOT fall back to local storage. Without tokens, protected APIs will 401.
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const isNetworkError = errorMessage.includes('fetch') || 
-                             errorMessage.includes('network') || 
-                             errorMessage.includes('Failed to fetch') ||
-                             errorMessage.includes('CORS') ||
-                             errorMessage.includes('500') ||
-                             errorMessage.includes('503') ||
-                             errorMessage.includes('502') ||
-                             errorMessage.includes('504') ||
-                             errorMessage.includes('429') ||
-                             errorMessage.includes('Too many requests') ||
-                             errorMessage.includes('Service temporarily unavailable');
-      
-      // If it's a network/server error, fallback to local storage immediately
-      // BUT: Don't fallback for "Invalid credentials" - this means password is wrong in database
-      // Only fallback for actual network/server errors
-      if (isNetworkError) {
-        console.warn('⚠️  API login failed due to network error, falling back to local storage:', errorMessage);
-        try {
-          const localResult = await loginLocal({ ...credentials, skipRoleCheck: true });
-          if (localResult.success) {
-            console.log('✅ Local storage login successful (fallback)');
-            return localResult;
-          } else {
-            // Local storage also failed - return the original API error
-            console.warn('⚠️  Local storage login also failed');
-            return { success: false, reason: 'Login failed. Please check your connection and try again.' };
-          }
-        } catch (localError) {
-          console.error('❌ Local storage login error:', localError);
-          return { success: false, reason: 'Login failed. Please check your connection and try again.' };
-        }
-      } else {
-        // Other errors (including Invalid credentials) - return the error message
-        // Don't fallback to localStorage for invalid credentials - password was updated in DB
-        return { success: false, reason: errorMessage };
-      }
+      console.error('❌ API login failed (production, no fallback):', errorMessage);
+      return { success: false, reason: errorMessage || 'Login failed. Please try again.' };
     }
   } else {
     // Development mode - use local storage directly
