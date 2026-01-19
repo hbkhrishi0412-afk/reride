@@ -83,36 +83,51 @@ class DataService {
           }
         }
 
-        let response: Response;
-        let timeoutId: NodeJS.Timeout | null = null;
-        try {
-          // Add timeout for fetch requests - reduced to 7 seconds for faster fallback
-          const controller = new AbortController();
-          timeoutId = setTimeout(() => {
-            controller.abort();
-          }, 7000); // 7 second timeout for faster fallback
-          
-          response = await fetch(`${this.apiBaseUrl}${endpoint}`, {
-            ...fetchOptions,
-            signal: controller.signal
-          });
-          
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
+        // Helper: perform fetch with timeout so we can retry after token refresh
+        const performFetch = async (): Promise<Response> => {
+          let timeoutId: NodeJS.Timeout | null = null;
+          try {
+            const controller = new AbortController();
+            timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout for faster fallback
+
+            const resp = await fetch(`${this.apiBaseUrl}${endpoint}`, {
+              ...fetchOptions,
+              signal: controller.signal
+            });
+
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+
+            return resp;
+          } catch (fetchError) {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+
+            if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
+              throw new Error('API request timeout');
+            }
+            throw new Error('Network error: Unable to reach API server');
           }
-        } catch (fetchError) {
-          // Clean up timeout if still active
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
+        };
+
+        let response: Response = await performFetch();
+
+        // If the access token expired, try one refresh + retry before failing
+        if (response.status === 401) {
+          try {
+            const { refreshAccessToken } = await import('./userService');
+            const refreshResult = await refreshAccessToken();
+            if (refreshResult.success && refreshResult.accessToken) {
+              headers['Authorization'] = `Bearer ${refreshResult.accessToken}`;
+              response = await performFetch();
+            }
+          } catch (authError) {
+            console.warn('⚠️ Token refresh during API request failed:', authError);
           }
-          
-          // Network error or timeout - throw error to trigger fallback
-          if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
-            throw new Error('API request timeout');
-          }
-          throw new Error('Network error: Unable to reach API server');
         }
 
         if (!response.ok) {
