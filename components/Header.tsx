@@ -127,14 +127,24 @@ const Header: React.FC<HeaderProps> = memo(({
                                 <span>Call us at 727-727-7275</span>
                             </a>
                             <button 
-                                onClick={() => setIsLocationModalOpen(true)} 
-                                className="flex items-center gap-1.5 transition-colors font-medium text-sm" style={{ color: '#1E88E5' }}
+                                type="button"
+                                onClick={() => setIsLocationModalOpen(true)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        setIsLocationModalOpen(true);
+                                    }
+                                }}
+                                className="flex items-center gap-1.5 transition-colors font-medium text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-300 rounded-md" 
+                                style={{ color: '#1E88E5' }}
+                                aria-label="Choose location"
+                                title="Choose location"
                             >
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
-                                {userLocation}
+                                {userLocation || 'Select location'}
                             </button>
                         </div>
                     </div>
@@ -190,6 +200,12 @@ const Header: React.FC<HeaderProps> = memo(({
                                     className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
                                 >
                                     New Cars
+                                </button>
+                                <button 
+                                    onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} 
+                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
+                                >
+                                    Car Services
                                 </button>
                                 <button 
                                     onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} 
@@ -313,6 +329,7 @@ const Header: React.FC<HeaderProps> = memo(({
                             <button onClick={() => handleNavigate(ViewEnum.USED_CARS)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Buy Car</button>
                             <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Sell Car</button>
                             <button onClick={() => handleNavigate(ViewEnum.NEW_CARS)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">New Cars</button>
+                            <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Car Services</button>
                             <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Dealers</button>
                             <hr className="border-gray-200"/>
                             <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="block w-full text-left font-semibold text-spinny-text-dark py-2 px-4 rounded-lg hover:bg-white">Compare ({compareCount})</button>

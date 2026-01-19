@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 // Removed blocking import - will lazy load location data when needed
+import { getDisplayNameForCity } from '../utils/cityMapping';
 
 interface LocationModalProps {
     isOpen: boolean;
@@ -108,7 +109,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 try {
                     // Use OpenStreetMap Nominatim API for reverse geocoding
                     const response = await fetch(
-                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`,
+                        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=14&addressdetails=1`,
                         {
                             headers: {
                                 'User-Agent': 'ReRide-App'
@@ -137,11 +138,23 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     
                     // Extract city and state from the response
                     const address = data.address;
-                    const detectedCity = address.city || address.town || address.village || address.suburb || address.state_district;
-                    const detectedState = address.state;
+                    const detectedCity = address.city || address.town || address.village || address.suburb || address.state_district || address.locality || address.county;
+                    const detectedState = address.state || address.state_district || address.region;
                     
                     console.log('Detected location:', { detectedCity, detectedState });
                     
+                    // Helper to resolve state code from detected state name
+                    const resolveStateCode = (stateName?: string) => {
+                        if (!stateName) return '';
+                        const normalized = stateName.toLowerCase();
+                        const found = indianStates.find(
+                            (s) => s.name.toLowerCase() === normalized || normalized.includes(s.name.toLowerCase()) || s.name.toLowerCase().includes(normalized)
+                        );
+                        return found?.code || '';
+                    };
+                    const stateCode = resolveStateCode(detectedState);
+                    const stateCities = stateCode ? (citiesByState[stateCode] || []) : [];
+
                     // Try to match with our available cities
                     const allCities = Object.values(citiesByState).flat();
                     let matchedCity = null;
@@ -162,30 +175,33 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     }
                     
                     // If still no match, try to find major city in the detected state
-                    if (!matchedCity && detectedState) {
-                        const stateEntry = indianStates.find(s => 
-                            s.name.toLowerCase().includes(detectedState.toLowerCase()) ||
-                            detectedState.toLowerCase().includes(s.name.toLowerCase())
-                        );
-                        
-                        if (stateEntry && citiesByState[stateEntry.code]) {
-                            // Pick the first major city in that state
-                            matchedCity = citiesByState[stateEntry.code][0];
-                        }
+                    if (!matchedCity && stateCities.length > 0) {
+                        matchedCity = stateCities[0];
                     }
                     
                     // If we found a match, use it; otherwise, use detected city name
                     const finalLocation = matchedCity || detectedCity || 'Mumbai';
+                    const displayLocation = getDisplayNameForCity(finalLocation);
+
+                    // Sync dropdowns with detected state/city for user visibility
+                    if (stateCode) {
+                        setSelectedState(stateCode);
+                        if (matchedCity) {
+                            setSelectedCity(matchedCity);
+                        }
+                    }
                     
-                    onLocationChange(finalLocation);
-                    addToast(`Location detected: ${finalLocation}`, 'success');
+                    onLocationChange(displayLocation);
+                    addToast(`Location detected: ${displayLocation}${detectedState ? `, ${detectedState}` : ''}`, 'success');
                     setIsDetecting(false);
                     onClose();
                     
                 } catch (error) {
                     console.error('Reverse geocoding error:', error);
                     // Fallback: Use coordinates to estimate nearest major city
-                    const nearestCity = findNearestCity(latitude, longitude);
+                    const nearestCity = getDisplayNameForCity(findNearestCity(latitude, longitude));
+                    setSelectedState('');
+                    setSelectedCity(nearestCity);
                     onLocationChange(nearestCity);
                     addToast(`Location detected: ${nearestCity}`, 'success');
                     setIsDetecting(false);

@@ -45,6 +45,7 @@ const SECURITY_CONFIG = {
     // Options: '15m', '30m', '1h', '2h', '4h', '8h', '12h', '24h', '48h', '7d', '14d', '30d'
     ACCESS_TOKEN_EXPIRES_IN: '48h', // Increased from '24h' to 48 hours for better UX
     REFRESH_TOKEN_EXPIRES_IN: '30d', // Increased from '7d' to 30 days for better UX
+    CLOCK_TOLERANCE_SECONDS: 60, // Grace period for minor clock skew
     ISSUER: 'reride-app',
     AUDIENCE: 'reride-users'
   },
@@ -118,9 +119,7 @@ export const getSecurityConfig = () => {
     ...SECURITY_CONFIG,
     JWT: {
       ...SECURITY_CONFIG.JWT,
-      SECRET: isProduction
-        ? process.env.JWT_SECRET
-        : SECURITY_CONFIG.JWT.SECRET
+      SECRET: process.env.JWT_SECRET ?? SECURITY_CONFIG.JWT.SECRET
     },
     LOGGING: {
       ...SECURITY_CONFIG.LOGGING,

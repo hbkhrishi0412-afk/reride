@@ -26,6 +26,7 @@ const ICONS = {
   THEME: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h8" /></svg>,
   SELL: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
   PRICE: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>,
+  SERVICE: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 112 0v1.586a1 1 0 00.293.707l1.414 1.414a1 1 0 00.707.293H17a2 2 0 110 2h-1.586a1 1 0 00-.707.293l-1.414 1.414a1 1 0 00-.293.707V15a2 2 0 11-2 0v-1.586a1 1 0 00-.293-.707l-1.414-1.414a1 1 0 00-.707-.293H7a2 2 0 110-2h1.586a1 1 0 00.707-.293l1.414-1.414A1 1 0 0011 5.586V4z" /></svg>,
 };
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavigate, currentUser, onLogout }) => {
@@ -38,6 +39,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
       // Navigation
       { id: 'home', title: 'Go to Home', icon: ICONS.HOME, action: () => onNavigate(View.HOME), section: 'Navigation' },
       { id: 'used_cars', title: 'Browse Used Cars', icon: ICONS.SEARCH, action: () => onNavigate(View.USED_CARS), section: 'Navigation' },
+      { id: 'car_services', title: 'Car Services', icon: ICONS.SERVICE, action: () => onNavigate(View.CAR_SERVICES), section: 'Navigation' },
       { id: 'pricing', title: 'View Pricing', icon: ICONS.PRICE, action: () => onNavigate(View.PRICING), section: 'Navigation' },
       { id: 'sell_car', title: 'Sell a Car', icon: ICONS.SELL, action: () => onNavigate(View.SELLER_LOGIN), section: 'Navigation' },
       // Conditional Navigation

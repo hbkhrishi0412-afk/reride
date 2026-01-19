@@ -17,7 +17,7 @@ interface UnifiedLoginProps {
   hideRolePicker?: boolean;
 }
 
-type UserRole = 'customer' | 'seller' | 'admin';
+type UserRole = 'customer' | 'seller' | 'admin' | 'service_provider';
 type AuthMode = 'login' | 'register' | 'otp';
 
 const UnifiedLogin: React.FC<UnifiedLoginProps> = ({ 
@@ -66,6 +66,15 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       color: 'bg-purple-500',
       loginTitle: 'Admin Panel Login',
       registerTitle: 'Admin Registration'
+    },
+    // Placeholder config for service provider to avoid undefined access
+    service_provider: {
+      title: 'Service Provider',
+      description: 'Manage car services',
+      icon: '🛠️',
+      color: 'bg-blue-500',
+      loginTitle: 'Service Provider Login',
+      registerTitle: 'Service Provider'
     }
   };
 
@@ -90,9 +99,19 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (mode === 'login') {
         if (!email || !password) throw new Error('Please enter both email and password.');
+        // Prevent submit for service provider placeholder
+        if (selectedRole === 'service_provider') {
+          onNavigate(View.CAR_SERVICE_LOGIN);
+          return;
+        }
         result = await login({ email, password, role: selectedRole });
       } else {
         if (!name || !mobile || !email || !password) throw new Error('Please fill in all registration fields.');
+        // Prevent register for service provider placeholder
+        if (selectedRole === 'service_provider') {
+          onNavigate(View.CAR_SERVICE_LOGIN);
+          return;
+        }
         result = await register({ name, email, password, mobile, role: selectedRole });
       }
 
@@ -166,6 +185,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   };
 
   const handleRoleChange = (role: UserRole) => {
+    if (role === 'service_provider') {
+      onNavigate(View.CAR_SERVICE_LOGIN);
+      return;
+    }
     if (forcedRole) return;
     setSelectedRole(role);
     setError('');
@@ -294,6 +317,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                           : (roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles')}
                       </option>
                     ))}
+                    <option value="service_provider">Service Provider</option>
                   </select>
                 </div>
               )}
@@ -428,6 +452,15 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   </>
                 )}
               </span>
+            </button>
+
+            {/* Service Provider Login entry point */}
+            <button
+              type="button"
+              onClick={() => onNavigate(View.CAR_SERVICE_LOGIN)}
+              className="mt-3 w-full flex justify-center py-3 px-4 border border-blue-200 text-sm font-semibold rounded-xl text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+            >
+              Service Provider Login
             </button>
           </form>
 

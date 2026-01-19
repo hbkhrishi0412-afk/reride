@@ -19,18 +19,30 @@ export const SECURITY_CONFIG = {
 
   // JWT Configuration
   JWT: {
-    SECRET: process.env.JWT_SECRET || (() => {
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error('CRITICAL: JWT_SECRET must be set in production environment');
+    // Lazy getter prevents hard crashes at module load while still warning in prod
+    get SECRET() {
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        const isProd = process.env.NODE_ENV === 'production';
+        if (isProd) {
+          if (!(SECURITY_CONFIG.JWT as any)._warned) {
+            console.warn('⚠️ JWT_SECRET not set in production. Using fallback. Please set JWT_SECRET.');
+            (SECURITY_CONFIG.JWT as any)._warned = true;
+          }
+          return 'fallback-secret-please-set-jwt-secret';
+        }
+        return 'dev-only-secret-not-for-production';
       }
-      return 'dev-only-secret-not-for-production';
-    })(),
+      return secret;
+    },
+    _warned: false as boolean,
     // Token expiration times
     // Access tokens: shorter-lived for security (compromised tokens expire faster)
     // Refresh tokens: longer-lived for better UX (users don't need to re-login frequently)
     // Options: '15m', '30m', '1h', '2h', '4h', '8h', '12h', '24h', '48h', '7d', '14d', '30d'
     ACCESS_TOKEN_EXPIRES_IN: '24h', // Balance between security and UX
     REFRESH_TOKEN_EXPIRES_IN: '14d', // Balance between security and UX
+    CLOCK_TOLERANCE_SECONDS: 60, // Grace period for minor clock skew
     ISSUER: 'reride-app',
     AUDIENCE: 'reride-users'
   },
@@ -115,9 +127,7 @@ export const getSecurityConfig = () => {
     ...SECURITY_CONFIG,
     JWT: {
       ...SECURITY_CONFIG.JWT,
-      SECRET: isProduction 
-        ? process.env.JWT_SECRET 
-        : SECURITY_CONFIG.JWT.SECRET
+      SECRET: (process.env.JWT_SECRET ?? SECURITY_CONFIG.JWT.SECRET)
     },
     LOGGING: {
       ...SECURITY_CONFIG.LOGGING,

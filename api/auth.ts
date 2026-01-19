@@ -1,5 +1,6 @@
 import type { VercelRequest } from '@vercel/node';
 import { verifyToken } from '../utils/security.js';
+import { getSecurityConfig } from '../utils/security-config.js';
 
 // Authentication middleware
 export interface AuthResult {
@@ -14,7 +15,16 @@ export const authenticateRequest = (req: VercelRequest): AuthResult => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return { isValid: false, error: 'No valid authorization header' };
   }
-  
+
+  const securityConfig = getSecurityConfig();
+  const secret = securityConfig.JWT.SECRET;
+  if (!secret) {
+    return { 
+      isValid: false, 
+      error: 'Server configuration error: JWT secret is missing' 
+    };
+  }
+
   try {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     const decoded = verifyToken(token);
@@ -25,7 +35,8 @@ export const authenticateRequest = (req: VercelRequest): AuthResult => {
     };
     return { isValid: true, user };
   } catch (error) {
-    return { isValid: false, error: 'Invalid or expired token' };
+    const message = error instanceof Error ? error.message : 'Invalid or expired token';
+    return { isValid: false, error: message };
   }
 };
 

@@ -87,6 +87,9 @@ const CustomerInbox = React.lazy(() => import('./components/CustomerInbox'));
 const SellerProfilePage = React.lazy(() => import('./components/SellerProfilePage'));
 const NewCars = React.lazy(() => import('./components/NewCars'));
 const DealerProfiles = React.lazy(() => import('./components/DealerProfiles'));
+const CarServices = React.lazy(() => import('./components/CarServices'));
+const CarServiceLogin = React.lazy(() => import('./components/CarServiceLogin'));
+const CarServiceDashboard = React.lazy(() => import('./components/CarServiceDashboard'));
 const PricingPage = React.lazy(() => import('./components/PricingPage'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
 const FAQPage = React.lazy(() => import('./components/FAQPage'));
@@ -290,6 +293,7 @@ const AppContent: React.FC = React.memo(() => {
     onCertificationApproval,
     onOfferResponse,
   } = useApp();
+  const [serviceProvider, setServiceProvider] = React.useState<any>(null);
 
   // Persist active chat id so the dock can reopen the last thread (OLX-like behavior)
   React.useEffect(() => {
@@ -601,7 +605,7 @@ const AppContent: React.FC = React.memo(() => {
               setSelectedCategory(category);
               navigate(ViewEnum.USED_CARS);
             }}
-            featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4)}
+            featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published')}
             onSelectVehicle={selectVehicle}
             onToggleCompare={(id) => {
               setComparisonList(prev => 
@@ -629,6 +633,7 @@ const AppContent: React.FC = React.memo(() => {
               }
             }}
             recommendations={recommendations}
+            allVehicles={vehicles.filter(v => v.status === 'published')}
             onNavigate={navigate}
             onSelectCity={(city) => {
               setSelectedCity(city);
@@ -2139,6 +2144,24 @@ const AppContent: React.FC = React.memo(() => {
           />
         );
 
+      case ViewEnum.CAR_SERVICE_LOGIN:
+        return (
+          <CarServiceLogin
+            onNavigate={navigate}
+            onLoginSuccess={(provider) => setServiceProvider(provider)}
+          />
+        );
+
+      case ViewEnum.CAR_SERVICE_DASHBOARD:
+        return (
+          <CarServiceDashboard
+            provider={serviceProvider}
+          />
+        );
+
+      case ViewEnum.CAR_SERVICES:
+        return <CarServices onNavigate={navigate} />;
+
       case ViewEnum.PRICING:
         if (isMobileApp) {
           return (
@@ -2271,7 +2294,7 @@ const AppContent: React.FC = React.memo(() => {
                   setForgotPasswordRole('customer');
                   navigate(ViewEnum.FORGOT_PASSWORD);
                 }}
-                allowedRoles={['customer', 'seller']}
+                allowedRoles={['customer', 'seller', 'service_provider']}
               />
             </Suspense>
           </AuthenticationErrorBoundary>
@@ -2520,6 +2543,12 @@ const AppContent: React.FC = React.memo(() => {
         return 'New Cars Admin';
       case ViewEnum.FORGOT_PASSWORD:
         return 'Reset Password';
+      case ViewEnum.CAR_SERVICES:
+        return 'Car Services';
+      case ViewEnum.CAR_SERVICE_LOGIN:
+        return 'Car Service Login';
+      case ViewEnum.CAR_SERVICE_DASHBOARD:
+        return 'Car Service Dashboard';
       case ViewEnum.SUPPORT:
         return 'Support';
       case ViewEnum.FAQ:

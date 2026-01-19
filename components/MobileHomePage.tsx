@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { Vehicle, VehicleCategory } from '../types';
-import { View as ViewEnum } from '../types';
-import { getFirstValidImage } from '../utils/imageUtils';
+import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
+import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
+import { matchesCity } from '../utils/cityMapping';
 import MobileVehicleCard from './MobileVehicleCard';
 
 interface MobileHomePageProps {
@@ -40,6 +40,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   comparisonList,
   onViewSellerProfile,
   recommendations,
+  allVehicles,
   onNavigate,
   onSelectCity
 }) => {
@@ -47,22 +48,44 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
 
+  const publishedVehicles = useMemo(
+    () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published'),
+    [allVehicles]
+  );
+
   // Memoize static data to prevent recreation on every render
-  const cities = useMemo(() => [
-    { name: 'Delhi NCR', abbr: 'DN', count: 0 },
-    { name: 'Hyderabad', abbr: 'HY', count: 0 },
-    { name: 'Bangalore', abbr: 'BA', count: 0 },
-    { name: 'Pune', abbr: 'PU', count: 0 },
-    { name: 'Mumbai', abbr: 'MU', count: 0 },
+  const baseCities = useMemo(() => [
+    { name: 'Delhi NCR', abbr: 'DN' },
+    { name: 'Hyderabad', abbr: 'HY' },
+    { name: 'Bangalore', abbr: 'BA' },
+    { name: 'Pune', abbr: 'PU' },
+    { name: 'Mumbai', abbr: 'MU' },
   ], []);
 
-  const categories = useMemo(() => [
-    { name: 'Four Wheeler', icon: '🚗', id: 'four_wheeler' as VehicleCategory },
-    { name: 'Two Wheeler', icon: '🏍️', id: 'two_wheeler' as VehicleCategory },
-    { name: 'Three Wheeler', icon: '🛺', id: 'three_wheeler' as VehicleCategory },
-    { name: 'Commercial', icon: '🚚', id: 'commercial' as VehicleCategory },
-    { name: 'Farm', icon: '🚜', id: 'farm' as VehicleCategory },
+  const cities = useMemo(() => baseCities.map(city => ({
+    ...city,
+    count: publishedVehicles.filter(vehicle => matchesCity(vehicle.city, city.name)).length,
+  })), [baseCities, publishedVehicles]);
+
+  const baseCategories = useMemo(() => [
+    { name: 'Four Wheeler', icon: '🚗', id: VehicleCategory.FOUR_WHEELER },
+    { name: 'Two Wheeler', icon: '🏍️', id: VehicleCategory.TWO_WHEELER },
+    { name: 'Three Wheeler', icon: '🛺', id: VehicleCategory.THREE_WHEELER },
+    { name: 'Commercial', icon: '🚚', id: VehicleCategory.COMMERCIAL },
+    { name: 'Farm', icon: '🚜', id: VehicleCategory.FARM },
   ], []);
+
+  const categoryCounts = useMemo(() => publishedVehicles.reduce((acc, vehicle) => {
+    if (vehicle?.category) {
+      acc[vehicle.category] = (acc[vehicle.category] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<VehicleCategory, number>), [publishedVehicles]);
+
+  const categories = useMemo(() => baseCategories.map(category => ({
+    ...category,
+    count: categoryCounts[category.id] || 0
+  })), [baseCategories, categoryCounts]);
 
   // Track carousel scroll position with throttling for performance
   useEffect(() => {
@@ -88,8 +111,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   }, [featuredVehicles.length]);
 
   const handleSearch = useCallback(() => {
-    if (searchQuery.trim()) {
-      onSearch(searchQuery);
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery) {
+      onSearch(trimmedQuery);
       onNavigate(ViewEnum.USED_CARS);
     } else {
       onNavigate(ViewEnum.USED_CARS);
@@ -107,7 +131,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
   // Memoize featured vehicles slice to prevent unnecessary re-renders
   const displayedFeaturedVehicles = useMemo(
-    () => featuredVehicles.slice(0, 4),
+    () => featuredVehicles,
     [featuredVehicles]
   );
 
@@ -189,7 +213,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       </div>
 
       {/* Featured Vehicles Carousel */}
-      {featuredVehicles.length > 0 && (
+      {featuredVehicles.length > 0 ? (
         <div className="px-4 py-6 bg-white">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">Featured Vehicles</h2>
@@ -215,7 +239,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 <div className="bg-white rounded-xl shadow-lg overflow-hidden active:scale-[0.98] transition-transform">
                   <div className="relative h-48">
                     <img
-                      src={getFirstValidImage(vehicle.images)}
+                      src={optimizeImageUrl(getFirstValidImage(vehicle.images), 800, 85)}
                       alt={`${vehicle.make} ${vehicle.model}`}
                       className="w-full h-full object-cover"
                     />
@@ -289,6 +313,20 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </div>
           )}
         </div>
+      ) : (
+        <div className="px-4 py-6 bg-white">
+          <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center">
+            <p className="text-gray-800 font-semibold mb-1">No featured vehicles yet</p>
+            <p className="text-gray-500 text-sm mb-4">Browse all cars to see what’s available.</p>
+            <button
+              onClick={() => onNavigate(ViewEnum.USED_CARS)}
+              className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold active:scale-95 transition-transform w-full"
+              style={{ minHeight: '44px' }}
+            >
+              Browse All Cars
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Categories Section */}
@@ -308,6 +346,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               <span className="text-xs font-medium text-gray-700 text-center leading-tight">
                 {category.name}
               </span>
+              <span className="text-[10px] text-gray-500">{category.count} cars</span>
             </button>
           ))}
         </div>
@@ -332,10 +371,11 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 onSelectCity(city.name);
                 onNavigate(ViewEnum.USED_CARS);
               }}
-              className="flex-shrink-0 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl p-4 text-white min-w-[100px] active:scale-95 transition-transform"
+              className="flex-shrink-0 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl p-4 text-white min-w-[110px] active:scale-95 transition-transform"
             >
               <div className="text-2xl font-bold mb-1">{city.abbr}</div>
               <div className="text-xs font-medium">{city.name}</div>
+              <div className="text-[11px] text-white/90 mt-1">{city.count} cars</div>
             </button>
           ))}
         </div>

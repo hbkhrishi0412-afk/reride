@@ -125,6 +125,31 @@ describe('Security Utilities', () => {
       
       expect(() => verifyToken('expired-token')).toThrow('Invalid or expired token');
     });
+
+    it('should propagate token expired error explicitly', () => {
+      const jwt = require('jsonwebtoken');
+      jwt.verify.mockImplementationOnce(() => {
+        const err = new Error('jwt expired');
+        (err as any).name = 'TokenExpiredError';
+        throw err;
+      });
+
+      expect(() => verifyToken('token_expired')).toThrow('Token has expired');
+    });
+
+    it('should include clock tolerance when verifying tokens', () => {
+      const jwt = require('jsonwebtoken');
+      jwt.verify.mockClear();
+
+      const token = generateAccessToken(mockUser);
+      verifyToken(token);
+
+      expect(jwt.verify).toHaveBeenCalledWith(
+        token,
+        expect.anything(),
+        expect.objectContaining({ clockTolerance: expect.any(Number) })
+      );
+    });
   });
 
   describe('Input Sanitization', () => {

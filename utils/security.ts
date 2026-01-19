@@ -203,10 +203,13 @@ export const verifyToken = (token: string): TokenPayload => {
       throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
     }
     
+    const toleranceSeconds = Math.max(0, Number((config.JWT as any).CLOCK_TOLERANCE_SECONDS ?? 0) || 0);
+
     try {
       const decoded = jwt.verify(token, secret, {
         issuer: config.JWT.ISSUER,
-        audience: config.JWT.AUDIENCE
+        audience: config.JWT.AUDIENCE,
+        clockTolerance: toleranceSeconds
       });
       
       if (typeof decoded === 'string' || !decoded) {
