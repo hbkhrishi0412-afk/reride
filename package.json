@@ -44,7 +44,6 @@
     "test:prod": "node test-production-api.js",
     "migrate:mongodb-to-firebase": "node scripts/migrate-mongodb-to-firebase.js",
     "hash-passwords": "node scripts/hash-user-passwords.js",
-    "migrate:users-emailkey": "node scripts/rekey-users-emailkey.js",
     "cap:sync": "npx cap sync",
     "cap:sync:android": "npx cap sync android",
     "cap:open:android": "npx cap open android",

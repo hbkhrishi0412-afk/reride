@@ -1421,28 +1421,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       // Normalize emails for comparison (critical for production)
       const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
       const normalizedRequestEmail = email ? String(email).toLowerCase().trim() : '';
-      
-      // Enhanced logging for debugging authorization issues
-      if (process.env.NODE_ENV !== 'production') {
-        logInfo('🔐 Authorization check:', {
-          authEmail: auth.user?.email,
-          normalizedAuthEmail,
-          requestEmail: email,
-          normalizedRequestEmail,
-          isAdmin: auth.user?.role === 'admin',
-          emailsMatch: normalizedAuthEmail === normalizedRequestEmail,
-          willAllow: auth.user && (auth.user.role === 'admin' || normalizedAuthEmail === normalizedRequestEmail)
-        });
-      }
-      
       if (!auth.user || (auth.user.role !== 'admin' && normalizedAuthEmail !== normalizedRequestEmail)) {
-        logWarn('⚠️ Authorization failed for user update:', {
-          authEmail: auth.user?.email,
-          normalizedAuthEmail,
-          requestEmail: email,
-          normalizedRequestEmail,
-          isAdmin: auth.user?.role === 'admin'
-        });
         return res.status(403).json({ success: false, reason: 'Unauthorized: You can only update your own profile.' });
       }
       
@@ -1566,19 +1545,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       logInfo('📝 Found user, applying update operation...');
-
-      // Ensure the email field is normalized in the stored record for reliable lookups
-      const existingEmailNormalized = existingUser.email ? existingUser.email.toLowerCase().trim() : '';
-      if (!existingEmailNormalized || existingEmailNormalized !== normalizedEmail) {
-        updateFields.email = normalizedEmail;
-        firebaseUpdates.email = normalizedEmail;
-      }
       
       // Update user in Firebase
       try {
-        const emailKey = normalizedEmail.replace(/[.#$[\]]/g, '_');
-        const targetUserId = existingUser.id || emailKey;
-        await firebaseUserService.updateById(targetUserId, firebaseUpdates);
+        await firebaseUserService.update(normalizedEmail, firebaseUpdates);
         logInfo('✅ User update operation completed in Firebase');
         
         // Fetch updated user
