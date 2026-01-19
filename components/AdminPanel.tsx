@@ -993,29 +993,44 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     const analytics = useMemo(() => {
         // Add null/undefined checks to prevent length errors
-        const safeUsers = users || [];
-        const safeVehicles = vehicles || [];
-        const safeConversations = conversations || [];
+        const safeUsers = Array.isArray(users) ? users : [];
+        const safeVehicles = Array.isArray(vehicles) ? vehicles : [];
+        const safeConversations = Array.isArray(conversations) ? conversations : [];
         
-        const totalUsers = safeUsers.length;
-        const totalVehicles = safeVehicles.length;
-        const activeListings = safeVehicles.filter(v => v.status === 'published').length;
-        const soldListings = safeVehicles.filter(v => v.status === 'sold');
-        // FIX: Added Number() to ensure v.price is treated as a number, preventing arithmetic errors on potentially mixed types.
-        const totalSales = soldListings.reduce((sum: number, v) => sum + (Number(v.price) || 0), 0);
-        const flaggedVehiclesCount = safeVehicles.reduce((sum: number, v) => v.isFlagged ? sum + 1 : sum, 0);
-        const flaggedConversationsCount = safeConversations.reduce((sum: number, c) => c.isFlagged ? sum + 1 : sum, 0);
+        let activeListings = 0;
+        let totalSales = 0;
+        let certificationRequests = 0;
+        let flaggedVehiclesCount = 0;
+        const listingsByMake: Record<string, number> = {};
+        
+        for (const vehicle of safeVehicles) {
+            if (!vehicle) continue;
+            if (vehicle.status === 'published') {
+                activeListings += 1;
+            }
+            if (vehicle.status === 'sold') {
+                totalSales += Number(vehicle.price) || 0;
+            }
+            if (vehicle.isFlagged) {
+                flaggedVehiclesCount += 1;
+            }
+            if (vehicle.certificationStatus === 'requested') {
+                certificationRequests += 1;
+            }
+            if (vehicle.make) {
+                listingsByMake[vehicle.make] = (listingsByMake[vehicle.make] || 0) + 1;
+            }
+        }
+
+        const flaggedConversationsCount = safeConversations.reduce(
+            (sum: number, conversation) => conversation?.isFlagged ? sum + 1 : sum,
+            0
+        );
         const flaggedContent = flaggedVehiclesCount + flaggedConversationsCount;
-        const certificationRequests = safeVehicles.filter(v => v.certificationStatus === 'requested').length;
-        
-        const listingsByMake = safeVehicles.reduce((acc, v) => {
-            acc[v.make] = (acc[v.make] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
 
         return {
-            totalUsers,
-            totalVehicles,
+            totalUsers: safeUsers.length,
+            totalVehicles: safeVehicles.length,
             activeListings,
             totalSales,
             flaggedContent,
@@ -1026,6 +1041,29 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 .map(([make, count]) => ({ label: make, value: count }))
         };
     }, [users, vehicles, conversations]);
+
+    const userCounts = useMemo(() => {
+        const safeUsers = Array.isArray(users) ? users : [];
+        let customers = 0;
+        let sellers = 0;
+        let admins = 0;
+        for (const user of safeUsers) {
+            if (user?.role === 'customer') customers += 1;
+            if (user?.role === 'seller') sellers += 1;
+            if (user?.role === 'admin') admins += 1;
+        }
+        return {
+            all: safeUsers.length,
+            customers,
+            sellers,
+            admins
+        };
+    }, [users]);
+
+    const allSellerUsers = useMemo(() => {
+        const safeUsers = Array.isArray(users) ? users : [];
+        return safeUsers.filter(user => user?.role === 'seller');
+    }, [users]);
 
     const handleSaveUser = (email: string, details: Partial<User>) => {
         onAdminUpdateUser(email, details);
@@ -1139,7 +1177,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                         }`}
                                     >
-                                        All ({users.length})
+                                        All ({userCounts.all})
                                     </button>
                                     <button 
                                         onClick={() => setRoleFilter('customer')}
@@ -1149,7 +1187,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                         }`}
                                     >
-                                        Customers ({users.filter(u => u.role === 'customer').length})
+                                        Customers ({userCounts.customers})
                                     </button>
                                     <button 
                                         onClick={() => setRoleFilter('seller')}
@@ -1159,7 +1197,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                         }`}
                                     >
-                                        Sellers ({users.filter(u => u.role === 'seller').length})
+                                        Sellers ({userCounts.sellers})
                                     </button>
                                     <button 
                                         onClick={() => setRoleFilter('admin')}
@@ -1169,7 +1207,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                         }`}
                                     >
-                                        Admins ({users.filter(u => u.role === 'admin').length})
+                                        Admins ({userCounts.admins})
                                     </button>
                                 </div>
                                 <div className="flex gap-2">
@@ -1444,7 +1482,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         <div className="flex justify-between items-center">
                             <div className="flex gap-4">
                                 <SellerFilterDropdown 
-                                    sellers={users.filter(u => u.role === 'seller')}
+                                    sellers={allSellerUsers}
                                     selectedSeller={selectedSeller}
                                     onSellerChange={setSelectedSeller}
                                 />
@@ -2510,23 +2548,19 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         // Calculate plan statistics
         useEffect(() => {
             // Only count sellers for plan statistics
-            const sellerUsers = users.filter(user => user.role === 'seller');
-            const stats = sellerUsers.reduce((acc, user) => {
+            const stats = allSellerUsers.reduce((acc, user) => {
             const plan = user.subscriptionPlan || 'free';
             acc[plan] = (acc[plan] || 0) + 1;
             return acc;
             }, {} as Record<SubscriptionPlan, number>);
             setPlanStats(stats);
-        }, [users]);
+        }, [allSellerUsers]);
 
         const filteredUsers = useMemo(() => {
-            // First filter by role - only show sellers
-            let sellerUsers = users.filter(user => user.role === 'seller');
-            
             // Then filter by plan type if not 'all'
-            if (planFilter === 'all') return sellerUsers;
-            return sellerUsers.filter(user => (user.subscriptionPlan || 'free') === planFilter);
-        }, [users, planFilter]);
+            if (planFilter === 'all') return allSellerUsers;
+            return allSellerUsers.filter(user => (user.subscriptionPlan || 'free') === planFilter);
+        }, [allSellerUsers, planFilter]);
 
         const handleEditPlan = (plan: PlanDetails) => {
             setEditingPlan(plan);
@@ -2622,7 +2656,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     />
                     <StatCard 
                         title="Total Sellers" 
-                        value={users.filter(u => u.role === 'seller').length} 
+                        value={allSellerUsers.length}
                         icon={<span className="text-2xl">👥</span>} 
                         onClick={() => setPlanFilter('all')}
                     />
