@@ -33,6 +33,12 @@ type ServiceProvider = {
     name: string;
     city: string;
     distanceKm?: number;
+    services?: Array<{
+        serviceType: string;
+        price?: number;
+        description?: string;
+        etaMinutes?: number;
+    }>;
 };
 
 type Coupon = {
@@ -47,10 +53,13 @@ type Props = {
     onSubmitRequest?: (payload: {
         items: Array<{ serviceId: string; quantity: number }>;
         addressId: string;
+        address?: Address;
         slotId: string;
         couponCode?: string;
         providerId: string;
         total: number;
+        note?: string;
+        carDetails?: { make: string; model: string; year: string; fuel: string; reg?: string; city?: string };
     }) => Promise<void> | void;
     // Optional: allow injecting real data
     servicePackages?: ServicePackage[];
@@ -58,6 +67,9 @@ type Props = {
     timeSlots?: TimeSlot[];
     serviceProviders?: ServiceProvider[];
     coupons?: Coupon[];
+    onUseMyLocation?: () => void;
+    isLocating?: boolean;
+    locationError?: string;
 };
 
 const mockServicePackages: ServicePackage[] = [
@@ -98,12 +110,42 @@ const ServiceCart: React.FC<Props> = ({
     timeSlots = mockSlots,
     serviceProviders = mockProviders,
     coupons = mockCoupons,
+    onUseMyLocation,
+    isLocating = false,
+    locationError,
 }) => {
     const [items, setItems] = useState<CartItem[]>([{ serviceId: servicePackages[0]?.id || '', quantity: 1 }]);
     const [selectedAddress, setSelectedAddress] = useState(addresses[0]?.id || '');
     const [selectedSlot, setSelectedSlot] = useState(timeSlots[0]?.id || '');
     const [selectedCoupon, setSelectedCoupon] = useState<string | undefined>();
-    const [selectedProvider, setSelectedProvider] = useState(serviceProviders[0]?.id || '');
+    const [selectedProviders, setSelectedProviders] = useState<string[]>(serviceProviders[0]?.id ? [serviceProviders[0].id] : []);
+    const [providerServices, setProviderServices] = useState<Record<string, ServiceProvider['services']>>({});
+
+    useEffect(() => {
+        const fetchProviderServices = async () => {
+            try {
+                const resp = await fetch('/api/provider-services?scope=public');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const grouped: Record<string, ServiceProvider['services']> = {};
+                data.forEach((entry: any) => {
+                    const pid = entry.providerId;
+                    if (!pid) return;
+                    grouped[pid] = grouped[pid] || [];
+                    grouped[pid].push({
+                        serviceType: entry.serviceType,
+                        price: entry.price,
+                        description: entry.description,
+                        etaMinutes: entry.etaMinutes,
+                    });
+                });
+                setProviderServices(grouped);
+            } catch {
+                // ignore
+            }
+        };
+        fetchProviderServices();
+    }, []);
     const [note, setNote] = useState('');
     const [carDetails, setCarDetails] = useState<any>(null);
     const [carForm, setCarForm] = useState({ make: '', model: '', year: '', fuel: '', reg: '', city: '' });
@@ -112,9 +154,9 @@ const ServiceCart: React.FC<Props> = ({
 
     // Persist cart state
     useEffect(() => {
-        const payload = { items, selectedAddress, selectedSlot, selectedCoupon, selectedProvider, note, carDetails };
+        const payload = { items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails };
         localStorage.setItem(CART_KEY, JSON.stringify(payload));
-    }, [items, selectedAddress, selectedSlot, selectedCoupon, selectedProvider, note, carDetails]);
+    }, [items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails]);
 
     // Load persisted cart
     useEffect(() => {
@@ -126,7 +168,7 @@ const ServiceCart: React.FC<Props> = ({
             setSelectedAddress(parsed.selectedAddress || addresses[0]?.id || '');
             setSelectedSlot(parsed.selectedSlot || timeSlots[0]?.id || '');
             setSelectedCoupon(parsed.selectedCoupon);
-            setSelectedProvider(parsed.selectedProvider || serviceProviders[0]?.id || '');
+            setSelectedProviders(parsed.selectedProviders || (serviceProviders[0]?.id ? [serviceProviders[0].id] : []));
             setNote(parsed.note || '');
             if (parsed.carDetails) {
                 setCarDetails(parsed.carDetails);
@@ -170,6 +212,51 @@ const ServiceCart: React.FC<Props> = ({
         return { subtotal, discount, tax, total };
     }, [items, selectedCoupon, coupons, servicePackages]);
 
+    const selectedServiceIds = useMemo(() => items.map(i => i.serviceId), [items]);
+
+    const availableProviders = useMemo(() => {
+        return serviceProviders.filter(p => {
+            const services = providerServices[p.id] || [];
+            return selectedServiceIds.every((sid) => {
+                const svcMeta = servicePackages.find(s => s.id === sid);
+                const serviceName = svcMeta?.name || sid;
+                return services.some(s => s.serviceType === serviceName && s.active !== false);
+            });
+        });
+    }, [providerServices, selectedServiceIds, servicePackages, serviceProviders]);
+
+    const providerTotals = useMemo(() => {
+        const result: Record<string, { total: number; breakdown: Array<{ id: string; name: string; price?: number }> }> = {};
+        availableProviders.forEach(p => {
+            const services = providerServices[p.id] || [];
+            let total = 0;
+            const breakdown: Array<{ id: string; name: string; price?: number }> = [];
+            selectedServiceIds.forEach((sid) => {
+                const svcMeta = servicePackages.find(s => s.id === sid);
+                const serviceName = svcMeta?.name || sid;
+                const match = services.find(s => s.serviceType === serviceName && s.active !== false);
+                const price = match?.price;
+                if (price !== undefined) {
+                    total += price;
+                }
+                breakdown.push({ id: sid, name: serviceName, price });
+            });
+            result[p.id] = { total, breakdown };
+        });
+        return result;
+    }, [availableProviders, providerServices, selectedServiceIds, servicePackages]);
+
+    const sortedAvailableProviders = useMemo(() => {
+        return [...availableProviders].sort((a, b) => {
+            const at = providerTotals[a.id]?.total ?? Number.POSITIVE_INFINITY;
+            const bt = providerTotals[b.id]?.total ?? Number.POSITIVE_INFINITY;
+            if (at !== bt) return at - bt;
+            const ad = a.distanceKm ?? Number.POSITIVE_INFINITY;
+            const bd = b.distanceKm ?? Number.POSITIVE_INFINITY;
+            return ad - bd;
+        });
+    }, [availableProviders, providerTotals]);
+
     const updateQuantity = (serviceId: string, delta: number) => {
         setItems(prev => {
             const next = prev.map(item => item.serviceId === serviceId ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item);
@@ -208,12 +295,14 @@ const ServiceCart: React.FC<Props> = ({
         const payload = {
             items,
             addressId: selectedAddress,
+            address: addresses.find(a => a.id === selectedAddress),
             slotId: selectedSlot,
             couponCode: selectedCoupon,
-            providerId: selectedProvider,
+            candidateProviderIds: selectedProviders,
             total: totals.total,
             note,
             carDetails,
+            servicePackages,
         };
         await onSubmitRequest?.(payload);
     };
@@ -427,22 +516,67 @@ const ServiceCart: React.FC<Props> = ({
                         </section>
 
                         <section className="border border-gray-200 rounded-lg p-4">
-                            <h3 className="text-sm font-semibold text-gray-900 mb-2">Choose provider</h3>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                                <h3 className="text-sm font-semibold text-gray-900">Choose provider</h3>
+                                {onUseMyLocation && (
+                                    <button
+                                        type="button"
+                                        onClick={onUseMyLocation}
+                                        disabled={isLocating}
+                                        className="text-xs font-semibold text-purple-700 hover:text-purple-800 disabled:opacity-60"
+                                    >
+                                        {isLocating ? 'Detecting...' : 'Use my location'}
+                                    </button>
+                                )}
+                            </div>
                             <div className="space-y-2">
-                                {serviceProviders.map(p => (
-                                    <label key={p.id} className="flex items-center gap-3 p-2 rounded-md border border-gray-200 hover:border-purple-500 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            className="h-4 w-4"
-                                            checked={selectedProvider === p.id}
-                                            onChange={() => setSelectedProvider(p.id)}
-                                        />
-                                        <div className="flex-1">
-                                            <div className="text-sm font-semibold text-gray-900">{p.name}</div>
-                                            <div className="text-xs text-gray-600">{p.city}{p.distanceKm ? ` • ${p.distanceKm} km away` : ''}</div>
-                                        </div>
-                                    </label>
-                                ))}
+                        {sortedAvailableProviders.map(p => {
+                                    const totals = providerTotals[p.id];
+                                    return (
+                                        <label key={p.id} className="flex items-start gap-3 p-3 rounded-md border border-gray-200 hover:border-purple-500 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 mt-1"
+                                                checked={selectedProviders.includes(p.id)}
+                                                onChange={(e) => {
+                                                    const checked = e.target.checked;
+                                                    setSelectedProviders(prev =>
+                                                        checked ? Array.from(new Set([...prev, p.id])) : prev.filter(id => id !== p.id)
+                                                    );
+                                                }}
+                                            />
+                                            <div className="flex-1 space-y-1">
+                                                <div className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                                                    <span>{p.name}</span>
+                                                    {totals && totals.total > 0 && (
+                                                        <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
+                                                            ₹{totals.total.toLocaleString()}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-gray-600">{p.city}{p.distanceKm ? ` • ${p.distanceKm} km away` : ''}</div>
+                                                {totals && totals.breakdown.some(b => b.price !== undefined) && (
+                                                    <div className="text-xs text-gray-700 flex flex-wrap gap-2">
+                                                        {totals.breakdown.map(b => (
+                                                            <span key={b.id} className="px-2 py-1 bg-gray-100 rounded-full">
+                                                                {b.name}{b.price !== undefined ? ` • ₹${b.price}` : ''}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {!totals && (
+                                                    <div className="text-xs text-amber-700">Pricing not set for selected services.</div>
+                                                )}
+                                            </div>
+                                        </label>
+                                    );
+                                })}
+                                {availableProviders.length === 0 && (
+                                    <div className="text-xs text-gray-600">No providers offer all selected services.</div>
+                                )}
+                                {locationError && (
+                                    <div className="text-xs text-red-600">{locationError}</div>
+                                )}
                             </div>
                         </section>
 

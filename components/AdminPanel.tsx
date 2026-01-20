@@ -12,6 +12,7 @@ import SellerFormPreview from './SellerFormPreview';
 import { planService } from '../services/planService';
 import ImportVehiclesModal from './ImportVehiclesModal';
 import ImportUsersModal from './ImportUsersModal';
+import AdminServiceOps from './AdminServiceOps';
 
 // --- Seller Filter Dropdown Component ---
 interface SellerFilterDropdownProps {
@@ -164,7 +165,7 @@ interface AdminPanelProps {
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
 }
 
-type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement';
+type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps';
 type RoleFilter = 'all' | 'customer' | 'seller' | 'admin';
 // FIX: Restrict sortable keys to prevent comparison errors on incompatible types.
 type SortableUserKey = 'name' | 'status';
@@ -1654,6 +1655,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 return <PaymentManagement currentUser={currentUser} />;
             case 'planManagement':
                 return <PlanManagementView />;
+            case 'serviceOps':
+                return <AdminServiceOps />;
             default:
                 return null;
         }
@@ -3207,6 +3210,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             <NavItem view="payments" label="Payment Requests" />
                             <NavItem view="planManagement" label="Plan Management" />
                             <NavItem view="faq" label="FAQ Management" />
+                            <NavItem view="serviceOps" label="Service Ops" />
                             <NavItem view="vehicleData" label="Vehicle Data" />
                             <NavItem view="sellCarAdmin" label="Sell Car Submissions" />
                             <NavItem view="auditLog" label="Audit Log" />

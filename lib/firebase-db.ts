@@ -179,6 +179,7 @@ export const DB_PATHS = {
   IMAGES: 'images',
   SERVICE_PROVIDERS: 'serviceProviders',
   SERVICE_REQUESTS: 'serviceRequests',
+  PROVIDER_SERVICES: 'providerServices',
 } as const;
 
 // Helper to get a reference to a path

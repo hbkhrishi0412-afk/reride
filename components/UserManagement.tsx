@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import type { User, View } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 import PasswordInput from './PasswordInput.js';
+import PageHeader from './PageHeader';
 
 interface UserManagementProps {
     users: User[];
@@ -142,15 +143,16 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, currentUser, onT
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="flex justify-between items-center">
-                <div>
-                     <button onClick={() => onNavigate(ViewEnum.ADMIN_PANEL)} className="text-sm hover:underline mb-2 transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>&larr; Back to Admin Dashboard</button>
-                     <h1 className="text-3xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark">User Management</h1>
-                </div>
-                <button onClick={() => setIsCreateModalOpen(true)} className="bg-spinny-orange-light0 text-white font-bold py-2 px-4 rounded-lg hover:bg-spinny-orange transition-colors">
-                    Create User
-                </button>
-            </div>
+            <PageHeader
+                title="User Management"
+                backLabel="Back to Admin Dashboard"
+                onBack={() => onNavigate(ViewEnum.ADMIN_PANEL)}
+                rightSlot={
+                    <button onClick={() => setIsCreateModalOpen(true)} className="bg-spinny-orange-light0 text-white font-bold py-2 px-4 rounded-lg hover:bg-spinny-orange transition-colors">
+                        Create User
+                    </button>
+                }
+            />
             
             <div className="bg-white p-6 rounded-lg shadow-md">
                 <div className="flex justify-between items-center mb-4">

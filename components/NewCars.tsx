@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { NEW_CARS_DATA, NewCarModel, NewCarVariant } from '../data/newCarsData';
-import { newCarsService, NewCarPayload } from '../services/newCarsService';
+import { newCarsService } from '../services/newCarsService';
 import { getSafeImageSrc } from '../utils/imageUtils';
 import CarSpecModal from './CarSpecModal';
+import { useApp } from './AppProvider';
+import { INDIAN_STATES, CITIES_BY_STATE } from '../constants/location';
+import { getStateCodeForCity } from '../utils/cityMapping';
 
 const formatCurrency = (value: number) => {
     if (value === Infinity || !value) return 'Price not available';
@@ -110,6 +113,7 @@ const NewCars: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [expandedCarId, setExpandedCarId] = useState<number | null>(null);
     const [specModalData, setSpecModalData] = useState<{ car: NewCarModel; variant: NewCarVariant } | null>(null);
+    const { userLocation, selectedCity } = useApp();
 
     // Filters
     const [selectedState, setSelectedState] = useState('Maharashtra');
@@ -120,6 +124,7 @@ const NewCars: React.FC = () => {
     const [bodyTypeFilter, setBodyTypeFilter] = useState('all');
     const [fuelFilter, setFuelFilter] = useState('all');
     const [seatingFilter, setSeatingFilter] = useState('all');
+    const [isStateFilterUserSet, setIsStateFilterUserSet] = useState(false);
 
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
     const [tempFilters, setTempFilters] = useState({ selectedState, makeFilter, modelFilter, yearFilter, bodyTypeFilter, fuelFilter, seatingFilter });
@@ -157,7 +162,24 @@ const NewCars: React.FC = () => {
         return () => { cancelled = true; };
     }, []);
 
-    const allIndianStates = useMemo(() => ["Andaman & Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra & Nagar Haveli and Daman & Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu & Kashmir", "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"], []);
+    const allIndianStates = useMemo(() => INDIAN_STATES.map(state => state.name), []);
+    const locationCity = useMemo(() => selectedCity || userLocation, [selectedCity, userLocation]);
+
+    useEffect(() => {
+        if (!locationCity || isStateFilterUserSet) return;
+
+        const stateCode = getStateCodeForCity(locationCity, CITIES_BY_STATE);
+        const stateName = stateCode
+            ? INDIAN_STATES.find((s) => s.code === stateCode)?.name
+            : INDIAN_STATES.find((s) => s.name.toLowerCase() === locationCity.toLowerCase())?.name;
+
+        if (stateName && stateName !== selectedState) {
+            setSelectedState(stateName);
+        }
+    }, [locationCity, isStateFilterUserSet, selectedState]);
+
+    const markStateFilterUserSet = () => setIsStateFilterUserSet(true);
+
     const uniqueBrands = useMemo(() => [...new Set(carModels.map(car => car.brand_name))].sort(), [carModels]);
     const availableModels = useMemo(() => {
         if (makeFilter === 'all') return [];
@@ -199,6 +221,7 @@ const NewCars: React.FC = () => {
         setBodyTypeFilter('all');
         setFuelFilter('all');
         setSeatingFilter('all');
+        setIsStateFilterUserSet(false);
     };
 
     const handleViewSpecs = (car: NewCarModel, variant: NewCarVariant) => {
@@ -218,6 +241,9 @@ const NewCars: React.FC = () => {
         setBodyTypeFilter(tempFilters.bodyTypeFilter);
         setFuelFilter(tempFilters.fuelFilter);
         setSeatingFilter(tempFilters.seatingFilter);
+        if (tempFilters.selectedState !== selectedState) {
+            setIsStateFilterUserSet(true);
+        }
         setIsFilterModalOpen(false);
     };
 
@@ -227,6 +253,7 @@ const NewCars: React.FC = () => {
             makeFilter: 'all', modelFilter: 'all', yearFilter: 'all',
             bodyTypeFilter: 'all', fuelFilter: 'all', seatingFilter: 'all'
         });
+        setIsStateFilterUserSet(false);
     };
 
     const renderFilterControls = (isMobile: boolean) => {
@@ -248,7 +275,7 @@ const NewCars: React.FC = () => {
 
         return (
             <>
-                <FilterSelect label="State for On-Road Price" value={state.selectedState} onChange={e => setState(p => ({...p, selectedState: e.target.value}))}>
+                <FilterSelect label="State for On-Road Price" value={state.selectedState} onChange={e => { markStateFilterUserSet(); setState(p => ({...p, selectedState: e.target.value})); }}>
                     {allIndianStates.map(state => <option key={state} value={state}>{state}</option>)}
                 </FilterSelect>
                 <FilterSelect label="Make" value={state.makeFilter} onChange={e => setState(p => ({...p, makeFilter: e.target.value, modelFilter: 'all' }))}>

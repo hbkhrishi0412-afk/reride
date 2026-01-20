@@ -13,6 +13,7 @@ interface LocationModalProps {
 const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation, onLocationChange, addToast }) => {
     const [selectedState, setSelectedState] = useState('');
     const [selectedCity, setSelectedCity] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
     const [isDetecting, setIsDetecting] = useState(false);
     
     // Lazy load location data
@@ -90,10 +91,64 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         }
     }, [isOpen, currentLocation, indianStates, citiesByState]);
 
+    const popularCities = useMemo(
+        () => [
+            'Mumbai',
+            'Bangalore',
+            'Delhi',
+            'Pune',
+            'Navi Mumbai',
+            'Hyderabad',
+            'Ahmedabad',
+            'Chennai',
+            'Kolkata',
+            'Chandigarh'
+        ],
+        []
+    );
+
+    const allCities = useMemo(
+        () =>
+            Object.entries(citiesByState).flatMap(([stateCode, cities]) =>
+                cities.map((city) => ({ city, stateCode }))
+            ),
+        [citiesByState]
+    );
+
     const availableCities = useMemo(() => {
         if (!selectedState) return [];
         return citiesByState[selectedState] || [];
     }, [selectedState, citiesByState]);
+
+    const filteredCities = useMemo(() => {
+        const term = searchTerm.trim().toLowerCase();
+        if (!term) return [];
+        return allCities
+            .filter(({ city }) => city.toLowerCase().includes(term))
+            .slice(0, 8);
+    }, [searchTerm, allCities]);
+
+    useEffect(() => {
+        if (isOpen) {
+            setSearchTerm('');
+        }
+    }, [isOpen]);
+
+    const handleCitySelect = (cityName: string) => {
+        const foundState = Object.entries(citiesByState).find(([, cities]) =>
+            cities.some((city) => city.toLowerCase() === cityName.toLowerCase())
+        );
+
+        if (foundState) {
+            setSelectedState(foundState[0]);
+            setSelectedCity(cityName);
+        }
+
+        const displayName = getDisplayNameForCity(cityName);
+        onLocationChange(displayName);
+        addToast(`Location set to ${displayName}`, 'success');
+        onClose();
+    };
 
     const handleDetectLocation = () => {
         if (!navigator.geolocation) {
@@ -298,7 +353,8 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             return;
         }
 
-        onLocationChange(selectedCity);
+        const displayName = getDisplayNameForCity(selectedCity);
+        onLocationChange(displayName);
         onClose();
     };
 
@@ -306,46 +362,100 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
 
     return (
         <div className="fixed inset-0 bg-black/60 z-[101] flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                <div className="p-6 border-b dark:border-gray-200-200">
-                    <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Select Your Location</h2>
-                    <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark mt-1">Prices and availability may vary based on your location.</p>
-                    {currentLocation && (
-                        <div className="mt-3 flex items-center gap-2 text-sm">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1E88E5' }}>
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <span className="text-spinny-text-dark dark:text-spinny-text-dark">Current: <strong style={{ color: '#FF6B35' }}>{currentLocation}</strong></span>
-                        </div>
-                    )}
-                </div>
-                <div className="p-6 space-y-4">
-                    <button
-                        onClick={handleDetectLocation}
-                        disabled={isDetecting}
-                        className="w-full flex items-center justify-center gap-2 font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-70 disabled:cursor-wait" style={{ background: 'rgba(30, 136, 229, 0.1)', color: '#1A1A1A' }} onMouseEnter={(e) => !isDetecting && (e.currentTarget.style.background = 'var(--spinny-blue)')} onMouseLeave={(e) => !isDetecting && (e.currentTarget.style.background = 'rgba(30, 136, 229, 0.1)')}
-                    >
-                        {isDetecting ? (
-                            <>
-                                <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-current"></div>
-                                <span>Detecting...</span>
-                            </>
-                        ) : (
-                            <>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>
-                                <span>Detect My Location</span>
-                            </>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-6 border-b dark:border-gray-200-200">
+                    <div>
+                        <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Select your city</h2>
+                        <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark mt-1">Prices and availability may vary based on your location.</p>
+                        {currentLocation && (
+                            <div className="mt-3 flex items-center gap-2 text-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1E88E5' }}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span className="text-spinny-text-dark dark:text-spinny-text-dark">Current: <strong style={{ color: '#FF6B35' }}>{currentLocation}</strong></span>
+                            </div>
                         )}
+                    </div>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100" aria-label="Close location selector">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
                     </button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                    <div className="relative">
+                        <div className="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                            </svg>
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Type your Pincode or City"
+                                className="w-full outline-none text-sm"
+                            />
+                        </div>
+                        {filteredCities.length > 0 && (
+                            <div className="absolute mt-2 w-full bg-white shadow-lg rounded-lg border border-gray-200 z-10 max-h-60 overflow-auto">
+                                {filteredCities.map(({ city, stateCode }) => (
+                                    <button
+                                        key={`${city}-${stateCode}`}
+                                        className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center justify-between"
+                                        onClick={() => handleCitySelect(city)}
+                                    >
+                                        <span>{city}</span>
+                                        <span className="text-xs text-gray-500">{stateCode}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        <button
+                            onClick={handleDetectLocation}
+                            disabled={isDetecting}
+                            className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-spinny-text-dark hover:text-blue-600 disabled:opacity-70"
+                        >
+                            {isDetecting ? (
+                                <span className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-current"></div>
+                                    Detecting location...
+                                </span>
+                            ) : (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                                    </svg>
+                                    find my location
+                                </>
+                            )}
+                        </button>
+                    </div>
+
+                    <div>
+                        <p className="text-sm font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-3">Popular cities</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {popularCities.map((city) => (
+                                <button
+                                    key={city}
+                                    onClick={() => handleCitySelect(city)}
+                                    className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm transition-colors"
+                                >
+                                    <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-blue-500 font-semibold">
+                                        {city.slice(0, 1)}
+                                    </div>
+                                    <span className="text-sm font-medium text-spinny-text-dark">{city}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
                     <div className="flex items-center text-xs text-spinny-text-dark">
                         <span className="flex-grow border-t dark:border-gray-200-300"></span>
                         <span className="px-4">OR</span>
                         <span className="flex-grow border-t dark:border-gray-200-300"></span>
                     </div>
-
-                    <p className="text-sm font-semibold text-center text-spinny-text-dark dark:text-spinny-text-dark">Select your location manually</p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>

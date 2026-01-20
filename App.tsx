@@ -20,12 +20,15 @@ import OfflineIndicator from './components/OfflineIndicator';
 import MobileLayout from './components/MobileLayout';
 import MobileSearch from './components/MobileSearch';
 import MobilePushNotificationManager from './components/MobilePushNotificationManager';
-import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage } from './types';
+import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates } from './types';
 import { parseDeepLink } from './utils/mobileFeatures';
 import { planService } from './services/planService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
+import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
+import { getAuth } from 'firebase/auth';
+import './lib/firebase';
 
 // Simple loading component
 const LoadingSpinner: React.FC = () => (
@@ -299,16 +302,157 @@ const AppContent: React.FC = React.memo(() => {
   // Simple handler for service cart submissions (wire to real API as needed)
   const handleServiceRequestSubmit = React.useCallback(async (payload: any) => {
     try {
-      // TODO: integrate real POST endpoint for service requests
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Service request payload', payload);
+      const auth = getAuth();
+      const token = await auth.currentUser?.getIdToken().catch(() => null);
+
+      if (!token) {
+        addToast('Please log in to submit a service request.', 'error');
+        return;
       }
+
+      const firstItem = payload.items?.[0];
+      const serviceName =
+        payload.servicePackages?.find?.((s: any) => s.id === firstItem?.serviceId)?.name ||
+        firstItem?.serviceId ||
+        'General service';
+      const vehicleDesc = payload.carDetails
+        ? `${payload.carDetails.make || ''} ${payload.carDetails.model || ''}`.trim()
+        : '';
+      const city = payload.address?.city || payload.carDetails?.city || selectedCity || '';
+
+      const services = payload.items?.map((it: any) => {
+        const svcMeta = payload.servicePackages?.find?.((s: any) => s.id === it.serviceId);
+        return {
+          id: it.serviceId,
+          name: svcMeta?.name || it.serviceId,
+          quantity: it.quantity || 1,
+          price: undefined,
+        };
+      });
+
+      const body = {
+        title: payload.note || `${serviceName} request`,
+        serviceType: serviceName,
+        customerName: payload.customerName || currentUser?.name || '',
+        customerPhone: payload.customerPhone || currentUser?.mobile || '',
+        customerEmail: currentUser?.email || '',
+        vehicle: vehicleDesc,
+        city,
+        addressLine: payload.address?.line1 || '',
+        pincode: payload.address?.pincode || '',
+        carDetails: vehicleDesc,
+        status: 'open',
+        scheduledAt: payload.slotId || '',
+        notes: payload.note || '',
+        providerId: null,
+        candidateProviderIds: payload.candidateProviderIds || [],
+        services,
+      };
+
+      const resp = await fetch('/api/service-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        const msg = data.error || `Failed to submit request (status ${resp.status})`;
+        throw new Error(msg);
+      }
+
       addToast('Service request submitted', 'success');
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to submit service request';
       console.error('Failed to submit service request', error);
-      addToast('Failed to submit service request', 'error');
+      addToast(msg, 'error');
+    }
+  }, [addToast, currentUser?.mobile, currentUser?.name, selectedCity]);
+
+  const [userCoords, setUserCoords] = React.useState<LocationCoordinates | null>(null);
+  const [isLocating, setIsLocating] = React.useState(false);
+  const [locationError, setLocationError] = React.useState<string | null>(null);
+
+  // Load cached coords on mount
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('user_coords');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+          setUserCoords(parsed);
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
+  const handleUseMyLocation = React.useCallback(async () => {
+    try {
+      setIsLocating(true);
+      setLocationError(null);
+      const coords = await getUserLocation();
+      if (coords) {
+        setUserCoords(coords);
+        try {
+          localStorage.setItem('user_coords', JSON.stringify(coords));
+        } catch {
+          // ignore storage errors
+        }
+      } else {
+        const msg = 'Unable to fetch location. Please allow location access.';
+        setLocationError(msg);
+        addToast(msg, 'error');
+      }
+    } catch (err) {
+      console.error('Location error', err);
+      const msg = 'Location access failed. Please retry and allow permission.';
+      setLocationError(msg);
+      addToast(msg, 'error');
+    } finally {
+      setIsLocating(false);
     }
   }, [addToast]);
+
+  // Derive registered service providers (sellers) for the service cart
+  const [serviceProviderOptions, setServiceProviderOptions] = React.useState<Array<{ id: string; name: string; city: string; distanceKm?: number }>>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const base = (users || [])
+        .filter(u => u.role === 'seller')
+        .map(u => ({
+          id: u.id || u.email || u.name,
+          name: u.dealershipName || u.name,
+          city: u.location || 'Unknown',
+        }))
+        .filter(p => p.id && p.name);
+
+      const userCity = selectedCity || userLocation || currentUser?.location || '';
+      const cityCoords = userCity ? await getCityCoordinates(userCity) : null;
+      const baseCoords = userCoords || cityCoords;
+
+      const enriched = await Promise.all(
+        base.map(async (p) => {
+          const providerCoords = p.city ? await getCityCoordinates(p.city) : null;
+          const distanceKm =
+            baseCoords && providerCoords ? calculateDistance(baseCoords, providerCoords) : undefined;
+          return { ...p, distanceKm };
+        })
+      );
+
+      if (!cancelled) setServiceProviderOptions(enriched);
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [users, selectedCity, userLocation, currentUser?.location, userCoords]);
 
   // Persist active chat id so the dock can reopen the last thread (OLX-like behavior)
   React.useEffect(() => {
@@ -660,13 +804,14 @@ const AppContent: React.FC = React.memo(() => {
       case ViewEnum.USED_CARS:
         // Filter vehicles for buy/sale (exclude rental vehicles)
         // Filter by status, listingType, and city if selected
+        const cityFilter = selectedCity || userLocation || '';
         const filteredVehicles = vehicles.filter(v => {
           if (!v) return false;
           const isPublished = v.status === 'published';
           // Exclude rental vehicles from buy/sale listings
           const isNotRental = v.listingType !== 'rental' || v.listingType === undefined;
           // Apply city filter if a city is selected (using city mapping for accurate matching)
-          const matchesCityFilter = matchesCity(v.city, selectedCity);
+          const matchesCityFilter = matchesCity(v.city, cityFilter);
           
           return isPublished && isNotRental && matchesCityFilter;
         });
@@ -2183,6 +2328,10 @@ const AppContent: React.FC = React.memo(() => {
             isLoggedIn={!!currentUser}
             onLogin={() => navigate(ViewEnum.LOGIN_PORTAL)}
             onSubmitRequest={handleServiceRequestSubmit}
+            serviceProviders={serviceProviderOptions}
+            onUseMyLocation={handleUseMyLocation}
+            isLocating={isLocating}
+            locationError={locationError || undefined}
           />
         );
 

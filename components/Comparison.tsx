@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
+import PageHeader from './PageHeader';
 
 interface ComparisonProps {
   vehicles: Vehicle[];
@@ -117,20 +118,19 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome,
 
   return (
     <div className="bg-white p-6 rounded-xl shadow-soft-lg animate-fade-in">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div>
-            <h1 className="text-3xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark">Compare Vehicles</h1>
-            <button onClick={onBackToHome} className="text-sm font-medium hover:underline mt-1 transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>
-                &larr; Back to Listings
+      <PageHeader
+        title="Compare Vehicles"
+        backLabel="Back to Listings"
+        onBack={onBackToHome}
+        rightSlot={
+          <div className="flex items-center space-x-3 bg-spinny-off-white dark:bg-brand-gray-700 p-2 rounded-lg">
+            <label htmlFor="highlight-toggle" className="text-sm font-medium text-spinny-text-dark dark:text-brand-gray-200">Highlight Differences</label>
+            <button onClick={() => setHighlightDiffs(!highlightDiffs)} id="highlight-toggle" className={`${highlightDiffs ? '' : 'bg-brand-gray-300 dark:bg-brand-gray-600'} relative inline-flex items-center h-6 rounded-full w-11 transition-colors`} style={highlightDiffs ? { background: '#FF6B35' } : undefined}>
+                <span className={`${highlightDiffs ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`} />
             </button>
-        </div>
-        <div className="flex items-center space-x-3 bg-spinny-off-white dark:bg-brand-gray-700 p-2 rounded-lg">
-          <label htmlFor="highlight-toggle" className="text-sm font-medium text-spinny-text-dark dark:text-brand-gray-200">Highlight Differences</label>
-          <button onClick={() => setHighlightDiffs(!highlightDiffs)} id="highlight-toggle" className={`${highlightDiffs ? '' : 'bg-brand-gray-300 dark:bg-brand-gray-600'} relative inline-flex items-center h-6 rounded-full w-11 transition-colors`} style={highlightDiffs ? { background: '#FF6B35' } : undefined}>
-              <span className={`${highlightDiffs ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`} />
-          </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
       
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">

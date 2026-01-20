@@ -1,6 +1,8 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Conversation, User, ChatMessage } from '../types';
 import { View as ViewEnum } from '../types';
+import { useConversationList } from '../hooks/useConversationList';
+import { formatRelativeTime } from '../utils/date';
 
 interface MobileInboxProps {
   conversations: Conversation[];
@@ -51,34 +53,12 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     return seller?.name || seller?.dealershipName || 'Seller';
   };
 
-  const sortedConversations = useMemo(() => {
-    return [...conversations].sort((a, b) => 
-      new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
-    );
-  }, [conversations]);
-
-  const filteredConversations = useMemo(() => {
-    let filtered = sortedConversations;
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(conv => 
-        conv.vehicleName.toLowerCase().includes(query) ||
-        getSellerName(conv.sellerId).toLowerCase().includes(query) ||
-        conv.messages.some(msg => msg.text?.toLowerCase().includes(query))
-      );
-    }
-    
-    if (filterUnread) {
-      filtered = filtered.filter(conv => !conv.isReadByCustomer);
-    }
-    
-    return filtered;
-  }, [sortedConversations, searchQuery, filterUnread]);
-
-  const unreadCount = useMemo(() => {
-    return conversations.filter(c => !c.isReadByCustomer).length;
-  }, [conversations]);
+  const { sortedConversations, filteredConversations, unreadCount } = useConversationList(
+    conversations,
+    searchQuery,
+    filterUnread,
+    getSellerName
+  );
 
   const handleSelectConversation = (conv: Conversation) => {
     setSelectedConv(conv);
@@ -122,19 +102,6 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
       const input = document.getElementById('message-input');
       if (input) input.focus();
     }, 100);
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   useEffect(() => {
@@ -207,7 +174,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                   )}
                   {msg.text && <p className="text-sm">{msg.text}</p>}
                   <p className={`text-xs mt-1 ${isUser ? 'text-white/70' : 'text-gray-500'}`}>
-                    {formatTime(msg.timestamp)}
+                    {formatRelativeTime(msg.timestamp)}
                   </p>
                 </div>
               </div>
@@ -340,7 +307,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                         {getSellerName(conv.sellerId)}
                       </h3>
                       <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
-                        {formatTime(conv.lastMessageAt)}
+                        {formatRelativeTime(conv.lastMessageAt)}
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 truncate mb-1">

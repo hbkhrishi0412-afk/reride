@@ -1,7 +1,9 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Conversation, User, ChatMessage } from '../types.js';
 import { OfferModal } from './ReadReceiptIcon.js';
 import InlineChat from './InlineChat.js';
+import { useConversationList } from '../hooks/useConversationList';
+import { formatRelativeTime } from '../utils/date';
 
 interface CustomerInboxProps {
   conversations: Conversation[];
@@ -14,20 +16,6 @@ interface CustomerInboxProps {
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
 }
-
-// Helper function to format relative time
-const formatRelativeTime = (dateString: string): string => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-};
 
 // Helper function to count unread messages
 const countUnreadMessages = (conversation: Conversation, userRole: 'customer' | 'seller'): number => {
@@ -59,32 +47,12 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
     window.open(`tel:${phone}`);
   }, []);
 
-  const sortedConversations = useMemo(() => {
-    return [...conversations].sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
-  }, [conversations]);
-
-  const filteredConversations = useMemo(() => {
-    let filtered = sortedConversations;
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(conv => 
-        conv.vehicleName.toLowerCase().includes(query) ||
-        getSellerName(conv.sellerId).toLowerCase().includes(query) ||
-        conv.messages.some(msg => msg.text?.toLowerCase().includes(query))
-      );
-    }
-    
-    if (filterUnread) {
-      filtered = filtered.filter(conv => !conv.isReadByCustomer);
-    }
-    
-    return filtered;
-  }, [sortedConversations, searchQuery, filterUnread, getSellerName]);
-
-  const unreadCount = useMemo(() => {
-    return conversations.filter(c => !c.isReadByCustomer).length;
-  }, [conversations]);
+  const { sortedConversations, filteredConversations, unreadCount } = useConversationList(
+    conversations,
+    searchQuery,
+    filterUnread,
+    getSellerName
+  );
 
   const handleSelectConversation = useCallback((conv: Conversation) => {
     setSelectedConv(conv);
