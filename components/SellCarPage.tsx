@@ -49,6 +49,10 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   const [selectedTransmission, setSelectedTransmission] = useState('');
   const [customerContact, setCustomerContact] = useState('');
   const [contactError, setContactError] = useState('');
+  const [manualMake, setManualMake] = useState('');
+  const [manualModel, setManualModel] = useState('');
+  const [manualVariant, setManualVariant] = useState('');
+  const [manualDistrict, setManualDistrict] = useState('');
 
   const totalSteps = 12; // Steps 0-11: Step 0 is preference, Steps 1-11 are form steps (registration input is step 1)
   const districts = getIndianDistricts();
@@ -76,6 +80,67 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     '2,25,000 Km - 2,50,000 Km',
     '2,50,000 Km or more'
   ];
+
+  // High-fidelity logo URLs for each make (prefer Wikipedia SVGs)
+  const brandLogos: Record<string, string> = {
+    'Maruti Suzuki': 'https://upload.wikimedia.org/wikipedia/commons/1/12/Maruti_Suzuki_logo.svg',
+    Hyundai: 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Hyundai_Motor_Company_logo.svg',
+    Tata: 'https://upload.wikimedia.org/wikipedia/commons/7/79/Tata_logo.svg',
+    Honda: 'https://upload.wikimedia.org/wikipedia/commons/7/79/Honda_Logo.svg',
+    Renault: 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Renault_2021_logo.svg',
+    Mahindra: 'https://upload.wikimedia.org/wikipedia/commons/5/5e/Mahindra_%26_Mahindra_Logo.svg',
+    Kia: 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Kia_logo.svg',
+    Toyota: 'https://upload.wikimedia.org/wikipedia/commons/a/a1/Toyota_logo.svg',
+    Volkswagen: 'https://upload.wikimedia.org/wikipedia/commons/6/6d/Volkswagen_logo_2019.svg',
+    Skoda: 'https://upload.wikimedia.org/wikipedia/commons/9/95/%C5%A0koda_Auto_logo.svg',
+    MG: 'https://upload.wikimedia.org/wikipedia/commons/8/8b/MG_Motor_logo.svg',
+    Nissan: 'https://upload.wikimedia.org/wikipedia/commons/1/11/Nissan_logo.svg',
+    Ford: 'https://upload.wikimedia.org/wikipedia/commons/a/a0/Ford_Motor_Company_Logo.svg',
+    BMW: 'https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg',
+    'Mercedes-Benz': 'https://upload.wikimedia.org/wikipedia/commons/9/90/Mercedes-Logo.svg',
+    Audi: 'https://upload.wikimedia.org/wikipedia/commons/2/2f/Audi_logo.svg',
+    Volvo: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Volvo_Logo.svg',
+    Jeep: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Jeep_logo.svg',
+    'Land Rover': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Land_Rover_logo.svg',
+    Porsche: 'https://upload.wikimedia.org/wikipedia/commons/f/f5/Porsche_logo.svg',
+    Mini: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/MINI_logo.svg',
+    Mitsubishi: 'https://upload.wikimedia.org/wikipedia/commons/5/5a/Mitsubishi_logo.svg',
+    Jaguar: 'https://upload.wikimedia.org/wikipedia/en/3/3e/Jaguar_Racing_logo.svg',
+    Fiat: 'https://upload.wikimedia.org/wikipedia/commons/6/64/Fiat_Auto_logo.svg',
+    Citroen: 'https://upload.wikimedia.org/wikipedia/commons/6/6a/Citro%C3%ABn_2022_logo.svg',
+    Lexus: 'https://upload.wikimedia.org/wikipedia/commons/b/ba/Lexus_division_emblem.svg',
+    Tesla: 'https://upload.wikimedia.org/wikipedia/commons/b/bd/Tesla_Motors.svg',
+    BYD: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/BYD_Company_logo.svg',
+    Chevrolet: 'https://upload.wikimedia.org/wikipedia/commons/5/5f/Chevrolet_logo.svg',
+    GMC: 'https://upload.wikimedia.org/wikipedia/commons/9/96/GMC_logo.svg',
+    Dodge: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Dodge_logo.svg',
+    'Land Rover Defender': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Land_Rover_logo.svg'
+  };
+
+  const heroHighlights = [
+    { title: 'Instant valuation', desc: '90% cars get a price in under 2 minutes.' },
+    { title: 'Doorstep inspection', desc: 'Free pickup & RC transfer included.' },
+    { title: 'Trusted by sellers', desc: '50,000+ happy owners across India.' }
+  ];
+
+  const quickSteps = [
+    'Pick how you want to sell',
+    'Share basic car details',
+    'Get your best offer & payment'
+  ];
+
+  const trustSignals = [
+    { value: '50k+', label: 'Happy customers' },
+    { value: 'Rs 25Cr+', label: 'Worth of cars sold' },
+    { value: '120+', label: 'Cities covered' }
+  ];
+
+  const getBrandLogo = (brandName: string): string => {
+    const direct = brandLogos[brandName];
+    if (direct) return direct;
+    const brandSlug = brandName.toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
+    return `https://logo.clearbit.com/${brandSlug}.com`;
+  };
 
   // Load car data on component mount
   useEffect(() => {
@@ -297,84 +362,164 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
 
   const renderStep0 = () => (
     <div className={`transition-all duration-500 ${isAnimating ? 'opacity-0 transform translate-x-4' : 'opacity-100 transform translate-x-0'}`}>
-      <div className="space-y-4">
-        {/* Title */}
-        <h2 className="text-xl font-bold text-gray-900 text-center mb-4">
-          Choose Your Preference
-        </h2>
+      <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-6 lg:gap-10 items-start">
+        <div className="bg-gradient-to-br from-purple-50 via-white to-orange-50 rounded-2xl p-5 md:p-6 border border-white/50 shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white text-orange-600 text-xs font-semibold shadow-sm mb-3">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            Faster handoffs, happier sellers
+          </div>
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 leading-snug">
+            Sell with confidence, start in under 2 minutes
+          </h2>
+          <p className="text-gray-600 mt-2 text-sm md:text-base">
+            We guide you step by step, fetch the right details automatically, and connect you to verified buyers with instant payouts.
+          </p>
 
-        {/* Preference Options */}
-        <div className="space-y-3">
-          {/* Sell as an Individual */}
-          <div
-            onClick={() => {
-              console.log('Individual clicked');
-              setSellerType('individual');
-              // Proceed to step 1 (registration input page)
-              setTimeout(() => {
-                console.log('Moving to step 1');
-                handleNextStep();
-              }, 300);
-            }}
-            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all duration-300 ${
-              sellerType === 'individual'
-                ? 'border-orange-500 bg-orange-50'
-                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-            }`}
-          >
-            <input
-              type="radio"
-              name="sellerType"
-              value="individual"
-              checked={sellerType === 'individual'}
-              onChange={(e) => {
-                setSellerType('individual');
-                // Proceed to step 1 (registration input page)
-                setTimeout(() => handleNextStep(), 300);
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500"
-            />
-            <div className="flex items-center gap-2 flex-1">
-              <span className="text-gray-900 font-medium text-sm">Sell as an Individual</span>
-              <svg className="w-5 h-5 text-gray-600 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          <div className="grid sm:grid-cols-3 gap-3 mt-4">
+            {trustSignals.map((item) => (
+              <div key={item.label} className="bg-white rounded-xl p-3 border border-orange-100 shadow-sm">
+                <p className="text-xl font-bold text-gray-900">{item.value}</p>
+                <p className="text-xs text-gray-600">{item.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-3 mt-5">
+            {heroHighlights.map((highlight) => (
+              <div key={highlight.title} className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{highlight.title}</p>
+                  <p className="text-sm text-gray-600">{highlight.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 border border-dashed border-orange-200 rounded-xl p-4 bg-white/70">
+            <p className="text-xs font-semibold uppercase text-orange-600 tracking-wide mb-2">How it works</p>
+            <div className="flex flex-wrap gap-3">
+              {quickSteps.map((step, index) => (
+                <span key={step} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-50 text-sm text-gray-800 border border-orange-100">
+                  <span className="w-6 h-6 rounded-full bg-white text-orange-600 flex items-center justify-center text-xs font-bold border border-orange-200">{index + 1}</span>
+                  {step}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border-2 border-orange-100 shadow-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-orange-100">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-orange-600 font-semibold">Step 1</p>
+                <h3 className="text-lg font-bold text-gray-900">Choose how you want to sell</h3>
+              </div>
+              <div className="flex items-center gap-1 text-sm text-gray-600">
+                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                Guided flow
+              </div>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setSellerType('individual');
+                  setTimeout(() => handleNextStep(), 300);
+                }}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-300 text-left ${
+                  sellerType === 'individual'
+                    ? 'border-orange-500 bg-orange-50 shadow-sm'
+                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                }`}
+                aria-pressed={sellerType === 'individual'}
+              >
+                <span className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-orange-100">
+                  <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </span>
+                <div className="flex-1">
+                  <p className="text-gray-900 font-semibold text-sm">Sell as an Individual</p>
+                  <p className="text-xs text-gray-600">One-to-one guidance with instant pricing.</p>
+                </div>
+                <input
+                  type="radio"
+                  name="sellerType"
+                  value="individual"
+                  checked={sellerType === 'individual'}
+                  onChange={() => {
+                    setSellerType('individual');
+                    setTimeout(() => handleNextStep(), 300);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500"
+                />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSellerType('dealer');
+                  onNavigate(ViewEnum.SELLER_LOGIN);
+                }}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-300 text-left ${
+                  sellerType === 'dealer'
+                    ? 'border-orange-500 bg-orange-50 shadow-sm'
+                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                }`}
+                aria-pressed={sellerType === 'dealer'}
+              >
+                <span className="w-10 h-10 flex items-center justify-center rounded-full bg-white border border-orange-100">
+                  <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                </span>
+                <div className="flex-1">
+                  <p className="text-gray-900 font-semibold text-sm">Sell as a Dealer</p>
+                  <p className="text-xs text-gray-600">Jump to your seller login and manage inventory.</p>
+                </div>
+                <input
+                  type="radio"
+                  name="sellerType"
+                  value="dealer"
+                  checked={sellerType === 'dealer'}
+                  onChange={() => {
+                    setSellerType('dealer');
+                    onNavigate(ViewEnum.SELLER_LOGIN);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500"
+                />
+              </button>
+            </div>
+
+            <div className="px-4 pb-4 pt-2 bg-orange-50/70 border-t border-orange-100 text-sm text-gray-700 flex items-start gap-2">
+              <svg className="w-4 h-4 text-orange-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 20a8 8 0 100-16 8 8 0 000 16z" />
               </svg>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm">Why we ask this first</p>
+                <p className="text-xs text-gray-600">Your path changes based on who you are. Individuals get a guided wizard; dealers jump straight to login.</p>
+              </div>
             </div>
           </div>
 
-          {/* Sell as a Dealer */}
-          <div
-            onClick={() => {
-              console.log('Dealer clicked, navigating to seller login');
-              setSellerType('dealer');
-              // Redirect to seller login page
-              onNavigate(ViewEnum.SELLER_LOGIN);
-            }}
-            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all duration-300 ${
-              sellerType === 'dealer'
-                ? 'border-orange-500 bg-orange-50'
-                : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-            }`}
-          >
-            <input
-              type="radio"
-              name="sellerType"
-              value="dealer"
-              checked={sellerType === 'dealer'}
-              onChange={(e) => {
-                setSellerType('dealer');
-                // Redirect to seller login page
-                onNavigate(ViewEnum.SELLER_LOGIN);
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-4 h-4 text-orange-500 border-gray-300 focus:ring-orange-500"
-            />
-            <div className="flex items-center gap-2 flex-1">
-              <span className="text-gray-900 font-medium text-sm">Sell as a Dealer</span>
-              <svg className="w-5 h-5 text-gray-600 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-white/80 rounded-xl p-4 border border-gray-100 shadow-sm">
+            <div className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M4 6h7a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2z" />
               </svg>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">Need help choosing?</p>
+              <p className="text-xs text-gray-600">Chat with support or call 727-727-7275. We answer in under 60 seconds.</p>
             </div>
           </div>
         </div>
@@ -466,44 +611,6 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
             {carData?.makes.map((brand, index) => {
-              // Get real brand logo URL using multiple reliable sources
-              const getBrandLogo = (brandName: string): string => {
-                // Primary: Wikipedia Commons (most reliable)
-                const logoMap: Record<string, string> = {
-                  'Maruti Suzuki': 'https://upload.wikimedia.org/wikipedia/commons/1/12/Maruti_Suzuki_logo.svg',
-                  'Hyundai': 'https://upload.wikimedia.org/wikipedia/commons/f/fd/Hyundai_Motor_Company_logo.svg',
-                  'Tata': 'https://upload.wikimedia.org/wikipedia/commons/7/79/Tata_logo.svg',
-                  'Honda': 'https://upload.wikimedia.org/wikipedia/commons/7/79/Honda_Logo.svg',
-                  'Renault': 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Renault_2021_logo.svg',
-                  'Mahindra': 'https://upload.wikimedia.org/wikipedia/commons/5/5e/Mahindra_%26_Mahindra_Logo.svg',
-                  'Kia': 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Kia_logo.svg',
-                  'Toyota': 'https://upload.wikimedia.org/wikipedia/commons/a/a1/Toyota_logo.svg',
-                  'Volkswagen': 'https://upload.wikimedia.org/wikipedia/commons/6/6d/Volkswagen_logo_2019.svg',
-                  'Skoda': 'https://upload.wikimedia.org/wikipedia/commons/9/95/%C5%A0koda_Auto_logo.svg',
-                  'MG': 'https://upload.wikimedia.org/wikipedia/commons/8/8b/MG_Motor_logo.svg',
-                  'Nissan': 'https://upload.wikimedia.org/wikipedia/commons/2/23/Nissan_logo.svg',
-                  'Ford': 'https://upload.wikimedia.org/wikipedia/commons/a/a0/Ford_Motor_Company_Logo.svg',
-                  'BMW': 'https://upload.wikimedia.org/wikipedia/commons/4/44/BMW.svg',
-                  'Mercedes-Benz': 'https://upload.wikimedia.org/wikipedia/commons/9/90/Mercedes-Logo.svg',
-                  'Audi': 'https://upload.wikimedia.org/wikipedia/commons/9/92/Audi-Logo_2016.svg',
-                  'Volvo': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Volvo_Logo.svg',
-                  'Jeep': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Jeep_logo.svg',
-                  'Land Rover': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Land_Rover_logo.svg',
-                  'Porsche': 'https://upload.wikimedia.org/wikipedia/commons/f/f5/Porsche_logo.svg',
-                  'Mini': 'https://upload.wikimedia.org/wikipedia/commons/7/7a/MINI_logo.svg',
-                  'Mitsubishi': 'https://upload.wikimedia.org/wikipedia/commons/5/5a/Mitsubishi_logo.svg',
-                };
-                
-                // Return mapped logo or fallback to clearbit
-                if (logoMap[brandName]) {
-                  return logoMap[brandName];
-                }
-                
-                // Fallback: Try clearbit
-                const brandSlug = brandName.toLowerCase().replace(/\s+/g, '').replace(/-/g, '');
-                return `https://logo.clearbit.com/${brandSlug}.com`;
-              };
-
               const logoUrl = getBrandLogo(brand.name);
 
               return (
@@ -540,6 +647,33 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
             })}
           </div>
         )}
+
+        <div className="mt-6 p-4 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/70 space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">Can't find your manufacturer?</h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={manualMake}
+              onChange={(e) => setManualMake(e.target.value)}
+              placeholder="Enter manufacturer name"
+              className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-orange-400 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (!manualMake.trim()) return;
+                setCarDetails(prev => ({ ...prev, make: manualMake.trim() }));
+                setAvailableModels([]);
+                handleNextStep();
+              }}
+              className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+              disabled={!manualMake.trim()}
+            >
+              Continue
+            </button>
+          </div>
+          <p className="text-xs text-gray-600">We will let you add model/variant manually next.</p>
+        </div>
         
         <div className="flex justify-center pt-4">
           <button
@@ -565,20 +699,47 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
           </p>
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
-          {availableModels.map((model, index) => (
-            <button
-              key={model}
-              onClick={() => {
-                handleCarDetailChange('model', model);
-                handleNextStep();
-              }}
-              className="p-3 border-2 border-gray-200 rounded-lg hover:border-orange-400 hover:bg-orange-50 transition-all duration-300 active:scale-95"
-            >
-              <span className="text-gray-800 font-semibold text-sm">{model}</span>
-            </button>
-          ))}
-        </div>
+        {availableModels.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {availableModels.map((model) => (
+              <button
+                key={model}
+                onClick={() => {
+                  handleCarDetailChange('model', model);
+                  handleNextStep();
+                }}
+                className="p-3 border-2 border-gray-200 rounded-lg hover:border-orange-400 hover:bg-orange-50 transition-all duration-300 active:scale-95"
+              >
+                <span className="text-gray-800 font-semibold text-sm">{model}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600 text-center">No models found for this make. Enter yours manually.</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={manualModel}
+                onChange={(e) => setManualModel(e.target.value)}
+                placeholder="Enter model name"
+                className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-orange-400 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!manualModel.trim()) return;
+                  handleCarDetailChange('model', manualModel.trim());
+                  handleNextStep();
+                }}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                disabled={!manualModel.trim()}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
         
         <div className="flex justify-center pt-4">
           <button
@@ -687,6 +848,32 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
               </button>
             ))}
         </div>
+
+        <div className="mt-4 p-4 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/70 space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">Can't find your district?</h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={manualDistrict}
+              onChange={(e) => setManualDistrict(e.target.value)}
+              placeholder="Enter district manually"
+              className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-orange-400 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (!manualDistrict.trim()) return;
+                handleCarDetailChange('district', manualDistrict.trim());
+                handleNextStep();
+              }}
+              className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+              disabled={!manualDistrict.trim()}
+            >
+              Continue
+            </button>
+          </div>
+          <p className="text-xs text-gray-600">We will use this location to find the right buyers.</p>
+        </div>
         
         <div className="flex justify-center pt-4">
           <button
@@ -761,20 +948,47 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
           </p>
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
-          {availableVariants.map((variant) => (
-            <button
-              key={variant}
-              onClick={() => {
-                handleCarDetailChange('variant', variant);
-                handleNextStep();
-              }}
-              className="p-3 border-2 border-gray-200 rounded-lg hover:border-orange-400 hover:bg-orange-50 transition-all duration-300 active:scale-95"
-            >
-              <span className="text-gray-800 font-semibold text-sm">{variant}</span>
-            </button>
-          ))}
-        </div>
+        {availableVariants.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {availableVariants.map((variant) => (
+              <button
+                key={variant}
+                onClick={() => {
+                  handleCarDetailChange('variant', variant);
+                  handleNextStep();
+                }}
+                className="p-3 border-2 border-gray-200 rounded-lg hover:border-orange-400 hover:bg-orange-50 transition-all duration-300 active:scale-95"
+              >
+                <span className="text-gray-800 font-semibold text-sm">{variant}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600 text-center">Can't see your variant? Enter it manually.</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={manualVariant}
+                onChange={(e) => setManualVariant(e.target.value)}
+                placeholder="Enter variant name"
+                className="flex-1 px-3 py-2 border-2 border-gray-200 rounded-lg focus:border-orange-400 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!manualVariant.trim()) return;
+                  handleCarDetailChange('variant', manualVariant.trim());
+                  handleNextStep();
+                }}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                disabled={!manualVariant.trim()}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
         
         <div className="flex justify-center pt-4">
           <button
@@ -1035,11 +1249,12 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
 
   // Calculate progress: Step 0 (preference) = 0%, Step 1 = ~9%, Step 11 = 100%
   const progressPercentage = currentStep === 0 ? 0 : ((currentStep) / (totalSteps - 1)) * 100;
+  const cardWidthClass = currentStep === 0 ? 'max-w-5xl' : 'max-w-3xl';
 
   return (
     <div className="min-h-[calc(100vh-140px)] py-6 md:py-8" style={{ background: 'linear-gradient(180deg, #6A2D9D 0%, #D24B9F 100%)' }}>
       {/* Purple Header Section - SellRight Design */}
-      <div className="px-4 pt-4 md:pt-6 pb-4 md:pb-6 max-w-4xl mx-auto">
+      <div className="px-4 pt-4 md:pt-6 pb-4 md:pb-6 max-w-6xl mx-auto">
         {/* SellRight Branding */}
         <div className="flex justify-center items-center gap-2 mb-4">
           <div className="w-10 h-10 bg-red-600 rounded flex items-center justify-center shadow-md">
@@ -1077,7 +1292,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
 
       {/* Main Content Card */}
       <div className="px-4 -mt-4">
-        <div className="bg-white rounded-2xl shadow-xl p-4 md:p-6 max-w-3xl mx-auto">
+        <div className={`bg-white rounded-2xl shadow-xl p-4 md:p-6 mx-auto ${cardWidthClass}`}>
           {renderCurrentStep()}
         </div>
       </div>

@@ -38,18 +38,22 @@ export function getCityNamesForDisplay(displayName: string): string[] {
 export function matchesCity(vehicleCity: string | undefined, displayCity: string | undefined): boolean {
   if (!displayCity) return true; // No filter selected
   if (!vehicleCity) return false; // Vehicle has no city
-  
-  // Normalize both strings for comparison
-  const normalizedVehicleCity = vehicleCity.trim().toLowerCase();
-  const normalizedDisplayCity = displayCity.trim().toLowerCase();
-  
+
+  // Normalize both strings for comparison. Many vehicle cities include state codes
+  // like "Hyderabad, TS" – strip anything after the comma.
+  const normalize = (city: string) => city.split(',')[0].trim().toLowerCase();
+  const normalizedVehicleCity = normalize(vehicleCity);
+  const normalizedDisplayCity = normalize(displayCity);
+
   // Get all possible city names for the display name
-  const possibleNames = getCityNamesForDisplay(displayCity);
-  
-  // Check if vehicle city matches any of the possible names
-  return possibleNames.some(name => 
-    name.trim().toLowerCase() === normalizedVehicleCity
-  ) || normalizedVehicleCity === normalizedDisplayCity;
+  const possibleNames = getCityNamesForDisplay(displayCity).map(normalize);
+
+  // Check for exact or starts-with/contains matches to be forgiving
+  return (
+    possibleNames.some((name) => name === normalizedVehicleCity) ||
+    normalizedVehicleCity === normalizedDisplayCity ||
+    possibleNames.some((name) => normalizedVehicleCity.includes(name) || name.includes(normalizedVehicleCity))
+  );
 }
 
 /**

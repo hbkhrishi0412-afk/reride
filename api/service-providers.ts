@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import admin from '../server/firebase-admin.js';
-import { adminCreate, adminRead } from '../server/firebase-admin-db.js';
+import { adminCreate, adminRead, adminReadAll, adminUpdate } from '../server/firebase-admin-db.js';
 import { DB_PATHS } from '../lib/firebase-db.js';
 
 interface ServiceProviderPayload {
@@ -29,8 +29,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const decoded = await verifyIdTokenFromHeader(req);
     const uid = decoded.uid;
     const email = decoded.email || '';
+    const scope = (req.query.scope as string) || 'mine';
 
     if (req.method === 'GET') {
+      if (scope === 'all') {
+        const all = await adminReadAll<Record<string, ServiceProviderPayload>>(COLLECTION);
+        const list = all ? Object.entries(all).map(([id, rec]) => ({ id, ...rec })) : [];
+        return res.status(200).json(list);
+      }
+
       const provider = await adminRead<ServiceProviderPayload & { id?: string }>(COLLECTION, uid);
       if (!provider) {
         return res.status(404).json({ error: 'Service provider profile not found' });
@@ -61,7 +68,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       await adminCreate<ServiceProviderPayload>(COLLECTION, payload, uid);
+
+      // Also sync into admin users collection so the provider shows up in admin panel
+      const emailKey = payload.email.replace(/[.#$[\]]/g, '_');
+      const existingUser = await adminRead<any>(DB_PATHS.USERS, emailKey);
+      if (!existingUser) {
+        const now = new Date().toISOString();
+        await adminCreate(DB_PATHS.USERS, {
+          name: payload.name,
+          email: payload.email,
+          mobile: payload.phone,
+          role: 'seller', // reuse seller slot for providers in admin panel
+          location: payload.city,
+          status: 'active',
+          authProvider: 'email',
+          firebaseUid: uid,
+          createdAt: now,
+          updatedAt: now,
+        }, emailKey);
+      }
+
       return res.status(201).json({ uid, ...payload });
+    }
+
+    if (req.method === 'PATCH') {
+      const existing = await adminRead<ServiceProviderPayload>(COLLECTION, uid);
+      if (!existing) {
+        return res.status(404).json({ error: 'Service provider profile not found' });
+      }
+
+      const body = req.body as Partial<ServiceProviderPayload>;
+      const updates: Partial<ServiceProviderPayload> = {};
+      
+      if (body.skills !== undefined) updates.skills = body.skills;
+      if (body.workshops !== undefined) updates.workshops = body.workshops;
+      if (body.availability !== undefined) updates.availability = body.availability;
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.phone !== undefined) updates.phone = body.phone;
+      if (body.city !== undefined) updates.city = body.city;
+
+      await adminUpdate<ServiceProviderPayload>(COLLECTION, uid, updates);
+      const updated = await adminRead<ServiceProviderPayload>(COLLECTION, uid);
+      return res.status(200).json({ ...updated, uid });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

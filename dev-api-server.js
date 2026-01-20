@@ -844,6 +844,14 @@ app.delete('/api/vehicle-data-management', (req, res) => {
 
 // Mock users store for development
 let mockUsers = [];
+// Mock service providers store (keyed by uid)
+const mockServiceProviders = {};
+const mockProviderServices = {};
+// Mock service requests store
+let mockServiceRequests = [];
+
+// Helper to pick uid from header/query (fallback to a fixed dev uid)
+const getDevUid = (req) => (req.headers['x-dev-uid'] || req.query.uid || 'dev-uid');
 
 // GET /api/users
 app.get('/api/users', (req, res) => {
@@ -969,6 +977,220 @@ app.post('/api/users', (req, res) => {
   }
   
   res.status(400).json({ success: false, reason: 'Invalid action. Use action: login, register, or oauth-login' });
+});
+
+// --- Service Providers (dev mock) ---
+app.get('/api/service-providers', (req, res) => {
+  const scope = req.query.scope || 'mine';
+  const uid = getDevUid(req);
+  if (scope === 'all') {
+    const list = Object.entries(mockServiceProviders).map(([id, rec]) => ({ id, ...rec }));
+    return res.json(list);
+  }
+  const provider = mockServiceProviders[uid];
+  if (!provider) {
+    return res.status(404).json({ error: 'Service provider profile not found' });
+  }
+  return res.json({ uid, ...provider });
+});
+
+// --- Provider Services (dev mock) ---
+app.get('/api/provider-services', (req, res) => {
+  const scope = req.query.scope || 'mine';
+  const uid = getDevUid(req);
+
+  if (scope === 'public') {
+    const flattened = Object.entries(mockProviderServices).flatMap(([pid, services]) =>
+      Object.entries(services || {}).map(([serviceType, payload]) => ({
+        providerId: pid,
+        serviceType,
+        ...payload,
+      }))
+    );
+    return res.json(flattened);
+  }
+
+  if (scope === 'mine') {
+    const mine = mockProviderServices[uid] || {};
+    const list = Object.entries(mine).map(([serviceType, payload]) => ({ serviceType, ...payload }));
+    return res.json(list);
+  }
+
+  return res.status(400).json({ error: 'Invalid scope' });
+});
+
+app.patch('/api/provider-services', (req, res) => {
+  const uid = getDevUid(req);
+  const { serviceType, price, description = '', etaMinutes, active = true } = req.body || {};
+  if (!serviceType) return res.status(400).json({ error: 'Missing serviceType' });
+  mockProviderServices[uid] = mockProviderServices[uid] || {};
+  mockProviderServices[uid][serviceType] = {
+    serviceType,
+    price: price !== undefined ? Number(price) : undefined,
+    description,
+    etaMinutes: etaMinutes !== undefined ? Number(etaMinutes) : undefined,
+    active,
+  };
+  const list = Object.entries(mockProviderServices[uid]).map(([st, payload]) => ({ serviceType: st, ...payload }));
+  return res.json(list);
+});
+
+app.post('/api/service-providers', (req, res) => {
+  const { name, email, phone, city, workshops = [], skills = [], availability = 'weekdays' } = req.body || {};
+  if (!name || !email || !phone || !city) {
+    return res.status(400).json({ error: 'Missing required fields: name, email, phone, city' });
+  }
+  const uid = getDevUid(req) || `provider-${Date.now()}`;
+  const payload = {
+    name,
+    email: email.toLowerCase(),
+    phone,
+    city,
+    workshops,
+    skills,
+    availability,
+  };
+  mockServiceProviders[uid] = payload;
+
+  // Also mirror into mockUsers so admin panel lists it
+  const existingUser = mockUsers.find(u => u.email === payload.email);
+  if (!existingUser) {
+    mockUsers.push({
+      id: uid,
+      email: payload.email,
+      name: payload.name,
+      mobile: payload.phone,
+      role: 'seller',
+      status: 'active',
+      isVerified: false,
+      subscriptionPlan: 'free',
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  return res.status(201).json({ uid, ...payload });
+});
+
+app.patch('/api/service-providers', (req, res) => {
+  const uid = getDevUid(req);
+  if (!uid) return res.status(401).json({ error: 'Not authenticated' });
+  
+  const existing = mockServiceProviders[uid];
+  if (!existing) return res.status(404).json({ error: 'Service provider profile not found' });
+
+  const { skills, workshops, availability, name, phone, city } = req.body || {};
+  const updates = { ...existing };
+  
+  if (skills !== undefined) updates.skills = skills;
+  if (workshops !== undefined) updates.workshops = workshops;
+  if (availability !== undefined) updates.availability = availability;
+  if (name !== undefined) updates.name = name;
+  if (phone !== undefined) updates.phone = phone;
+  if (city !== undefined) updates.city = city;
+
+  mockServiceProviders[uid] = updates;
+  return res.json({ uid, ...updates });
+});
+
+// --- Service Requests (dev mock) ---
+app.get('/api/service-requests', (req, res) => {
+  const providerId = getDevUid(req);
+  const scope = req.query.scope || 'mine';
+
+  if (scope === 'open') {
+    const cityFilter = (req.query.city || '').toString().toLowerCase();
+    const serviceTypeFilter = req.query.serviceType || '';
+    const open = mockServiceRequests.filter(r => r.status === 'open');
+    const filtered = open.filter(r => {
+      const cityMatches = cityFilter ? (r.city || '').toLowerCase() === cityFilter : true;
+      const serviceMatches = serviceTypeFilter ? r.serviceType === serviceTypeFilter : true;
+      const candidateOk = !r.candidateProviderIds || r.candidateProviderIds.length === 0 || r.candidateProviderIds.includes(providerId);
+      return cityMatches && serviceMatches && candidateOk;
+    });
+    return res.json(filtered);
+  }
+
+  if (scope === 'all') {
+    return res.json(mockServiceRequests);
+  }
+
+  const records = mockServiceRequests.filter(r => r.providerId === providerId);
+  return res.json(records);
+});
+
+app.post('/api/service-requests', (req, res) => {
+  const {
+    title,
+    serviceType = 'General',
+    customerName = '',
+    customerPhone = '',
+    customerEmail = '',
+    vehicle = '',
+    city = '',
+    addressLine = '',
+    pincode = '',
+    candidateProviderIds = [],
+    status = 'open',
+    scheduledAt = '',
+    notes = '',
+    carDetails = '',
+    providerId = null
+  } = req.body || {};
+  if (!title) {
+    return res.status(400).json({ error: 'Missing required field: title' });
+  }
+  const id = `req-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+  const record = {
+    id,
+    providerId,
+    candidateProviderIds,
+    title,
+    serviceType,
+    customerName,
+    customerPhone,
+    customerEmail,
+    vehicle,
+    city,
+    addressLine,
+    pincode,
+    status,
+    scheduledAt,
+    notes,
+    carDetails,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  mockServiceRequests.push(record);
+  return res.status(201).json(record);
+});
+
+app.patch('/api/service-requests', (req, res) => {
+  const providerId = getDevUid(req);
+  const { id, action, ...updates } = req.body || {};
+  if (!id) return res.status(400).json({ error: 'Missing request id' });
+  const idx = mockServiceRequests.findIndex(r => r.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Request not found' });
+
+  const existing = mockServiceRequests[idx];
+
+  if (action === 'claim') {
+    if (existing.status !== 'open' || existing.providerId) {
+      return res.status(409).json({ error: 'Request already claimed' });
+    }
+    const candidateOk = !existing.candidateProviderIds || existing.candidateProviderIds.length === 0 || existing.candidateProviderIds.includes(providerId);
+    if (!candidateOk) {
+      return res.status(403).json({ error: 'Not allowed to claim this request' });
+    }
+    mockServiceRequests[idx] = { ...existing, providerId, status: 'accepted', claimedAt: new Date().toISOString() };
+    return res.json(mockServiceRequests[idx]);
+  }
+
+  if (existing.providerId !== providerId) {
+    return res.status(403).json({ error: 'Not allowed to update this request' });
+  }
+
+  mockServiceRequests[idx] = { ...existing, ...updates, updatedAt: new Date().toISOString() };
+  return res.json(mockServiceRequests[idx]);
 });
 
 // PUT /api/users - Update user (THIS IS THE MISSING ENDPOINT!)

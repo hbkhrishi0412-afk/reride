@@ -21,6 +21,22 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const isDev = process.env.NODE_ENV === 'development';
+
+  const handleMockLogin = () => {
+    // Quick dev-only path to view the dashboard without hitting auth
+    const mockProvider = {
+      name: name || 'Mock Provider',
+      email: email || 'mock-provider@example.com',
+      phone: phone || '0000000000',
+      city: city || 'Mock City',
+      workshops: workshops ? workshops.split(',').map(s => s.trim()).filter(Boolean) : [],
+      skills: skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : [],
+      availability,
+    };
+    onLoginSuccess(mockProvider);
+    onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,6 +258,15 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
           >
             {loading ? (mode === 'login' ? 'Signing in...' : 'Creating account...') : mode === 'login' ? 'Login' : 'Create account'}
           </button>
+          {isDev && (
+            <button
+              type="button"
+              onClick={handleMockLogin}
+              className="w-full py-2.5 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
+            >
+              Use mock login (dev)
+            </button>
+          )}
         </form>
         <button
           onClick={() => onNavigate(ViewEnum.CAR_SERVICES)}

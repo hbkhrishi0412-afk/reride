@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { Notification } from '../types';
+import { formatRelativeTime } from '../utils/date';
 
 interface MobileNotificationsProps {
   notifications: Notification[];
@@ -39,19 +40,6 @@ export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
   const unreadCount = useMemo(() => {
     return notifications.filter(n => !n.isRead).length;
   }, [notifications]);
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
 
   const getNotificationIcon = (targetType: Notification['targetType']) => {
     switch (targetType) {
@@ -185,7 +173,7 @@ export const MobileNotifications: React.FC<MobileNotificationsProps> = ({
                       <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0 mt-1"></div>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500">{formatTime(notification.timestamp)}</p>
+                  <p className="text-xs text-gray-500">{formatRelativeTime(notification.timestamp)}</p>
                 </div>
               </div>
             </div>
