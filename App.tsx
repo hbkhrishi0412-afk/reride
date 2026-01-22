@@ -803,14 +803,15 @@ const AppContent: React.FC = React.memo(() => {
 
       case ViewEnum.USED_CARS:
         // Filter vehicles for buy/sale (exclude rental vehicles)
-        // Filter by status, listingType, and city if selected
-        const cityFilter = selectedCity || userLocation || '';
+        // Filter by status, listingType, and city if explicitly selected (not auto-detected)
+        // Only use selectedCity, not userLocation, so users can see all vehicles by default
+        const cityFilter = selectedCity || '';
         const filteredVehicles = vehicles.filter(v => {
           if (!v) return false;
           const isPublished = v.status === 'published';
           // Exclude rental vehicles from buy/sale listings
           const isNotRental = v.listingType !== 'rental' || v.listingType === undefined;
-          // Apply city filter if a city is selected (using city mapping for accurate matching)
+          // Apply city filter only if a city is explicitly selected (using city mapping for accurate matching)
           const matchesCityFilter = matchesCity(v.city, cityFilter);
           
           return isPublished && isNotRental && matchesCityFilter;
@@ -1100,87 +1101,21 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.RENTAL:
-        if (isMobileApp) {
-          const rentalVehicles = vehicles.filter(v => {
-            const isRental = v.listingType === 'rental';
-            const isPublished = v.status === 'published';
-            const matchesCityFilter = matchesCity(v.city, selectedCity);
-            return isRental && isPublished && matchesCityFilter;
-          });
+        // Rental vehicles feature not currently used - redirect to used cars page
+        // Create a redirect component inline
+        const RentalRedirect: React.FC = () => {
+          React.useEffect(() => {
+            navigate(ViewEnum.USED_CARS);
+          }, []);
           return (
-            <MobileRentalPage
-              vehicles={rentalVehicles}
-              onSelectVehicle={selectVehicle}
-              comparisonList={comparisonList}
-              onToggleCompare={toggleCompare}
-              wishlist={wishlist}
-              onToggleWishlist={toggleWishlist}
-              currentUser={currentUser}
-              onViewSellerProfile={(sellerEmail: string) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
-            />
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-gray-600">Redirecting to used cars...</p>
+              </div>
+            </div>
           );
-        }
-        // Filter vehicles specifically marked for rental
-        const rentalVehicles = vehicles.filter(v => {
-          // Only show vehicles explicitly marked as rental
-          const isRental = v.listingType === 'rental';
-          const isPublished = v.status === 'published';
-          
-          // Apply city filter if selected (using city mapping for accurate matching)
-          const matchesCityFilter = matchesCity(v.city, selectedCity);
-          
-          return isRental && isPublished && matchesCityFilter;
-        });
-        
-        return (
-          <VehicleListErrorBoundary>
-            <VehicleList
-              vehicles={enrichVehiclesWithSellerInfo(rentalVehicles, users)}
-              onSelectVehicle={selectVehicle}
-              isLoading={isLoading}
-              comparisonList={comparisonList}
-              onToggleCompare={(id) => {
-                setComparisonList(prev => 
-                  prev.includes(id) 
-                    ? prev.filter(vId => vId !== id)
-                    : [...prev, id]
-                );
-              }}
-              onClearCompare={() => setComparisonList([])}
-              wishlist={wishlist}
-              onToggleWishlist={(id) => {
-                setWishlist(prev => 
-                  prev.includes(id) 
-                    ? prev.filter(vId => vId !== id)
-                    : [...prev, id]
-                );
-              }}
-              categoryTitle={selectedCity ? `Rental Vehicles in ${selectedCity}` : "Rental Vehicles"}
-              initialCategory={currentCategory}
-              initialSearchQuery={initialSearchQuery}
-              onViewSellerProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
-              userLocation={userLocation}
-              currentUser={currentUser}
-              onSaveSearch={(search) => {
-                addToast(`Search "${search.name}" saved successfully!`, 'success');
-              }}
-            />
-          </VehicleListErrorBoundary>
-        );
+        };
+        return <RentalRedirect />;
 
       case ViewEnum.COMPARISON:
         if (isMobileApp) {
@@ -2693,7 +2628,7 @@ const AppContent: React.FC = React.memo(() => {
       case ViewEnum.USED_CARS:
         return 'Browse Cars';
       case ViewEnum.RENTAL:
-        return 'Rental Vehicles';
+        return 'Browse Cars';
       case ViewEnum.DETAIL:
         return selectedVehicle ? selectedVehicle.make + ' ' + selectedVehicle.model : 'Vehicle Details';
       case ViewEnum.SELLER_DASHBOARD:
