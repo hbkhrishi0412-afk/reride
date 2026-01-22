@@ -2074,16 +2074,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
             usedCertifications: userData.usedCertifications || 0,
           };
           
-          // Save to Firebase Realtime Database
+          // Save to Supabase
           try {
-            const { firebaseUserService } = await import('../services/firebase-user-service');
-            // Remove password before saving to Firebase (security)
+            const { supabaseUserService } = await import('../services/supabase-user-service');
+            // Remove password before saving to Supabase (security)
             const { password: _, ...userWithoutPassword } = createdUser;
-            await firebaseUserService.create(userWithoutPassword);
-            console.log('✅ User saved to Firebase Realtime Database:', createdUser.email);
-          } catch (firebaseError) {
-            // Log error but don't fail the entire operation if Firebase save fails
-            console.warn('⚠️ Failed to save user to Firebase Realtime Database:', firebaseError);
+            await supabaseUserService.create(userWithoutPassword);
+            console.log('✅ User saved to Supabase:', createdUser.email);
+          } catch (supabaseError) {
+            // Log error but don't fail the entire operation if Supabase save fails
+            console.warn('⚠️ Failed to save user to Supabase:', supabaseError);
             // Still show success toast since MongoDB save succeeded
           }
           
