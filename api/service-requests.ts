@@ -5,15 +5,6 @@ import type { ServiceRequestPayload } from '../services/supabase-service-request
 
 // ServiceRequestPayload is now imported from the service file
 
-async function verifyIdTokenFromHeader(req: VercelRequest) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Missing bearer token');
-  }
-  const token = authHeader.replace('Bearer ', '').trim();
-  return admin.auth().verifyIdToken(token);
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const decoded = await verifyIdTokenFromHeader(req);
@@ -104,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           claimedAt: new Date().toISOString(),
         });
         const updatedClaim = await supabaseServiceRequestService.findById(id);
-        return res.status(200).json(updatedClaim || { id, ...existing });
+        return res.status(200).json(updatedClaim || existing);
       }
 
       if (existing.providerId !== providerId) {
@@ -113,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       await supabaseServiceRequestService.update(id, updates);
       const updated = await supabaseServiceRequestService.findById(id);
-      return res.status(200).json(updated || { id, ...existing });
+      return res.status(200).json(updated || existing);
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

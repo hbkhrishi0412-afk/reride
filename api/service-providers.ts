@@ -6,15 +6,6 @@ import type { ServiceProviderPayload } from '../services/supabase-service-provid
 
 // ServiceProviderPayload is now imported from the service file
 
-async function verifyIdTokenFromHeader(req: VercelRequest) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Missing bearer token');
-  }
-  const token = authHeader.replace('Bearer ', '').trim();
-  return admin.auth().verifyIdToken(token);
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const decoded = await verifyIdTokenFromHeader(req);

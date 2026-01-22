@@ -143,7 +143,14 @@ CREATE INDEX IF NOT EXISTS idx_new_cars_model_name ON new_cars(model_name);
 CREATE INDEX IF NOT EXISTS idx_new_cars_model_year ON new_cars(model_year);
 
 -- ============================================================================
--- 7. PLANS TABLE - Create if it doesn't exist
+-- 7. VEHICLES TABLE - Add metadata column if missing
+-- ============================================================================
+-- Add metadata column to vehicles table (required for storing additional vehicle data)
+ALTER TABLE vehicles 
+ADD COLUMN IF NOT EXISTS metadata JSONB;
+
+-- ============================================================================
+-- 8. PLANS TABLE - Create if it doesn't exist
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS plans (
     id TEXT PRIMARY KEY,
@@ -164,7 +171,7 @@ CREATE INDEX IF NOT EXISTS idx_plans_name ON plans(name);
 CREATE INDEX IF NOT EXISTS idx_plans_price ON plans(price);
 
 -- ============================================================================
--- 8. VERIFICATION - Check that all required tables and columns exist
+-- 9. VERIFICATION - Check that all required tables and columns exist
 -- ============================================================================
 DO $$
 DECLARE
@@ -240,6 +247,14 @@ BEGIN
         missing_items := array_append(missing_items, 'plans table');
     END IF;
     
+    -- Check vehicles.metadata column
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'vehicles' AND column_name = 'metadata'
+    ) THEN
+        missing_items := array_append(missing_items, 'vehicles.metadata column');
+    END IF;
+    
     -- Report results
     IF array_length(missing_items, 1) > 0 THEN
         RAISE NOTICE '⚠️  Some items could not be created: %', array_to_string(missing_items, ', ');
@@ -249,7 +264,7 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- 9. OPTIONAL: RLS Policies (commented out - uncomment after migration)
+-- 10. OPTIONAL: RLS Policies (commented out - uncomment after migration)
 -- ============================================================================
 -- These policies can be added after migration for production use
 

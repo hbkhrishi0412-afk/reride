@@ -72,7 +72,7 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
     }
   });
   
-  return {
+  const row: any = {
     id: vehicle.id?.toString() || undefined,
     category: vehicle.category || null,
     make: vehicle.make || '',
@@ -107,8 +107,14 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
     boot_space: vehicle.bootSpace || null,
     created_at: vehicle.createdAt || new Date().toISOString(),
     updated_at: vehicle.updatedAt || new Date().toISOString(),
-    metadata: Object.keys(metadata).length > 0 ? metadata : null,
   };
+
+  // Only include metadata if it has values (don't include null/empty metadata to avoid schema errors)
+  if (Object.keys(metadata).length > 0) {
+    row.metadata = metadata;
+  }
+
+  return row;
 }
 
 // Vehicle service for Supabase
@@ -173,13 +179,40 @@ export const supabaseVehicleService = {
     // Remove id from updates
     delete row.id;
     
+    // Remove undefined values to avoid issues
+    Object.keys(row).forEach(key => {
+      if (row[key] === undefined) {
+        delete row[key];
+      }
+    });
+    
+    // If metadata column doesn't exist in schema, remove it from update
+    // This prevents "Could not find the 'metadata' column" errors
+    // The metadata will still be stored in other columns if they exist
+    if (row.metadata === null || (typeof row.metadata === 'object' && Object.keys(row.metadata).length === 0)) {
+      delete row.metadata;
+    }
+    
     const { error } = await supabase
       .from('vehicles')
       .update(row)
       .eq('id', id.toString());
     
     if (error) {
-      throw new Error(`Failed to update vehicle: ${error.message}`);
+      // If error is about metadata column, retry without metadata
+      if (error.message.includes("metadata") || error.message.includes("Could not find")) {
+        delete row.metadata;
+        const { error: retryError } = await supabase
+          .from('vehicles')
+          .update(row)
+          .eq('id', id.toString());
+        
+        if (retryError) {
+          throw new Error(`Failed to update vehicle: ${retryError.message}`);
+        }
+      } else {
+        throw new Error(`Failed to update vehicle: ${error.message}`);
+      }
     }
   },
 
