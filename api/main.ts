@@ -4,48 +4,47 @@ import { PLAN_DETAILS } from '../constants.js';
 import { planService } from '../services/planService.js';
 import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan } from '../types.js';
 import { VehicleCategory } from '../types.js';
-// Firebase services
-import { firebaseUserService } from '../services/firebase-user-service.js';
-import { firebaseVehicleService } from '../services/firebase-vehicle-service.js';
-import { firebaseConversationService } from '../services/firebase-conversation-service.js';
-import { isDatabaseAvailable as isFirebaseAvailable, getDatabaseStatus } from '../lib/firebase-db.js';
-import { 
-  DB_PATHS
-} from '../lib/firebase-db.js';
-import {
-  adminCreate,
-  adminUpdate,
-  adminRead,
-  adminReadAll,
-  adminDelete
-} from '../server/firebase-admin-db.js';
+// Supabase services
+import { supabaseUserService } from '../services/supabase-user-service.js';
+import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
+import { supabaseConversationService } from '../services/supabase-conversation-service.js';
+import { getSupabaseAdminClient } from '../lib/supabase.js';
 
-// Always use Firebase - MongoDB removed
-// Note: This is checked at module load time. If Firebase is not available,
+// Use Supabase instead of Firebase
+// Note: This is checked at module load time. If Supabase is not available,
 // API routes will return proper error messages with details on how to fix it.
-// CRITICAL FIX: Wrap in try-catch to prevent function crashes if Firebase initialization fails
-let USE_FIREBASE = false;
+// CRITICAL FIX: Wrap in try-catch to prevent function crashes if Supabase initialization fails
+let USE_SUPABASE = false;
 try {
-  USE_FIREBASE = isFirebaseAvailable();
+  // Try to initialize Supabase admin client to check availability
+  getSupabaseAdminClient();
+  USE_SUPABASE = true;
 } catch (error) {
-  // Don't crash the function if Firebase initialization fails at module load
+  // Don't crash the function if Supabase initialization fails at module load
   // We'll handle this gracefully in each handler by returning 503 errors
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-  console.warn('⚠️ Firebase initialization failed at module load (function will still work, but Firebase operations will return 503):', errorMessage);
-  USE_FIREBASE = false;
+  console.warn('⚠️ Supabase initialization failed at module load (function will still work, but Supabase operations will return 503):', errorMessage);
+  USE_SUPABASE = false;
 }
 
-// Get Firebase status with detailed error information
-function getFirebaseErrorMessage(): string {
+// Get Supabase status with detailed error information
+function getSupabaseErrorMessage(): string {
   try {
-    const status = getDatabaseStatus();
-    if (status.available) {
-      return '';
-    }
-    return status.details || status.error || 'Firebase database is not available. Please check your configuration.';
-  } catch {
-    return 'Firebase database is not available. Please check your configuration.';
+    getSupabaseAdminClient();
+    return '';
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return `Supabase database is not available: ${errorMessage}. Please check your SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY configuration.`;
   }
+}
+
+// Legacy Firebase references for backward compatibility (will be removed)
+const USE_FIREBASE = USE_SUPABASE; // Map to Supabase
+const firebaseUserService = supabaseUserService;
+const firebaseVehicleService = supabaseVehicleService;
+const firebaseConversationService = supabaseConversationService;
+function getFirebaseErrorMessage(): string {
+  return getSupabaseErrorMessage();
 }
 import { 
   hashPassword, 

@@ -114,6 +114,22 @@
       ".read": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'",
       ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
     },
+    "serviceRequests": {
+      "$requestId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      },
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "serviceProviders": {
+      "$providerId": {
+        ".read": true,
+        ".write": "auth != null"
+      },
+      ".read": true,
+      ".write": "auth != null"
+    },
     "images": {
       ".read": true,
       "$folder": {
