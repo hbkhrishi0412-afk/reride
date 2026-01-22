@@ -55,11 +55,16 @@ const TrustBadgeDisplay: React.FC<TrustBadgeDisplayProps> = ({ user, showDetails
     } else if (trustScore >= 50) {
       return { label: 'Verified', color: '#F59E0B', bgColor: '#FEF3C7', icon: '✓' };
     } else {
-      return { label: 'New Seller', color: '#6B7280', bgColor: '#F3F4F6', icon: '○' };
+      return null; // Don't show badge for new sellers
     }
   };
 
   const badge = getBadgeInfo();
+
+  // Don't render anything if badge is null (new sellers)
+  if (!badge) {
+    return null;
+  }
 
   return (
     <div className="inline-block">

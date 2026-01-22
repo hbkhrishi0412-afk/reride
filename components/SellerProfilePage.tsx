@@ -96,61 +96,71 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
             <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6 lg:gap-8">
                 {/* Left Side: Seller Profile Card - Sticky */}
                 <aside className="lg:sticky lg:top-8 lg:h-fit lg:self-start">
-                    <header className="relative bg-gradient-to-br from-white via-blue-50/30 to-purple-50/20 p-4 md:p-5 rounded-xl shadow-lg border border-gray-100/50 backdrop-blur-sm overflow-hidden">
-                        {/* Decorative Background Elements */}
-                        <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br from-blue-200/20 to-purple-200/20 rounded-full blur-3xl -z-0"></div>
-                        <div className="absolute bottom-0 left-0 w-32 h-32 bg-gradient-to-tr from-orange-200/20 to-pink-200/20 rounded-full blur-3xl -z-0"></div>
+                    <header className="relative bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                        {/* Enhanced Decorative Background Elements */}
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-blue-100/40 via-purple-100/30 to-pink-100/20 rounded-full blur-3xl -z-0"></div>
+                        <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-orange-100/30 to-yellow-100/20 rounded-full blur-3xl -z-0"></div>
                         
-                        <div className="relative z-10 flex flex-col items-center gap-3">
-                            {/* Premium Profile Picture - Centered */}
+                        <div className="relative z-10 flex flex-col items-center gap-4">
+                            {/* Enhanced Profile Picture with Glow Effect */}
                             <div className="relative group flex-shrink-0">
-                                <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity"></div>
+                                {/* Animated glow ring */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500 rounded-full blur-2xl opacity-40 group-hover:opacity-60 transition-opacity duration-500 animate-pulse"></div>
+                                {/* Outer ring */}
+                                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 p-0.5 opacity-20 group-hover:opacity-40 transition-opacity">
+                                    <div className="w-full h-full rounded-full bg-white dark:bg-gray-800"></div>
+                                </div>
                                 <img 
                                     src={seller.logoUrl || `https://i.pravatar.cc/150?u=${seller.email}`} 
                                     alt={`${seller.dealershipName || seller.name} logo`} 
-                                    className="relative w-20 h-20 md:w-24 md:h-24 rounded-full object-cover border-2 shadow-lg ring-2 ring-white/50 transition-transform group-hover:scale-105" 
-                                    style={{ borderColor: '#1E88E5' }}
+                                    className="relative w-24 h-24 md:w-28 md:h-28 rounded-full object-cover border-4 border-white dark:border-gray-800 shadow-2xl ring-4 ring-blue-100 dark:ring-gray-700 transition-all duration-300 group-hover:scale-110 group-hover:ring-blue-200" 
                                 />
                                 <VerifiedBadge
                                     show={isUserVerified(seller)}
                                     iconOnly
                                     size="sm"
-                                    className="absolute -bottom-0.5 -right-0.5 h-5 w-5 ring-2 ring-white rounded-full shadow-md"
+                                    className="absolute -bottom-1 -right-1 h-7 w-7 ring-4 ring-white dark:ring-gray-800 rounded-full shadow-lg z-10"
                                 />
                             </div>
                             
-                            {/* Seller Information - Centered */}
+                            {/* Seller Information - Enhanced */}
                             <div className="w-full text-center">
                                 <div className="flex items-center justify-center gap-2 mb-2">
-                                    <h1 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                    <h1 className="text-xl md:text-2xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
                                         {seller.dealershipName || seller.name}
                                         <VerifiedBadge show={isUserVerified(seller)} size="sm" />
                                     </h1>
                                 </div>
                                 
                                 {/* Badges - Centered */}
-                                <div className="mb-3 flex items-center justify-center gap-2 flex-wrap">
+                                <div className="mb-4 flex items-center justify-center gap-2 flex-wrap">
                                     <BadgeDisplay badges={seller.badges || []} />
                                     <TrustBadgeDisplay user={seller} showDetails={false} />
                                 </div>
                                 
-                                {/* Verification Status - Visible */}
-                                <div className="mb-3 px-2">
-                                    <div className="bg-white/80 backdrop-blur-sm rounded-lg p-2.5 border border-gray-200">
-                                        <p className="text-xs font-semibold text-gray-700 mb-2 text-center">Verification Status</p>
-                                        <div className="flex flex-col gap-1.5">
+                                {/* Enhanced Verification Status Card */}
+                                <div className="mb-4 px-1">
+                                    <div className="bg-gradient-to-br from-gray-50 to-gray-100/50 dark:from-gray-700/50 dark:to-gray-800/50 backdrop-blur-sm rounded-xl p-3.5 border border-gray-200 dark:border-gray-600 shadow-sm">
+                                        <p className="text-xs font-bold text-gray-800 dark:text-gray-200 mb-3 text-center uppercase tracking-wide">Verification Status</p>
+                                        <div className="flex flex-col gap-2">
                                             {(() => {
                                                 const phoneVerified = seller.verificationStatus?.phoneVerified || seller.phoneVerified || false;
                                                 return phoneVerified ? (
-                                                    <div className="flex items-center gap-2 px-2 py-1 bg-green-50 text-green-700 rounded text-xs border border-green-200">
-                                                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                    <div className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 text-green-700 dark:text-green-400 rounded-lg text-xs border border-green-200 dark:border-green-800 shadow-sm">
+                                                        <div className="flex-shrink-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                                                            <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </div>
+                                                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                             <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                                                         </svg>
-                                                        <span className="font-medium">Phone Verified</span>
+                                                        <span className="font-semibold">Phone Verified</span>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-2 px-2 py-1 bg-gray-50 text-gray-500 rounded text-xs border border-gray-200">
-                                                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                    <div className="flex items-center gap-2.5 px-3 py-2 bg-white dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 rounded-lg text-xs border border-gray-200 dark:border-gray-600">
+                                                        <div className="flex-shrink-0 w-4 h-4 border-2 border-gray-300 dark:border-gray-500 rounded-full"></div>
+                                                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                             <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
                                                         </svg>
                                                         <span className="font-medium">Phone Not Verified</span>
@@ -160,16 +170,22 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                                             {(() => {
                                                 const emailVerified = seller.verificationStatus?.emailVerified || seller.emailVerified || false;
                                                 return emailVerified ? (
-                                                    <div className="flex items-center gap-2 px-2 py-1 bg-green-50 text-green-700 rounded text-xs border border-green-200">
-                                                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                    <div className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 text-green-700 dark:text-green-400 rounded-lg text-xs border border-green-200 dark:border-green-800 shadow-sm">
+                                                        <div className="flex-shrink-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                                                            <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </div>
+                                                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                             <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                                                             <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                                                         </svg>
-                                                        <span className="font-medium">Email Verified</span>
+                                                        <span className="font-semibold">Email Verified</span>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-2 px-2 py-1 bg-gray-50 text-gray-500 rounded text-xs border border-gray-200">
-                                                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                    <div className="flex items-center gap-2.5 px-3 py-2 bg-white dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 rounded-lg text-xs border border-gray-200 dark:border-gray-600">
+                                                        <div className="flex-shrink-0 w-4 h-4 border-2 border-gray-300 dark:border-gray-500 rounded-full"></div>
+                                                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                             <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                                                             <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                                                         </svg>
@@ -180,15 +196,21 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                                             {(() => {
                                                 const govtIdVerified = seller.verificationStatus?.govtIdVerified || seller.govtIdVerified || false;
                                                 return govtIdVerified ? (
-                                                    <div className="flex items-center gap-2 px-2 py-1 bg-green-50 text-green-700 rounded text-xs border border-green-200">
-                                                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                    <div className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 text-green-700 dark:text-green-400 rounded-lg text-xs border border-green-200 dark:border-green-800 shadow-sm">
+                                                        <div className="flex-shrink-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                                                            <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </div>
+                                                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                             <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
                                                         </svg>
-                                                        <span className="font-medium">ID Verified</span>
+                                                        <span className="font-semibold">ID Verified</span>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center gap-2 px-2 py-1 bg-gray-50 text-gray-500 rounded text-xs border border-gray-200">
-                                                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                    <div className="flex items-center gap-2.5 px-3 py-2 bg-white dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 rounded-lg text-xs border border-gray-200 dark:border-gray-600">
+                                                        <div className="flex-shrink-0 w-4 h-4 border-2 border-gray-300 dark:border-gray-500 rounded-full"></div>
+                                                        <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                             <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
                                                         </svg>
                                                         <span className="font-medium">ID Not Verified</span>
@@ -199,54 +221,54 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                                     </div>
                                 </div>
                                 
-                                {/* Bio - Collapsed */}
+                                {/* Enhanced Bio */}
                                 {seller.bio && (
-                                    <p className="mb-3 text-gray-600 dark:text-gray-300 leading-snug text-xs md:text-sm line-clamp-2">
+                                    <p className="mb-4 text-gray-600 dark:text-gray-300 leading-relaxed text-sm px-2 line-clamp-2">
                                         {seller.bio}
                                     </p>
                                 )}
                                 
-                                {/* Stats and Actions - Stacked */}
-                                <div className="space-y-2.5">
-                                    {/* Rating */}
-                                    <div className="flex items-center justify-center gap-1.5 bg-white/60 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm">
+                                {/* Enhanced Stats and Actions */}
+                                <div className="space-y-3 w-full">
+                                    {/* Enhanced Rating Display */}
+                                    <div className="flex items-center justify-center gap-2 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 px-4 py-2.5 rounded-xl shadow-sm border border-amber-100 dark:border-amber-800/50">
                                         <StarRating rating={seller.averageRating || 0} size="sm" readOnly />
-                                        <span className="text-gray-700 dark:text-gray-200 font-medium text-xs">
+                                        <span className="text-gray-700 dark:text-gray-200 font-semibold text-sm">
                                             {seller.averageRating?.toFixed(1) || 'No Rating'} 
-                                            <span className="text-gray-500 ml-0.5">({seller.ratingCount || 0} ratings)</span>
+                                            <span className="text-gray-500 dark:text-gray-400 ml-1 font-normal">({seller.ratingCount || 0} ratings)</span>
                                         </span>
                                     </div>
                                     
-                                    {/* Followers/Following - Centered */}
-                                    <div className="flex items-center justify-center gap-1.5 text-gray-600 dark:text-gray-300 font-medium text-xs">
+                                    {/* Enhanced Followers/Following */}
+                                    <div className="flex items-center justify-center gap-2 text-gray-600 dark:text-gray-300 font-medium text-sm">
                                         {isOwnerSeller ? (
                                             <>
                                                 <button 
-                                                    className="hover:text-blue-600 transition-colors px-2 py-0.5 rounded hover:bg-white/60"
+                                                    className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 font-semibold"
                                                     onClick={() => setShowFollowers(true)}
                                                 >
-                                                    {followersCount} Followers
+                                                    <span className="text-gray-900 dark:text-white">{followersCount}</span> Followers
                                                 </button>
                                                 <span className="opacity-30">•</span>
                                                 <button 
-                                                    className="hover:text-blue-600 transition-colors px-2 py-0.5 rounded hover:bg-white/60"
+                                                    className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 font-semibold"
                                                     onClick={() => setShowFollowing(true)}
                                                 >
-                                                    {followingCount} Following
+                                                    <span className="text-gray-900 dark:text-white">{followingCount}</span> Following
                                                 </button>
                                             </>
                                         ) : (
                                             <>
-                                                <span>{followersCount} Followers</span>
+                                                <span className="px-3 py-1.5"><span className="text-gray-900 dark:text-white font-semibold">{followersCount}</span> Followers</span>
                                                 <span className="opacity-30">•</span>
-                                                <span>{followingCount} Following</span>
+                                                <span className="px-3 py-1.5"><span className="text-gray-900 dark:text-white font-semibold">{followingCount}</span> Following</span>
                                             </>
                                         )}
                                     </div>
                                     
-                                    {/* Member Since - Always Visible */}
-                                    <div className="flex items-center justify-center gap-1.5 text-gray-600 dark:text-gray-300 text-xs py-1">
-                                        <svg className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    {/* Enhanced Member Since */}
+                                    <div className="flex items-center justify-center gap-2 text-gray-600 dark:text-gray-400 text-sm py-1">
+                                        <svg className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                         </svg>
                                         <span className="font-medium">
@@ -267,26 +289,26 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                                         </span>
                                     </div>
                                     
-                                    {/* Follow Button - Full Width */}
+                                    {/* Enhanced Follow Button */}
                                     <button
                                         onClick={handleFollowToggle}
-                                        className={`w-full px-3 py-2 rounded-lg font-semibold text-xs transition-all duration-300 flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 ${
+                                        className={`w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 ${
                                             isFollowing 
-                                                ? 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 hover:from-gray-200 hover:to-gray-300' 
-                                                : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
+                                                ? 'bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 text-gray-700 dark:text-gray-200 hover:from-gray-200 hover:to-gray-300 dark:hover:from-gray-600 dark:hover:to-gray-500' 
+                                                : 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-pink-700'
                                         }`}
                                     >
                                         {isFollowing ? (
                                             <>
-                                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                                 </svg>
                                                 <span>Following</span>
                                             </>
                                         ) : (
                                             <>
-                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                                 </svg>
                                                 <span>Follow Seller</span>
                                             </>

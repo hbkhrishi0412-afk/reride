@@ -1623,8 +1623,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // CRITICAL FIX: Improve error handling - don't spam console with errors
         let connectionErrorLogged = false;
-        socket.on('connect_error', (error: any) => {
+        socket.on('connect_error', (_error: any) => {
           // CRITICAL FIX: Only log error once to prevent console spam
+          // Error parameter is prefixed with _ to indicate it's intentionally unused
           if (!connectionErrorLogged) {
             connectionErrorLogged = true;
             if (process.env.NODE_ENV === 'development') {
@@ -1986,12 +1987,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }) : []
       );
       
-      // Also update in MongoDB - pass both updates and nulls
+      // Also update in API - pass both updates and nulls
       try {
         const { updateUser: updateUserService } = await import('../services/userService');
-        await updateUserService({ email, ...details }); // Pass original details to preserve null values
+        
+        // Ensure verificationStatus is properly structured for API
+        const apiUpdateData: any = { email, ...details };
+        
+        // If verificationStatus is being updated, ensure it's properly formatted
+        if (details.verificationStatus) {
+          apiUpdateData.verificationStatus = details.verificationStatus;
+        }
+        
+        // Ensure individual verification fields are also included
+        if (details.phoneVerified !== undefined) {
+          apiUpdateData.phoneVerified = details.phoneVerified;
+        }
+        if (details.emailVerified !== undefined) {
+          apiUpdateData.emailVerified = details.emailVerified;
+        }
+        if (details.govtIdVerified !== undefined) {
+          apiUpdateData.govtIdVerified = details.govtIdVerified;
+        }
+        
+        await updateUserService(apiUpdateData);
+        
+        // CRITICAL: Refresh users list from API after successful update to ensure sync
+        try {
+          const { getUsers: getUsersService } = await import('../services/userService');
+          const refreshedUsers = await getUsersService();
+          
+          // Update the users state with fresh data from API
+          setUsers(refreshedUsers);
+          
+          // Also update localStorage cache
+          if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+            localStorage.setItem('reRideUsers', JSON.stringify(refreshedUsers));
+            // Trigger storage event to notify other components
+            window.dispatchEvent(new Event('storage'));
+          }
+          
+          console.log('✅ Users list refreshed from API after verification update');
+        } catch (refreshError) {
+          console.warn('⚠️ Failed to refresh users list after update:', refreshError);
+          // Don't fail the update if refresh fails - the API update already succeeded
+          // The error is logged but not thrown to prevent breaking the update flow
+        }
       } catch (error) {
-        console.warn('Failed to sync user update to MongoDB:', error);
+        console.error('❌ Failed to sync user update to API:', error);
+        addToast(`Failed to sync update to server: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+        // Don't throw - local state is already updated
       }
       
       // Log audit entry for user update

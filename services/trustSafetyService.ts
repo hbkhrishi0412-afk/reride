@@ -126,7 +126,7 @@ export function getTrustBadge(score: number): {
   label: string;
   color: string;
   icon: string;
-} {
+} | null {
   if (score >= 90) {
     return { label: 'Highly Trusted', color: '#10B981', icon: '✓✓✓' };
   } else if (score >= 70) {
@@ -134,7 +134,7 @@ export function getTrustBadge(score: number): {
   } else if (score >= 50) {
     return { label: 'Verified', color: '#F59E0B', icon: '✓' };
   } else {
-    return { label: 'New Seller', color: '#6B7280', icon: '○' };
+    return null; // Don't return badge info for new sellers
   }
 }
 

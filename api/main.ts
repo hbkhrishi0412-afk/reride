@@ -1417,16 +1417,37 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     }
     
     try {
+      logInfo('📊 Fetching all users from database...');
       const users = await firebaseUserService.findAll();
+      logInfo(`✅ Fetched ${users.length} users from database`);
+      
       // SECURITY FIX: Normalize all users to remove passwords
-      const normalizedUsers = users.map(user => normalizeUser(user)).filter((u): u is NormalizedUser => u !== null);
+      const normalizedUsers = users.map(user => {
+        const normalized = normalizeUser(user);
+        if (!normalized) {
+          logWarn(`⚠️ User filtered out during normalization:`, { 
+            email: user.email, 
+            id: user.id, 
+            hasId: !!user.id, 
+            hasEmail: !!user.email,
+            hasRole: !!user.role 
+          });
+        }
+        return normalized;
+      }).filter((u): u is NormalizedUser => u !== null);
+      
+      logInfo(`✅ Returning ${normalizedUsers.length} normalized users (${users.length - normalizedUsers.length} filtered out)`);
       return res.status(200).json(normalizedUsers);
     } catch (error) {
       logError('❌ Error fetching users:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logError('❌ Error details:', { message: errorMessage, stack: error instanceof Error ? error.stack : undefined });
+      
       // Always return fallback instead of 500 to prevent crashes
       try {
         const fallbackUsers = await getFallbackUsers();
         res.setHeader('X-Data-Fallback', 'true');
+        logWarn('⚠️ Using fallback users due to error');
         return res.status(200).json(fallbackUsers);
       } catch (fallbackError) {
         // Even fallback failed, return empty array instead of 500
@@ -1534,6 +1555,42 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           updateFields[key] = updateData[key];
         }
       });
+      
+      // CRITICAL: Sync verificationStatus with individual verification fields
+      // If verificationStatus is being updated, also update individual fields
+      if (updateFields.verificationStatus && typeof updateFields.verificationStatus === 'object') {
+        const verificationStatus = updateFields.verificationStatus as any;
+        
+        // Sync phoneVerified
+        if (verificationStatus.phoneVerified !== undefined) {
+          updateFields.phoneVerified = verificationStatus.phoneVerified;
+        }
+        
+        // Sync emailVerified
+        if (verificationStatus.emailVerified !== undefined) {
+          updateFields.emailVerified = verificationStatus.emailVerified;
+        }
+        
+        // Sync govtIdVerified
+        if (verificationStatus.govtIdVerified !== undefined) {
+          updateFields.govtIdVerified = verificationStatus.govtIdVerified;
+        }
+      }
+      
+      // Also sync in reverse: if individual fields are updated, update verificationStatus
+      if (!updateFields.verificationStatus) {
+        updateFields.verificationStatus = {};
+      }
+      
+      if (updateFields.phoneVerified !== undefined) {
+        (updateFields.verificationStatus as any).phoneVerified = updateFields.phoneVerified;
+      }
+      if (updateFields.emailVerified !== undefined) {
+        (updateFields.verificationStatus as any).emailVerified = updateFields.emailVerified;
+      }
+      if (updateFields.govtIdVerified !== undefined) {
+        (updateFields.verificationStatus as any).govtIdVerified = updateFields.govtIdVerified;
+      }
 
       // Build update object for Firebase (no $set/$unset needed)
       const firebaseUpdates: Record<string, unknown> = {};
