@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import admin from '../server/firebase-admin.js';
-import { adminCreate, adminRead, adminUpdate } from '../server/firebase-admin-db.js';
-import { DB_PATHS } from '../lib/firebase-db.js';
+import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
+import { getSupabaseAdminClient } from '../lib/supabase.js';
 
 interface ProviderService {
   serviceType: string;
@@ -11,16 +10,9 @@ interface ProviderService {
   active?: boolean;
 }
 
-const COLLECTION = DB_PATHS.PROVIDER_SERVICES;
+// Using Supabase service_providers table with services stored in metadata
 
-async function verifyIdTokenFromHeader(req: VercelRequest) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Missing bearer token');
-  }
-  const token = authHeader.replace('Bearer ', '').trim();
-  return admin.auth().verifyIdToken(token);
-}
+// verifyIdTokenFromHeader is now imported from server/supabase-auth.js
 
 function devFallbackProviderId(req: VercelRequest): string | null {
   const isDev = process.env.NODE_ENV === 'development';
@@ -60,23 +52,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET') {
+      const supabase = getSupabaseAdminClient();
+      
       if (scope === 'mine') {
         if (!uid) return res.status(401).json({ error: 'Not authenticated' });
-        const data = await adminRead<Record<string, ProviderService>>(COLLECTION, uid);
-        const list = data ? Object.entries(data).map(([serviceType, payload]) => ({ serviceType, ...payload })) : [];
+        
+        const { data: provider, error } = await supabase
+          .from('service_providers')
+          .select('*')
+          .eq('id', uid)
+          .single();
+        
+        if (error || !provider) {
+          return res.status(200).json([]);
+        }
+        
+        const services = (provider.metadata?.services as Record<string, ProviderService>) || {};
+        const list = Object.entries(services).map(([serviceType, payload]) => ({ serviceType, ...payload }));
         return res.status(200).json(list);
       }
 
       // public: return all providers and their services
-      const all = await adminRead<Record<string, Record<string, ProviderService>>>(COLLECTION);
-      if (!all) return res.status(200).json([]);
-      const result = Object.entries(all).flatMap(([providerId, services]) =>
-        Object.entries(services || {}).map(([serviceType, payload]) => ({
-          providerId,
+      const { data: allProviders, error } = await supabase
+        .from('service_providers')
+        .select('id, metadata');
+      
+      if (error || !allProviders) {
+        return res.status(200).json([]);
+      }
+      
+      const result = allProviders.flatMap((provider) => {
+        const services = (provider.metadata?.services as Record<string, ProviderService>) || {};
+        return Object.entries(services).map(([serviceType, payload]) => ({
+          providerId: provider.id,
           serviceType,
           ...payload,
-        }))
-      );
+        }));
+      });
       return res.status(200).json(result);
     }
 
@@ -95,12 +107,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         etaMinutes: etaMinutes !== undefined ? Number(etaMinutes) : undefined,
         active,
       };
-      // Upsert by serviceType under provider node
-      await adminUpdate<Record<string, ProviderService>>(COLLECTION, uid, {
+      
+      const supabase = getSupabaseAdminClient();
+      
+      // Get existing provider to merge services
+      const { data: existing, error: fetchError } = await supabase
+        .from('service_providers')
+        .select('metadata')
+        .eq('id', uid)
+        .single();
+      
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw new Error(`Failed to fetch provider: ${fetchError.message}`);
+      }
+      
+      const currentMetadata = existing?.metadata || {};
+      const currentServices = (currentMetadata.services as Record<string, ProviderService>) || {};
+      const updatedServices = {
+        ...currentServices,
         [serviceType]: payload,
-      });
-      const updated = await adminRead<Record<string, ProviderService>>(COLLECTION, uid);
-      const list = updated ? Object.entries(updated).map(([st, val]) => ({ serviceType: st, ...val })) : [];
+      };
+      
+      // Update provider with new services in metadata
+      const { error: updateError } = await supabase
+        .from('service_providers')
+        .update({
+          metadata: {
+            ...currentMetadata,
+            services: updatedServices,
+          },
+        })
+        .eq('id', uid);
+      
+      if (updateError) {
+        throw new Error(`Failed to update provider services: ${updateError.message}`);
+      }
+      
+      // Return updated list
+      const list = Object.entries(updatedServices).map(([st, val]) => ({ serviceType: st, ...val }));
       return res.status(200).json(list);
     }
 

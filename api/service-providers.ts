@@ -1,19 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import admin from '../server/firebase-admin.js';
-import { adminCreate, adminRead, adminReadAll, adminUpdate } from '../server/firebase-admin-db.js';
-import { DB_PATHS } from '../lib/firebase-db.js';
+import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
+import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
+import { supabaseUserService } from '../services/supabase-user-service.js';
+import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
 
-interface ServiceProviderPayload {
-  name: string;
-  email: string;
-  phone: string;
-  city: string;
-  workshops?: string[];
-  skills?: string[];
-  availability?: string;
-}
-
-const COLLECTION = DB_PATHS.SERVICE_PROVIDERS;
+// ServiceProviderPayload is now imported from the service file
 
 async function verifyIdTokenFromHeader(req: VercelRequest) {
   const authHeader = req.headers.authorization;
@@ -33,16 +24,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       if (scope === 'all') {
-        const all = await adminReadAll<Record<string, ServiceProviderPayload>>(COLLECTION);
-        const list = all ? Object.entries(all).map(([id, rec]) => ({ id, ...rec })) : [];
-        return res.status(200).json(list);
+        const all = await supabaseServiceProviderService.findAll();
+        return res.status(200).json(all);
       }
 
-      const provider = await adminRead<ServiceProviderPayload & { id?: string }>(COLLECTION, uid);
+      const provider = await supabaseServiceProviderService.findById(uid);
       if (!provider) {
         return res.status(404).json({ error: 'Service provider profile not found' });
       }
-      return res.status(200).json({ ...provider, uid });
+      return res.status(200).json({ ...provider, uid: provider.id });
     }
 
     if (req.method === 'POST') {
@@ -67,14 +57,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(403).json({ error: 'Email mismatch with authenticated user' });
       }
 
-      await adminCreate<ServiceProviderPayload>(COLLECTION, payload, uid);
+      await supabaseServiceProviderService.create({ ...payload, id: uid });
 
-      // Also sync into admin users collection so the provider shows up in admin panel
-      const emailKey = payload.email.replace(/[.#$[\]]/g, '_');
-      const existingUser = await adminRead<any>(DB_PATHS.USERS, emailKey);
+      // Also sync into users collection so the provider shows up in admin panel
+      const existingUser = await supabaseUserService.findByEmail(payload.email);
       if (!existingUser) {
-        const now = new Date().toISOString();
-        await adminCreate(DB_PATHS.USERS, {
+        await supabaseUserService.create({
           name: payload.name,
           email: payload.email,
           mobile: payload.phone,
@@ -83,16 +71,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           status: 'active',
           authProvider: 'email',
           firebaseUid: uid,
-          createdAt: now,
-          updatedAt: now,
-        }, emailKey);
+          createdAt: new Date().toISOString(),
+        });
       }
 
       return res.status(201).json({ uid, ...payload });
     }
 
     if (req.method === 'PATCH') {
-      const existing = await adminRead<ServiceProviderPayload>(COLLECTION, uid);
+      const existing = await supabaseServiceProviderService.findById(uid);
       if (!existing) {
         return res.status(404).json({ error: 'Service provider profile not found' });
       }
@@ -107,9 +94,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.phone !== undefined) updates.phone = body.phone;
       if (body.city !== undefined) updates.city = body.city;
 
-      await adminUpdate<ServiceProviderPayload>(COLLECTION, uid, updates);
-      const updated = await adminRead<ServiceProviderPayload>(COLLECTION, uid);
-      return res.status(200).json({ ...updated, uid });
+      await supabaseServiceProviderService.update(uid, updates);
+      const updated = await supabaseServiceProviderService.findById(uid);
+      return res.status(200).json({ ...(updated || existing), uid: updated?.id || uid });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

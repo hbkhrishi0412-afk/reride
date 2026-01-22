@@ -135,16 +135,37 @@ export const firebaseVehicleService = {
     }
   },
 
-  // Find vehicles by status
-  async findByStatus(status: 'published' | 'unpublished' | 'sold'): Promise<Vehicle[]> {
+  // Find vehicles by status (options parameter for compatibility, but Firebase doesn't support DB-level sorting/pagination)
+  async findByStatus(
+    status: 'published' | 'unpublished' | 'sold',
+    options?: { orderBy?: string; orderDirection?: 'asc' | 'desc'; limit?: number; offset?: number }
+  ): Promise<Vehicle[]> {
     // Use Admin SDK in server context, Client SDK elsewhere
+    let vehicles: Vehicle[];
     if (isServerContext) {
-      const vehicles = await adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'status', status);
-      return convertSnapshotToVehicles(adminSnapshotToArray(vehicles));
+      const vehicleData = await adminQueryByField<Vehicle>(DB_PATHS.VEHICLES, 'status', status);
+      vehicles = convertSnapshotToVehicles(adminSnapshotToArray(vehicleData));
     } else {
-      const vehicles = await queryByField<Vehicle>(DB_PATHS.VEHICLES, 'status', status);
-      return convertSnapshotToVehicles(snapshotToArray(vehicles));
+      const vehicleData = await queryByField<Vehicle>(DB_PATHS.VEHICLES, 'status', status);
+      vehicles = convertSnapshotToVehicles(snapshotToArray(vehicleData));
     }
+    
+    // Firebase doesn't support database-level sorting, so sort in-memory
+    if (options?.orderBy === 'created_at' || options?.orderBy === 'createdAt') {
+      vehicles = vehicles.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return options.orderDirection === 'asc' ? aTime - bTime : bTime - aTime;
+      });
+    }
+    
+    // Apply pagination in-memory (Firebase doesn't support offset/limit in queries)
+    if (options?.limit) {
+      const startIndex = options.offset || 0;
+      vehicles = vehicles.slice(startIndex, startIndex + options.limit);
+    }
+    
+    return vehicles;
   },
 
   // Find featured vehicles

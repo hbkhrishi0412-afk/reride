@@ -1,6 +1,6 @@
-// api/login.ts - Firebase ID Token Verification Endpoint
+// api/login.ts - Supabase JWT Token Verification Endpoint
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import admin from '../server/firebase-admin.js';
+import { verifySupabaseToken } from '../server/supabase-auth.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
@@ -15,12 +15,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Token is required' });
     }
 
-    // Verify Firebase ID token
-    const decoded = await admin.auth().verifyIdToken(token);
+    // Verify Supabase JWT token
+    const decoded = await verifySupabaseToken(`Bearer ${token}`);
 
     return res.status(200).json({ uid: decoded.uid });
   } catch (err) {
-    console.error('Firebase ID token verification error:', err);
+    console.error('Supabase JWT token verification error:', err);
     return res.status(401).json({ error: 'Unauthorized' });
   }
 }

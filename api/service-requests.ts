@@ -1,31 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import admin from '../server/firebase-admin.js';
-import { adminCreate, adminRead, adminUpdate, adminQueryByField } from '../server/firebase-admin-db.js';
-import { DB_PATHS } from '../lib/firebase-db.js';
+import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
+import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
+import type { ServiceRequestPayload } from '../services/supabase-service-request-service.js';
 
-interface ServiceRequestPayload {
-  providerId?: string | null;
-  candidateProviderIds?: string[];
-  title: string;
-  serviceType?: string;
-  customerName?: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  vehicle?: string;
-  city?: string;
-  addressLine?: string;
-  pincode?: string;
-  status?: 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
-  scheduledAt?: string;
-  notes?: string;
-  carDetails?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  claimedAt?: string;
-  completedAt?: string;
-}
-
-const COLLECTION = DB_PATHS.SERVICE_REQUESTS;
+// ServiceRequestPayload is now imported from the service file
 
 async function verifyIdTokenFromHeader(req: VercelRequest) {
   const authHeader = req.headers.authorization;
@@ -44,11 +22,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       if (scope === 'open') {
-        const records = await adminQueryByField<ServiceRequestPayload>(COLLECTION, 'status', 'open');
+        const records = await supabaseServiceRequestService.findByStatus('open');
         const cityFilter = (req.query.city as string) || '';
         const serviceTypeFilter = (req.query.serviceType as string) || '';
-        const list = Object.entries(records).map(([id, rec]) => ({ id, ...rec }));
-        const filtered = list.filter((item) => {
+        const filtered = records.filter((item) => {
           const cityMatches = cityFilter ? item.city?.toLowerCase() === cityFilter.toLowerCase() : true;
           const serviceMatches = serviceTypeFilter ? item.serviceType === serviceTypeFilter : true;
           const candidateOk =
@@ -61,15 +38,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (scope === 'all') {
-        const all = await adminRead<Record<string, ServiceRequestPayload>>(COLLECTION);
-        const list = all
-          ? Object.entries(all).map(([id, rec]) => ({ id, ...rec }))
-          : [];
-        return res.status(200).json(list);
+        const all = await supabaseServiceRequestService.findAll();
+        return res.status(200).json(all);
       }
 
-      const records = await adminQueryByField<ServiceRequestPayload>(COLLECTION, 'providerId', providerId);
-      return res.status(200).json(Object.entries(records).map(([id, rec]) => ({ id, ...rec })));
+      const records = await supabaseServiceRequestService.findByProviderId(providerId);
+      return res.status(200).json(records);
     }
 
     if (req.method === 'POST') {
@@ -96,8 +70,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         carDetails: body.carDetails || '',
       };
 
-      const id = await adminCreate<ServiceRequestPayload>(COLLECTION, payload);
-      return res.status(201).json({ id, ...payload });
+      const created = await supabaseServiceRequestService.create(payload);
+      return res.status(201).json(created);
     }
 
     if (req.method === 'PATCH') {
@@ -108,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!id) {
         return res.status(400).json({ error: 'Missing request id' });
       }
-      const existing = await adminRead<ServiceRequestPayload>(COLLECTION, id);
+      const existing = await supabaseServiceRequestService.findById(id);
       if (!existing) {
         return res.status(404).json({ error: 'Request not found' });
       }
@@ -124,22 +98,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!candidateOk) {
           return res.status(403).json({ error: 'Not allowed to claim this request' });
         }
-        await adminUpdate<ServiceRequestPayload>(COLLECTION, id, {
+        await supabaseServiceRequestService.update(id, {
           providerId,
           status: 'accepted',
           claimedAt: new Date().toISOString(),
         });
-        const updatedClaim = await adminRead<ServiceRequestPayload>(COLLECTION, id);
-        return res.status(200).json({ id, ...(updatedClaim || {}) });
+        const updatedClaim = await supabaseServiceRequestService.findById(id);
+        return res.status(200).json(updatedClaim || { id, ...existing });
       }
 
       if (existing.providerId !== providerId) {
         return res.status(403).json({ error: 'Not allowed to update this request' });
       }
 
-      await adminUpdate<ServiceRequestPayload>(COLLECTION, id, updates);
-      const updated = await adminRead<ServiceRequestPayload>(COLLECTION, id);
-      return res.status(200).json({ id, ...(updated || {}) });
+      await supabaseServiceRequestService.update(id, updates);
+      const updated = await supabaseServiceRequestService.findById(id);
+      return res.status(200).json(updated || { id, ...existing });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

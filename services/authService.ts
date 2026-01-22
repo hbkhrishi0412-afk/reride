@@ -1,222 +1,167 @@
-import { 
-  signInWithPopup, 
-  GoogleAuthProvider,
-  signInWithPhoneNumber,
-  RecaptchaVerifier,
-  ConfirmationResult
-} from 'firebase/auth';
-import { auth, getFirebaseInitError } from '../lib/firebase';
+import { getSupabaseClient } from '../lib/supabase.js';
 import { User } from '../types';
 
-// Helper to get production-appropriate error message
-const getFirebaseErrorMessage = (): string => {
-  const initError = getFirebaseInitError();
-  if (initError) {
-    return initError;
-  }
-  
-  // Check if we're in production
-  const isProduction = typeof window !== 'undefined' && 
-    (window.location.hostname.includes('vercel.app') || 
-     window.location.hostname.includes('reride.co.in'));
-  
-  if (isProduction) {
-    return 'Firebase Auth is not initialized. Please configure Firebase environment variables in your Vercel project settings (Settings → Environment Variables). Add all 6 variables: VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID';
-  }
-  
-  return 'Firebase Auth is not initialized. Please check your Firebase configuration in .env.local file.';
-};
-
-// Google Sign-In
+// Google Sign-In with Supabase
 export const signInWithGoogle = async (): Promise<{ 
   success: boolean; 
   user?: any; 
-  firebaseUser?: any; 
+  firebaseUser?: any; // Keep for backward compatibility
   reason?: string 
 }> => {
   try {
-    // Validate that auth is initialized
-    if (!auth) {
-      const errorMessage = getFirebaseErrorMessage();
-      console.error('❌ Firebase Auth is not initialized.');
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Google Sign-In Error:', error);
+      return {
+        success: false,
+        reason: error.message || 'Failed to sign in with Google'
+      };
+    }
+
+    // OAuth redirects, so we return the URL for redirect
+    // The actual user data will be available after redirect
+    return {
+      success: true,
+      user: { redirectUrl: data.url },
+      firebaseUser: { redirectUrl: data.url }, // Backward compatibility
+    };
+  } catch (error: any) {
+    console.error('Google Sign-In Error:', error);
+    
+    let errorMessage = 'Failed to sign in with Google';
+    if (error.message) {
+      errorMessage = error.message;
+    }
+    
+    return {
+      success: false,
+      reason: errorMessage
+    };
+  }
+};
+
+// Phone/OTP Authentication with Supabase
+// Note: Supabase phone auth requires Twilio configuration in Supabase dashboard
+
+// Send OTP to phone number
+export const sendOTP = async (phoneNumber: string): Promise<{
+  success: boolean;
+  confirmationResult?: any; // Keep for backward compatibility
+  reason?: string;
+}> => {
+  try {
+    const supabase = getSupabaseClient();
+    
+    // Format phone number (must include country code, e.g., +91 for India)
+    const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber}`;
+    
+    const { data, error } = await supabase.auth.signInWithOtp({
+      phone: formattedNumber,
+    });
+
+    if (error) {
+      console.error('Send OTP Error:', error);
+      
+      let errorMessage = 'Failed to send OTP';
+      if (error.message.includes('invalid')) {
+        errorMessage = 'Invalid phone number format. Please enter a valid phone number with country code.';
+      } else if (error.message.includes('too many')) {
+        errorMessage = 'Too many requests. Please wait a moment and try again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       return {
         success: false,
         reason: errorMessage
       };
     }
 
-    const provider = new GoogleAuthProvider();
-    provider.addScope('profile');
-    provider.addScope('email');
-    
-    const result = await signInWithPopup(auth, provider);
-    const firebaseUser = result.user;
-    
-    // Validate that we got a user
-    if (!firebaseUser) {
-      return {
-        success: false,
-        reason: 'No user returned from Google Sign-In'
-      };
+    // Store phone number for verification
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('supabase_phone_auth', formattedNumber);
     }
-    
-    // Extract user information
-    const userData = {
-      email: firebaseUser.email || '',
-      name: firebaseUser.displayName || '',
-      avatarUrl: firebaseUser.photoURL || '',
-      uid: firebaseUser.uid,
-      phoneNumber: firebaseUser.phoneNumber || '',
-      emailVerified: firebaseUser.emailVerified
-    };
     
     return {
       success: true,
-      user: userData,
-      firebaseUser: firebaseUser
-    };
-  } catch (error: any) {
-    console.error('Google Sign-In Error:', error);
-    
-    // Provide more specific error messages
-    let errorMessage = 'Failed to sign in with Google';
-    if (error.code === 'auth/popup-closed-by-user') {
-      errorMessage = 'Sign-in popup was closed. Please try again.';
-    } else if (error.code === 'auth/popup-blocked') {
-      errorMessage = 'Popup was blocked by your browser. Please allow popups and try again.';
-    } else if (error.code === 'auth/network-request-failed') {
-      errorMessage = 'Network error. Please check your internet connection and try again.';
-    } else if (error.code === 'auth/api-key-not-valid') {
-      const isProduction = typeof window !== 'undefined' && 
-        (window.location.hostname.includes('vercel.app') || 
-         window.location.hostname.includes('reride.co.in'));
-      errorMessage = isProduction 
-        ? 'Firebase configuration is invalid. Please verify your Firebase environment variables in Vercel project settings.'
-        : 'Firebase configuration is invalid. Please check your .env.local file.';
-    } else if (error.code === 'auth/unauthorized-domain') {
-      // This error occurs when the domain is not authorized in Firebase Console
-      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
-      errorMessage = `Domain "${currentDomain}" is not authorized in Firebase. Please add this domain to Firebase Console → Authentication → Settings → Authorized domains.`;
-    } else if (error.message) {
-      errorMessage = error.message;
-    }
-    
-    return {
-      success: false,
-      reason: errorMessage
-    };
-  }
-};
-
-// Initialize reCAPTCHA for phone authentication
-let recaptchaVerifier: RecaptchaVerifier | null = null;
-
-export const initializeRecaptcha = (containerId: string = 'recaptcha-container'): RecaptchaVerifier => {
-  if (!auth) {
-    throw new Error(getFirebaseErrorMessage());
-  }
-  
-  if (recaptchaVerifier) {
-    recaptchaVerifier.clear();
-  }
-  
-  recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
-    size: 'invisible',
-    callback: () => {
-      // reCAPTCHA solved - will proceed with phone auth
-      console.log('reCAPTCHA verified');
-    },
-    'expired-callback': () => {
-      console.log('reCAPTCHA expired');
-    }
-  });
-  
-  return recaptchaVerifier;
-};
-
-// Send OTP to phone number
-export const sendOTP = async (phoneNumber: string): Promise<{
-  success: boolean;
-  confirmationResult?: ConfirmationResult;
-  reason?: string;
-}> => {
-  try {
-    if (!auth) {
-      return {
-        success: false,
-        reason: getFirebaseErrorMessage()
-      };
-    }
-    
-    // Format phone number (must include country code, e.g., +91 for India)
-    const formattedNumber = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber}`;
-    
-    if (!recaptchaVerifier) {
-      initializeRecaptcha();
-    }
-    
-    if (!recaptchaVerifier) {
-      return {
-        success: false,
-        reason: 'Failed to initialize reCAPTCHA. Please try again.'
-      };
-    }
-    
-    const confirmationResult = await signInWithPhoneNumber(auth, formattedNumber, recaptchaVerifier);
-    
-    return {
-      success: true,
-      confirmationResult
+      confirmationResult: { phone: formattedNumber } // Backward compatibility
     };
   } catch (error: any) {
     console.error('Send OTP Error:', error);
-    
-    // Provide more specific error messages
-    let errorMessage = 'Failed to send OTP';
-    if (error.code === 'auth/unauthorized-domain') {
-      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
-      errorMessage = `Domain "${currentDomain}" is not authorized in Firebase. Please add this domain to Firebase Console → Authentication → Settings → Authorized domains.`;
-    } else if (error.code === 'auth/invalid-phone-number') {
-      errorMessage = 'Invalid phone number format. Please enter a valid phone number with country code.';
-    } else if (error.code === 'auth/too-many-requests') {
-      errorMessage = 'Too many requests. Please wait a moment and try again.';
-    } else if (error.message) {
-      errorMessage = error.message;
-    }
-    
     return {
       success: false,
-      reason: errorMessage
+      reason: error.message || 'Failed to send OTP'
     };
   }
 };
 
 // Verify OTP
 export const verifyOTP = async (
-  confirmationResult: ConfirmationResult, 
+  confirmationResult: any, // Can be phone number or confirmation result
   otp: string
 ): Promise<{
   success: boolean;
   user?: any;
-  firebaseUser?: any;
+  firebaseUser?: any; // Keep for backward compatibility
   reason?: string;
 }> => {
   try {
-    const result = await confirmationResult.confirm(otp);
-    const firebaseUser = result.user;
+    const supabase = getSupabaseClient();
+    
+    // Get phone number from confirmationResult or sessionStorage
+    const phone = confirmationResult?.phone || 
+                 (typeof window !== 'undefined' ? sessionStorage.getItem('supabase_phone_auth') : null);
+    
+    if (!phone) {
+      return {
+        success: false,
+        reason: 'Phone number not found. Please request OTP again.'
+      };
+    }
+    
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone,
+      token: otp,
+      type: 'sms',
+    });
+
+    if (error) {
+      console.error('Verify OTP Error:', error);
+      return {
+        success: false,
+        reason: error.message || 'Invalid OTP'
+      };
+    }
+
+    // Clear stored phone number
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('supabase_phone_auth');
+    }
     
     const userData = {
-      phoneNumber: firebaseUser.phoneNumber || '',
-      uid: firebaseUser.uid,
-      email: firebaseUser.email || '',
-      name: firebaseUser.displayName || '',
-      avatarUrl: firebaseUser.photoURL || ''
+      phoneNumber: data.user?.phone || phone,
+      uid: data.user?.id || '',
+      email: data.user?.email || '',
+      name: data.user?.user_metadata?.name || '',
+      avatarUrl: data.user?.user_metadata?.avatar_url || ''
     };
     
     return {
       success: true,
       user: userData,
-      firebaseUser: firebaseUser
+      firebaseUser: data.user // Backward compatibility
     };
   } catch (error: any) {
     console.error('Verify OTP Error:', error);
@@ -227,31 +172,41 @@ export const verifyOTP = async (
   }
 };
 
-// Clean up reCAPTCHA
-export const cleanupRecaptcha = () => {
-  if (recaptchaVerifier) {
-    recaptchaVerifier.clear();
-    recaptchaVerifier = null;
-  }
+// Initialize reCAPTCHA (no-op for Supabase, kept for backward compatibility)
+export const initializeRecaptcha = (containerId: string = 'recaptcha-container'): any => {
+  console.log('reCAPTCHA initialization not needed for Supabase Auth');
+  return { containerId };
 };
 
-// Register or login user with backend after Firebase authentication
+// Clean up reCAPTCHA (no-op for Supabase, kept for backward compatibility)
+export const cleanupRecaptcha = () => {
+  // No cleanup needed for Supabase
+};
+
+// Register or login user with backend after Supabase authentication
 export const syncWithBackend = async (
-  firebaseUser: any,
+  supabaseUser: any, // Can be Firebase user (backward compat) or Supabase user
   role: 'customer' | 'seller',
   authProvider: 'google' | 'phone'
 ): Promise<{ success: boolean; user?: User; reason?: string }> => {
   try {
-    const response = await fetch('/api/users', {
+    // Extract user data (handles both Firebase and Supabase user formats)
+    const userId = supabaseUser.uid || supabaseUser.id;
+    const email = supabaseUser.email || supabaseUser.email;
+    const name = supabaseUser.displayName || supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User';
+    const mobile = supabaseUser.phoneNumber || supabaseUser.phone || '';
+    const avatarUrl = supabaseUser.photoURL || supabaseUser.user_metadata?.avatar_url || '';
+    
+    const response = await fetch('/api/main', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'oauth-login',
-        firebaseUid: firebaseUser.uid,
-        email: firebaseUser.email,
-        name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-        mobile: firebaseUser.phoneNumber || '',
-        avatarUrl: firebaseUser.photoURL || '',
+        firebaseUid: userId, // Keep field name for API compatibility
+        email,
+        name,
+        mobile,
+        avatarUrl,
         role,
         authProvider
       })

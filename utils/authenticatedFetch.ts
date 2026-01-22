@@ -15,6 +15,7 @@ let refreshTokenKnownInvalid = false; // Track if refresh token is known to be i
 
 /**
  * Get authentication headers with JWT token
+ * Tries Supabase session first, then falls back to custom token
  */
 export const getAuthHeaders = (): HeadersInit => {
   const headers: HeadersInit = {
@@ -22,6 +23,23 @@ export const getAuthHeaders = (): HeadersInit => {
   };
 
   try {
+    // Try to get Supabase session token first (synchronous check)
+    try {
+      const { getSupabaseClient } = require('../lib/supabase.js');
+      const supabase = getSupabaseClient();
+      // Use getSession synchronously if possible, otherwise fall back
+      // Note: Supabase getSession is async, so we'll check localStorage for cached token
+      const supabaseToken = localStorage.getItem('sb-access-token') || 
+                           localStorage.getItem('supabase.auth.token');
+      if (supabaseToken) {
+        headers['Authorization'] = `Bearer ${supabaseToken}`;
+        return headers;
+      }
+    } catch (supabaseError) {
+      // Supabase not available, fall back to custom token
+    }
+    
+    // Fallback to custom token
     const token = localStorage.getItem('reRideAccessToken');
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
