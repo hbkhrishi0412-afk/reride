@@ -3,9 +3,11 @@
  * 
  * Usage:
  *   node scripts/migrate-firebase-to-supabase.js                    # Full migration
- *   node scripts/migrate-firebase-to-supabase.js --dry-run          # Test mode (no writes)
+ *   node scripts/migrate-firebase-to-supabase.js --dry-run          # Test mode (no writes, skips storage)
+ *   node scripts/migrate-firebase-to-supabase.js --dry-run --quick   # Fast dry-run (first 10 items per collection)
  *   node scripts/migrate-firebase-to-supabase.js --storage-only      # Migrate storage files only
  *   node scripts/migrate-firebase-to-supabase.js --skip-storage     # Skip storage migration
+ *   node scripts/migrate-firebase-to-supabase.js --dry-run --include-storage  # Dry-run with storage check
  * 
  * IMPORTANT: Before running, make sure:
  *   1. Supabase tables are created (users, vehicles, conversations, etc.)
@@ -36,9 +38,19 @@ const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
 const STORAGE_ONLY = args.includes('--storage-only');
 const SKIP_STORAGE = args.includes('--skip-storage');
+const QUICK_MODE = args.includes('--quick');
+const QUICK_LIMIT = 10; // Limit items per collection in quick mode
 
 if (DRY_RUN) {
   console.log('🧪 DRY-RUN MODE: No data will be written to Supabase\n');
+  // Automatically skip storage in dry-run mode for faster execution
+  if (!STORAGE_ONLY && !args.includes('--include-storage')) {
+    console.log('💡 Storage migration skipped in dry-run mode (use --include-storage to enable)\n');
+  }
+}
+
+if (QUICK_MODE) {
+  console.log(`⚡ QUICK MODE: Only processing first ${QUICK_LIMIT} items per collection\n`);
 }
 
 // Load environment variables
@@ -103,6 +115,16 @@ function emailToKey(email) {
   return email ? email.toLowerCase().trim().replace(/[.#$[\]]/g, '_') : null;
 }
 
+// Helper to limit entries in quick mode
+function limitEntries(entries, collectionName) {
+  if (QUICK_MODE && entries.length > QUICK_LIMIT) {
+    console.log(`   Found ${entries.length} ${collectionName} (processing first ${QUICK_LIMIT} in quick mode)`);
+    return entries.slice(0, QUICK_LIMIT);
+  }
+  console.log(`   Found ${entries.length} ${collectionName}`);
+  return entries;
+}
+
 // Helper to get data from Firebase (works with both Admin SDK and Client SDK)
 async function getFirebaseData(path) {
   // Check if using Admin SDK (has .ref method)
@@ -147,6 +169,43 @@ function sanitizeForSupabase(data) {
   }
   
   return sanitized;
+}
+
+// Helper to check if error is about missing column
+function isColumnError(error) {
+  const message = error?.message || '';
+  return message.includes('column') && 
+         (message.includes('not found') || 
+          message.includes('does not exist') ||
+          message.includes('Could not find'));
+}
+
+// Helper to upsert with fallback on column errors
+async function upsertWithFallback(table, record, fallbackRecord, options = {}) {
+  try {
+    const { error } = await supabaseAdmin
+      .from(table)
+      .upsert(record, options);
+    
+    if (error) {
+      // If it's a column error and we have a fallback, try again
+      if (isColumnError(error) && fallbackRecord) {
+        console.warn(`   ⚠️  Column error detected, retrying without problematic fields...`);
+        const { error: fallbackError } = await supabaseAdmin
+          .from(table)
+          .upsert(fallbackRecord, options);
+        
+        if (fallbackError) {
+          throw fallbackError;
+        }
+        return { success: true, usedFallback: true };
+      }
+      throw error;
+    }
+    return { success: true, usedFallback: false };
+  } catch (error) {
+    throw error;
+  }
 }
 
 // Download file from URL and return as buffer
@@ -296,8 +355,7 @@ async function migrateUsers(dryRun = false) {
       console.log('   ℹ️  No users found in Firebase');
       return { migrated: 0, skipped: 0, errors: [] };
     }
-    const userEntries = Object.entries(users);
-    console.log(`   Found ${userEntries.length} users`);
+    const userEntries = limitEntries(Object.entries(users), 'users');
     
     const results = await processBatch(userEntries, 20, async ([key, userData], isDryRun) => {
       try {
@@ -430,8 +488,7 @@ async function migrateVehicles(dryRun = false) {
       console.log('   ℹ️  No vehicles found in Firebase');
       return { migrated: 0, skipped: 0, errors: [] };
     }
-    const vehicleEntries = Object.entries(vehicles);
-    console.log(`   Found ${vehicleEntries.length} vehicles`);
+    const vehicleEntries = limitEntries(Object.entries(vehicles), 'vehicles');
     
     const results = await processBatch(vehicleEntries, 30, async ([key, vehicleData], isDryRun) => {
       try {
@@ -559,8 +616,7 @@ async function migrateConversations(dryRun = false) {
       console.log('   ℹ️  No conversations found in Firebase');
       return { migrated: 0, skipped: 0, errors: [] };
     }
-    const conversationEntries = Object.entries(conversations);
-    console.log(`   Found ${conversationEntries.length} conversations`);
+    const conversationEntries = limitEntries(Object.entries(conversations), 'conversations');
     
     const results = await processBatch(conversationEntries, 30, async ([key, convData], isDryRun) => {
       try {
@@ -592,26 +648,45 @@ async function migrateConversations(dryRun = false) {
           }
         };
         
+        // Create fallback record without flagged_at (in case column doesn't exist)
+        const conversationRecordFallback = { ...conversationRecord };
+        delete conversationRecordFallback.flagged_at;
+        
         if (isDryRun) {
           console.log(`   [DRY-RUN] Would migrate conversation: ${conversationId}`);
           return true;
         }
         
-        const { error } = await supabaseAdmin
-          .from('conversations')
-          .upsert(conversationRecord, {
+        const result = await upsertWithFallback(
+          'conversations',
+          conversationRecord,
+          conversationRecordFallback,
+          {
             onConflict: 'id',
             ignoreDuplicates: false
-          });
+          }
+        );
         
-        if (error) {
-          throw error;
+        if (!result.success) {
+          throw new Error('Failed to upsert conversation');
         }
         
         return true;
       } catch (error) {
         if (!isDryRun) {
-          console.error(`   ❌ Error migrating conversation ${key}:`, error.message);
+          if (isColumnError(error)) {
+            console.error(`   ❌ Error migrating conversation ${key}: ${error.message}`);
+            console.error(`   💡 Tip: Run scripts/fix-supabase-schema-migration.sql to add missing columns`);
+          } else {
+            console.error(`   ❌ Error migrating conversation ${key}:`, error.message);
+            // Log full error details for debugging
+            if (error.details) {
+              console.error(`   Details:`, error.details);
+            }
+            if (error.hint) {
+              console.error(`   Hint:`, error.hint);
+            }
+          }
         }
         return false;
       }
@@ -636,8 +711,7 @@ async function migrateNotifications(dryRun = false) {
       console.log('   ℹ️  No notifications found in Firebase');
       return { migrated: 0, skipped: 0, errors: [] };
     }
-    const notificationEntries = Object.entries(notifications);
-    console.log(`   Found ${notificationEntries.length} notifications`);
+    const notificationEntries = limitEntries(Object.entries(notifications), 'notifications');
     
     const results = await processBatch(notificationEntries, 30, async ([key, notifData], isDryRun) => {
       try {
@@ -656,26 +730,45 @@ async function migrateNotifications(dryRun = false) {
           metadata: sanitized
         };
         
+        // Create fallback record without metadata (in case column doesn't exist)
+        const notificationRecordFallback = { ...notificationRecord };
+        delete notificationRecordFallback.metadata;
+        
         if (isDryRun) {
           console.log(`   [DRY-RUN] Would migrate notification: ${notificationId}`);
           return true;
         }
         
-        const { error } = await supabaseAdmin
-          .from('notifications')
-          .upsert(notificationRecord, {
+        const result = await upsertWithFallback(
+          'notifications',
+          notificationRecord,
+          notificationRecordFallback,
+          {
             onConflict: 'id',
             ignoreDuplicates: false
-          });
+          }
+        );
         
-        if (error) {
-          throw error;
+        if (!result.success) {
+          throw new Error('Failed to upsert notification');
         }
         
         return true;
       } catch (error) {
         if (!isDryRun) {
-          console.error(`   ❌ Error migrating notification ${key}:`, error.message);
+          if (isColumnError(error)) {
+            console.error(`   ❌ Error migrating notification ${key}: ${error.message}`);
+            console.error(`   💡 Tip: Run scripts/fix-supabase-schema-migration.sql to add missing columns`);
+          } else {
+            console.error(`   ❌ Error migrating notification ${key}:`, error.message);
+            // Log full error details for debugging
+            if (error.details) {
+              console.error(`   Details:`, error.details);
+            }
+            if (error.hint) {
+              console.error(`   Hint:`, error.hint);
+            }
+          }
         }
         return false;
       }
@@ -700,8 +793,7 @@ async function migrateNewCars(dryRun = false) {
       console.log('   ℹ️  No new cars found in Firebase');
       return { migrated: 0, skipped: 0, errors: [] };
     }
-    const newCarEntries = Object.entries(newCars);
-    console.log(`   Found ${newCarEntries.length} new cars`);
+    const newCarEntries = limitEntries(Object.entries(newCars), 'new cars');
     
     const results = await processBatch(newCarEntries, 30, async ([key, carData], isDryRun) => {
       try {
@@ -767,8 +859,7 @@ async function migratePlans(dryRun = false) {
       console.log('   ℹ️  No plans found in Firebase');
       return { migrated: 0, skipped: 0, errors: [] };
     }
-    const planEntries = Object.entries(plans);
-    console.log(`   Found ${planEntries.length} plans`);
+    const planEntries = limitEntries(Object.entries(plans), 'plans');
     
     const results = await processBatch(planEntries, 30, async ([key, planData], isDryRun) => {
       try {
@@ -831,8 +922,7 @@ async function migrateServiceProviders(dryRun = false) {
       console.log('   ℹ️  No service providers found in Firebase');
       return { migrated: 0, skipped: 0, errors: [] };
     }
-    const providerEntries = Object.entries(providers);
-    console.log(`   Found ${providerEntries.length} service providers`);
+    const providerEntries = limitEntries(Object.entries(providers), 'service providers');
     
     const results = await processBatch(providerEntries, 30, async ([key, providerData], isDryRun) => {
       try {
@@ -872,7 +962,12 @@ async function migrateServiceProviders(dryRun = false) {
         return true;
       } catch (error) {
         if (!isDryRun) {
-          console.error(`   ❌ Error migrating service provider ${key}:`, error.message);
+          if (isColumnError(error) || error.message.includes('table') || error.message.includes('does not exist')) {
+            console.error(`   ❌ Error migrating service provider ${key}: ${error.message}`);
+            console.error(`   💡 Tip: Run scripts/fix-supabase-schema-migration.sql to create missing tables`);
+          } else {
+            console.error(`   ❌ Error migrating service provider ${key}:`, error.message);
+          }
         }
         return false;
       }
@@ -897,8 +992,7 @@ async function migrateServiceRequests(dryRun = false) {
       console.log('   ℹ️  No service requests found in Firebase');
       return { migrated: 0, skipped: 0, errors: [] };
     }
-    const requestEntries = Object.entries(requests);
-    console.log(`   Found ${requestEntries.length} service requests`);
+    const requestEntries = limitEntries(Object.entries(requests), 'service requests');
     
     const results = await processBatch(requestEntries, 30, async ([key, requestData], isDryRun) => {
       try {
@@ -1108,8 +1202,12 @@ async function main() {
       results.storage = await migrateStorageFiles(DRY_RUN);
     } else {
       // Migrate database tables
-      if (!SKIP_STORAGE) {
+      // Skip storage in dry-run mode unless explicitly requested
+      if (!SKIP_STORAGE && (!DRY_RUN || args.includes('--include-storage'))) {
         results.storage = await migrateStorageFiles(DRY_RUN);
+      } else if (DRY_RUN && !SKIP_STORAGE) {
+        console.log('\n📁 Skipping Storage Migration (auto-skipped in dry-run mode)\n');
+        results.storage = { migrated: 0, skipped: 0, errors: [] };
       }
       
       results.users = await migrateUsers(DRY_RUN);
