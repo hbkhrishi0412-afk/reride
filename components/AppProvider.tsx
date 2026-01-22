@@ -153,7 +153,8 @@ export const useApp = () => {
 };
 
 // Component export - Fast Refresh compatible with displayName
-export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo(({ children }) => {
+// Note: Context providers should NOT be memoized as they need to re-render when state changes
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Track which notifications have already shown browser notifications
   const shownNotificationIdsRef = useRef<Set<number>>(new Set());
   // Track vehicles currently being updated to prevent duplicate updates
@@ -463,21 +464,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
   }, []);
 
   // CRITICAL: Emergency fail-safe to prevent infinite loading
-  // If isLoading is still true after 5 seconds, force it to false
+  // Only show notification if we have no vehicles loaded at all
   useEffect(() => {
     const emergencyTimeout = setTimeout(() => {
       setIsLoading(current => {
-        if (current) {
-          console.warn('⚠️ EMERGENCY: Forcing loading to complete after 5s timeout');
-          addToast('App loaded. Some features may still be loading in the background.', 'info');
+        if (current && vehicles.length === 0) {
+          // Only show notification if we truly have no data
+          console.warn('⚠️ EMERGENCY: No vehicles loaded after 3s');
+          addToast('Loading vehicles...', 'info');
           return false;
         }
         return current;
       });
-    }, 5000);
+    }, 3000); // Reduced from 5000 to 3000 for faster response
     
     return () => clearTimeout(emergencyTimeout);
-  }, [addToast]); // Now addToast is defined, so this is safe
+  }, [addToast, vehicles.length]); // Add vehicles.length dependency
 
   const handleLogout = useCallback(async () => {
     try {
@@ -1118,7 +1120,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     const handleForceLoadingComplete = () => {
       console.warn('⚠️ Force loading complete event received, clearing loading state');
       setIsLoading(false);
-      addToast('Loading completed. Some data may still be loading in the background.', 'info');
+      // Removed toast notification - no longer needed since we show cached data immediately
     };
 
     window.addEventListener('forceLoadingComplete', handleForceLoadingComplete);
@@ -1126,138 +1128,126 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     return () => {
       window.removeEventListener('forceLoadingComplete', handleForceLoadingComplete);
     };
-  }, [addToast]);
+  }, []); // Removed addToast dependency
 
-  // Load initial data with optimized loading and timeout protection
+  // Load initial data with instant cache display and background refresh
   useEffect(() => {
     let isMounted = true;
-    let loadingTimeout: NodeJS.Timeout | null = null;
     
     const loadInitialData = async () => {
       try {
-        setIsLoading(true);
+        let hasCachedData = false;
         
-        // CRITICAL: Set a maximum timeout to prevent infinite loading
-        // If loading takes more than 5 seconds, force completion (balanced timeout for better UX)
-        loadingTimeout = setTimeout(() => {
-          if (isMounted) {
-            console.warn('⚠️ Initial data loading exceeded 5s timeout, forcing completion');
-            setIsLoading(false);
-            // Ensure we have at least empty arrays so the app can render
-            if (vehicles.length === 0) {
-              setVehicles([]);
-            }
-            if (users.length === 0) {
-              setUsers([]);
+        // STEP 1: Load cached vehicles IMMEDIATELY (synchronous, instant)
+        const cacheKey = 'reRideVehicles_prod';
+        try {
+          const cachedVehiclesJson = localStorage.getItem(cacheKey);
+          if (cachedVehiclesJson) {
+            const cachedVehicles = JSON.parse(cachedVehiclesJson);
+            if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
+              // Show cached vehicles INSTANTLY - don't wait for API
+              setVehicles(cachedVehicles);
+              setRecommendations(cachedVehicles.slice(0, 6));
+              setIsLoading(false); // Stop loading immediately
+              hasCachedData = true;
+              console.log(`✅ Instantly loaded ${cachedVehicles.length} cached vehicles`);
             }
           }
-        }, 5000); // 5 seconds max - balanced for initial render
+        } catch (cacheError) {
+          console.warn('Failed to load cached vehicles:', cacheError);
+        }
         
-        // Load critical data first (vehicles and users) with individual timeouts
-        const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T, silent: boolean = false): Promise<T> => {
+        // STEP 2: Load cached users IMMEDIATELY
+        try {
+          const cachedUsersJson = localStorage.getItem('reRideUsers_prod');
+          if (cachedUsersJson) {
+            const cachedUsers = JSON.parse(cachedUsersJson);
+            if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
+              setUsers(cachedUsers);
+            }
+          }
+        } catch (cacheError) {
+          console.warn('Failed to load cached users:', cacheError);
+        }
+        
+        // STEP 3: Fetch fresh data from API in background (non-blocking)
+        // This updates the cache and UI silently
+        const isAdmin = currentUser?.role === 'admin';
+        
+        // Use shorter timeout for faster failure handling
+        const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
           return Promise.race([
             promise,
             new Promise<T>((resolve) => {
-              setTimeout(() => {
-                // Only log timeout warnings in development mode to reduce console noise
-                if (!silent && process.env.NODE_ENV === 'development') {
-                  console.warn(`Request timeout after ${timeoutMs}ms, using fallback`);
-                }
-                resolve(fallback);
-              }, timeoutMs);
+              setTimeout(() => resolve(fallback), timeoutMs);
             })
           ]);
         };
         
-        // Load critical data with shorter timeouts to prevent hanging
-        // Use Promise.allSettled to ensure we always get results, even if some fail
-        // For admin users, load all vehicles (including unpublished/sold)
-        const isAdmin = currentUser?.role === 'admin';
-        const [vehiclesResult, usersResult] = await Promise.allSettled([
+        // Load vehicles and users in parallel (no delays)
+        Promise.all([
           loadWithTimeout(
-            dataService.getVehicles(isAdmin).catch(err => {
-              if (process.env.NODE_ENV === 'development') {
-                console.warn('Failed to load vehicles, using empty array:', err);
-              }
-              return [];
-            }),
-            8000, // 8 second timeout for vehicles
-            [],
-            true
+            dataService.getVehicles(isAdmin).catch(() => []),
+            4000, // Reduced from 8000 to 4000 for faster response
+            []
           ),
           loadWithTimeout(
-            dataService.getUsers().catch(err => {
-              if (process.env.NODE_ENV === 'development') {
-                console.warn('Failed to load users, using empty array:', err);
-              }
-              return [];
-            }),
-            8000, // 8 second timeout for users
-            [],
-            true
+            dataService.getUsers().catch(() => []),
+            4000, // Reduced from 8000 to 4000
+            []
           )
-        ]);
-        
-        if (!isMounted) return;
-        
-        // Extract results from Promise.allSettled
-        const vehiclesData = vehiclesResult.status === 'fulfilled' ? vehiclesResult.value : [];
-        const usersData = usersResult.status === 'fulfilled' ? usersResult.value : [];
-        
-        // CRITICAL: Always set vehicles and users, even if empty, so the app can render
-        setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
-        setUsers(Array.isArray(usersData) ? usersData : []);
-        
-        // Set some recommendations (first 6 vehicles) - only if we have vehicles
-        if (Array.isArray(vehiclesData) && vehiclesData.length > 0) {
-          setRecommendations(vehiclesData.slice(0, 6));
-        } else {
-          // Ensure recommendations is always an array
-          setRecommendations([]);
-        }
-        
-        // Load FAQs from MongoDB (non-blocking, with delay to prevent rate limiting)
-        (async () => {
-          try {
-            // Delay before loading FAQs
-            await new Promise(resolve => setTimeout(resolve, 800));
-            
-            const { fetchFaqsFromMongoDB } = await import('../services/faqService');
-            const faqsData = await fetchFaqsFromMongoDB();
-            
-            if (isMounted) {
-              setFaqItems(faqsData);
-            }
-          } catch (faqError) {
-            console.warn('⚠️ Failed to load FAQs from MongoDB, using localStorage fallback:', faqError);
-            if (isMounted) {
-              const localFaqs = getFaqs();
-              if (localFaqs) {
-                setFaqItems(localFaqs);
-              } else {
-                setFaqItems([]);
-              }
-            }
+        ]).then(([vehiclesData, usersData]) => {
+          if (!isMounted) return;
+          
+          // Only update if we got fresh data
+          if (Array.isArray(vehiclesData) && vehiclesData.length > 0) {
+            setVehicles(vehiclesData);
+            setRecommendations(vehiclesData.slice(0, 6));
+            console.log(`✅ Updated with ${vehiclesData.length} fresh vehicles from API`);
           }
-        })();
+          
+          if (Array.isArray(usersData) && usersData.length > 0) {
+            setUsers(usersData);
+          }
+          
+          // If no cached data was available, stop loading now
+          if (!hasCachedData) {
+            setIsLoading(false);
+          }
+        }).catch(error => {
+          console.warn('Background data refresh failed (using cache):', error);
+          // If no cached data was available, stop loading even on error
+          if (!hasCachedData && isMounted) {
+            setIsLoading(false);
+          }
+        });
         
-        // Load non-critical data in background sequentially to prevent rate limiting
-        // dataService now uses request queue internally
-        (async () => {
-          try {
-            // Delay before loading background data
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Load vehicle data (uses queue internally)
-            const vehicleDataData = await dataService.getVehicleData().catch(() => null);
-            if (isMounted && vehicleDataData) {
-              setVehicleData(vehicleDataData);
+        // STEP 4: Load non-critical data in parallel (no sequential delays)
+        Promise.all([
+          // FAQs
+          (async () => {
+            try {
+              const { fetchFaqsFromMongoDB } = await import('../services/faqService');
+              const faqsData = await fetchFaqsFromMongoDB().catch(() => []);
+              if (isMounted) setFaqItems(faqsData);
+            } catch (error) {
+              const localFaqs = getFaqs();
+              if (isMounted) setFaqItems(localFaqs || []);
             }
-            
-            // Delay before next request
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            // Load conversations
+          })(),
+          
+          // Vehicle data
+          (async () => {
+            try {
+              const vehicleDataData = await dataService.getVehicleData().catch(() => null);
+              if (isMounted && vehicleDataData) setVehicleData(vehicleDataData);
+            } catch (error) {
+              console.warn('Failed to load vehicle data:', error);
+            }
+          })(),
+          
+          // Conversations
+          (async () => {
             try {
               let userEmail: string | undefined;
               let userRole: string | undefined;
@@ -1270,33 +1260,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 }
               } catch {}
               
-              const { getConversationsFromMongoDB } = await import('../services/conversationService');
-              const result = userRole === 'seller' 
-                ? await getConversationsFromMongoDB(undefined, userEmail)
-                : userRole === 'customer'
-                ? await getConversationsFromMongoDB(userEmail)
-                : await getConversationsFromMongoDB();
-              
-              if (isMounted) {
-                if (result.success && result.data) {
-                  setConversations(result.data);
-                } else {
-                  const localConversations = getConversations();
-                  setConversations(localConversations || []);
+              if (userEmail || userRole) {
+                const { getConversationsFromMongoDB } = await import('../services/conversationService');
+                const result = userRole === 'seller' 
+                  ? await getConversationsFromMongoDB(undefined, userEmail)
+                  : userRole === 'customer'
+                  ? await getConversationsFromMongoDB(userEmail)
+                  : await getConversationsFromMongoDB();
+                
+                if (isMounted) {
+                  if (result.success && result.data) {
+                    setConversations(result.data);
+                  } else {
+                    const localConversations = getConversations();
+                    setConversations(localConversations || []);
+                  }
                 }
               }
             } catch (error) {
-              console.warn('Failed to load conversations from MongoDB, using localStorage:', error);
+              console.warn('Failed to load conversations:', error);
               if (isMounted) {
                 const localConversations = getConversations();
                 setConversations(localConversations || []);
               }
             }
-            
-            // Delay before next request
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            // Load notifications
+          })(),
+          
+          // Notifications
+          (async () => {
             try {
               let userEmail: string | undefined;
               try {
@@ -1315,12 +1306,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                   try {
                     localStorage.setItem('reRideNotifications', JSON.stringify(result.data));
                   } catch (error) {
-                    console.warn('Failed to save notifications to localStorage:', error);
+                    console.warn('Failed to save notifications:', error);
                   }
                 }
               }
             } catch (error) {
-              console.warn('Failed to load notifications from MongoDB, using localStorage:', error);
+              console.warn('Failed to load notifications:', error);
               if (isMounted) {
                 try {
                   const notificationsJson = localStorage.getItem('reRideNotifications');
@@ -1330,37 +1321,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
                 }
               }
             }
-          } catch (error) {
-            console.warn('Background data loading failed:', error);
-          }
-        })();
+          })()
+        ]).catch(error => {
+          console.warn('Background data loading failed:', error);
+        });
         
       } catch (error) {
         console.error('AppProvider: Error loading initial data:', error);
-        // CRITICAL: Ensure we have at least empty arrays so the app can render
         if (isMounted) {
-          // Ensure vehicles and users are always arrays
+          // Ensure we have at least empty arrays
           setVehicles(prev => Array.isArray(prev) ? prev : []);
           setUsers(prev => Array.isArray(prev) ? prev : []);
           setRecommendations([]);
           setIsLoading(false);
-          // Only show warning toast in development to avoid user confusion
           if (process.env.NODE_ENV === 'development') {
             addToast('Some data failed to load. The app will continue with available data.', 'warning');
           }
-        }
-      } finally {
-        // CRITICAL: Always clear loading state, even on error
-        if (loadingTimeout) {
-          clearTimeout(loadingTimeout);
-        }
-        if (isMounted) {
-          // Force loading to false after a short delay to ensure UI updates
-          setTimeout(() => {
-            if (isMounted) {
-              setIsLoading(false);
-            }
-          }, 100);
         }
       }
     };
@@ -1369,11 +1345,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
     
     return () => {
       isMounted = false;
-      if (loadingTimeout) {
-        clearTimeout(loadingTimeout);
-      }
     };
-  }, [addToast]);
+  }, [addToast, currentUser?.role]);
 
   // Refresh server-sourced data whenever the authenticated user changes
   useEffect(() => {
@@ -3564,7 +3537,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = React.memo((
       {children}
     </AppContext.Provider>
   );
-});
+};
 
 // Add displayName for better debugging and Fast Refresh compatibility
 AppProvider.displayName = 'AppProvider';

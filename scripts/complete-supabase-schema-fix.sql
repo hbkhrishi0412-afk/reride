@@ -143,14 +143,58 @@ CREATE INDEX IF NOT EXISTS idx_new_cars_model_name ON new_cars(model_name);
 CREATE INDEX IF NOT EXISTS idx_new_cars_model_year ON new_cars(model_year);
 
 -- ============================================================================
--- 7. VEHICLES TABLE - Add metadata column if missing
+-- 7. CONVERSATIONS TABLE - Ensure id column is TEXT (not UUID)
+-- ============================================================================
+-- Check if conversations table exists and fix id column type if needed
+DO $$
+BEGIN
+    -- If conversations table exists but id is UUID, we need to handle it
+    -- For now, we'll just ensure the column exists as TEXT
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'conversations') THEN
+        -- Check if id column exists and is not TEXT
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'conversations' 
+            AND column_name = 'id' 
+            AND data_type != 'text'
+        ) THEN
+            -- Note: Changing column type requires dropping and recreating, which is complex
+            -- Instead, we'll just log a warning
+            RAISE NOTICE '⚠️  conversations.id column is not TEXT type. Migration may fail.';
+        END IF;
+    END IF;
+END $$;
+
+-- ============================================================================
+-- 8. NOTIFICATIONS TABLE - Ensure title column allows NULL or has default
+-- ============================================================================
+-- Make title nullable or add default if it's required
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'notifications') THEN
+        -- Check if title column exists and is NOT NULL
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'notifications' 
+            AND column_name = 'title' 
+            AND is_nullable = 'NO'
+        ) THEN
+            -- Make title nullable to allow migration of notifications without titles
+            ALTER TABLE notifications ALTER COLUMN title DROP NOT NULL;
+            RAISE NOTICE '✅ Made notifications.title nullable';
+        END IF;
+    END IF;
+END $$;
+
+-- ============================================================================
+-- 9. VEHICLES TABLE - Add metadata column if missing
 -- ============================================================================
 -- Add metadata column to vehicles table (required for storing additional vehicle data)
 ALTER TABLE vehicles 
 ADD COLUMN IF NOT EXISTS metadata JSONB;
 
 -- ============================================================================
--- 8. PLANS TABLE - Create if it doesn't exist
+-- 10. PLANS TABLE - Create if it doesn't exist
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS plans (
     id TEXT PRIMARY KEY,
@@ -171,7 +215,7 @@ CREATE INDEX IF NOT EXISTS idx_plans_name ON plans(name);
 CREATE INDEX IF NOT EXISTS idx_plans_price ON plans(price);
 
 -- ============================================================================
--- 9. VERIFICATION - Check that all required tables and columns exist
+-- 11. VERIFICATION - Check that all required tables and columns exist
 -- ============================================================================
 DO $$
 DECLARE
@@ -264,7 +308,7 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- 10. OPTIONAL: RLS Policies (commented out - uncomment after migration)
+-- 12. OPTIONAL: RLS Policies (commented out - uncomment after migration)
 -- ============================================================================
 -- These policies can be added after migration for production use
 

@@ -7,6 +7,7 @@
  *   node scripts/migrate-firebase-to-supabase.js --dry-run --quick   # Fast dry-run (first 10 items per collection)
  *   node scripts/migrate-firebase-to-supabase.js --storage-only      # Migrate storage files only
  *   node scripts/migrate-firebase-to-supabase.js --skip-storage     # Skip storage migration
+ *   node scripts/migrate-firebase-to-supabase.js --skip-images       # Skip image migration (faster, migrate images separately)
  *   node scripts/migrate-firebase-to-supabase.js --dry-run --include-storage  # Dry-run with storage check
  * 
  * IMPORTANT: Before running, make sure:
@@ -38,6 +39,7 @@ const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
 const STORAGE_ONLY = args.includes('--storage-only');
 const SKIP_STORAGE = args.includes('--skip-storage');
+const SKIP_IMAGES = args.includes('--skip-images'); // Skip image migration during data migration
 const QUICK_MODE = args.includes('--quick');
 const QUICK_LIMIT = 10; // Limit items per collection in quick mode
 
@@ -51,6 +53,10 @@ if (DRY_RUN) {
 
 if (QUICK_MODE) {
   console.log(`⚡ QUICK MODE: Only processing first ${QUICK_LIMIT} items per collection\n`);
+}
+
+if (SKIP_IMAGES) {
+  console.log('⚡ SKIP-IMAGES MODE: Image migration will be skipped (faster data migration)\n');
 }
 
 // Load environment variables
@@ -93,16 +99,18 @@ async function processBatch(items, concurrency, processor, dryRun = false) {
       }
     });
     
-    // Progress reporting
+    // Progress reporting (more frequent for better feedback)
     const processed = Math.min(i + concurrency, items.length);
-    if (processed % Math.max(50, Math.floor(items.length / 10)) === 0 || processed >= items.length) {
+    const reportInterval = Math.max(10, Math.floor(items.length / 20)); // Report every 5% or 10 items
+    if (processed % reportInterval === 0 || processed >= items.length) {
       const elapsed = (Date.now() - startTime) / 1000;
       if (elapsed > 0) {
         const rate = processed / elapsed;
         const remaining = items.length - processed;
         const eta = remaining / rate;
         const mode = dryRun ? '[DRY-RUN] ' : '';
-        console.log(`   ${mode}✅ Processed ${processed}/${items.length} (${rate.toFixed(1)} items/sec${remaining > 0 ? `, ETA: ${eta.toFixed(1)}s` : ''})...`);
+        const percent = ((processed / items.length) * 100).toFixed(1);
+        console.log(`   ${mode}✅ Processed ${processed}/${items.length} (${percent}%, ${rate.toFixed(1)} items/sec${remaining > 0 ? `, ETA: ${eta.toFixed(1)}s` : ''})...`);
       }
     }
   }
@@ -316,19 +324,32 @@ async function migrateStorageFiles(dryRun = false) {
         
         console.log(`   Found ${items.length} files in ${folder}/`);
         
-        for (const item of items) {
-          try {
-            const firebasePath = item.fullPath;
-            const supabaseUrl = await migrateStorageFile(firebasePath, 'files', dryRun);
-            
-            if (supabaseUrl) {
-              totalMigrated++;
-            } else {
+        // Process files in parallel batches for better performance
+        const fileBatchSize = 20; // Process 20 files at a time
+        for (let i = 0; i < items.length; i += fileBatchSize) {
+          const batch = items.slice(i, i + fileBatchSize);
+          const batchPromises = batch.map(async (item) => {
+            try {
+              const firebasePath = item.fullPath;
+              const supabaseUrl = await migrateStorageFile(firebasePath, 'files', dryRun);
+              
+              if (supabaseUrl) {
+                totalMigrated++;
+              } else {
+                totalSkipped++;
+              }
+            } catch (error) {
               totalSkipped++;
+              errors.push({ path: item.fullPath, error: error.message });
             }
-          } catch (error) {
-            totalSkipped++;
-            errors.push({ path: item.fullPath, error: error.message });
+          });
+          
+          await Promise.allSettled(batchPromises);
+          
+          // Progress update
+          if ((i + fileBatchSize) % 100 === 0 || (i + fileBatchSize) >= items.length) {
+            const processed = Math.min(i + fileBatchSize, items.length);
+            console.log(`   📤 Processed ${processed}/${items.length} files in ${folder}/...`);
           }
         }
       } catch (error) {
@@ -357,7 +378,7 @@ async function migrateUsers(dryRun = false) {
     }
     const userEntries = limitEntries(Object.entries(users), 'users');
     
-    const results = await processBatch(userEntries, 20, async ([key, userData], isDryRun) => {
+    const results = await processBatch(userEntries, 50, async ([key, userData], isDryRun) => {
       try {
         const sanitized = sanitizeForSupabase(userData);
         
@@ -370,25 +391,29 @@ async function migrateUsers(dryRun = false) {
         // Use email as primary key or keep Firebase key
         const userId = sanitized.id || key;
         
-        // Migrate avatar URL if it's a Firebase Storage URL
+        // Migrate avatar and logo URLs in parallel if they're Firebase Storage URLs
         let avatarUrl = sanitized.avatarUrl || null;
-        if (avatarUrl && avatarUrl.includes('firebasestorage') && !isDryRun) {
-          try {
-            const migratedUrl = await migrateStorageFile(`users/${userId}/avatar`, 'files', isDryRun);
-            if (migratedUrl) avatarUrl = migratedUrl;
-          } catch (e) {
-            // Keep original URL if migration fails
-          }
-        }
-        
-        // Migrate logo URL if it's a Firebase Storage URL
         let logoUrl = sanitized.logoUrl || null;
-        if (logoUrl && logoUrl.includes('firebasestorage') && !isDryRun) {
-          try {
-            const migratedUrl = await migrateStorageFile(`users/${userId}/logo`, 'files', isDryRun);
-            if (migratedUrl) logoUrl = migratedUrl;
-          } catch (e) {
-            // Keep original URL if migration fails
+        
+        if (!isDryRun && !SKIP_IMAGES) {
+          const urlPromises = [];
+          if (avatarUrl && avatarUrl.includes('firebasestorage')) {
+            urlPromises.push(
+              migrateStorageFile(`users/${userId}/avatar`, 'files', isDryRun)
+                .then(url => { if (url) avatarUrl = url; })
+                .catch(() => {}) // Keep original if migration fails
+            );
+          }
+          if (logoUrl && logoUrl.includes('firebasestorage')) {
+            urlPromises.push(
+              migrateStorageFile(`users/${userId}/logo`, 'files', isDryRun)
+                .then(url => { if (url) logoUrl = url; })
+                .catch(() => {}) // Keep original if migration fails
+            );
+          }
+          // Wait for all URL migrations to complete
+          if (urlPromises.length > 0) {
+            await Promise.allSettled(urlPromises);
           }
         }
         
@@ -490,7 +515,7 @@ async function migrateVehicles(dryRun = false) {
     }
     const vehicleEntries = limitEntries(Object.entries(vehicles), 'vehicles');
     
-    const results = await processBatch(vehicleEntries, 30, async ([key, vehicleData], isDryRun) => {
+    const results = await processBatch(vehicleEntries, 50, async ([key, vehicleData], isDryRun) => {
       try {
         const sanitized = sanitizeForSupabase(vehicleData);
         
@@ -502,28 +527,23 @@ async function migrateVehicles(dryRun = false) {
         
         const vehicleId = sanitized.id || key;
         
-        // Migrate vehicle images
+        // Migrate vehicle images (parallelized for better performance)
         let images = sanitized.images || [];
-        if (Array.isArray(images) && images.length > 0 && !isDryRun) {
-          const migratedImages = [];
-          for (let i = 0; i < images.length; i++) {
-            const imageUrl = images[i];
+        if (Array.isArray(images) && images.length > 0 && !isDryRun && !SKIP_IMAGES) {
+          // Parallelize image migration instead of sequential
+          const imagePromises = images.map(async (imageUrl, i) => {
             if (imageUrl && imageUrl.includes('firebasestorage')) {
               try {
                 const migratedUrl = await migrateStorageFile(`vehicles/${vehicleId}/image_${i}`, 'files', isDryRun);
-                if (migratedUrl) {
-                  migratedImages.push(migratedUrl);
-                } else {
-                  migratedImages.push(imageUrl); // Keep original if migration fails
-                }
+                return migratedUrl || imageUrl; // Keep original if migration fails
               } catch (e) {
-                migratedImages.push(imageUrl); // Keep original if migration fails
+                return imageUrl; // Keep original if migration fails
               }
             } else {
-              migratedImages.push(imageUrl); // Keep non-Firebase URLs as-is
+              return imageUrl; // Keep non-Firebase URLs as-is
             }
-          }
-          images = migratedImages;
+          });
+          images = await Promise.all(imagePromises);
         }
         
         const vehicleRecord = {
@@ -618,14 +638,18 @@ async function migrateConversations(dryRun = false) {
     }
     const conversationEntries = limitEntries(Object.entries(conversations), 'conversations');
     
-    const results = await processBatch(conversationEntries, 30, async ([key, convData], isDryRun) => {
+    const results = await processBatch(conversationEntries, 50, async ([key, convData], isDryRun) => {
       try {
         const sanitized = sanitizeForSupabase(convData);
         
+        // Use the key as ID (conversations table uses TEXT, not UUID)
         const conversationId = sanitized.id || key;
         
+        // Ensure ID is a string (not UUID format)
+        const conversationIdStr = String(conversationId);
+        
         const conversationRecord = {
-          id: conversationId,
+          id: conversationIdStr,
           customer_id: sanitized.customerId || null,
           seller_id: sanitized.sellerId || null,
           vehicle_id: sanitized.vehicleId || null,
@@ -713,19 +737,31 @@ async function migrateNotifications(dryRun = false) {
     }
     const notificationEntries = limitEntries(Object.entries(notifications), 'notifications');
     
-    const results = await processBatch(notificationEntries, 30, async ([key, notifData], isDryRun) => {
+    const results = await processBatch(notificationEntries, 50, async ([key, notifData], isDryRun) => {
       try {
         const sanitized = sanitizeForSupabase(notifData);
         
         const notificationId = sanitized.id || key;
         
+        // Generate title from message if title is missing (required field)
+        let title = sanitized.title;
+        if (!title) {
+          const message = sanitized.message || sanitized.body || '';
+          // Extract first part of message as title (max 50 chars)
+          title = message.length > 50 ? message.substring(0, 47) + '...' : message;
+          // If still empty, use a default
+          if (!title) {
+            title = 'Notification';
+          }
+        }
+        
         const notificationRecord = {
           id: notificationId,
           user_id: sanitized.userId || sanitized.user_id || null,
-          type: sanitized.type || null,
-          title: sanitized.title || null,
-          message: sanitized.message || sanitized.body || null,
-          read: sanitized.read || false,
+          type: sanitized.type || 'general',
+          title: title,
+          message: sanitized.message || sanitized.body || '',
+          read: sanitized.read || sanitized.isRead || false,
           created_at: sanitized.createdAt || sanitized.created_at || new Date().toISOString(),
           metadata: sanitized
         };
@@ -795,7 +831,7 @@ async function migrateNewCars(dryRun = false) {
     }
     const newCarEntries = limitEntries(Object.entries(newCars), 'new cars');
     
-    const results = await processBatch(newCarEntries, 30, async ([key, carData], isDryRun) => {
+    const results = await processBatch(newCarEntries, 50, async ([key, carData], isDryRun) => {
       try {
         const sanitized = sanitizeForSupabase(carData);
         
@@ -861,7 +897,7 @@ async function migratePlans(dryRun = false) {
     }
     const planEntries = limitEntries(Object.entries(plans), 'plans');
     
-    const results = await processBatch(planEntries, 30, async ([key, planData], isDryRun) => {
+    const results = await processBatch(planEntries, 50, async ([key, planData], isDryRun) => {
       try {
         const sanitized = sanitizeForSupabase(planData);
         
@@ -924,7 +960,7 @@ async function migrateServiceProviders(dryRun = false) {
     }
     const providerEntries = limitEntries(Object.entries(providers), 'service providers');
     
-    const results = await processBatch(providerEntries, 30, async ([key, providerData], isDryRun) => {
+    const results = await processBatch(providerEntries, 50, async ([key, providerData], isDryRun) => {
       try {
         const sanitized = sanitizeForSupabase(providerData);
         
@@ -994,7 +1030,7 @@ async function migrateServiceRequests(dryRun = false) {
     }
     const requestEntries = limitEntries(Object.entries(requests), 'service requests');
     
-    const results = await processBatch(requestEntries, 30, async ([key, requestData], isDryRun) => {
+    const results = await processBatch(requestEntries, 50, async ([key, requestData], isDryRun) => {
       try {
         const sanitized = sanitizeForSupabase(requestData);
         
