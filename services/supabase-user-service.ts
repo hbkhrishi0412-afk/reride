@@ -16,6 +16,7 @@ function supabaseRowToUser(row: any): User {
     name: row.name || '',
     email: row.email || '',
     mobile: row.mobile || '',
+    password: row.password || undefined, // Include password field
     role: (row.role || 'customer') as 'customer' | 'seller' | 'admin',
     status: (row.status || 'active') as 'active' | 'inactive',
     avatarUrl: row.avatar_url || undefined,
@@ -64,6 +65,7 @@ function userToSupabaseRow(user: Partial<User>): any {
     email: user.email?.toLowerCase().trim() || '',
     name: user.name || '',
     mobile: user.mobile || null,
+    password: user.password || null, // Include password field
     role: user.role || 'customer',
     status: user.status || 'active',
     avatar_url: user.avatarUrl || null,

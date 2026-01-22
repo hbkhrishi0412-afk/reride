@@ -45,6 +45,7 @@
     "migrate:mongodb-to-firebase": "node scripts/migrate-mongodb-to-firebase.js",
     "migrate:firebase-to-supabase": "node scripts/migrate-firebase-to-supabase.js",
     "migrate:supabase": "node scripts/migrate-firebase-to-supabase.js",
+    "migrate:verify": "node scripts/verify-migration-status.js",
     "hash-passwords": "node scripts/hash-user-passwords.js",
     "cap:sync": "npx cap sync",
     "cap:sync:android": "npx cap sync android",

@@ -63,6 +63,7 @@ CREATE TABLE users (
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   mobile TEXT,
+  password TEXT, -- Bcrypt hashed password for email/password auth. NULL for OAuth-only users.
   role TEXT DEFAULT 'customer',
   status TEXT DEFAULT 'active',
   avatar_url TEXT,
@@ -84,6 +85,11 @@ CREATE TABLE users (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   metadata JSONB
 );
+```
+
+**Note:** If you already created the users table without the password column, run this SQL to add it:
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;
 ```
 
 #### Vehicles Table

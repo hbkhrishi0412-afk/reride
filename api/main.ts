@@ -878,10 +878,27 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       
       // Check if user has a password set (might be an OAuth user)
       if (!user.password) {
-        return res.status(400).json({ 
-          success: false, 
-          reason: 'This account uses Google/Phone sign-in. Please use that method to login.' 
-        });
+        // Allow OAuth users to set a password during login
+        // Hash the provided password and update the user
+        try {
+          const hashedPassword = await hashPassword(sanitizedData.password);
+          await supabaseUserService.update(normalizedEmail, {
+            password: hashedPassword,
+            authProvider: user.authProvider === 'email' ? 'email' : user.authProvider, // Keep existing authProvider
+            updatedAt: new Date().toISOString()
+          });
+          
+          // Update the user object with the new password
+          user.password = hashedPassword;
+          
+          logInfo('✅ Password set for OAuth user during login:', normalizedEmail);
+        } catch (updateError) {
+          logError('❌ Failed to set password for OAuth user:', updateError);
+          return res.status(500).json({ 
+            success: false, 
+            reason: 'Failed to set password. Please try again or use your original sign-in method.' 
+          });
+        }
       }
       
       // Verify password using bcrypt
