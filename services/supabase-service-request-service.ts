@@ -105,7 +105,7 @@ export const supabaseServiceRequestService = {
     const row = serviceRequestToSupabaseRow({
       ...requestData,
       id,
-      createdAt: requestData.createdAt || new Date().toISOString(),
+      createdAt: (requestData.createdAt && typeof requestData.createdAt === 'string') ? requestData.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
 
