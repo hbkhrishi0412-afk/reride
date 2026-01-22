@@ -1,14 +1,14 @@
 /**
  * Image Upload Service
- * Handles uploading images to Firebase Realtime Database
- * Images are stored as base64 data URLs in the database
+ * Handles uploading images to Supabase Storage
+ * Images are stored as files in Supabase Storage buckets
  */
 
 interface UploadResult {
   success: boolean;
   url?: string;
   error?: string;
-  imageId?: string; // ID of the image in Realtime Database
+  imageId?: string; // ID/path of the image in Supabase Storage
 }
 
 interface ImageData extends Record<string, unknown> {
@@ -22,11 +22,11 @@ interface ImageData extends Record<string, unknown> {
 }
 
 /**
- * Uploads a single image file to Firebase Realtime Database
+ * Uploads a single image file to Supabase Storage
  * @param file - The image file to upload
- * @param folder - Optional folder path in database (e.g., 'vehicles', 'users')
+ * @param folder - Optional folder path in storage bucket (e.g., 'vehicles', 'users')
  * @param userEmail - Optional email of the user uploading the image (for ownership tracking)
- * @returns Promise with upload result containing the image data URL and ID
+ * @returns Promise with upload result containing the image URL and path
  */
 export const uploadImage = async (file: File, folder: string = 'vehicles', userEmail?: string): Promise<UploadResult> => {
   try {
@@ -39,8 +39,8 @@ export const uploadImage = async (file: File, folder: string = 'vehicles', userE
       };
     }
 
-    // Use Firebase Realtime Database for image storage
-    return await uploadToFirebaseRealtimeDB(file, folder, userEmail);
+    // Use Supabase Storage for image storage
+    return await uploadToSupabaseStorage(file, folder, userEmail);
   } catch (error) {
     console.error('❌ Image upload error:', error);
     return {
@@ -96,139 +96,81 @@ function getCurrentUserEmail(): string | null {
 }
 
 /**
- * Uploads image to Firebase Realtime Database
- * Converts image to base64 and stores it in the database
+ * Uploads image to Supabase Storage
+ * Stores image as a file in Supabase Storage bucket
  * @param file - The image file to upload
- * @param folder - Folder path in database (e.g., 'vehicles', 'users')
+ * @param folder - Folder path in storage bucket (e.g., 'vehicles', 'users')
  * @param userEmail - Optional email of the user uploading the image (for ownership tracking)
  */
-async function uploadToFirebaseRealtimeDB(file: File, folder: string, userEmail?: string): Promise<UploadResult> {
+async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: string): Promise<UploadResult> {
   try {
-    console.log(`📤 Uploading image to Realtime Database: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+    console.log(`📤 Uploading image to Supabase Storage: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
     
-    // CRITICAL: Ensure we have a user email for ownership tracking
-    // Try provided email first, then fallback to current user from storage
-    let finalUserEmail = userEmail;
-    if (!finalUserEmail) {
-      finalUserEmail = getCurrentUserEmail() || undefined;
-      if (finalUserEmail) {
-        console.log(`📧 Using current user email from storage: ${finalUserEmail}`);
-      }
-    }
-    
-    // If still no email, this is a critical error - rules require uploadedBy to be set
-    if (!finalUserEmail) {
-      const errorMsg = 'Cannot upload image: user email is required for ownership tracking. Please ensure you are logged in.';
-      console.error('❌', errorMsg);
-      return {
-        success: false,
-        error: errorMsg
-      };
-    }
-    
-    // CRITICAL: Ensure Firebase Auth is active before upload
-    // Firebase Realtime Database client SDK requires authentication
-    try {
-      const { auth } = await import('../lib/firebase.js');
-      if (auth) {
-        const { signInAnonymously } = await import('firebase/auth');
-        // Check if user is already authenticated
-        if (!auth.currentUser) {
-          console.log('🔐 No Firebase Auth user found, signing in anonymously...');
-          try {
-            await signInAnonymously(auth);
-            console.log('✅ Signed in anonymously for image upload');
-          } catch (authError) {
-            console.warn('⚠️ Could not sign in anonymously, proceeding anyway:', authError);
-            // Continue - rules might still work if auth is partially initialized
-          }
-        } else {
-          console.log('✅ Firebase Auth user already authenticated');
-        }
-      }
-    } catch (authImportError) {
-      console.warn('⚠️ Could not check Firebase Auth, proceeding with upload:', authImportError);
-      // Continue - might work if auth is set up differently
-    }
+    const { getSupabaseClient } = await import('../lib/supabase.js');
+    const supabase = getSupabaseClient();
     
     // Resize image to standard dimensions before uploading
     console.log('🔄 Resizing image to fit standard dimensions...');
     const resizedFile = await resizeImage(file, 1200, 800, 0.85);
     console.log(`✅ Image resized: ${(resizedFile.size / 1024).toFixed(2)} KB (original: ${(file.size / 1024).toFixed(2)} KB)`);
     
-    // Convert resized file to base64
-    const base64Data = await convertFileToBase64(resizedFile);
+    // Generate unique file name
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 9);
+    const fileExt = resizedFile.name.split('.').pop() || 'jpg';
+    const fileName = `${timestamp}_${randomStr}.${fileExt}`;
+    const filePath = `${folder}/${fileName}`;
     
-    // Check base64 size (base64 is ~33% larger than original)
-    const base64Size = base64Data.length;
-    const maxBase64Size = 1.5 * 1024 * 1024; // 1.5MB base64 limit
+    // Upload to Supabase Storage
+    console.log(`💾 Uploading to Supabase Storage: ${filePath}`);
+    const { data, error } = await supabase.storage
+      .from('images') // Bucket name - make sure this bucket exists in Supabase
+      .upload(filePath, resizedFile, {
+        cacheControl: '3600',
+        upsert: false
+      });
     
-    if (base64Size > maxBase64Size) {
-      console.warn(`⚠️ Image base64 size (${(base64Size / 1024).toFixed(2)} KB) exceeds recommended limit`);
-      // Still allow it, but warn - Firebase has 16MB limit per node
+    if (error) {
+      console.error('❌ Supabase Storage upload error:', error);
+      
+      // Check if bucket doesn't exist
+      if (error.message.includes('Bucket not found') || error.message.includes('not found')) {
+        return {
+          success: false,
+          error: 'Storage bucket not found. Please create an "images" bucket in Supabase Storage.'
+        };
+      }
+      
+      // Check for permission errors
+      if (error.message.includes('permission') || error.message.includes('denied')) {
+        return {
+          success: false,
+          error: 'Permission denied. Please check Supabase Storage policies.'
+        };
+      }
+      
+      return {
+        success: false,
+        error: `Failed to upload image: ${error.message}`
+      };
     }
     
-    // Generate unique image ID
-    const imageId = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    // Get public URL for the uploaded image
+    const { data: urlData } = supabase.storage
+      .from('images')
+      .getPublicUrl(filePath);
     
-    // Prepare image data for database
-    // CRITICAL: uploadedBy must always be set for security rules to work
-    const imageData: ImageData = {
-      base64: base64Data,
-      fileName: file.name,
-      contentType: resizedFile.type,
-      folder: folder,
-      uploadedAt: new Date().toISOString(),
-      size: resizedFile.size, // Use resized file size
-      uploadedBy: finalUserEmail // Always set uploadedBy with valid email (validated above)
-    };
-    
-    // Import Firebase Realtime Database functions
-    const { create, isDatabaseAvailable } = await import('../lib/firebase-db.js');
-    
-    // Check if database is available
-    if (!isDatabaseAvailable()) {
-      throw new Error('Firebase Realtime Database is not available. Please check your configuration.');
-    }
-    
-    // Store image in Realtime Database under images/{folder}/{imageId}
-    console.log(`💾 Storing image in database: images/${folder}/${imageId}`);
-    await create(`images/${folder}`, imageData, imageId);
-    console.log(`✅ Image stored successfully: ${imageId}`);
-    
-    // Return base64 data URL as the URL (can be used directly in img src)
-    // NOTE: For large vehicles with many images, consider storing only imageId references
-    // and fetching images on-demand to avoid exceeding Firebase's 16MB node limit
-    const dataUrl = base64Data;
-    
-    // Log warning if base64 is very large (could cause vehicle object to exceed limits)
-    if (base64Size > 500 * 1024) { // 500KB base64
-      console.warn(`⚠️ Large image base64 (${(base64Size / 1024).toFixed(2)} KB). Consider limiting number of images per vehicle to avoid size limits.`);
-    }
+    const publicUrl = urlData.publicUrl;
+    console.log(`✅ Image uploaded successfully: ${publicUrl}`);
     
     return {
       success: true,
-      url: dataUrl,
-      imageId: imageId
+      url: publicUrl,
+      imageId: filePath
     };
   } catch (error) {
-    console.error('❌ Firebase Realtime Database upload error:', error);
+    console.error('❌ Supabase Storage upload error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
-    // Provide more specific error messages
-    if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('permission')) {
-      return {
-        success: false,
-        error: 'Permission denied. Please check Firebase database rules for image uploads.'
-      };
-    }
-    
-    if (errorMessage.includes('not available') || errorMessage.includes('configuration')) {
-      return {
-        success: false,
-        error: 'Database not available. Please check Firebase configuration.'
-      };
-    }
     
     return {
       success: false,
@@ -384,23 +326,28 @@ export const validateImageFile = (file: File): { valid: boolean; error?: string 
 };
 
 /**
- * Retrieves an image from Firebase Realtime Database
- * @param imageId - The ID of the image
+ * Retrieves an image from Supabase Storage
+ * @param imageId - The path/ID of the image in storage
  * @param folder - The folder where the image is stored (e.g., 'vehicles', 'users')
- * @returns Promise with the image data URL or null if not found
+ * @returns Promise with the image URL or null if not found
  */
 export const getImageFromDatabase = async (imageId: string, folder: string = 'vehicles'): Promise<string | null> => {
   try {
-    const { read } = await import('../lib/firebase-db.js');
-    const imageData = await read<ImageData>(`images/${folder}`, imageId);
+    const { getSupabaseClient } = await import('../lib/supabase.js');
+    const supabase = getSupabaseClient();
     
-    if (imageData && imageData.base64) {
-      return imageData.base64;
-    }
+    // If imageId is already a full path, use it directly
+    // Otherwise, construct path from folder and imageId
+    const filePath = imageId.includes('/') ? imageId : `${folder}/${imageId}`;
     
-    return null;
+    // Get public URL
+    const { data } = supabase.storage
+      .from('images')
+      .getPublicUrl(filePath);
+    
+    return data.publicUrl || null;
   } catch (error) {
-    console.error('Error retrieving image from database:', error);
+    console.error('Error retrieving image from Supabase Storage:', error);
     return null;
   }
 };

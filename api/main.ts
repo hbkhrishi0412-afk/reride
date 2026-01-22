@@ -9,6 +9,7 @@ import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 
 // Use Supabase instead of Firebase
 // Note: This is checked at module load time. If Supabase is not available,
@@ -298,6 +299,26 @@ const cleanupRateLimitCache = () => {
   for (const [key, entry] of rateLimitCache.entries()) {
     if (entry.resetTime < now) {
       rateLimitCache.delete(key);
+    }
+  }
+};
+
+// Simple cache for published vehicles (30 second TTL for fast loading)
+interface VehicleCacheEntry {
+  vehicles: VehicleType[];
+  timestamp: number;
+  totalCount?: number; // Cache total count separately for pagination
+}
+
+const vehicleCache = new Map<string, VehicleCacheEntry>();
+const VEHICLE_CACHE_TTL = 30000; // 30 seconds
+
+// Clean up expired vehicle cache entries
+const cleanupVehicleCache = () => {
+  const now = Date.now();
+  for (const [key, entry] of vehicleCache.entries()) {
+    if (now - entry.timestamp > VEHICLE_CACHE_TTL) {
+      vehicleCache.delete(key);
     }
   }
 };
@@ -2029,7 +2050,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
 
       if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
-        const allVehicles = await firebaseVehicleService.findByStatus('published');
+        const allVehicles = await firebaseVehicleService.findByStatus('published', {
+          orderBy: 'created_at',
+          orderDirection: 'desc'
+        });
         const nearbyVehicles = allVehicles.filter(vehicle => {
           if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
           const distance = calculateDistance(
@@ -2113,36 +2137,112 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         });
       }
 
-      // Get all vehicles and auto-disable expired listings
-      let vehicles = await firebaseVehicleService.findAll();
-      console.log(`📊 Total vehicles fetched from Firebase: ${vehicles.length}`);
-      // Sort by createdAt descending
-      vehicles = vehicles.sort((a, b) => {
-        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bTime - aTime;
-      });
+      // PERFORMANCE OPTIMIZATION: Check cache first, then query only published vehicles
+      // This dramatically reduces the amount of data fetched and processed
+      cleanupVehicleCache();
+      const cacheKey = 'published_vehicles';
+      const cached = vehicleCache.get(cacheKey);
+      
+      // PAGINATION SUPPORT: Parse pagination parameters early
+      const page = parseInt(String(req.query.page || '1'), 10) || 1;
+      const limit = parseInt(String(req.query.limit || '0'), 10) || 0; // 0 means no limit (return all)
+      
+      let vehicles: VehicleType[];
+      let totalVehiclesCount: number = 0;
+      
+      if (cached && (Date.now() - cached.timestamp) < VEHICLE_CACHE_TTL && limit === 0) {
+        // Use cache only for non-paginated requests (cache contains full list)
+        console.log(`📊 Using cached published vehicles (${cached.vehicles.length} vehicles)`);
+        vehicles = cached.vehicles;
+        totalVehiclesCount = vehicles.length;
+      } else {
+        // PERFORMANCE: Use database-level sorting and pagination (much faster)
+        if (limit > 0) {
+          // For paginated requests, fetch only the paginated subset
+          const offset = (page - 1) * limit;
+          vehicles = await firebaseVehicleService.findByStatus('published', {
+            orderBy: 'created_at',
+            orderDirection: 'desc',
+            limit: limit,
+            offset: offset
+          });
+          
+          // Get total count from cache if available, otherwise fetch (but cache it)
+          const cachedCount = cached?.totalCount;
+          if (cachedCount !== undefined) {
+            totalVehiclesCount = cachedCount;
+            console.log(`📊 Using cached total count: ${totalVehiclesCount}`);
+          } else {
+            // Only fetch count if not cached (optimize: could use COUNT query in future)
+            const allVehiclesForCount = await firebaseVehicleService.findByStatus('published', {
+              orderBy: 'created_at',
+              orderDirection: 'desc'
+            });
+            totalVehiclesCount = allVehiclesForCount.length;
+            // Update cache with total count
+            if (cached) {
+              cached.totalCount = totalVehiclesCount;
+            } else {
+              vehicleCache.set(cacheKey, { vehicles: [], timestamp: Date.now(), totalCount: totalVehiclesCount });
+            }
+            console.log(`📊 Fetched and cached total count: ${totalVehiclesCount}`);
+          }
+          
+          console.log(`📊 Published vehicles fetched (paginated): ${vehicles.length} of ${totalVehiclesCount} total`);
+        } else {
+          // For non-paginated requests, fetch all with database sorting
+          vehicles = await firebaseVehicleService.findByStatus('published', {
+            orderBy: 'created_at',
+            orderDirection: 'desc'
+          });
+          totalVehiclesCount = vehicles.length;
+          console.log(`📊 Published vehicles fetched: ${vehicles.length}`);
+          // Cache the full result with total count for non-paginated requests
+          vehicleCache.set(cacheKey, { vehicles, timestamp: Date.now(), totalCount: totalVehiclesCount });
+        }
+      }
+      
+      // Only sort in-memory if we got cached data (database already sorted new queries)
+      if (cached && vehicles === cached.vehicles) {
+        vehicles = vehicles.sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bTime - aTime;
+        });
+      }
       
       const now = new Date();
       const sellerEmails = new Set<string>();
       
+      // Only collect seller emails for vehicles that need expiry checks
       vehicles.forEach(vehicle => {
-        if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
+        if (!vehicle.listingExpiresAt && vehicle.sellerEmail) {
           sellerEmails.add(vehicle.sellerEmail.toLowerCase());
         }
       });
       
+      // PERFORMANCE OPTIMIZATION: Only fetch users for vehicles that need expiry checks
+      // Use Promise.all to fetch users in parallel instead of loading all users
       const sellerMap = new Map<string, UserType>();
       if (sellerEmails.size > 0) {
-        const allUsers = await firebaseUserService.findAll();
-        allUsers.forEach((seller) => {
-          if (seller.email) {
+        // Fetch users in parallel for better performance
+        const userPromises = Array.from(sellerEmails).map(email => 
+          firebaseUserService.findByEmail(email).catch(err => {
+            console.warn(`⚠️ Failed to fetch user ${email}:`, err);
+            return null;
+          })
+        );
+        const users = await Promise.all(userPromises);
+        
+        // Build seller map from fetched users
+        users.forEach((seller) => {
+          if (seller && seller.email) {
             const normalizedEmail = seller.email.toLowerCase().trim();
-            if (sellerEmails.has(normalizedEmail)) {
-              sellerMap.set(normalizedEmail, seller);
-            }
+            sellerMap.set(normalizedEmail, seller);
           }
         });
+        
+        console.log(`📊 Fetched ${sellerMap.size} sellers for expiry checks (out of ${sellerEmails.size} needed)`);
       }
       
       const vehicleUpdates: Array<{ id: number; updates: Partial<VehicleType> }> = [];
@@ -2261,42 +2361,52 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
       
       // Apply all updates to Firebase
-      for (const update of vehicleUpdates) {
-        await firebaseVehicleService.update(update.id, update.updates);
+      if (vehicleUpdates.length > 0) {
+        for (const update of vehicleUpdates) {
+          await firebaseVehicleService.update(update.id, update.updates);
+        }
+        // Invalidate cache after updates
+        vehicleCache.delete('published_vehicles');
       }
       
-      // Return vehicles after checking expiry (latest data)
-      const refreshedVehicles = vehicleUpdates.length > 0
-        ? await firebaseVehicleService.findAll()
-        : vehicles;
-      
-      // Sort refreshed vehicles
-      const sortedVehicles = refreshedVehicles.sort((a, b) => {
-        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bTime - aTime;
-      });
-      
-      // Filter to only published vehicles for public-facing endpoint
-      const publishedVehicles = sortedVehicles.filter(v => v.status === 'published');
-      const unpublishedCount = sortedVehicles.length - publishedVehicles.length;
-      console.log(`📊 Published vehicles after filtering: ${publishedVehicles.length} out of ${sortedVehicles.length} total (${unpublishedCount} unpublished/sold)`);
-      
-      // Log status breakdown for debugging
-      const statusBreakdown = {
-        published: sortedVehicles.filter(v => v.status === 'published').length,
-        unpublished: sortedVehicles.filter(v => v.status === 'unpublished').length,
-        sold: sortedVehicles.filter(v => v.status === 'sold').length,
-        other: sortedVehicles.filter(v => !['published', 'unpublished', 'sold'].includes(v.status || '')).length
-      };
-      console.log(`📊 Vehicle status breakdown:`, statusBreakdown);
+      // PERFORMANCE OPTIMIZATION: Only refresh if we made updates, and only fetch published vehicles
+      // Since we started with published vehicles, any updates that change status will be filtered out
+      let finalVehicles = vehicles;
+      if (vehicleUpdates.length > 0) {
+        // Only refresh published vehicles after updates (with database sorting)
+        finalVehicles = await firebaseVehicleService.findByStatus('published', {
+          orderBy: 'created_at',
+          orderDirection: 'desc'
+        });
+        console.log(`📊 Refreshed ${finalVehicles.length} published vehicles after ${vehicleUpdates.length} updates`);
+      }
       
       // Normalize sellerEmail to lowercase for consistent filtering
-      const normalizedVehicles = publishedVehicles.map(v => ({
+      let normalizedVehicles = finalVehicles.map(v => ({
         ...v,
         sellerEmail: v.sellerEmail?.toLowerCase().trim() || v.sellerEmail
       }));
       
+      // Use the total count we fetched earlier (or from cache)
+      const finalTotalCount = totalVehiclesCount || normalizedVehicles.length;
+      
+      // Return paginated response with metadata if pagination was requested
+      if (limit > 0) {
+        const totalPages = Math.ceil(finalTotalCount / limit);
+        console.log(`📊 Returning ${normalizedVehicles.length} published vehicles (page ${page} of ${totalPages}, total: ${finalTotalCount})`);
+        return res.status(200).json({
+          vehicles: normalizedVehicles,
+          pagination: {
+            page,
+            limit,
+            total: finalTotalCount,
+            pages: totalPages,
+            hasMore: page < totalPages
+          }
+        });
+      }
+      
+      // Return all vehicles if no pagination requested (backward compatible)
       console.log(`📊 Returning ${normalizedVehicles.length} published vehicles to client`);
       return res.status(200).json(normalizedVehicles);
     } catch (error) {

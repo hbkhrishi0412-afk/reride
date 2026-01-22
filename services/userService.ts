@@ -727,8 +727,65 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
     return { success: false, reason: 'Password is required.' };
   }
   
-  // Always use local storage in development or on localhost
-  // Only try API in true production environments
+  // Try Supabase Auth first
+  try {
+    const { signInWithEmail } = await import('./supabase-auth-service.js');
+    const supabaseResult = await signInWithEmail(credentials.email, credentials.password);
+    
+    if (supabaseResult.success && supabaseResult.session) {
+      // Supabase Auth successful - now sync with backend to get user data
+      try {
+        const result = await authApi({ action: 'login', ...credentials });
+        
+        if (result.success && result.user) {
+          // Store Supabase session token
+          if (supabaseResult.session.access_token) {
+            localStorage.setItem('reRideAccessToken', supabaseResult.session.access_token);
+            if (supabaseResult.session.refresh_token) {
+              localStorage.setItem('reRideRefreshToken', supabaseResult.session.refresh_token);
+            }
+          }
+          localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+          
+          // Verify role matches requested role
+          if (credentials.role && result.user.role !== credentials.role) {
+            return { 
+              success: false, 
+              reason: `User is not a registered ${credentials.role}.`,
+              detectedRole: result.user.role 
+            };
+          }
+          
+          return {
+            success: true,
+            user: result.user,
+            detectedRole: result.detectedRole
+          };
+        }
+      } catch (apiError) {
+        console.warn('⚠️ Backend sync failed, but Supabase auth succeeded:', apiError);
+        // Still return success with Supabase user
+        return {
+          success: true,
+          user: {
+            id: supabaseResult.user?.id || '',
+            email: supabaseResult.user?.email || credentials.email,
+            name: supabaseResult.user?.user_metadata?.name || '',
+            role: credentials.role || 'customer',
+          } as User
+        };
+      }
+    }
+    
+    // If Supabase Auth failed, fall back to API login
+    if (!supabaseResult.success) {
+      console.log('⚠️ Supabase Auth failed, trying API login...');
+    }
+  } catch (supabaseError) {
+    console.warn('⚠️ Supabase Auth not available, falling back to API:', supabaseError);
+  }
+  
+  // Fallback to API login (for backward compatibility)
   if (!isDevelopment) {
     try {
       console.log('🌐 Trying API login...', { 
@@ -738,15 +795,12 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       });
       const result = await authApi({ action: 'login', ...credentials });
       
-      // Validate API response structure
       if (!result || typeof result !== 'object') {
         console.error('❌ Invalid API response structure:', result);
         throw new Error('Invalid response from server');
       }
       
       if (!result.success) {
-        console.warn('⚠️ API login failed:', result.reason);
-        // Pass through detectedRole if API provided it
         return {
           success: result.success,
           reason: result.reason,
@@ -754,29 +808,11 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
         };
       }
       
-      // Validate user object structure (critical for seller dashboard)
-      if (!result.user) {
-        console.error('❌ API response missing user object:', result);
-        throw new Error('User data not received from server');
-      }
-      
-      if (!result.user.email || !result.user.role) {
-        console.error('❌ API user object missing required fields:', {
-          hasEmail: !!result.user.email,
-          hasRole: !!result.user.role,
-          userObject: result.user
-        });
+      if (!result.user || !result.user.email || !result.user.role) {
         throw new Error('Invalid user data received from server');
       }
       
-      // Verify role matches requested role
       if (credentials.role && result.user.role !== credentials.role) {
-        console.warn('⚠️ Role mismatch in API response:', {
-          requested: credentials.role,
-          received: result.user.role,
-          email: result.user.email
-        });
-        // Return error with detected role for UI to auto-switch
         return { 
           success: false, 
           reason: `User is not a registered ${credentials.role}.`,
@@ -784,19 +820,11 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
         };
       }
       
-      // Store JWT tokens if provided
       if (result.accessToken && result.refreshToken) {
         storeTokens(result.accessToken, result.refreshToken);
         localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
-        console.log('✅ Tokens stored successfully');
       }
       
-      console.log('✅ API login successful:', {
-        email: result.user.email,
-        role: result.user.role,
-        userId: result.user.id
-      });
-      // Pass through detectedRole if API provided it
       return {
         success: result.success,
         user: result.user,
@@ -804,13 +832,11 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
         detectedRole: result.detectedRole
       };
     } catch (error) {
-      // Production: do NOT fall back to local storage. Without tokens, protected APIs will 401.
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('❌ API login failed (production, no fallback):', errorMessage);
+      console.error('❌ API login failed:', errorMessage);
       return { success: false, reason: errorMessage || 'Login failed. Please try again.' };
     }
   } else {
-    // Development mode - use local storage directly
     console.log('💻 Development mode - using local storage directly');
     return await loginLocal({ ...credentials, skipRoleCheck: true });
   }
@@ -835,27 +861,76 @@ export const register = async (credentials: any): Promise<{ success: boolean, us
     return { success: false, reason: 'Role is required.' };
   }
   
-  // Always try API first for production, with fallback to local
+  // Try Supabase Auth first
+  try {
+    const { signUpWithEmail } = await import('./supabase-auth-service.js');
+    const supabaseResult = await signUpWithEmail(
+      credentials.email,
+      credentials.password,
+      {
+        name: credentials.name,
+        mobile: credentials.mobile,
+        role: credentials.role
+      }
+    );
+    
+    if (supabaseResult.success && supabaseResult.session) {
+      // Supabase Auth successful - now sync with backend
+      try {
+        const result = await authApi({ action: 'register', ...credentials });
+        
+        if (result.success && result.user) {
+          // Store Supabase session token
+          if (supabaseResult.session.access_token) {
+            localStorage.setItem('reRideAccessToken', supabaseResult.session.access_token);
+            if (supabaseResult.session.refresh_token) {
+              localStorage.setItem('reRideRefreshToken', supabaseResult.session.refresh_token);
+            }
+          }
+          localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+          
+          return result;
+        }
+      } catch (apiError) {
+        console.warn('⚠️ Backend sync failed, but Supabase auth succeeded:', apiError);
+        // Still return success
+        return {
+          success: true,
+          user: {
+            id: supabaseResult.user?.id || '',
+            email: supabaseResult.user?.email || credentials.email,
+            name: credentials.name,
+            mobile: credentials.mobile,
+            role: credentials.role,
+          } as User
+        };
+      }
+    }
+    
+    if (!supabaseResult.success) {
+      console.log('⚠️ Supabase Auth failed, trying API registration...');
+    }
+  } catch (supabaseError) {
+    console.warn('⚠️ Supabase Auth not available, falling back to API:', supabaseError);
+  }
+  
+  // Fallback to API registration
   if (!isDevelopment) {
     try {
       console.log('🌐 Trying API registration...');
       const result = await authApi({ action: 'register', ...credentials });
       
-      // Store JWT tokens if provided
       if (result.success && result.accessToken && result.refreshToken) {
         storeTokens(result.accessToken, result.refreshToken);
         localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
       }
       
-      console.log('✅ API registration successful');
       return result;
     } catch (error) {
       console.warn('⚠️  API registration failed, falling back to local storage:', error);
-      // Fallback to local storage if API fails
       return await registerLocal(credentials);
     }
   } else {
-    // Development mode - use local storage
     console.log('💻 Development mode - using local storage');
     return await registerLocal(credentials);
   }

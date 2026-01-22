@@ -213,14 +213,35 @@ export const supabaseVehicleService = {
     return (data || []).map(supabaseRowToVehicle);
   },
 
-  // Find vehicles by status
-  async findByStatus(status: 'published' | 'unpublished' | 'sold'): Promise<Vehicle[]> {
+  // Find vehicles by status with optional sorting and pagination
+  async findByStatus(
+    status: 'published' | 'unpublished' | 'sold',
+    options?: { orderBy?: string; orderDirection?: 'asc' | 'desc'; limit?: number; offset?: number }
+  ): Promise<Vehicle[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
-    const { data, error } = await supabase
+    let query = supabase
       .from('vehicles')
       .select('*')
       .eq('status', status);
+    
+    // Apply database-level sorting (much faster than in-memory sorting)
+    if (options?.orderBy) {
+      query = query.order(options.orderBy, { ascending: options.orderDirection === 'asc' });
+    } else {
+      // Default: sort by created_at descending (newest first)
+      query = query.order('created_at', { ascending: false });
+    }
+    
+    // Apply pagination at database level if specified
+    // Use .range() for pagination (it handles both offset and limit)
+    if (options?.limit) {
+      const offset = options.offset || 0;
+      // .range() is inclusive on both ends, so we need offset to offset+limit-1
+      query = query.range(offset, offset + options.limit - 1);
+    }
+    
+    const { data, error } = await query;
     
     if (error) {
       throw new Error(`Failed to fetch vehicles by status: ${error.message}`);

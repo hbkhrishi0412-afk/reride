@@ -84,7 +84,7 @@ function userToSupabaseRow(user: Partial<User>): any {
     firebase_uid: user.firebaseUid || null,
     auth_provider: user.authProvider || 'email',
     created_at: user.createdAt || new Date().toISOString(),
-    updated_at: user.updatedAt || new Date().toISOString(),
+    updated_at: (user as any).updatedAt || new Date().toISOString(),
     metadata: Object.keys(metadata).length > 0 ? metadata : null,
   };
 }
