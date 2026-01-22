@@ -1227,8 +1227,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // FAQs
           (async () => {
             try {
-              const { fetchFaqsFromMongoDB } = await import('../services/faqService');
-              const faqsData = await fetchFaqsFromMongoDB().catch(() => []);
+              const { fetchFaqsFromSupabase } = await import('../services/faqService');
+              const faqsData = await fetchFaqsFromSupabase().catch(() => []);
               if (isMounted) setFaqItems(faqsData);
             } catch (error) {
               const localFaqs = getFaqs();
@@ -1451,7 +1451,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [notifications, currentUser?.email]);
 
-  // Periodic sync queue processor - retry failed MongoDB saves
+  // Periodic sync queue processor - retry failed Supabase saves
   useEffect(() => {
     const SYNC_INTERVAL = 30000; // 30 seconds
 
@@ -1477,7 +1477,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const result = await processSyncQueue();
           
           if (result.success > 0) {
-            console.log(`✅ Successfully synced ${result.success} items to MongoDB`);
+            console.log(`✅ Successfully synced ${result.success} items to Supabase`);
             if (process.env.NODE_ENV === 'development') {
               addToast(`Synced ${result.success} items to server`, 'success');
             }
@@ -2055,7 +2055,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return { success: false, reason: 'User with this email already exists.' };
         }
 
-        // CRITICAL FIX: Create user in MongoDB FIRST (real-time), then sync to local state only on success
+        // CRITICAL FIX: Create user in Supabase FIRST (real-time), then sync to local state only on success
         try {
           const { authenticatedFetch } = await import('../utils/authenticatedFetch');
           const { handleApiResponse } = await import('../utils/authenticatedFetch');
@@ -2077,13 +2077,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           if (!apiResult.success || !response.ok) {
             const errorReason = apiResult.reason || 'Unknown error';
-            console.error('❌ Failed to create user in MongoDB:', errorReason);
+            console.error('❌ Failed to create user in Supabase:', errorReason);
             addToast(`User creation failed: ${errorReason}`, 'error');
-            // Don't create locally - MongoDB creation failed
+            // Don't create locally - Supabase creation failed
             throw new Error(errorReason);
           }
           
-          // MongoDB creation succeeded - NOW update local state
+          // Supabase creation succeeded - NOW update local state
           const createdUser = apiResult.data?.user || {
             ...userData,
             status: 'active',
@@ -2102,12 +2102,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } catch (supabaseError) {
             // Log error but don't fail the entire operation if Supabase save fails
             console.warn('⚠️ Failed to save user to Supabase:', supabaseError);
-            // Still show success toast since MongoDB save succeeded
+            // Still show success toast since Supabase save succeeded
           }
           
           setUsers(prev => [...prev, createdUser]);
           
-          // Save to localStorage after MongoDB success
+          // Save to localStorage after Supabase success
           const isDevelopment = isDevelopmentEnvironment() || window.location.hostname === 'localhost';
           if (isDevelopment) {
             try {
@@ -2120,7 +2120,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
           
-          console.log('✅ User created and saved to MongoDB:', createdUser.email);
+          console.log('✅ User created and saved to Supabase:', createdUser.email);
           addToast(`User ${createdUser.name} created successfully`, 'success');
           
           // Log audit entry for user creation (inside try block where createdUser is in scope)
@@ -2128,10 +2128,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const entry = logAction(actor, 'Create User', createdUser.email, `Created user: ${createdUser.name} (${createdUser.role})`);
           setAuditLog(prev => [entry, ...prev]);
         } catch (apiError) {
-          console.error('❌ Error creating user in MongoDB:', apiError);
+          console.error('❌ Error creating user in Supabase:', apiError);
           const errorMsg = apiError instanceof Error ? apiError.message : 'Failed to create user';
           addToast(`User creation failed: ${errorMsg}`, 'error');
-          // Don't create locally - MongoDB creation failed
+          // Don't create locally - Supabase creation failed
           throw apiError;
         }
         
@@ -2600,14 +2600,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     onUpdateVehicleData: async (newData: VehicleData) => {
       try {
-        // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state only on success
+        // CRITICAL FIX: Update Supabase FIRST (real-time), then sync to local state only on success
         const { saveVehicleData } = await import('../services/vehicleDataService');
         const success = await saveVehicleData(newData);
         
         if (!success) {
-          // MongoDB update failed - don't update local state
+          // Supabase update failed - don't update local state
           addToast('Vehicle data update failed. Please try again.', 'error');
-          throw new Error('Failed to update vehicle data in MongoDB');
+          throw new Error('Failed to update vehicle data in Supabase');
         }
         
         // MongoDB update succeeded - NOW update local state
@@ -2625,7 +2625,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Only log here to avoid duplicate error toasts
         console.error('❌ Failed to update vehicle data:', error);
         // Don't show generic toast - inner catch already showed specific error message
-        // Don't update local state - MongoDB update failed
+        // Don't update local state - Supabase update failed
         throw error;
       }
     },
@@ -2643,21 +2643,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     onAddFaq: async (faq: Omit<FAQItem, 'id'>) => {
       try {
-        // CRITICAL FIX: Save to MongoDB FIRST (real-time), then sync to local state only on success
-        const { saveFaqToMongoDB } = await import('../services/faqService');
-        const savedFaq = await saveFaqToMongoDB(faq);
+        // CRITICAL FIX: Save to Supabase FIRST (real-time), then sync to local state only on success
+        const { saveFaqToSupabase } = await import('../services/faqService');
+        const savedFaq = await saveFaqToSupabase(faq);
         
         if (!savedFaq) {
-          throw new Error('Failed to save FAQ to MongoDB');
+          throw new Error('Failed to save FAQ to Supabase');
         }
         
-        // MongoDB save succeeded - NOW update local state
+        // Supabase save succeeded - NOW update local state
         const newFaq: FAQItem = savedFaq || { ...faq, id: Date.now() };
-        
-        // If MongoDB returned _id, store it
-        if (savedFaq && (savedFaq as any)._id) {
-          (newFaq as any)._id = (savedFaq as any)._id;
-        }
         
         setFaqItems(prev => {
           const updated = [...prev, newFaq];
@@ -2667,36 +2662,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         addToast('FAQ added successfully', 'success');
       } catch (error) {
-        console.error('❌ Failed to add FAQ to MongoDB:', error);
+        console.error('❌ Failed to add FAQ to Supabase:', error);
         addToast('FAQ creation failed. Please try again.', 'error');
-        // Don't add locally - MongoDB creation failed
+        // Don't add locally - Supabase creation failed
         throw error;
       }
     },
     onUpdateFaq: async (faq: FAQItem) => {
       try {
-        // Find the FAQ to get its MongoDB _id
-        const existingFaq = faqItems.find(f => f.id === faq.id);
-        const mongoId = (existingFaq as any)?._id;
-        
-        if (!mongoId) {
-          throw new Error('FAQ not found in database');
+        if (!faq.id) {
+          throw new Error('FAQ ID is required for update');
         }
         
-        // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state only on success
-        const { updateFaqInMongoDB } = await import('../services/faqService');
-        await updateFaqInMongoDB(faq, mongoId);
+        // CRITICAL FIX: Update Supabase FIRST (real-time), then sync to local state only on success
+        const { updateFaqInSupabase } = await import('../services/faqService');
+        const success = await updateFaqInSupabase(faq);
         
-        // MongoDB update succeeded - NOW update local state
+        if (!success) {
+          throw new Error('Failed to update FAQ in Supabase');
+        }
+        
+        // Supabase update succeeded - NOW update local state
         setFaqItems(prev => {
           const updated = Array.isArray(prev) ? prev.map(f => {
             if (f && f.id === faq.id) {
-              const updatedFaq = { ...faq };
-              // Preserve _id if it exists
-              if ((f as any)._id) {
-                (updatedFaq as any)._id = (f as any)._id;
-              }
-              return updatedFaq;
+              return { ...faq };
             }
             return f;
           }) : [];
@@ -2705,27 +2695,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         addToast('FAQ updated successfully', 'success');
       } catch (error) {
-        console.error('❌ Failed to update FAQ in MongoDB:', error);
+        console.error('❌ Failed to update FAQ in Supabase:', error);
         addToast('FAQ update failed. Please try again.', 'error');
-        // Don't update locally - MongoDB update failed
+        // Don't update locally - Supabase update failed
         throw error;
       }
     },
     onDeleteFaq: async (id: number) => {
       try {
-        // Find the FAQ to get its MongoDB _id
-        const existingFaq = faqItems.find(f => f.id === id);
-        const mongoId = (existingFaq as any)?._id;
+        // CRITICAL FIX: Delete from Supabase FIRST (real-time), then sync to local state only on success
+        const { deleteFaqFromSupabase } = await import('../services/faqService');
+        const success = await deleteFaqFromSupabase(id);
         
-        if (!mongoId) {
-          throw new Error('FAQ not found in database');
+        if (!success) {
+          throw new Error('Failed to delete FAQ from Supabase');
         }
         
-        // CRITICAL FIX: Delete from MongoDB FIRST (real-time), then sync to local state only on success
-        const { deleteFaqFromMongoDB } = await import('../services/faqService');
-        await deleteFaqFromMongoDB(mongoId);
-        
-        // MongoDB delete succeeded - NOW delete from local state
+        // Supabase delete succeeded - NOW delete from local state
         setFaqItems(prev => {
           const updated = Array.isArray(prev) ? prev.filter(f => f && f.id !== id) : [];
           saveFaqs(updated);
@@ -2733,9 +2719,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         addToast('FAQ deleted successfully', 'success');
       } catch (error) {
-        console.error('❌ Failed to delete FAQ from MongoDB:', error);
+        console.error('❌ Failed to delete FAQ from Supabase:', error);
         addToast('FAQ deletion failed. Please try again.', 'error');
-        // Don't delete locally - MongoDB delete failed
+        // Don't delete locally - Supabase delete failed
         throw error;
       }
     },
@@ -2822,7 +2808,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.error('Failed to save conversations to localStorage:', error);
           }
           
-          // Save to MongoDB with sync queue fallback
+          // Save to Supabase with sync queue fallback
           const updatedConversation = updated.find(conv => conv.id === conversationId);
           if (updatedConversation) {
             // CRITICAL FIX: Update activeChat with the updated conversation to ensure UI updates immediately
@@ -2831,11 +2817,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setActiveChat(updatedConversation);
             }
             
-            // Save entire conversation to MongoDB (with queue fallback)
+            // Save entire conversation to Supabase (with queue fallback)
             (async () => {
               const result = await saveConversationWithSync(updatedConversation);
               if (result.synced) {
-                console.log('✅ Conversation synced to MongoDB:', conversationId);
+                console.log('✅ Conversation synced to Supabase:', conversationId);
               } else if (result.queued) {
                 console.log('⏳ Conversation queued for sync (will retry):', conversationId);
               }
@@ -2845,7 +2831,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             (async () => {
               const result = await addMessageWithSync(conversationId, newMessage);
               if (result.synced) {
-                console.log('✅ Message synced to MongoDB:', messageId);
+                console.log('✅ Message synced to Supabase:', messageId);
                 
                 // Broadcast message via WebSocket for real-time end-to-end sync (development only)
                 // In production, Firebase handles real-time sync, so Socket.io is not needed
@@ -2911,11 +2897,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.error('Failed to save notifications to localStorage:', error);
           }
           
-          // Save to MongoDB with sync queue fallback - wait for completion
+          // Save to Supabase with sync queue fallback - wait for completion
           (async () => {
             const result = await saveNotificationWithSync(newNotification);
             if (result.synced) {
-              console.log('✅ Notification synced to MongoDB:', notificationId);
+              console.log('✅ Notification synced to Supabase:', notificationId);
             } else if (result.queued) {
               console.log('⏳ Notification queued for sync (will retry):', notificationId);
             }
@@ -2978,14 +2964,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.error('Failed to save conversations to localStorage:', error);
           }
           
-          // Save to MongoDB with sync queue fallback
+          // Save to Supabase with sync queue fallback
           const updatedConversation = updated.find(conv => conv.id === conversationId);
           if (updatedConversation) {
-            // Save entire conversation to MongoDB (with queue fallback)
+            // Save entire conversation to Supabase (with queue fallback)
             (async () => {
               const result = await saveConversationWithSync(updatedConversation);
               if (result.synced) {
-                console.log('✅ Conversation synced to MongoDB:', conversationId);
+                console.log('✅ Conversation synced to Supabase:', conversationId);
               } else if (result.queued) {
                 console.log('⏳ Conversation queued for sync (will retry):', conversationId);
               }
@@ -2995,7 +2981,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             (async () => {
               const result = await addMessageWithSync(conversationId, newMessage);
               if (result.synced) {
-                console.log('✅ Message synced to MongoDB:', messageId);
+                console.log('✅ Message synced to Supabase:', messageId);
                 
                 // Broadcast message via WebSocket for real-time end-to-end sync (development only)
                 // In production, Firebase handles real-time sync, so Socket.io is not needed
@@ -3069,11 +3055,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.error('Failed to save notifications to localStorage:', error);
           }
           
-          // Save to MongoDB with sync queue fallback - wait for completion
+          // Save to Supabase with sync queue fallback - wait for completion
           (async () => {
             const result = await saveNotificationWithSync(newNotification);
             if (result.synced) {
-              console.log('✅ Notification synced to MongoDB:', notificationId);
+              console.log('✅ Notification synced to Supabase:', notificationId);
             } else if (result.queued) {
               console.log('⏳ Notification queued for sync (will retry):', notificationId);
             }
@@ -3120,10 +3106,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.log('💳 Updating partnerBanks:', { email, partnerBanks: safeUpdates.partnerBanks, count: safeUpdates.partnerBanks?.length || 0 });
         }
         
-        // CRITICAL FIX: Update MongoDB FIRST (real-time), then sync to local state/localStorage only on success
-        // This ensures password changes are persisted to MongoDB immediately, not just locally
+        // CRITICAL FIX: Update Supabase FIRST (real-time), then sync to local state/localStorage only on success
+        // This ensures password changes are persisted to Supabase immediately, not just locally
         try {
-          console.log('📡 Sending user update request to API (real-time MongoDB update)...', { email, hasPassword: !!updates.password });
+          console.log('📡 Sending user update request to API (real-time Supabase update)...', { email, hasPassword: !!updates.password });
           
           // PROACTIVE TOKEN REFRESH: For critical operations like password updates, 
           // proactively refresh token before making the request to prevent session expiration errors
@@ -3165,7 +3151,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Handle 401 Unauthorized - token refresh should have been attempted by authenticatedFetch
             // If we still get 401, it means token refresh failed - user needs to re-login
             if (response.status === 401) {
-              console.error('❌ 401 Unauthorized - Token refresh failed. MongoDB update NOT saved.');
+              console.error('❌ 401 Unauthorized - Token refresh failed. Supabase update NOT saved.');
               const errorReason = apiResult.reason || apiResult.error || 'Authentication expired';
               // Avoid duplicate "log in again" messages
               const cleanReason = errorReason.includes('log in again') 
@@ -3176,14 +3162,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               } else {
                 addToast(`Profile update failed: ${cleanReason}`, 'error');
               }
-              // Don't update localStorage - MongoDB update failed, so we shouldn't save locally
+              // Don't update localStorage - Supabase update failed, so we shouldn't save locally
               // Throw a specific error that we can check in catch block to avoid duplicate messages
               throw new Error('AUTH_401_ALREADY_HANDLED');
             }
             
             // Handle 500 Internal Server Error - server issue
             if (response.status === 500) {
-              console.error('❌ 500 Server Error - MongoDB update failed.');
+              console.error('❌ 500 Server Error - Supabase update failed.');
               if (updates.password) {
                 addToast('Password update failed: Server error. Please try again.', 'error');
               } else {
@@ -3198,9 +3184,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           
           const result = apiResult.data || {};
-          console.log('✅ User updated in MongoDB successfully:', { success: result?.success, hasUser: !!result?.user });
+          console.log('✅ User updated in Supabase successfully:', { success: result?.success, hasUser: !!result?.user });
           
-          // MongoDB update succeeded - NOW update local state and localStorage
+          // Supabase update succeeded - NOW update local state and localStorage
           if (result?.user) {
             // CRITICAL: Preserve role if not in API response (shouldn't happen, but safety check)
             // Also ensure partnerBanks and other fields from safeUpdates are included
@@ -3236,7 +3222,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               };
               
               setCurrentUser(mergedUser);
-              // Update localStorage after MongoDB success
+              // Update localStorage after Supabase success
               try {
                 localStorage.setItem('reRideCurrentUser', JSON.stringify(mergedUser));
                 sessionStorage.setItem('currentUser', JSON.stringify(mergedUser));
@@ -3271,7 +3257,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             const { updateUser: updateUserService } = await import('../services/userService');
             await updateUserService({ email, ...safeUpdates });
-            console.log('✅ User updated in localStorage users array (after MongoDB success)');
+            console.log('✅ User updated in localStorage users array (after Supabase success)');
           } catch (localError) {
             console.warn('⚠️ Failed to update user in localStorage users array:', localError);
             // Try manual update as fallback
@@ -3298,9 +3284,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           
         } catch (apiError) {
-          console.error('❌ API error during user update - MongoDB update FAILED:', apiError);
+          console.error('❌ API error during user update - Supabase update FAILED:', apiError);
           
-          // CRITICAL: Don't save locally when MongoDB fails - user wants real-time updates
+          // CRITICAL: Don't save locally when Supabase fails - user wants real-time updates
           // Only show error messages, don't update any local state
           
           if (apiError instanceof Error) {
@@ -3312,12 +3298,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             
             // Check for database connection errors (503)
-            if (errorMsg.includes('503') || errorMsg.includes('Database connection failed') || errorMsg.includes('MONGODB_URI')) {
-              console.error('❌ MongoDB connection failed:', errorMsg);
+            if (errorMsg.includes('503') || errorMsg.includes('Database connection failed') || errorMsg.includes('SUPABASE')) {
+              console.error('❌ Supabase connection failed:', errorMsg);
               if (updates.password) {
-                addToast('Password update failed: MongoDB connection error. Please try again.', 'error');
+                addToast('Password update failed: Supabase connection error. Please try again.', 'error');
               } else {
-                addToast('Profile update failed: MongoDB connection error. Please try again.', 'error');
+                addToast('Profile update failed: Supabase connection error. Please try again.', 'error');
               }
             } else if (errorMsg.includes('fetch') || 
                 errorMsg.includes('network') ||
@@ -3364,7 +3350,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 addToast('Profile update failed: Server error. Please try again.', 'error');
               }
             } else {
-              console.warn('⚠️ Failed to update profile in MongoDB:', errorMsg);
+              console.warn('⚠️ Failed to update profile in Supabase:', errorMsg);
               // Show the actual error message
               const displayError = errorMsg.replace(/^\d+:\s*/, ''); // Remove status code prefix
               if (updates.password) {

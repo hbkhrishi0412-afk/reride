@@ -33,6 +33,7 @@ type ServiceProvider = {
     name: string;
     city: string;
     distanceKm?: number;
+    serviceCategories?: string[];
     services?: Array<{
         serviceType: string;
         price?: number;
@@ -106,7 +107,7 @@ const ServiceCart: React.FC<Props> = ({
     onLogin,
     onSubmitRequest,
     servicePackages = mockServicePackages,
-    addresses = mockAddresses,
+    addresses: initialAddresses = mockAddresses,
     timeSlots = mockSlots,
     serviceProviders = mockProviders,
     coupons = mockCoupons,
@@ -114,21 +115,28 @@ const ServiceCart: React.FC<Props> = ({
     isLocating = false,
     locationError,
 }) => {
-    const [items, setItems] = useState<CartItem[]>([{ serviceId: servicePackages[0]?.id || '', quantity: 1 }]);
+    const [items, setItems] = useState<CartItem[]>([]);
+    const [addresses, setAddresses] = useState<Address[]>(initialAddresses);
     const [selectedAddress, setSelectedAddress] = useState(addresses[0]?.id || '');
     const [selectedSlot, setSelectedSlot] = useState(timeSlots[0]?.id || '');
     const [selectedCoupon, setSelectedCoupon] = useState<string | undefined>();
     const [selectedProviders, setSelectedProviders] = useState<string[]>(serviceProviders[0]?.id ? [serviceProviders[0].id] : []);
     const [providerServices, setProviderServices] = useState<Record<string, ServiceProvider['services']>>({});
+    const [availableServicePackages, setAvailableServicePackages] = useState<ServicePackage[]>(servicePackages);
 
     useEffect(() => {
         const fetchProviderServices = async () => {
             try {
-                const resp = await fetch('/api/provider-services?scope=public');
-                if (!resp.ok) return;
-                const data = await resp.json();
+                // Fetch providers with their categories
+                const [servicesResp, providersResp] = await Promise.all([
+                    fetch('/api/provider-services?scope=public'),
+                    fetch('/api/service-providers?scope=all').catch(() => null),
+                ]);
+                
+                if (!servicesResp.ok) return;
+                const servicesData = await servicesResp.json();
                 const grouped: Record<string, ServiceProvider['services']> = {};
-                data.forEach((entry: any) => {
+                servicesData.forEach((entry: any) => {
                     const pid = entry.providerId;
                     if (!pid) return;
                     grouped[pid] = grouped[pid] || [];
@@ -140,23 +148,86 @@ const ServiceCart: React.FC<Props> = ({
                     });
                 });
                 setProviderServices(grouped);
-            } catch {
-                // ignore
+                
+                // Update providers with categories if available
+                if (providersResp && providersResp.ok) {
+                    const providersData = await providersResp.json();
+                    const providersWithCategories = serviceProviders.map(p => {
+                        const providerData = providersData.find((pd: any) => pd.id === p.id || pd.uid === p.id);
+                        return providerData ? { ...p, serviceCategories: providerData.serviceCategories || [] } : p;
+                    });
+                    // Note: This would require updating the serviceProviders prop, but we'll use it in filtering
+                }
+                
+                // Build service packages from actual provider services
+                const serviceTypeMap = new Map<string, { price?: number; description?: string; etaMinutes?: number; count: number }>();
+                data.forEach((entry: any) => {
+                    if (!entry.serviceType || entry.active === false) return;
+                    const existing = serviceTypeMap.get(entry.serviceType) || { count: 0 };
+                    serviceTypeMap.set(entry.serviceType, {
+                        price: existing.price === undefined ? entry.price : Math.min(existing.price || Infinity, entry.price || Infinity),
+                        description: entry.description || existing.description,
+                        etaMinutes: entry.etaMinutes || existing.etaMinutes,
+                        count: existing.count + 1,
+                    });
+                });
+                
+                // Convert to service packages
+                const dynamicPackages: ServicePackage[] = Array.from(serviceTypeMap.entries())
+                    .filter(([_, meta]) => meta.count > 0) // Only show services that at least one provider offers
+                    .map(([serviceType, meta]) => ({
+                        id: `pkg-${serviceType.toLowerCase().replace(/\s+/g, '-')}`,
+                        name: serviceType,
+                        price: meta.price || 0,
+                        warrantyMonths: 3, // Default warranty
+                        description: meta.description || `${meta.count} provider${meta.count > 1 ? 's' : ''} available`,
+                        isCustom: meta.price === undefined || meta.price === 0,
+                    }));
+                
+                // If we have dynamic packages, use them; otherwise fall back to mock
+                if (dynamicPackages.length > 0) {
+                    setAvailableServicePackages(dynamicPackages);
+                    // Update items if the first service is no longer available
+                    setItems(prev => {
+                        const validItems = prev.filter(item => 
+                            dynamicPackages.some(pkg => pkg.id === item.serviceId)
+                        );
+                        // If no valid items, add the first available service
+                        if (validItems.length === 0 && dynamicPackages[0]) {
+                            return [{ serviceId: dynamicPackages[0].id, quantity: 1 }];
+                        }
+                        return validItems;
+                    });
+                } else {
+                    // Fall back to provided servicePackages or mock
+                    setAvailableServicePackages(servicePackages);
+                    if (items.length === 0 && servicePackages[0]) {
+                        setItems([{ serviceId: servicePackages[0].id, quantity: 1 }]);
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching provider services:', error);
             }
         };
         fetchProviderServices();
+        
+        // Refresh services periodically to stay in sync
+        const interval = setInterval(fetchProviderServices, 30000); // Every 30 seconds
+        return () => clearInterval(interval);
     }, []);
     const [note, setNote] = useState('');
     const [carDetails, setCarDetails] = useState<any>(null);
     const [carForm, setCarForm] = useState({ make: '', model: '', year: '', fuel: '', reg: '', city: '' });
     const [carFormError, setCarFormError] = useState('');
     const [carFormOpen, setCarFormOpen] = useState(true);
+    const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+    const [addressForm, setAddressForm] = useState<Partial<Address>>({});
 
     // Persist cart state
     useEffect(() => {
-        const payload = { items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails };
+        const payload = { items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses };
         localStorage.setItem(CART_KEY, JSON.stringify(payload));
-    }, [items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails]);
+    }, [items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses]);
 
     // Load persisted cart
     useEffect(() => {
@@ -164,6 +235,9 @@ const ServiceCart: React.FC<Props> = ({
         if (!raw) return;
         try {
             const parsed = JSON.parse(raw);
+            if (parsed.addresses && Array.isArray(parsed.addresses) && parsed.addresses.length > 0) {
+                setAddresses(parsed.addresses);
+            }
             setItems(parsed.items || []);
             setSelectedAddress(parsed.selectedAddress || addresses[0]?.id || '');
             setSelectedSlot(parsed.selectedSlot || timeSlots[0]?.id || '');
@@ -202,7 +276,7 @@ const ServiceCart: React.FC<Props> = ({
 
     const totals = useMemo(() => {
         const subtotal = items.reduce((sum, item) => {
-            const svc = servicePackages.find(s => s.id === item.serviceId);
+            const svc = availableServicePackages.find(s => s.id === item.serviceId);
             return sum + (svc ? svc.price * item.quantity : 0);
         }, 0);
         const couponValue = coupons.find(c => c.code === selectedCoupon)?.amountOff || 0;
@@ -210,20 +284,61 @@ const ServiceCart: React.FC<Props> = ({
         const tax = Math.round(subtotal * 0.05); // simple 5% mock tax
         const total = subtotal - discount + tax;
         return { subtotal, discount, tax, total };
-    }, [items, selectedCoupon, coupons, servicePackages]);
+    }, [items, selectedCoupon, coupons, availableServicePackages]);
 
     const selectedServiceIds = useMemo(() => items.map(i => i.serviceId), [items]);
 
+    // Map service package IDs to categories
+    const SERVICE_PACKAGE_TO_CATEGORY: Record<string, string> = {
+        'pkg-comprehensive': 'Essential Service',
+        'pkg-standard': 'Deep Detailing',
+        'pkg-care-plus': 'Care Plus',
+    };
+
+    // Get service categories from selected items
+    const selectedServiceCategories = useMemo(() => {
+        return items.map(item => {
+            const category = SERVICE_PACKAGE_TO_CATEGORY[item.serviceId];
+            if (category) return category;
+            // Fallback: try to match by name
+            const svcMeta = availableServicePackages.find(s => s.id === item.serviceId);
+            return svcMeta?.name || item.serviceId;
+        }).filter(Boolean);
+    }, [items, availableServicePackages]);
+
+    // Get service types from selected items (for backward compatibility)
+    const selectedServiceTypes = useMemo(() => {
+        return items.map(item => {
+            const svcMeta = availableServicePackages.find(s => s.id === item.serviceId);
+            return svcMeta?.name || item.serviceId;
+        }).filter(Boolean);
+    }, [items, availableServicePackages]);
+
+    // Filter providers based on selected service categories and types
     const availableProviders = useMemo(() => {
+        if (selectedServiceTypes.length === 0) {
+            return serviceProviders; // Show all if no services selected
+        }
+        
         return serviceProviders.filter(p => {
+            // First check if provider has matching categories
+            const providerCategories = (p as any).serviceCategories || [];
+            const hasMatchingCategory = selectedServiceCategories.some(category => 
+                providerCategories.includes(category)
+            );
+            
+            if (hasMatchingCategory) return true;
+            
+            // Fallback: check individual services
             const services = providerServices[p.id] || [];
-            return selectedServiceIds.every((sid) => {
-                const svcMeta = servicePackages.find(s => s.id === sid);
-                const serviceName = svcMeta?.name || sid;
-                return services.some(s => s.serviceType === serviceName && s.active !== false);
+            return selectedServiceTypes.every((serviceType) => {
+                return services.some(s => 
+                    s.serviceType === serviceType && 
+                    s.active !== false
+                );
             });
         });
-    }, [providerServices, selectedServiceIds, servicePackages, serviceProviders]);
+    }, [providerServices, selectedServiceTypes, selectedServiceCategories, serviceProviders]);
 
     const providerTotals = useMemo(() => {
         const result: Record<string, { total: number; breakdown: Array<{ id: string; name: string; price?: number }> }> = {};
@@ -231,20 +346,29 @@ const ServiceCart: React.FC<Props> = ({
             const services = providerServices[p.id] || [];
             let total = 0;
             const breakdown: Array<{ id: string; name: string; price?: number }> = [];
-            selectedServiceIds.forEach((sid) => {
-                const svcMeta = servicePackages.find(s => s.id === sid);
-                const serviceName = svcMeta?.name || sid;
+            
+            // Calculate totals based on selected items with quantities
+            items.forEach((item) => {
+                const svcMeta = availableServicePackages.find(s => s.id === item.serviceId);
+                const serviceName = svcMeta?.name || item.serviceId;
                 const match = services.find(s => s.serviceType === serviceName && s.active !== false);
                 const price = match?.price;
+                const quantity = item.quantity || 1;
+                
                 if (price !== undefined) {
-                    total += price;
+                    total += price * quantity;
                 }
-                breakdown.push({ id: sid, name: serviceName, price });
+                breakdown.push({ 
+                    id: item.serviceId, 
+                    name: serviceName, 
+                    price: price !== undefined ? price * quantity : undefined 
+                });
             });
+            
             result[p.id] = { total, breakdown };
         });
         return result;
-    }, [availableProviders, providerServices, selectedServiceIds, servicePackages]);
+    }, [availableProviders, providerServices, items, availableServicePackages]);
 
     const sortedAvailableProviders = useMemo(() => {
         return [...availableProviders].sort((a, b) => {
@@ -292,17 +416,29 @@ const ServiceCart: React.FC<Props> = ({
             setCarFormOpen(true);
             return;
         }
+        
+        // Ensure we have at least one provider selected or available
+        const providersToNotify = selectedProviders.length > 0 
+            ? selectedProviders 
+            : availableProviders.map(p => p.id);
+        
+        if (providersToNotify.length === 0) {
+            setCarFormError('No service providers available for the selected services. Please try different services.');
+            return;
+        }
+        
         const payload = {
             items,
             addressId: selectedAddress,
             address: addresses.find(a => a.id === selectedAddress),
             slotId: selectedSlot,
             couponCode: selectedCoupon,
-            candidateProviderIds: selectedProviders,
+            candidateProviderIds: providersToNotify,
             total: totals.total,
             note,
             carDetails,
-            servicePackages,
+            servicePackages: availableServicePackages,
+            serviceTypes: selectedServiceTypes, // Include service types for better matching
         };
         await onSubmitRequest?.(payload);
     };
@@ -408,22 +544,155 @@ const ServiceCart: React.FC<Props> = ({
                         </section>
 
                         <section className="border border-gray-200 rounded-lg p-4">
-                            <h2 className="text-sm font-semibold text-gray-900 mb-3">1. Address</h2>
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="text-sm font-semibold text-gray-900">1. Address</h2>
+                                <button
+                                    onClick={() => {
+                                        const newId = `addr-${Date.now()}`;
+                                        setAddresses(prev => [...prev, {
+                                            id: newId,
+                                            label: 'New Address',
+                                            line1: '',
+                                            city: '',
+                                            state: '',
+                                            pincode: '',
+                                        }]);
+                                        setEditingAddressId(newId);
+                                        setAddressForm({ label: 'New Address', line1: '', city: '', state: '', pincode: '' });
+                                    }}
+                                    className="text-xs text-purple-700 font-semibold hover:underline flex items-center gap-1"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Add Address
+                                </button>
+                            </div>
                             <div className="space-y-2">
-                                {addresses.map(addr => (
-                                    <label key={addr.id} className="flex items-start gap-3 p-3 rounded-md border border-gray-200 hover:border-purple-500 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            className="mt-1"
-                                            checked={selectedAddress === addr.id}
-                                            onChange={() => setSelectedAddress(addr.id)}
-                                        />
-                                        <div>
-                                            <div className="font-semibold text-gray-900">{addr.label}</div>
-                                            <div className="text-sm text-gray-600">{addr.line1}, {addr.city} {addr.pincode}</div>
+                                {addresses.map(addr => {
+                                    const isEditing = editingAddressId === addr.id;
+                                    return (
+                                        <div key={addr.id} className={`p-3 rounded-md border ${selectedAddress === addr.id ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-500'}`}>
+                                            {isEditing ? (
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-xs font-semibold text-gray-700">Label</label>
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingAddressId(null);
+                                                                setAddressForm({});
+                                                            }}
+                                                            className="text-xs text-gray-500 hover:text-gray-700"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={addressForm.label || addr.label}
+                                                        onChange={(e) => setAddressForm({ ...addressForm, label: e.target.value })}
+                                                        placeholder="e.g., Home, Office"
+                                                        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        value={addressForm.line1 || addr.line1}
+                                                        onChange={(e) => setAddressForm({ ...addressForm, line1: e.target.value })}
+                                                        placeholder="Street address"
+                                                        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                                                    />
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={addressForm.city || addr.city}
+                                                            onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
+                                                            placeholder="City"
+                                                            className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={addressForm.state || addr.state}
+                                                            onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
+                                                            placeholder="State"
+                                                            className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                                                        />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={addressForm.pincode || addr.pincode}
+                                                        onChange={(e) => setAddressForm({ ...addressForm, pincode: e.target.value })}
+                                                        placeholder="Pincode"
+                                                        className="w-full border border-gray-200 rounded-md px-3 py-2 text-sm"
+                                                    />
+                                                    <div className="flex gap-2 justify-end">
+                                                        <button
+                                                            onClick={() => {
+                                                                setAddresses(prev => prev.filter(a => a.id !== addr.id));
+                                                                if (selectedAddress === addr.id) {
+                                                                    setSelectedAddress(addresses.find(a => a.id !== addr.id)?.id || '');
+                                                                }
+                                                                setEditingAddressId(null);
+                                                                setAddressForm({});
+                                                            }}
+                                                            className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-md"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (addressForm.label || addressForm.line1 || addressForm.city) {
+                                                                    setAddresses(prev => prev.map(a => 
+                                                                        a.id === addr.id 
+                                                                            ? { ...a, ...addressForm }
+                                                                            : a
+                                                                    ));
+                                                                }
+                                                                setEditingAddressId(null);
+                                                                setAddressForm({});
+                                                            }}
+                                                            className="px-3 py-1.5 text-xs bg-purple-700 text-white rounded-md hover:bg-purple-800"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <label className="flex items-start gap-3 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        className="mt-1"
+                                                        checked={selectedAddress === addr.id}
+                                                        onChange={() => setSelectedAddress(addr.id)}
+                                                    />
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="font-semibold text-gray-900">{addr.label}</div>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setEditingAddressId(addr.id);
+                                                                        setAddressForm({
+                                                                            label: addr.label,
+                                                                            line1: addr.line1,
+                                                                            city: addr.city,
+                                                                            state: addr.state,
+                                                                            pincode: addr.pincode,
+                                                                        });
+                                                                    }}
+                                                                    className="text-xs text-purple-700 hover:underline"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-sm text-gray-600">{addr.line1}, {addr.city} {addr.pincode}</div>
+                                                    </div>
+                                                </label>
+                                            )}
                                         </div>
-                                    </label>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </section>
 
@@ -470,7 +739,7 @@ const ServiceCart: React.FC<Props> = ({
                             <h3 className="text-sm font-semibold text-gray-900 mb-3">Order details</h3>
                             <div className="space-y-3">
                                 {items.map(item => {
-                                    const svc = servicePackages.find(s => s.id === item.serviceId);
+                                    const svc = availableServicePackages.find(s => s.id === item.serviceId);
                                     if (!svc) return null;
                                     return (
                                         <div key={item.serviceId} className="flex gap-3 items-start border border-gray-100 rounded-md p-3">
@@ -480,7 +749,9 @@ const ServiceCart: React.FC<Props> = ({
                                             <div className="flex-1">
                                                 <div className="font-semibold text-gray-900 text-sm">{svc.name}</div>
                                                 <div className="text-xs text-gray-600">{svc.description}</div>
-                                                <div className="text-xs text-gray-600">₹{svc.price.toLocaleString()}</div>
+                                                <div className="text-xs text-gray-600">
+                                                    {svc.price > 0 ? `₹${svc.price.toLocaleString()}` : 'Custom quote'}
+                                                </div>
                                                 <div className="flex items-center gap-2 mt-2">
                                                     <button
                                                         onClick={() => updateQuantity(item.serviceId, -1)}
@@ -502,7 +773,9 @@ const ServiceCart: React.FC<Props> = ({
                                 })}
 
                                 <div className="flex flex-wrap gap-2">
-                                    {servicePackages.map(pkg => (
+                                    {availableServicePackages
+                                        .filter(pkg => !items.some(item => item.serviceId === pkg.id))
+                                        .map(pkg => (
                                         <button
                                             key={pkg.id}
                                             onClick={() => addService(pkg.id)}
@@ -517,7 +790,14 @@ const ServiceCart: React.FC<Props> = ({
 
                         <section className="border border-gray-200 rounded-lg p-4">
                             <div className="flex items-center justify-between gap-2 mb-2">
-                                <h3 className="text-sm font-semibold text-gray-900">Choose provider</h3>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-gray-900">Choose provider</h3>
+                                    {selectedServiceTypes.length > 0 && (
+                                        <p className="text-xs text-gray-600 mt-1">
+                                            Showing providers for: {selectedServiceTypes.join(', ')}
+                                        </p>
+                                    )}
+                                </div>
                                 {onUseMyLocation && (
                                     <button
                                         type="button"
@@ -529,6 +809,13 @@ const ServiceCart: React.FC<Props> = ({
                                     </button>
                                 )}
                             </div>
+                            {selectedServiceTypes.length === 0 && (
+                                <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                                    <p className="text-xs text-amber-800">
+                                        Please select a service above to see available providers.
+                                    </p>
+                                </div>
+                            )}
                             <div className="space-y-2">
                         {sortedAvailableProviders.map(p => {
                                     const totals = providerTotals[p.id];

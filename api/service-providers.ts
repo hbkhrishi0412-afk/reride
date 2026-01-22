@@ -84,6 +84,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (body.name !== undefined) updates.name = body.name;
       if (body.phone !== undefined) updates.phone = body.phone;
       if (body.city !== undefined) updates.city = body.city;
+      if (body.state !== undefined) updates.state = body.state;
+      if (body.district !== undefined) updates.district = body.district;
+      if (body.serviceCategories !== undefined) updates.serviceCategories = body.serviceCategories;
 
       await supabaseServiceProviderService.update(uid, updates);
       const updated = await supabaseServiceProviderService.findById(uid);

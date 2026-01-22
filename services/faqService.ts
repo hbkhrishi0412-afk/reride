@@ -1,54 +1,49 @@
 import type { FAQItem } from '../types';
-import { queueRequest } from '../utils/requestQueue';
+import { getSupabaseClient } from '../lib/supabase.js';
 
 const FAQ_STORAGE_KEY = 'reRideFaqs';
 
-// Fetch FAQs from MongoDB API
-export const fetchFaqsFromMongoDB = async (): Promise<FAQItem[]> => {
+// Fetch FAQs from Supabase
+export const fetchFaqsFromSupabase = async (): Promise<FAQItem[]> => {
   try {
-    const data = await queueRequest(
-      async () => {
-            if (!response.ok) {
-          throw new Error(`Failed to fetch FAQs: ${response.status}`);
-        }
-        
-        const responseData = await response.json();
-        
-        // Transform MongoDB documents to FAQItem format
-        // The API now returns id field, but we'll handle both cases
-        // Store _id as a property for MongoDB operations
-        const faqs: FAQItem[] = (responseData.faqs || []).map((faq: any, index: number) => {
-          const faqItem: FAQItem & { _id?: string } = {
-            id: faq.id || (faq._id ? parseInt(faq._id.toString().slice(-8), 16) : index + 1),
-            question: faq.question || '',
-            answer: faq.answer || '',
-            category: faq.category || 'General'
-          };
-          // Store MongoDB _id for update/delete operations
-          if (faq._id) {
-            (faqItem as any)._id = faq._id.toString();
-          }
-          return faqItem;
-        });
-        
-        // Save to localStorage as backup (client-side only)
-        if (faqs.length > 0 && typeof window !== 'undefined') {
-          saveFaqs(faqs);
-        }
-        
-        return faqs;
-      },
-      { priority: 3, id: 'faqs', maxRetries: 2 }
-    );
+    const supabase = getSupabaseClient();
     
-    return data;
+    const { data, error } = await supabase
+      .from('faqs')
+      .select('*')
+      .order('id', { ascending: true });
+    
+    if (error) {
+      throw new Error(`Failed to fetch FAQs: ${error.message}`);
+    }
+    
+    // Transform Supabase rows to FAQItem format
+    const faqs: FAQItem[] = (data || []).map((faq: any, index: number) => {
+      const faqItem: FAQItem = {
+        id: faq.id || index + 1,
+        question: faq.question || '',
+        answer: faq.answer || '',
+        category: faq.category || 'General'
+      };
+      return faqItem;
+    });
+    
+    // Save to localStorage as backup (client-side only)
+    if (faqs.length > 0 && typeof window !== 'undefined') {
+      saveFaqs(faqs);
+    }
+    
+    return faqs;
   } catch (error) {
-    console.error('Error fetching FAQs from MongoDB:', error);
-    // Fallback to localStorage if API fails
+    console.error('Error fetching FAQs from Supabase:', error);
+    // Fallback to localStorage if Supabase fails
     const localFaqs = getFaqs();
     return localFaqs || [];
   }
 };
+
+// Alias for backward compatibility
+export const fetchFaqsFromMongoDB = fetchFaqsFromSupabase;
 
 export const getFaqs = (): FAQItem[] | null => {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
@@ -74,77 +69,101 @@ export const saveFaqs = (faqs: FAQItem[]) => {
   }
 };
 
-// Save FAQ to MongoDB
-export const saveFaqToMongoDB = async (faq: Omit<FAQItem, 'id'>): Promise<FAQItem & { _id?: string } | null> => {
+// Save FAQ to Supabase
+export const saveFaqToSupabase = async (faq: Omit<FAQItem, 'id'>): Promise<FAQItem | null> => {
   try {
-    const response = await fetch('/api/faqs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(faq)
-    });
+    const supabase = getSupabaseClient();
     
-    if (!response.ok) {
-      throw new Error(`Failed to save FAQ: ${response.status}`);
+    const { data, error } = await supabase
+      .from('faqs')
+      .insert({
+        question: faq.question,
+        answer: faq.answer,
+        category: faq.category || 'General'
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      throw new Error(`Failed to save FAQ: ${error.message}`);
     }
     
-    const data = await response.json();
-    if (data.faq) {
-      // Transform the MongoDB response to FAQItem format
-      const savedFaq: FAQItem & { _id?: string } = {
-        id: data.faq.id || (data.faq._id ? parseInt(data.faq._id.toString().slice(-8), 16) : Date.now()),
-        question: data.faq.question || faq.question,
-        answer: data.faq.answer || faq.answer,
-        category: data.faq.category || faq.category
+    if (data) {
+      const savedFaq: FAQItem = {
+        id: data.id,
+        question: data.question || faq.question,
+        answer: data.answer || faq.answer,
+        category: data.category || faq.category || 'General'
       };
-      // Store MongoDB _id
-      if (data.faq._id) {
-        savedFaq._id = data.faq._id.toString();
-      }
       return savedFaq;
     }
     return null;
   } catch (error) {
-    console.error('Error saving FAQ to MongoDB:', error);
+    console.error('Error saving FAQ to Supabase:', error);
     return null;
   }
 };
 
-// Update FAQ in MongoDB
-// Note: This requires the MongoDB _id, not the app id
-// We'll need to find the FAQ by question or store _id mapping
-export const updateFaqInMongoDB = async (faq: FAQItem, mongoId?: string): Promise<boolean> => {
+// Alias for backward compatibility
+export const saveFaqToMongoDB = saveFaqToSupabase;
+
+// Update FAQ in Supabase
+export const updateFaqInSupabase = async (faq: FAQItem): Promise<boolean> => {
   try {
-    // If we have the MongoDB _id, use it directly
-    const idToUse = mongoId || faq.id?.toString();
+    if (!faq.id) {
+      throw new Error('FAQ ID is required for update');
+    }
     
-    const response = await fetch(`/api/content?type=faqs&id=${idToUse}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const supabase = getSupabaseClient();
+    
+    const { error } = await supabase
+      .from('faqs')
+      .update({
         question: faq.question,
         answer: faq.answer,
-        category: faq.category
+        category: faq.category || 'General'
       })
-    });
+      .eq('id', faq.id);
     
-    return response.ok;
+    if (error) {
+      throw new Error(`Failed to update FAQ: ${error.message}`);
+    }
+    
+    return true;
   } catch (error) {
-    console.error('Error updating FAQ in MongoDB:', error);
+    console.error('Error updating FAQ in Supabase:', error);
     return false;
   }
 };
 
-// Delete FAQ from MongoDB
-// Note: This requires the MongoDB _id, not the app id
-export const deleteFaqFromMongoDB = async (mongoId: string): Promise<boolean> => {
+// Alias for backward compatibility
+export const updateFaqInMongoDB = async (faq: FAQItem, _mongoId?: string): Promise<boolean> => {
+  return updateFaqInSupabase(faq);
+};
+
+// Delete FAQ from Supabase
+export const deleteFaqFromSupabase = async (faqId: number): Promise<boolean> => {
   try {
-    const response = await fetch(`/api/content?type=faqs&id=${mongoId}`, {
-      method: 'DELETE'
-    });
+    const supabase = getSupabaseClient();
     
-    return response.ok;
+    const { error } = await supabase
+      .from('faqs')
+      .delete()
+      .eq('id', faqId);
+    
+    if (error) {
+      throw new Error(`Failed to delete FAQ: ${error.message}`);
+    }
+    
+    return true;
   } catch (error) {
-    console.error('Error deleting FAQ from MongoDB:', error);
+    console.error('Error deleting FAQ from Supabase:', error);
     return false;
   }
+};
+
+// Alias for backward compatibility
+export const deleteFaqFromMongoDB = async (faqId: string | number): Promise<boolean> => {
+  const id = typeof faqId === 'string' ? parseInt(faqId, 10) : faqId;
+  return deleteFaqFromSupabase(id);
 };

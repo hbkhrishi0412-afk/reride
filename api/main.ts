@@ -209,11 +209,11 @@ const requireAdmin = (
   return auth;
 };
 
-// Rate limiting using MongoDB for serverless compatibility
+// Rate limiting using Supabase for serverless compatibility
 const config = getSecurityConfig();
 
 type HandlerOptions = {
-  // Firebase-only - no MongoDB options needed
+  // Supabase-only - no additional options needed
 };
 
 // Extract client IP from request headers (handles proxies and Vercel)
@@ -1374,19 +1374,48 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
   // GET - Get users (authenticated)
   if (req.method === 'GET') {
     const { action, email } = req.query;
-    const auth = requireAuth(req, res, 'GET /users');
-    if (!auth) {
-      return;
+    
+    // For non-admin requests without auth, return empty array instead of 401
+    // This prevents console errors when users aren't logged in
+    const authResult = authenticateRequest(req);
+    if (!authResult.isValid) {
+      // If no auth and not requesting specific action, return empty array gracefully
+      if (!action && !email) {
+        // Only log in development to avoid information leakage
+        if (process.env.NODE_ENV !== 'production') {
+          logInfo('📊 GET /users: No authentication, returning empty array');
+        }
+        return res.status(200).json([]);
+      }
+      // For specific actions (like trust-score), still require auth
+      const auth = requireAuth(req, res, 'GET /users');
+      if (!auth) {
+        return;
+      }
+    } else {
+      // Auth is valid, continue with normal flow
+      const auth = requireAuth(req, res, 'GET /users');
+      if (!auth) {
+        return;
+      }
     }
+    
+    // Get auth user for the rest of the handler
+    const auth = requireAuth(req, res, 'GET /users');
+    if (!auth || !auth.user) {
+      // This shouldn't happen if we got here, but handle it gracefully
+      return res.status(200).json([]);
+    }
+    const authUser = auth.user;
 
     if (action === 'trust-score' && email) {
       try {
         // Sanitize and normalize email
         const sanitizedEmail = await sanitizeString(String(email));
         const normalizedEmail = sanitizedEmail.toLowerCase().trim();
-        const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+        const normalizedAuthEmail = authUser?.email ? authUser.email.toLowerCase().trim() : '';
 
-        if (auth.user?.role !== 'admin' && normalizedAuthEmail !== normalizedEmail) {
+        if (authUser?.role !== 'admin' && normalizedAuthEmail !== normalizedEmail) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to trust score.' });
         }
 
@@ -1412,7 +1441,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
     }
     
-    if (auth.user?.role !== 'admin') {
+    if (authUser?.role !== 'admin') {
       return res.status(403).json({ success: false, reason: 'Forbidden. Admin access required.' });
     }
     
@@ -2279,23 +2308,68 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       });
       
       // PERFORMANCE OPTIMIZATION: Only fetch users for vehicles that need expiry checks
-      // Use Promise.all to fetch users in parallel instead of loading all users
+      // Use Promise.allSettled with individual timeouts to prevent blocking on slow queries
       const sellerMap = new Map<string, UserType>();
       if (sellerEmails.size > 0) {
-        // Fetch users in parallel for better performance
-        const userPromises = Array.from(sellerEmails).map(email => 
-          firebaseUserService.findByEmail(email).catch(err => {
-            console.warn(`⚠️ Failed to fetch user ${email}:`, err);
-            return null;
-          })
-        );
-        const users = await Promise.all(userPromises);
+        // Helper function to add timeout to individual user fetches
+        // Each fetch has a 2-second timeout to prevent blocking the entire operation
+        const fetchUserWithTimeout = async (email: string, timeoutMs: number = 2000): Promise<UserType | null> => {
+          return new Promise(async (resolve) => {
+            let timeoutId: NodeJS.Timeout | null = null;
+            let resolved = false;
+            
+            const cleanup = () => {
+              if (timeoutId) clearTimeout(timeoutId);
+            };
+            
+            // Set up timeout
+            timeoutId = setTimeout(() => {
+              if (!resolved) {
+                resolved = true;
+                cleanup();
+                console.warn(`⏱️ Timeout fetching user ${email} (${timeoutMs}ms)`);
+                resolve(null);
+              }
+            }, timeoutMs);
+            
+            try {
+              const user = await firebaseUserService.findByEmail(email);
+              if (!resolved) {
+                resolved = true;
+                cleanup();
+                resolve(user);
+              }
+            } catch (err) {
+              if (!resolved) {
+                resolved = true;
+                cleanup();
+                console.warn(`⚠️ Failed to fetch user ${email}:`, err);
+                resolve(null);
+              }
+            }
+          });
+        };
         
-        // Build seller map from fetched users
-        users.forEach((seller) => {
-          if (seller && seller.email) {
-            const normalizedEmail = seller.email.toLowerCase().trim();
-            sellerMap.set(normalizedEmail, seller);
+        // Fetch users in parallel with individual timeouts (2 seconds per fetch)
+        // Use allSettled to not block on slow queries
+        const userPromises = Array.from(sellerEmails).map(email => 
+          fetchUserWithTimeout(email, 2000)
+        );
+        
+        // Use allSettled instead of all to handle partial failures gracefully
+        const results = await Promise.allSettled(userPromises);
+        
+        // Build seller map from successfully fetched users
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value) {
+            const seller = result.value;
+            if (seller && seller.email) {
+              const normalizedEmail = seller.email.toLowerCase().trim();
+              sellerMap.set(normalizedEmail, seller);
+            }
+          } else if (result.status === 'rejected') {
+            const email = Array.from(sellerEmails)[index];
+            console.warn(`⚠️ User fetch promise rejected for ${email}:`, result.reason);
           }
         });
         

@@ -93,12 +93,53 @@ export const CITIES_BY_STATE: Record<string, string[]> = {
     'DD': ['Daman'], 'LD': ['Kavaratti'], 'PY': ['Puducherry'],
 };
 
-// Fetch users from MongoDB API
+// Fetch users from Supabase API
 export async function getMockUsers(): Promise<User[]> {
     try {
-        const response = await fetch('/api/users');
-        const data = await response.json();
-        return data.users || [];
+        // Check if user is authenticated before making request
+        const token = localStorage.getItem('reRideAccessToken');
+        if (!token) {
+            // No token available, return fallback users
+            return getFallbackUsers();
+        }
+        
+        // Use authenticated fetch if available
+        try {
+            const { authenticatedFetch } = await import('./utils/authenticatedFetch');
+            const response = await authenticatedFetch('/api/users');
+            
+            if (!response.ok) {
+                if (response.status === 401) {
+                    // Authentication failed, return fallback
+                    return getFallbackUsers();
+                }
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            return Array.isArray(data) ? data : (data.users || []);
+        } catch (authError) {
+            // If authenticatedFetch fails, try regular fetch with auth headers
+            try {
+                const { getAuthHeaders } = await import('./utils/authenticatedFetch');
+                const response = await fetch('/api/users', {
+                    headers: getAuthHeaders()
+                });
+                
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        return getFallbackUsers();
+                    }
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return Array.isArray(data) ? data : (data.users || []);
+            } catch (fetchError) {
+                // If all else fails, return fallback
+                return getFallbackUsers();
+            }
+        }
     } catch (error) {
         console.error('Error fetching users:', error);
         return getFallbackUsers();
@@ -152,7 +193,7 @@ export const getFallbackUsers = (): User[] => [
 // For backward compatibility, export a function that returns users
 export const MOCK_USERS = getMockUsers;
 
-// Fetch FAQs from MongoDB API
+// Fetch FAQs from Supabase API
 export async function getMockFAQs(): Promise<FAQItem[]> {
     try {
         const response = await fetch('/api/faqs');
@@ -183,7 +224,7 @@ export const getFallbackFAQs = (): FAQItem[] => [
 // For backward compatibility, export a function that returns FAQs
 export const MOCK_FAQS = getMockFAQs;
 
-// Fetch Support Tickets from MongoDB API
+// Fetch Support Tickets from Supabase API
 export async function getMockSupportTickets(): Promise<SupportTicket[]> {
     try {
         const response = await fetch('/api/support-tickets');
@@ -288,7 +329,7 @@ const generateMockVehicles = (count: number): Vehicle[] => {
     return vehicles;
 };
 
-// Fetch Vehicles from MongoDB API
+// Fetch Vehicles from Supabase API
 export async function getMockVehicles(): Promise<Vehicle[]> {
     try {
         const response = await fetch('/api/vehicles');
