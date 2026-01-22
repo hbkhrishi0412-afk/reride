@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { VehicleData, VehicleCategory } from '../types.js';
 
 interface VehicleDataManagementProps {
@@ -30,6 +30,29 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Validate selectedCategory exists in vehicleData when vehicleData changes
+  useEffect(() => {
+    if (selectedCategory && !vehicleData[selectedCategory]) {
+      // Category key doesn't exist, clear selection
+      setSelectedCategory(null);
+      setSelectedMake(null);
+      setSelectedModel(null);
+    }
+  }, [vehicleData, selectedCategory]);
+
+  // Helper function to normalize category keys for comparison
+  // Handles different formats: 'FOUR_WHEELER', 'four-wheeler', 'Four Wheeler', etc.
+  // Uses the same normalization as VehicleList for consistency
+  const normalizeCategoryKey = (category: string): string => {
+    return String(category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+  };
+
+  // Helper function to find category key by normalized value
+  const findCategoryKey = (normalizedValue: string): string | null => {
+    const normalized = normalizeCategoryKey(normalizedValue);
+    return Object.keys(vehicleData).find(key => normalizeCategoryKey(key) === normalized) || null;
+  };
+
   // Get available data based on selections
   const categories = Object.keys(vehicleData).sort();
   
@@ -37,11 +60,38 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
   const formatCategoryName = (category: string) => {
     return category.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
   };
-  const makes = selectedCategory ? (vehicleData[selectedCategory] || []).map(make => make.name).sort() : [];
-  const models = selectedCategory && selectedMake ? 
-    (vehicleData[selectedCategory]?.find(make => make.name === selectedMake)?.models || []).map(model => model.name).sort() : [];
-  const variants = selectedCategory && selectedMake && selectedModel ? 
-    (vehicleData[selectedCategory]?.find(make => make.name === selectedMake)?.models.find(model => model.name === selectedModel)?.variants || []).sort() : [];
+
+  // Get makes filtered by selected category - ensure we use the exact category key
+  // Only show makes from the selected category, not from all categories
+  const makes = useMemo(() => {
+    if (!selectedCategory) return [];
+    const categoryData = vehicleData[selectedCategory];
+    if (!categoryData || !Array.isArray(categoryData)) return [];
+    return categoryData.map(make => make.name).sort();
+  }, [selectedCategory, vehicleData]);
+  
+  // Get models filtered by selected category and make
+  // Only show models from the selected category and make combination
+  const models = useMemo(() => {
+    if (!selectedCategory || !selectedMake) return [];
+    const categoryData = vehicleData[selectedCategory];
+    if (!categoryData || !Array.isArray(categoryData)) return [];
+    const makeData = categoryData.find(make => make.name === selectedMake);
+    if (!makeData || !makeData.models) return [];
+    return makeData.models.map(model => model.name).sort();
+  }, [selectedCategory, selectedMake, vehicleData]);
+  
+  // Get variants filtered by selected category, make, and model
+  const variants = useMemo(() => {
+    if (!selectedCategory || !selectedMake || !selectedModel) return [];
+    const categoryData = vehicleData[selectedCategory];
+    if (!categoryData || !Array.isArray(categoryData)) return [];
+    const makeData = categoryData.find(make => make.name === selectedMake);
+    if (!makeData || !makeData.models) return [];
+    const modelData = makeData.models.find(model => model.name === selectedModel);
+    if (!modelData || !modelData.variants) return [];
+    return [...modelData.variants].sort();
+  }, [selectedCategory, selectedMake, selectedModel, vehicleData]);
 
   // Filter data based on search term
   const filteredCategories = categories.filter(cat => 
@@ -231,12 +281,38 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
   };
 
   const handleSelectCategory = (formattedCategory: string | null) => {
+    if (!formattedCategory) {
+      setSelectedCategory(null);
+      setSelectedMake(null);
+      setSelectedModel(null);
+      return;
+    }
+
     // Convert formatted category back to original key
-    const originalCategory = formattedCategory ? 
-      categories.find(cat => formatCategoryName(cat) === formattedCategory) || null : null;
-    setSelectedCategory(originalCategory);
-    setSelectedMake(null);
-    setSelectedModel(null);
+    // Try exact match first, then normalized match
+    let originalCategory = categories.find(cat => formatCategoryName(cat) === formattedCategory) || null;
+    
+    // If not found, try normalized comparison
+    if (!originalCategory) {
+      const normalizedFormatted = normalizeCategoryKey(formattedCategory);
+      originalCategory = categories.find(cat => {
+        const normalizedCat = normalizeCategoryKey(cat);
+        const formattedCat = formatCategoryName(cat);
+        return normalizedCat === normalizedFormatted || formattedCat === formattedCategory;
+      }) || null;
+    }
+
+    // Validate that the category exists in vehicleData before setting
+    if (originalCategory && vehicleData[originalCategory]) {
+      setSelectedCategory(originalCategory);
+      setSelectedMake(null);
+      setSelectedModel(null);
+    } else {
+      // Category not found or invalid, clear selection
+      setSelectedCategory(null);
+      setSelectedMake(null);
+      setSelectedModel(null);
+    }
   };
 
   const handleSelectMake = (make: string | null) => {

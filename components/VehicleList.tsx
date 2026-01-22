@@ -237,67 +237,353 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     return Object.values(CategoryEnum);
   }, [vehicleData, isLoadingVehicleData]);
 
-  // Get makes from admin database vehicle data
+  // Get makes from admin database vehicle data, filtered by selected category
   const uniqueMakes = useMemo(() => {
     if (vehicleData && !isLoadingVehicleData) {
       // Get makes from admin database
       const makesFromDb = new Set<string>();
-      Object.values(vehicleData).forEach((categoryData: any) => {
-        categoryData.forEach((make: any) => {
-          makesFromDb.add(make.name);
+      
+      // If a category filter is active, only get makes from that category
+      if (categoryFilter !== 'ALL' && categoryFilter) {
+        const normalizedCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        // Find matching category key in vehicleData
+        const categoryKey = Object.keys(vehicleData).find(key => {
+          const normalizedKey = String(key).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          return normalizedKey === normalizedCategory;
         });
-      });
+        
+        if (categoryKey && vehicleData[categoryKey]) {
+          vehicleData[categoryKey].forEach((make: any) => {
+            makesFromDb.add(make.name);
+          });
+        }
+      } else {
+        // No category filter - show all makes from all categories
+        Object.values(vehicleData).forEach((categoryData: any) => {
+          categoryData.forEach((make: any) => {
+            makesFromDb.add(make.name);
+          });
+        });
+      }
       return Array.from(makesFromDb).sort();
     }
-    // Fallback to vehicle makes
-    return [...new Set((vehicles || []).map(v => v.make))].sort();
-  }, [vehicleData, isLoadingVehicleData, vehicles]);
+    // Fallback to vehicle makes - filter by category if active
+    const filteredVehicles = categoryFilter !== 'ALL' && categoryFilter
+      ? (vehicles || []).filter(v => {
+          if (!v.category) return false;
+          const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          return vehicleCategory === filterCategory;
+        })
+      : (vehicles || []);
+    return [...new Set(filteredVehicles.map(v => v.make))].sort();
+  }, [vehicleData, isLoadingVehicleData, vehicles, categoryFilter]);
+
+  // Get makes for mobile temp filters, filtered by selected category
+  const tempUniqueMakes = useMemo(() => {
+    if (vehicleData && !isLoadingVehicleData) {
+      // Get makes from admin database
+      const makesFromDb = new Set<string>();
+      
+      // If a category filter is active, only get makes from that category
+      if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
+        const normalizedCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        // Find matching category key in vehicleData
+        const categoryKey = Object.keys(vehicleData).find(key => {
+          const normalizedKey = String(key).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          return normalizedKey === normalizedCategory;
+        });
+        
+        if (categoryKey && vehicleData[categoryKey]) {
+          vehicleData[categoryKey].forEach((make: any) => {
+            makesFromDb.add(make.name);
+          });
+        }
+      } else {
+        // No category filter - show all makes from all categories
+        Object.values(vehicleData).forEach((categoryData: any) => {
+          categoryData.forEach((make: any) => {
+            makesFromDb.add(make.name);
+          });
+        });
+      }
+      return Array.from(makesFromDb).sort();
+    }
+    // Fallback to vehicle makes - filter by category if active
+    const filteredVehicles = tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter
+      ? (vehicles || []).filter(v => {
+          if (!v.category) return false;
+          const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          const filterCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          return vehicleCategory === filterCategory;
+        })
+      : (vehicles || []);
+    return [...new Set(filteredVehicles.map(v => v.make))].sort();
+  }, [vehicleData, isLoadingVehicleData, vehicles, tempFilters.categoryFilter]);
 
   const availableModels = useMemo(() => {
     if (!makeFilter) return [];
     
     if (vehicleData && !isLoadingVehicleData) {
-      // Get models from admin database
+      // Get models from admin database, filtered by category if active
       const modelsFromDb = new Set<string>();
-      Object.values(vehicleData).forEach((categoryData: any) => {
-        categoryData.forEach((make: any) => {
-          if (make.name === makeFilter) {
-            make.models.forEach((model: any) => {
-              modelsFromDb.add(model.name);
-            });
-          }
-        });
-      });
-      return Array.from(modelsFromDb).sort();
-    }
-    
-    // Fallback to vehicle models
-    return [...new Set((vehicles || []).filter(v => v.make === makeFilter).map(v => v.model))].sort();
-  }, [makeFilter, vehicleData, isLoadingVehicleData, vehicles]);
-  const tempAvailableModels = useMemo(() => {
-      if (!tempFilters.makeFilter) return [];
       
-      if (vehicleData && !isLoadingVehicleData) {
-        // Get models from admin database
-        const modelsFromDb = new Set<string>();
+      if (categoryFilter !== 'ALL' && categoryFilter) {
+        // Filter by category
+        const normalizedCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const categoryKey = Object.keys(vehicleData).find(key => {
+          const normalizedKey = String(key).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          return normalizedKey === normalizedCategory;
+        });
+        
+        if (categoryKey && vehicleData[categoryKey]) {
+          vehicleData[categoryKey].forEach((make: any) => {
+            if (make.name === makeFilter) {
+              make.models.forEach((model: any) => {
+                modelsFromDb.add(model.name);
+              });
+            }
+          });
+        }
+      } else {
+        // No category filter - show all models for the make across all categories
         Object.values(vehicleData).forEach((categoryData: any) => {
           categoryData.forEach((make: any) => {
-            if (make.name === tempFilters.makeFilter) {
+            if (make.name === makeFilter) {
               make.models.forEach((model: any) => {
                 modelsFromDb.add(model.name);
               });
             }
           });
         });
+      }
+      return Array.from(modelsFromDb).sort();
+    }
+    
+    // Fallback to vehicle models - filter by category if active
+    let filteredVehicles = (vehicles || []).filter(v => v.make === makeFilter);
+    if (categoryFilter !== 'ALL' && categoryFilter) {
+      filteredVehicles = filteredVehicles.filter(v => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    return [...new Set(filteredVehicles.map(v => v.model))].sort();
+  }, [makeFilter, vehicleData, isLoadingVehicleData, vehicles, categoryFilter]);
+  const tempAvailableModels = useMemo(() => {
+      if (!tempFilters.makeFilter) return [];
+      
+      if (vehicleData && !isLoadingVehicleData) {
+        // Get models from admin database, filtered by category if active
+        const modelsFromDb = new Set<string>();
+        
+        if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
+          // Filter by category
+          const normalizedCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          const categoryKey = Object.keys(vehicleData).find(key => {
+            const normalizedKey = String(key).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+            return normalizedKey === normalizedCategory;
+          });
+          
+          if (categoryKey && vehicleData[categoryKey]) {
+            vehicleData[categoryKey].forEach((make: any) => {
+              if (make.name === tempFilters.makeFilter) {
+                make.models.forEach((model: any) => {
+                  modelsFromDb.add(model.name);
+                });
+              }
+            });
+          }
+        } else {
+          // No category filter - show all models for the make across all categories
+          Object.values(vehicleData).forEach((categoryData: any) => {
+            categoryData.forEach((make: any) => {
+              if (make.name === tempFilters.makeFilter) {
+                make.models.forEach((model: any) => {
+                  modelsFromDb.add(model.name);
+                });
+              }
+            });
+          });
+        }
         return Array.from(modelsFromDb).sort();
       }
       
-      // Fallback to vehicle models
-      return [...new Set((vehicles || []).filter(v => v.make === tempFilters.makeFilter).map(v => v.model))].sort();
-  }, [tempFilters.makeFilter, vehicleData, isLoadingVehicleData, vehicles]);
-  const uniqueYears = useMemo(() => [...new Set((vehicles || []).map(v => v.year))].sort((a, b) => Number(b) - Number(a)), [vehicles]);
-  const uniqueColors = useMemo(() => [...new Set((vehicles || []).map(v => v.color))].sort(), [vehicles]);
+      // Fallback to vehicle models - filter by category if active
+      let filteredVehicles = (vehicles || []).filter(v => v.make === tempFilters.makeFilter);
+      if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
+        filteredVehicles = filteredVehicles.filter(v => {
+          if (!v.category) return false;
+          const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          const filterCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          return vehicleCategory === filterCategory;
+        });
+      }
+      return [...new Set(filteredVehicles.map(v => v.model))].sort();
+  }, [tempFilters.makeFilter, tempFilters.categoryFilter, vehicleData, isLoadingVehicleData, vehicles]);
+  
+  // Filter years, colors, and fuel types based on selected category and make/model
+  const uniqueYears = useMemo(() => {
+    let filteredVehicles = vehicles || [];
+    
+    // Filter by category if active
+    if (categoryFilter !== 'ALL' && categoryFilter) {
+      filteredVehicles = filteredVehicles.filter(v => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    
+    // Filter by make if active
+    if (makeFilter && makeFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.make?.toLowerCase().trim() === makeFilter.toLowerCase().trim());
+    }
+    
+    // Filter by model if active
+    if (modelFilter && modelFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.model?.toLowerCase().trim() === modelFilter.toLowerCase().trim());
+    }
+    
+    return [...new Set(filteredVehicles.map(v => v.year))].sort((a, b) => Number(b) - Number(a));
+  }, [vehicles, categoryFilter, makeFilter, modelFilter]);
+  
+  const uniqueColors = useMemo(() => {
+    let filteredVehicles = vehicles || [];
+    
+    // Filter by category if active
+    if (categoryFilter !== 'ALL' && categoryFilter) {
+      filteredVehicles = filteredVehicles.filter(v => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    
+    // Filter by make if active
+    if (makeFilter && makeFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.make?.toLowerCase().trim() === makeFilter.toLowerCase().trim());
+    }
+    
+    // Filter by model if active
+    if (modelFilter && modelFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.model?.toLowerCase().trim() === modelFilter.toLowerCase().trim());
+    }
+    
+    return [...new Set(filteredVehicles.map(v => v.color))].sort();
+  }, [vehicles, categoryFilter, makeFilter, modelFilter]);
+  
+  // Filter fuel types based on selected category and make/model
+  const uniqueFuelTypes = useMemo(() => {
+    let filteredVehicles = vehicles || [];
+    
+    // Filter by category if active
+    if (categoryFilter !== 'ALL' && categoryFilter) {
+      filteredVehicles = filteredVehicles.filter(v => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    
+    // Filter by make if active
+    if (makeFilter && makeFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.make?.toLowerCase().trim() === makeFilter.toLowerCase().trim());
+    }
+    
+    // Filter by model if active
+    if (modelFilter && modelFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.model?.toLowerCase().trim() === modelFilter.toLowerCase().trim());
+    }
+    
+    return [...new Set(filteredVehicles.map(v => v.fuelType).filter(Boolean))].sort();
+  }, [vehicles, categoryFilter, makeFilter, modelFilter]);
+  
   const uniqueStates = useMemo(() => indianStates, [indianStates]);
+  
+  // Temp versions for mobile filters
+  const tempUniqueYears = useMemo(() => {
+    let filteredVehicles = vehicles || [];
+    
+    // Filter by category if active
+    if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
+      filteredVehicles = filteredVehicles.filter(v => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    
+    // Filter by make if active
+    if (tempFilters.makeFilter && tempFilters.makeFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.make?.toLowerCase().trim() === tempFilters.makeFilter.toLowerCase().trim());
+    }
+    
+    // Filter by model if active
+    if (tempFilters.modelFilter && tempFilters.modelFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.model?.toLowerCase().trim() === tempFilters.modelFilter.toLowerCase().trim());
+    }
+    
+    return [...new Set(filteredVehicles.map(v => v.year))].sort((a, b) => Number(b) - Number(a));
+  }, [vehicles, tempFilters.categoryFilter, tempFilters.makeFilter, tempFilters.modelFilter]);
+  
+  const tempUniqueColors = useMemo(() => {
+    let filteredVehicles = vehicles || [];
+    
+    // Filter by category if active
+    if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
+      filteredVehicles = filteredVehicles.filter(v => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    
+    // Filter by make if active
+    if (tempFilters.makeFilter && tempFilters.makeFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.make?.toLowerCase().trim() === tempFilters.makeFilter.toLowerCase().trim());
+    }
+    
+    // Filter by model if active
+    if (tempFilters.modelFilter && tempFilters.modelFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.model?.toLowerCase().trim() === tempFilters.modelFilter.toLowerCase().trim());
+    }
+    
+    return [...new Set(filteredVehicles.map(v => v.color))].sort();
+  }, [vehicles, tempFilters.categoryFilter, tempFilters.makeFilter, tempFilters.modelFilter]);
+  
+  const tempUniqueFuelTypes = useMemo(() => {
+    let filteredVehicles = vehicles || [];
+    
+    // Filter by category if active
+    if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
+      filteredVehicles = filteredVehicles.filter(v => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    
+    // Filter by make if active
+    if (tempFilters.makeFilter && tempFilters.makeFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.make?.toLowerCase().trim() === tempFilters.makeFilter.toLowerCase().trim());
+    }
+    
+    // Filter by model if active
+    if (tempFilters.modelFilter && tempFilters.modelFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter(v => v.model?.toLowerCase().trim() === tempFilters.modelFilter.toLowerCase().trim());
+    }
+    
+    return [...new Set(filteredVehicles.map(v => v.fuelType).filter(Boolean))].sort();
+  }, [vehicles, tempFilters.categoryFilter, tempFilters.makeFilter, tempFilters.modelFilter]);
 
   const allFeatures = useMemo(() => [...new Set((vehicles || []).flatMap(v => v.features))].sort(), [vehicles]);
   
@@ -507,14 +793,46 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   };
 
   const handleApplyFilters = () => {
-    setCategoryFilter(tempFilters.categoryFilter);
-    setMakeFilter(tempFilters.makeFilter?.trim() || '');
-    setModelFilter(tempFilters.modelFilter?.trim() || '');
+    // Get available options for the selected category/make/model
+    const categoryForValidation = tempFilters.categoryFilter;
+    const makeForValidation = tempFilters.makeFilter?.trim() || '';
+    const modelForValidation = tempFilters.modelFilter?.trim() || '';
+    
+    // Validate fuel type - reset if not available for selected category/make/model
+    let validFuelType = tempFilters.fuelTypeFilter?.trim() || '';
+    if (validFuelType) {
+      const tempFuelTypes = tempUniqueFuelTypes;
+      if (!tempFuelTypes.includes(validFuelType)) {
+        validFuelType = '';
+      }
+    }
+    
+    // Validate year - reset if not available for selected category/make/model
+    let validYear = tempFilters.yearFilter || '0';
+    if (validYear !== '0') {
+      const tempYears = tempUniqueYears;
+      if (!tempYears.includes(Number(validYear))) {
+        validYear = '0';
+      }
+    }
+    
+    // Validate color - reset if not available for selected category/make/model
+    let validColor = tempFilters.colorFilter?.trim() || '';
+    if (validColor) {
+      const tempColors = tempUniqueColors;
+      if (!tempColors.includes(validColor)) {
+        validColor = '';
+      }
+    }
+    
+    setCategoryFilter(categoryForValidation);
+    setMakeFilter(makeForValidation);
+    setModelFilter(modelForValidation);
     setPriceRange(tempFilters.priceRange);
     setMileageRange(tempFilters.mileageRange);
-    setFuelTypeFilter(tempFilters.fuelTypeFilter?.trim() || '');
-    setYearFilter(tempFilters.yearFilter || '0');
-    setColorFilter(tempFilters.colorFilter?.trim() || '');
+    setFuelTypeFilter(validFuelType);
+    setYearFilter(validYear);
+    setColorFilter(validColor);
     setStateFilter(tempFilters.stateFilter?.trim() || '');
     // Only mark state filter as user-set if it was actually changed in the modal
     // Preserve the original isStateFilterUserSet flag if the value hasn't changed
@@ -647,9 +965,15 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     const filtered = sourceVehicles.filter(vehicle => {
         // Use early returns for better performance
         // Normalize category comparison to handle different formats
-        if (categoryFilter !== 'ALL') {
-          const vehicleCategory = vehicle.category?.toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-          const filterCategory = categoryFilter.toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        if (categoryFilter !== 'ALL' && categoryFilter) {
+          // If vehicle has no category, exclude it when a category filter is active
+          if (!vehicle.category) return false;
+          
+          // Normalize both values for comparison
+          const vehicleCategory = String(vehicle.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+          
+          // Strict comparison - must match exactly after normalization
           if (vehicleCategory !== filterCategory) return false;
         }
         // Make filter - case-insensitive comparison
@@ -879,16 +1203,53 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         if (isMobile) {
             setTempFilters(prev => {
                 const newState = { ...prev, [name]: value };
-                if (name === 'makeFilter') {
+                if (name === 'categoryFilter') {
+                    // Reset make, model, fuel type, year, and color when category changes
+                    newState.makeFilter = '';
                     newState.modelFilter = '';
+                    newState.fuelTypeFilter = '';
+                    newState.yearFilter = '0';
+                    newState.colorFilter = '';
+                } else if (name === 'makeFilter') {
+                    // Reset model, fuel type, year, and color when make changes
+                    newState.modelFilter = '';
+                    newState.fuelTypeFilter = '';
+                    newState.yearFilter = '0';
+                    newState.colorFilter = '';
+                } else if (name === 'modelFilter') {
+                    // Reset fuel type, year, and color when model changes
+                    newState.fuelTypeFilter = '';
+                    newState.yearFilter = '0';
+                    newState.colorFilter = '';
                 }
                 return newState;
             });
         } else {
             switch(name) {
-                case 'categoryFilter': setCategoryFilter(value as any); break;
-                case 'makeFilter': setMakeFilter(value); setModelFilter(''); break;
-                case 'modelFilter': setModelFilter(value); break;
+                case 'categoryFilter': 
+                    // Reset make, model, fuel type, year, and color when category changes
+                    setCategoryFilter(value as any);
+                    setMakeFilter('');
+                    setModelFilter('');
+                    setFuelTypeFilter('');
+                    setYearFilter('0');
+                    setColorFilter('');
+                    break;
+                case 'makeFilter': 
+                    setMakeFilter(value); 
+                    setModelFilter('');
+                    // Reset fuel type, year, and color when make changes
+                    setFuelTypeFilter('');
+                    setYearFilter('0');
+                    setColorFilter('');
+                    break;
+                case 'modelFilter': 
+                    setModelFilter(value);
+                    // Reset fuel type, year, and color when model changes
+                    setFuelTypeFilter('');
+                    setYearFilter('0');
+                    setColorFilter('');
+                    break;
                 case 'fuelTypeFilter': setFuelTypeFilter(value); break;
                 case 'yearFilter': setYearFilter(value); break;
                 case 'colorFilter': setColorFilter(value); break;
@@ -917,7 +1278,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 <label htmlFor="make-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Make</label>
                 <select id="make-filter" name="makeFilter" value={state.makeFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any Make</option>
-                    {uniqueMakes.map(make => <option key={make} value={make}>{make}</option>)}
+                    {(isMobile ? tempUniqueMakes : uniqueMakes).map(make => <option key={make} value={make}>{make}</option>)}
                 </select>
             </div>
             <div>
@@ -959,21 +1320,21 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 <label htmlFor="fuel-type-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Fuel Type</label>
                 <select id="fuel-type-filter" name="fuelTypeFilter" value={state.fuelTypeFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any Fuel Type</option>
-                    {fuelTypes?.map(fuel => <option key={fuel} value={fuel}>{fuel}</option>) || []}
+                    {(isMobile ? tempUniqueFuelTypes : uniqueFuelTypes).map(fuel => <option key={fuel} value={fuel}>{fuel}</option>)}
                 </select>
             </div>
             <div>
                 <label htmlFor="year-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Year</label>
                 <select id="year-filter" name="yearFilter" value={state.yearFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="0">Any Year</option>
-                    {uniqueYears.map(year => <option key={year} value={year}>{year}</option>)}
+                    {(isMobile ? tempUniqueYears : uniqueYears).map(year => <option key={year} value={year}>{year}</option>)}
                 </select>
             </div>
             <div>
                 <label htmlFor="color-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Color</label>
                 <select id="color-filter" name="colorFilter" value={state.colorFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any Color</option>
-                    {uniqueColors.map(color => <option key={color} value={color}>{color}</option>)}
+                    {(isMobile ? tempUniqueColors : uniqueColors).map(color => <option key={color} value={color}>{color}</option>)}
                 </select>
             </div>
             <div>

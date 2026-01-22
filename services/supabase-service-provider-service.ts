@@ -8,9 +8,12 @@ export interface ServiceProviderPayload extends Record<string, unknown> {
   email: string;
   phone: string;
   city: string;
+  state?: string;
+  district?: string;
   workshops?: string[];
   skills?: string[];
   availability?: string;
+  serviceCategories?: string[];
 }
 
 // Helper to convert Supabase row to ServiceProviderPayload
@@ -22,9 +25,12 @@ function supabaseRowToServiceProvider(row: any): ServiceProviderPayload {
     email: row.email || '',
     phone: row.phone || '',
     city: row.location || metadata.city || '',
+    state: metadata.state || row.state || '',
+    district: metadata.district || row.district || '',
     workshops: metadata.workshops || [],
     skills: Array.isArray(row.services) ? row.services : (metadata.skills || []),
     availability: metadata.availability || 'weekdays',
+    serviceCategories: metadata.serviceCategories || [],
   };
 }
 
@@ -33,6 +39,9 @@ function serviceProviderToSupabaseRow(provider: Partial<ServiceProviderPayload>)
   const metadata: any = {
     workshops: provider.workshops,
     availability: provider.availability,
+    state: provider.state,
+    district: provider.district,
+    serviceCategories: provider.serviceCategories,
   };
 
   // Remove undefined values from metadata
@@ -134,7 +143,15 @@ export const supabaseServiceProviderService = {
   async update(id: string, updates: Partial<ServiceProviderPayload>): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
-    const row = serviceProviderToSupabaseRow(updates);
+    // Get existing provider to merge metadata
+    const existing = await this.findById(id);
+    if (!existing) {
+      throw new Error('Service provider not found');
+    }
+    
+    // Merge updates with existing data
+    const merged = { ...existing, ...updates };
+    const row = serviceProviderToSupabaseRow(merged);
 
     // Remove id from updates
     delete row.id;

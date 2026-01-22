@@ -21,9 +21,9 @@ const getAuthHeaders = (): Record<string, string> => {
 };
 
 /**
- * Save conversation to MongoDB
+ * Save conversation to Supabase
  */
-export async function saveConversationToMongoDB(conversation: Conversation): Promise<{ success: boolean; data?: Conversation; error?: string }> {
+export async function saveConversationToSupabase(conversation: Conversation): Promise<{ success: boolean; data?: Conversation; error?: string }> {
   try {
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'conversationService.ts:11',message:'POST /api/conversations request',data:{conversationId:conversation.id,hasMessages:conversation.messages.length > 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
@@ -49,13 +49,13 @@ export async function saveConversationToMongoDB(conversation: Conversation): Pro
     const result = await response.json();
     return { success: true, data: result.data };
   } catch (error) {
-    console.error('Error saving conversation to MongoDB:', error);
+    console.error('Error saving conversation to Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
 /**
- * Add message to conversation in MongoDB
+ * Add message to conversation in Supabase
  */
 export async function addMessageToConversation(conversationId: string, message: any): Promise<{ success: boolean; data?: Conversation; error?: string }> {
   try {
@@ -89,9 +89,9 @@ export async function addMessageToConversation(conversationId: string, message: 
 }
 
 /**
- * Get conversations from MongoDB
+ * Get conversations from Supabase
  */
-export async function getConversationsFromMongoDB(customerId?: string, sellerId?: string): Promise<{ success: boolean; data?: Conversation[]; error?: string }> {
+export async function getConversationsFromSupabase(customerId?: string, sellerId?: string): Promise<{ success: boolean; data?: Conversation[]; error?: string }> {
   try {
     const result = await queueRequest(
       async () => {
@@ -131,8 +131,12 @@ export async function getConversationsFromMongoDB(customerId?: string, sellerId?
       console.warn('Failed to fetch conversations from API. Using localStorage fallback.');
       return { success: false, error: 'Network error - API unavailable' };
     }
-    console.error('Error getting conversations from MongoDB:', error);
+    console.error('Error getting conversations from Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
+
+// Backward compatibility aliases
+export const saveConversationToMongoDB = saveConversationToSupabase;
+export const getConversationsFromMongoDB = getConversationsFromSupabase;
 

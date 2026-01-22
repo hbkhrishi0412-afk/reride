@@ -518,70 +518,21 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
     setIsChangingPassword(true);
     try {
-      // CRITICAL: Proactively refresh token before password update
-      // This prevents "session expired" errors during the update
-      // Password updates are critical operations that should not fail due to token expiration
+      // Attempt to proactively refresh token if it's likely expired
+      // But don't block the request if refresh fails - let the API handle it
       if (!isTokenLikelyValid()) {
-        console.log('🔄 Token appears expired, refreshing before password update...');
+        console.log('🔄 Token appears expired, attempting proactive refresh before password update...');
         try {
           const newToken = await refreshAuthToken();
-          if (!newToken) {
-            // Refresh token is also expired - need to log in again
-            console.warn('⚠️ Both access and refresh tokens expired - clearing auth data');
-            
-            // Clear all authentication tokens and user data
-            try {
-              localStorage.removeItem('reRideAccessToken');
-              localStorage.removeItem('reRideRefreshToken');
-              localStorage.removeItem('reRideCurrentUser');
-              if (typeof sessionStorage !== 'undefined') {
-                sessionStorage.removeItem('currentUser');
-                sessionStorage.removeItem('accessToken');
-              }
-            } catch (clearError) {
-              console.error('Error clearing tokens:', clearError);
-            }
-            
-            setPasswordError('Your session has expired. Please log in again.');
-            setIsChangingPassword(false);
-            
-            // Redirect to login after showing error message
-            setTimeout(() => {
-              if (typeof window !== 'undefined') {
-                // Reload page to trigger login redirect
-                window.location.reload();
-              }
-            }, 2000);
-            return;
+          if (newToken) {
+            console.log('✅ Token refreshed successfully before password update');
+          } else {
+            console.warn('⚠️ Proactive token refresh returned null, but continuing with request (API will handle 401)');
           }
-          console.log('✅ Token refreshed successfully before password update');
         } catch (refreshError) {
-          console.error('❌ Failed to refresh token before password update:', refreshError);
-          
-          // Clear all authentication tokens and user data
-          try {
-            localStorage.removeItem('reRideAccessToken');
-            localStorage.removeItem('reRideRefreshToken');
-            localStorage.removeItem('reRideCurrentUser');
-            if (typeof sessionStorage !== 'undefined') {
-              sessionStorage.removeItem('currentUser');
-              sessionStorage.removeItem('accessToken');
-            }
-          } catch (clearError) {
-            console.error('Error clearing tokens:', clearError);
-          }
-          
-          setPasswordError('Your session has expired. Please log in again.');
-          setIsChangingPassword(false);
-          
-          // Redirect to login after showing error message
-          setTimeout(() => {
-            if (typeof window !== 'undefined') {
-              // Reload page to trigger login redirect
-              window.location.reload();
-            }
-          }, 2000);
-          return;
+          // Don't block on proactive refresh failure - might be network issue
+          // The API call will handle 401 and retry with token refresh
+          console.warn('⚠️ Proactive token refresh failed, but continuing with request:', refreshError);
         }
       }
       
@@ -601,24 +552,31 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       console.error('Failed to update password:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to update password. Please try again.';
       
-      // Check if it's an authentication error
-      if (errorMessage.includes('Authentication expired') || 
+      // Only show "session expired" if we're CERTAIN it's an authentication error
+      // Check for explicit auth error messages from the API
+      const isAuthError = errorMessage.includes('Authentication expired') || 
           errorMessage.includes('Unauthorized') || 
           errorMessage.includes('401') ||
-          errorMessage.includes('session has expired') ||
-          errorMessage.includes('Please log in again')) {
-        
-        // Clear all authentication tokens and user data
-        try {
-          localStorage.removeItem('reRideAccessToken');
-          localStorage.removeItem('reRideRefreshToken');
-          localStorage.removeItem('reRideCurrentUser');
-          if (typeof sessionStorage !== 'undefined') {
-            sessionStorage.removeItem('currentUser');
-            sessionStorage.removeItem('accessToken');
+          (errorMessage.includes('session has expired') && errorMessage.includes('log in again')) ||
+          (errorMessage.includes('Please log in again') && (errorMessage.includes('expired') || errorMessage.includes('401')));
+      
+      if (isAuthError) {
+        // Only clear tokens if we're certain it's an auth issue
+        // Check if we still have a token - if not, it was already cleared
+        const hasToken = localStorage.getItem('reRideAccessToken');
+        if (hasToken) {
+          // Clear all authentication tokens and user data
+          try {
+            localStorage.removeItem('reRideAccessToken');
+            localStorage.removeItem('reRideRefreshToken');
+            localStorage.removeItem('reRideCurrentUser');
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.removeItem('currentUser');
+              sessionStorage.removeItem('accessToken');
+            }
+          } catch (clearError) {
+            console.error('Error clearing tokens:', clearError);
           }
-        } catch (clearError) {
-          console.error('Error clearing tokens:', clearError);
         }
         
         setPasswordError('Your session has expired. Please log in again.');
@@ -631,6 +589,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
           }
         }, 2000);
       } else {
+        // For other errors, show the actual error message
         setPasswordError(errorMessage);
       }
     } finally {

@@ -237,18 +237,18 @@ export const getVehicleDataSync = (): VehicleData => {
 };
 
 /**
- * Saves vehicle data to MongoDB FIRST (real-time), then syncs to localStorage only on success.
- * CRITICAL FIX: No longer saves locally first - MongoDB is the source of truth.
+ * Saves vehicle data to Supabase FIRST (real-time), then syncs to localStorage only on success.
+ * CRITICAL FIX: No longer saves locally first - Supabase is the source of truth.
  */
 export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
-  logInfo('🔄 Starting vehicle data save process (MongoDB first)...');
+  logInfo('🔄 Starting vehicle data save process (Supabase first)...');
   
-  // CRITICAL FIX: Try to save to MongoDB FIRST with retry logic
+  // CRITICAL FIX: Try to save to Supabase FIRST with retry logic
   const maxRetries = 3;
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(`🌐 Attempt ${attempt}/${maxRetries}: Trying to save to MongoDB...`);
+    console.log(`🌐 Attempt ${attempt}/${maxRetries}: Trying to save to Supabase...`);
     
     // Try consolidated endpoint first
     try {
@@ -263,13 +263,13 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('✅ Vehicle data saved to MongoDB via consolidated endpoint:', result);
+        console.log('✅ Vehicle data saved to Supabase via consolidated endpoint:', result);
         
-        // MongoDB save succeeded - NOW save to localStorage
+        // Supabase save succeeded - NOW save to localStorage
         if (isStorageAvailable()) {
           try {
             safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
-            logInfo('✅ Vehicle data synced to localStorage after MongoDB success');
+            logInfo('✅ Vehicle data synced to localStorage after Supabase success');
           } catch (error) {
             logError('❌ Failed to sync to localStorage:', error);
             // Don't fail the whole operation if localStorage fails
@@ -300,13 +300,13 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('✅ Vehicle data saved to MongoDB via standalone endpoint:', result);
+        console.log('✅ Vehicle data saved to Supabase via standalone endpoint:', result);
         
-        // MongoDB save succeeded - NOW save to localStorage
+        // Supabase save succeeded - NOW save to localStorage
         if (isStorageAvailable()) {
           try {
             safeSetItem(VEHICLE_DATA_STORAGE_KEY, JSON.stringify(data));
-            logInfo('✅ Vehicle data synced to localStorage after MongoDB success');
+            logInfo('✅ Vehicle data synced to localStorage after Supabase success');
           } catch (error) {
             logError('❌ Failed to sync to localStorage:', error);
             // Don't fail the whole operation if localStorage fails
@@ -332,7 +332,7 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
     }
   }
 
-  console.error('❌ All MongoDB save attempts failed. Data NOT saved locally.');
+  console.error('❌ All Supabase save attempts failed. Data NOT saved locally.');
   console.error('Last error:', lastError);
   
   // Log user-friendly error information
@@ -343,6 +343,6 @@ export const saveVehicleData = async (data: VehicleData): Promise<boolean> => {
     }
   }
   
-  // Return false to indicate MongoDB save failed - don't save locally
+  // Return false to indicate Supabase save failed - don't save locally
   return false;
 };

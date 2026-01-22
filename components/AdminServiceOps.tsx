@@ -68,27 +68,64 @@ const AdminServiceOps: React.FC = () => {
   });
   const [serviceSearch, setServiceSearch] = useState('');
 
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [p, s, r] = await Promise.all([
+        fetch('/api/service-providers?scope=all').then((res) => res.json()),
+        fetch('/api/provider-services?scope=public').then((res) => res.json()),
+        fetch('/api/service-requests?scope=all').then((res) => res.json()),
+      ]);
+      setProviders(Array.isArray(p) ? p : []);
+      setServices(Array.isArray(s) ? s : []);
+      setRequests(Array.isArray(r) ? r : []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load admin data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [p, s, r] = await Promise.all([
-          fetch('/api/service-providers?scope=all').then((res) => res.json()),
-          fetch('/api/provider-services?scope=public').then((res) => res.json()),
-          fetch('/api/service-requests?scope=all').then((res) => res.json()),
-        ]);
-        setProviders(Array.isArray(p) ? p : []);
-        setServices(Array.isArray(s) ? s : []);
-        setRequests(Array.isArray(r) ? r : []);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load admin data');
-      } finally {
-        setLoading(false);
+    loadData();
+    
+    // Listen for service updates from provider dashboard
+    const handleServiceUpdate = () => {
+      loadData();
+    };
+    
+    // Listen for profile updates from provider dashboard
+    const handleProfileUpdate = () => {
+      loadData();
+    };
+    
+    // Listen for custom events
+    window.addEventListener('serviceProviderServicesUpdated', handleServiceUpdate);
+    window.addEventListener('serviceProviderProfileUpdated', handleProfileUpdate);
+    
+    // Listen for storage events (cross-tab sync)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'serviceProviderServicesLastUpdate' || e.key === 'serviceProviderProfileLastUpdate') {
+        loadData();
       }
     };
-    load();
-  }, []);
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also poll periodically to catch updates from other sources
+    const pollInterval = setInterval(() => {
+      if (activeTab === 'services' || activeTab === 'providers') {
+        loadData();
+      }
+    }, 30000); // Poll every 30 seconds when on relevant tabs
+    
+    return () => {
+      window.removeEventListener('serviceProviderServicesUpdated', handleServiceUpdate);
+      window.removeEventListener('serviceProviderProfileUpdated', handleProfileUpdate);
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(pollInterval);
+    };
+  }, [activeTab]);
 
   const providerMap = useMemo(
     () =>
@@ -389,9 +426,10 @@ const AdminServiceOps: React.FC = () => {
           <thead>
             <tr className="text-gray-600 border-b">
               <th className="py-2 pr-4 text-left">Name</th>
-              <th className="py-2 pr-4 text-left">City</th>
+              <th className="py-2 pr-4 text-left">Location</th>
               <th className="py-2 pr-4 text-left">Contact</th>
               <th className="py-2 pr-4 text-left">Availability</th>
+              <th className="py-2 pr-4 text-left">Categories</th>
               <th className="py-2 pr-4 text-left">Skills</th>
               <th className="py-2 pr-4 text-left">Workshops</th>
             </tr>
@@ -400,19 +438,34 @@ const AdminServiceOps: React.FC = () => {
             {pagedProviders.map((p) => (
               <tr key={p.id} className="border-b last:border-none">
                 <td className="py-2 pr-4 font-semibold text-gray-900">{p.name}</td>
-                <td className="py-2 pr-4 text-gray-700">{p.city}</td>
+                <td className="py-2 pr-4 text-gray-700">
+                  <div>{p.city}</div>
+                  {p.state && <div className="text-xs text-gray-600">{p.state}</div>}
+                  {p.district && <div className="text-xs text-gray-500">{p.district}</div>}
+                </td>
                 <td className="py-2 pr-4 text-gray-700">
                   <div>{p.email}</div>
                   <div className="text-xs text-gray-600">{p.phone}</div>
                 </td>
                 <td className="py-2 pr-4 text-gray-700">{p.availability || '-'}</td>
+                <td className="py-2 pr-4 text-gray-700">
+                  {p.serviceCategories && p.serviceCategories.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {p.serviceCategories.map((cat, idx) => (
+                        <span key={idx} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+                  ) : '-'}
+                </td>
                 <td className="py-2 pr-4 text-gray-700">{p.skills?.join(', ') || '-'}</td>
                 <td className="py-2 pr-4 text-gray-700">{p.workshops?.join(', ') || '-'}</td>
               </tr>
             ))}
             {pagedProviders.length === 0 && (
               <tr>
-                <td className="py-3 text-gray-600" colSpan={6}>
+                <td className="py-3 text-gray-600" colSpan={7}>
                   No providers found.
                 </td>
               </tr>
@@ -449,18 +502,30 @@ const AdminServiceOps: React.FC = () => {
           <h1 className="text-xl font-bold text-gray-900">Service Operations (Admin)</h1>
           <p className="text-sm text-gray-600">Providers, services, and requests overview.</p>
         </div>
-        <div className="flex gap-2">
-          {(['requests', 'services', 'providers'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-3 py-2 rounded-lg text-sm border ${
-                activeTab === tab ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200'
-              }`}
-            >
-              {tab === 'requests' ? 'Requests' : tab === 'services' ? 'Services' : 'Providers'}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="px-3 py-2 rounded-lg text-sm border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
+          >
+            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+          <div className="flex gap-2">
+            {(['requests', 'services', 'providers'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-3 py-2 rounded-lg text-sm border ${
+                  activeTab === tab ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-200'
+                }`}
+              >
+                {tab === 'requests' ? 'Requests' : tab === 'services' ? 'Services' : 'Providers'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

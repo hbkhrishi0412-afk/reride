@@ -52,10 +52,12 @@ const Header: React.FC<HeaderProps> = memo(({
     const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+    const [isServiceProviderMenuOpen, setIsServiceProviderMenuOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const notificationsRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
+    const serviceProviderMenuRef = useRef<HTMLDivElement>(null);
     const mobileMenuRef = useRef<HTMLDivElement>(null);
 
     const unreadNotifications = useMemo(() => 
@@ -78,6 +80,9 @@ const Header: React.FC<HeaderProps> = memo(({
             if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
                 setIsUserMenuOpen(false);
             }
+            if (serviceProviderMenuRef.current && !serviceProviderMenuRef.current.contains(event.target as Node)) {
+                setIsServiceProviderMenuOpen(false);
+            }
             if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
                 setIsMobileMenuOpen(false);
             }
@@ -92,6 +97,7 @@ const Header: React.FC<HeaderProps> = memo(({
         setIsMobileMenuOpen(false);
         setIsNotificationsOpen(false);
         setIsUserMenuOpen(false);
+        setIsServiceProviderMenuOpen(false);
     };
 
     const DropdownLink: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
@@ -307,17 +313,87 @@ const Header: React.FC<HeaderProps> = memo(({
                                         )}
                                     </div>
                                 ) : serviceProvider ? (
-                                    <div className="flex items-center gap-3 px-3 py-2 bg-white rounded-lg border border-gray-200 shadow-sm">
-                                        <div className="text-right leading-tight">
-                                            <p className="text-sm font-semibold text-gray-900">{serviceProvider.name || 'Service Provider'}</p>
-                                            <p className="text-xs text-gray-500">{serviceProvider.email || ''}</p>
-                                        </div>
+                                    <div className="relative" ref={serviceProviderMenuRef}>
                                         <button 
-                                            onClick={onLogout} 
-                                            className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+                                            onClick={() => setIsServiceProviderMenuOpen(p => !p)} 
+                                            className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all"
                                         >
-                                            Logout
+                                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                                                <span className="text-white text-sm font-bold">
+                                                    {serviceProvider.name ? serviceProvider.name.charAt(0).toUpperCase() : 'P'}
+                                                </span>
+                                            </div>
+                                            <div className="text-left leading-tight">
+                                                <p className="text-sm font-semibold text-gray-900">{serviceProvider.name || 'Service Provider'}</p>
+                                                <p className="text-xs text-gray-500">{serviceProvider.email || ''}</p>
+                                            </div>
+                                            <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
                                         </button>
+                                        {isServiceProviderMenuOpen && (
+                                            <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 animate-fade-in z-20">
+                                                <div className="p-4 border-b border-gray-200">
+                                                    <p className="font-semibold text-sm text-gray-900 mb-1">
+                                                        {serviceProvider.name || 'Service Provider'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-600 mb-2">{serviceProvider.email || ''}</p>
+                                                    {serviceProvider.city && (
+                                                        <p className="text-xs text-gray-500 flex items-center gap-1">
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                            </svg>
+                                                            {serviceProvider.city}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="py-1">
+                                                    <button 
+                                                        onClick={() => {
+                                                            handleNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+                                                            setIsServiceProviderMenuOpen(false);
+                                                        }}
+                                                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                                        </svg>
+                                                        Dashboard
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            // Store the desired tab in sessionStorage
+                                                            sessionStorage.setItem('serviceProviderActiveTab', 'profile');
+                                                            // Dispatch custom event for immediate tab switch if already on dashboard
+                                                            window.dispatchEvent(new CustomEvent('serviceProviderTabChange', { detail: { tab: 'profile' } }));
+                                                            handleNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+                                                            setIsServiceProviderMenuOpen(false);
+                                                        }}
+                                                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                        </svg>
+                                                        Profile
+                                                    </button>
+                                                </div>
+                                                <div className="border-t border-gray-200">
+                                                    <button 
+                                                        onClick={() => {
+                                                            onLogout();
+                                                            setIsServiceProviderMenuOpen(false);
+                                                        }}
+                                                        className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                        </svg>
+                                                        Logout
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <button 

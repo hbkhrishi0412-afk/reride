@@ -1,6 +1,6 @@
 import type { Conversation, Notification } from '../types';
-import { saveConversationToMongoDB, addMessageToConversation } from './conversationService';
-import { saveNotificationToMongoDB, updateNotificationInMongoDB } from './notificationService';
+import { saveConversationToSupabase, addMessageToConversation } from './conversationService';
+import { saveNotificationToSupabase, updateNotificationInSupabase } from './notificationService';
 
 interface SyncQueueItem {
   id: string;
@@ -77,7 +77,7 @@ export async function processSyncQueue(): Promise<{ success: number; failed: num
 
       switch (item.type) {
         case 'conversation':
-          const convResult = await saveConversationToMongoDB(item.data);
+          const convResult = await saveConversationToSupabase(item.data);
           syncSuccess = convResult.success;
           break;
         case 'message':
@@ -87,11 +87,11 @@ export async function processSyncQueue(): Promise<{ success: number; failed: num
         case 'notification':
           if (item.data.updates) {
             // Update notification
-            const updateResult = await updateNotificationInMongoDB(item.data.notificationId, item.data.updates);
+            const updateResult = await updateNotificationInSupabase(item.data.notificationId, item.data.updates);
             syncSuccess = updateResult.success;
           } else {
             // Create notification
-            const notifResult = await saveNotificationToMongoDB(item.data);
+            const notifResult = await saveNotificationToSupabase(item.data);
             syncSuccess = notifResult.success;
           }
           break;
@@ -145,12 +145,12 @@ export async function processSyncQueue(): Promise<{ success: number; failed: num
  */
 export async function saveConversationWithSync(conversation: Conversation): Promise<{ synced: boolean; queued: boolean }> {
   try {
-    const result = await saveConversationToMongoDB(conversation);
+    const result = await saveConversationToSupabase(conversation);
     if (result.success) {
       return { synced: true, queued: false };
     }
   } catch (error) {
-    console.warn('Failed to save conversation to MongoDB:', error);
+    console.warn('Failed to save conversation to Supabase:', error);
   }
 
   // Add to sync queue
@@ -173,7 +173,7 @@ export async function addMessageWithSync(conversationId: string, message: any): 
       return { synced: true, queued: false };
     }
   } catch (error) {
-    console.warn('Failed to add message to MongoDB:', error);
+    console.warn('Failed to add message to Supabase:', error);
   }
 
   // Add to sync queue
@@ -191,12 +191,12 @@ export async function addMessageWithSync(conversationId: string, message: any): 
  */
 export async function saveNotificationWithSync(notification: Notification): Promise<{ synced: boolean; queued: boolean }> {
   try {
-    const result = await saveNotificationToMongoDB(notification);
+    const result = await saveNotificationToSupabase(notification);
     if (result.success) {
       return { synced: true, queued: false };
     }
   } catch (error) {
-    console.warn('Failed to save notification to MongoDB:', error);
+    console.warn('Failed to save notification to Supabase:', error);
   }
 
   // Add to sync queue
@@ -214,12 +214,12 @@ export async function saveNotificationWithSync(notification: Notification): Prom
  */
 export async function updateNotificationWithSync(notificationId: number, updates: Partial<Notification>): Promise<{ synced: boolean; queued: boolean }> {
   try {
-    const result = await updateNotificationInMongoDB(notificationId, updates);
+    const result = await updateNotificationInSupabase(notificationId, updates);
     if (result.success) {
       return { synced: true, queued: false };
     }
   } catch (error) {
-    console.warn('Failed to update notification in MongoDB:', error);
+    console.warn('Failed to update notification in Supabase:', error);
   }
 
   // Add to sync queue

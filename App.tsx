@@ -91,6 +91,7 @@ const SellerProfilePage = React.lazy(() => import('./components/SellerProfilePag
 const NewCars = React.lazy(() => import('./components/NewCars'));
 const DealerProfiles = React.lazy(() => import('./components/DealerProfiles'));
 const CarServices = React.lazy(() => import('./components/CarServices'));
+const ServiceDetail = React.lazy(() => import('./components/ServiceDetail'));
 const CarServiceLogin = React.lazy(() => import('./components/CarServiceLogin'));
 const CarServiceDashboard = React.lazy(() => import('./components/CarServiceDashboard'));
 const PricingPage = React.lazy(() => import('./components/PricingPage'));
@@ -313,6 +314,7 @@ const AppContent: React.FC = React.memo(() => {
       const firstItem = payload.items?.[0];
       const serviceName =
         payload.servicePackages?.find?.((s: any) => s.id === firstItem?.serviceId)?.name ||
+        payload.serviceTypes?.[0] ||
         firstItem?.serviceId ||
         'General service';
       const vehicleDesc = payload.carDetails
@@ -320,6 +322,7 @@ const AppContent: React.FC = React.memo(() => {
         : '';
       const city = payload.address?.city || payload.carDetails?.city || selectedCity || '';
 
+      // Map all selected services
       const services = payload.items?.map((it: any) => {
         const svcMeta = payload.servicePackages?.find?.((s: any) => s.id === it.serviceId);
         return {
@@ -330,9 +333,14 @@ const AppContent: React.FC = React.memo(() => {
         };
       });
 
+      // Use all service types if available, otherwise fall back to first service
+      const allServiceTypes = payload.serviceTypes && payload.serviceTypes.length > 0
+        ? payload.serviceTypes.join(', ')
+        : serviceName;
+
       const body = {
-        title: payload.note || `${serviceName} request`,
-        serviceType: serviceName,
+        title: payload.note || `${allServiceTypes} request`,
+        serviceType: allServiceTypes, // Include all selected service types
         customerName: payload.customerName || currentUser?.name || '',
         customerPhone: payload.customerPhone || currentUser?.mobile || '',
         customerEmail: currentUser?.email || '',
@@ -345,7 +353,7 @@ const AppContent: React.FC = React.memo(() => {
         scheduledAt: payload.slotId || '',
         notes: payload.note || '',
         providerId: null,
-        candidateProviderIds: payload.candidateProviderIds || [],
+        candidateProviderIds: payload.candidateProviderIds || [], // These are filtered by service type
         services,
       };
 
@@ -419,17 +427,55 @@ const AppContent: React.FC = React.memo(() => {
   }, [addToast]);
 
   // Derive registered service providers (sellers) for the service cart
-  const [serviceProviderOptions, setServiceProviderOptions] = React.useState<Array<{ id: string; name: string; city: string; distanceKm?: number }>>([]);
+  const [serviceProviderOptions, setServiceProviderOptions] = React.useState<Array<{ id: string; name: string; city: string; distanceKm?: number; serviceCategories?: string[] }>>([]);
 
   React.useEffect(() => {
     let cancelled = false;
     const run = async () => {
+      // Fetch actual service providers from API
+      try {
+        const providersResp = await fetch('/api/service-providers?scope=all');
+        if (providersResp.ok) {
+          const providers = await providersResp.json();
+          const base = providers.map((p: any) => ({
+            id: p.id || p.uid || p.email,
+            name: p.name || 'Unknown',
+            city: p.city || p.location || 'Unknown',
+            state: p.state,
+            district: p.district,
+            serviceCategories: p.serviceCategories || [],
+          })).filter((p: any) => p.id && p.name);
+          
+          const userCity = selectedCity || userLocation || currentUser?.location || '';
+          const cityCoords = userCity ? await getCityCoordinates(userCity) : null;
+          const baseCoords = userCoords || cityCoords;
+
+          const enriched = await Promise.all(
+            base.map(async (p: any) => {
+              const providerCoords = p.city ? await getCityCoordinates(p.city) : null;
+              const distanceKm =
+                baseCoords && providerCoords ? calculateDistance(baseCoords, providerCoords) : undefined;
+              return { ...p, distanceKm };
+            })
+          );
+
+          if (!cancelled) {
+            setServiceProviderOptions(enriched);
+          }
+          return;
+        }
+      } catch (error) {
+        console.warn('Failed to fetch service providers, falling back to users:', error);
+      }
+      
+      // Fallback to users if API fails
       const base = (users || [])
         .filter(u => u.role === 'seller')
         .map(u => ({
           id: u.id || u.email || u.name,
           name: u.dealershipName || u.name,
           city: u.location || 'Unknown',
+          serviceCategories: [],
         }))
         .filter(p => p.id && p.name);
 
@@ -2256,6 +2302,14 @@ const AppContent: React.FC = React.memo(() => {
 
       case ViewEnum.CAR_SERVICES:
         return <CarServices onNavigate={navigate} />;
+
+      case ViewEnum.SERVICE_DETAIL:
+        return (
+          <ServiceDetail
+            onNavigate={navigate}
+            onBack={() => navigate(ViewEnum.CAR_SERVICES)}
+          />
+        );
 
       case ViewEnum.SERVICE_CART:
         return (

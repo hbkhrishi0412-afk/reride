@@ -21,9 +21,9 @@ const getAuthHeaders = (): Record<string, string> => {
 };
 
 /**
- * Save notification to MongoDB
+ * Save notification to Supabase
  */
-export async function saveNotificationToMongoDB(notification: Notification): Promise<{ success: boolean; data?: Notification; error?: string }> {
+export async function saveNotificationToSupabase(notification: Notification): Promise<{ success: boolean; data?: Notification; error?: string }> {
   try {
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notificationService.ts:11',message:'POST /api/notifications request',data:{notificationId:notification.id,recipientEmail:notification.recipientEmail},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
@@ -49,15 +49,15 @@ export async function saveNotificationToMongoDB(notification: Notification): Pro
     const result = await response.json();
     return { success: true, data: result.data };
   } catch (error) {
-    console.error('Error saving notification to MongoDB:', error);
+    console.error('Error saving notification to Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
 /**
- * Get notifications from MongoDB
+ * Get notifications from Supabase
  */
-export async function getNotificationsFromMongoDB(recipientEmail?: string, isRead?: boolean): Promise<{ success: boolean; data?: Notification[]; error?: string }> {
+export async function getNotificationsFromSupabase(recipientEmail?: string, isRead?: boolean): Promise<{ success: boolean; data?: Notification[]; error?: string }> {
   try {
     const result = await queueRequest(
       async () => {
@@ -95,15 +95,15 @@ export async function getNotificationsFromMongoDB(recipientEmail?: string, isRea
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
       return { success: false, error: 'Network error - API unavailable' };
     }
-    console.error('Error getting notifications from MongoDB:', error);
+    console.error('Error getting notifications from Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
 /**
- * Update notification in MongoDB (e.g., mark as read)
+ * Update notification in Supabase (e.g., mark as read)
  */
-export async function updateNotificationInMongoDB(notificationId: number, updates: Partial<Notification>): Promise<{ success: boolean; data?: Notification; error?: string }> {
+export async function updateNotificationInSupabase(notificationId: number, updates: Partial<Notification>): Promise<{ success: boolean; data?: Notification; error?: string }> {
   try {
     const response = await fetch(`${API_BASE_URL}/notifications`, {
       method: 'PUT',
@@ -119,10 +119,15 @@ export async function updateNotificationInMongoDB(notificationId: number, update
     const result = await response.json();
     return { success: true, data: result.data };
   } catch (error) {
-    console.error('Error updating notification in MongoDB:', error);
+    console.error('Error updating notification in Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
+
+// Backward compatibility aliases
+export const saveNotificationToMongoDB = saveNotificationToSupabase;
+export const getNotificationsFromMongoDB = getNotificationsFromSupabase;
+export const updateNotificationInMongoDB = updateNotificationInSupabase;
 
 // Keep the existing browser notification functions
 /**

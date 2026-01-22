@@ -1805,6 +1805,14 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           // This prevents 401 errors from middleware/proxy layers in production
           // GET /api/users doesn't validate the token, but including it prevents proxy rejection
           response = await authenticatedFetch('/api/users');
+          
+          // Handle 401 gracefully - don't show error, just skip refresh
+          if (response.status === 401) {
+            if (process.env.NODE_ENV === 'development' && isMounted) {
+              console.warn('⚠️ User data refresh skipped: Authentication required');
+            }
+            return; // Exit early on 401
+          }
         } catch (fetchError) {
           // Catch network errors, CORS errors, or any other fetch-related errors
           // Don't throw - just silently fail to prevent ErrorBoundary from catching
@@ -1825,14 +1833,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             console.warn('⚠️ Invalid response object from authenticatedFetch');
           }
           return;
-        }
-        
-        // Handle 401 Unauthorized gracefully - user might not be authenticated
-        if (response.status === 401) {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ User refresh: 401 Unauthorized - user may not be authenticated');
-          }
-          return; // Silently return - don't show error
         }
         
         if (response.ok) {
