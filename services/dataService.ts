@@ -261,30 +261,52 @@ class DataService {
       return this.getVehiclesLocal();
     }
 
+    // STEP 1: Check cache first for instant response
+    const cacheKey = 'reRideVehicles_prod';
+    const cachedVehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
+    
+    // If we have cached data, return it immediately and fetch fresh data in background
+    if (cachedVehicles.length > 0) {
+      // Fetch fresh data in background (don't await)
+      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles';
+      this.makeApiRequest<Vehicle[]>(endpoint)
+        .then(vehicles => {
+          if (Array.isArray(vehicles) && vehicles.length > 0) {
+            this.setLocalStorageData(cacheKey, vehicles);
+            console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
+          }
+        })
+        .catch(error => {
+          console.warn('Background vehicle refresh failed (using cache):', error);
+        });
+      
+      // Return cached data immediately
+      console.log(`✅ Returning ${cachedVehicles.length} cached vehicles instantly`);
+      return cachedVehicles;
+    }
+
+    // STEP 2: No cache - fetch from API (first load or cache expired)
     try {
-      // For admin users, use admin-all endpoint to get all vehicles (including unpublished/sold)
       const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles';
       const vehicles = await this.makeApiRequest<Vehicle[]>(endpoint);
-      // Validate response is an array
+      
       if (!Array.isArray(vehicles)) {
         console.error('❌ Invalid response format: expected array, got:', typeof vehicles);
         throw new Error('Invalid response format: expected array');
       }
       
-      // Log success for debugging
       console.log(`✅ Loaded ${vehicles.length} vehicles from production API`);
       
-      // Cache the API data locally for offline use (use production cache key)
-      this.setLocalStorageData('reRideVehicles_prod', vehicles);
+      // Cache the API data
+      this.setLocalStorageData(cacheKey, vehicles);
       return vehicles;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Production API failed to load vehicles:', errorMessage);
       
-      // In production, try to use cached API data (not mock data)
-      const cachedVehicles = this.getLocalStorageData<Vehicle[]>('reRideVehicles_prod', []);
+      // Return cached data if available (even if stale)
       if (cachedVehicles.length > 0) {
-        console.warn(`⚠️ Using cached production data (${cachedVehicles.length} vehicles) due to API failure`);
+        console.warn(`⚠️ Using stale cached data (${cachedVehicles.length} vehicles) due to API failure`);
         return cachedVehicles;
       }
       
