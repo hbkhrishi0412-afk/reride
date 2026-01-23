@@ -190,6 +190,17 @@ export const supabaseServiceRequestService = {
   async update(id: string, updates: Partial<ServiceRequestPayload>): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
+    // First, get existing service request to merge metadata properly
+    const { data: existingRequest, error: fetchError } = await supabase
+      .from('service_requests')
+      .select('metadata')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found
+      throw new Error(`Failed to fetch existing service request: ${fetchError.message}`);
+    }
+    
     const row = serviceRequestToSupabaseRow({
       ...updates,
       updatedAt: new Date().toISOString(),
@@ -197,6 +208,25 @@ export const supabaseServiceRequestService = {
 
     // Remove id from updates
     delete row.id;
+
+    // CRITICAL: Merge metadata instead of replacing it
+    if (row.metadata && existingRequest?.metadata) {
+      // Merge new metadata with existing metadata
+      row.metadata = {
+        ...(existingRequest.metadata || {}),
+        ...(row.metadata || {})
+      };
+    } else if (row.metadata && !existingRequest?.metadata) {
+      // New metadata, no existing - use as is
+    } else if (!row.metadata && existingRequest?.metadata) {
+      // No new metadata, preserve existing
+      row.metadata = existingRequest.metadata;
+    }
+    
+    // Only include metadata if it has values
+    if (row.metadata && Object.keys(row.metadata).length === 0) {
+      delete row.metadata;
+    }
 
     const { error } = await supabase
       .from('service_requests')

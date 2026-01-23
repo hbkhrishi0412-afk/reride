@@ -147,10 +147,56 @@ export const supabaseConversationService = {
   // Update conversation
   async update(id: string, updates: Partial<Conversation>): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    
+    // First, get existing conversation to merge metadata (messages) properly
+    const { data: existingConversation, error: fetchError } = await supabase
+      .from('conversations')
+      .select('metadata')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found
+      throw new Error(`Failed to fetch existing conversation: ${fetchError.message}`);
+    }
+    
     const row = conversationToSupabaseRow(updates);
     
     // Remove id from updates
     delete row.id;
+    
+    // CRITICAL: Merge metadata (messages) instead of replacing it
+    // This preserves existing messages when updating other conversation fields
+    if (row.metadata && existingConversation?.metadata) {
+      // Merge metadata fields first
+      row.metadata = {
+        ...(existingConversation.metadata || {}),
+        ...(row.metadata || {})
+      };
+      // Then handle messages specifically
+      if (updates.messages && Array.isArray(updates.messages)) {
+        // New messages provided - use them (they should be the full array)
+        row.metadata.messages = updates.messages;
+      } else {
+        // No new messages - preserve existing messages (already merged above, but ensure it's set)
+        if (!row.metadata.messages) {
+          row.metadata.messages = existingConversation.metadata.messages || [];
+        }
+      }
+    } else if (row.metadata && !existingConversation?.metadata) {
+      // New metadata, no existing - use as is
+      // Ensure messages array exists if provided
+      if (updates.messages && Array.isArray(updates.messages)) {
+        row.metadata.messages = updates.messages;
+      }
+    } else if (!row.metadata && existingConversation?.metadata) {
+      // No new metadata, preserve existing
+      row.metadata = existingConversation.metadata;
+    }
+    
+    // Only include metadata if it has values
+    if (row.metadata && Object.keys(row.metadata).length === 0) {
+      delete row.metadata;
+    }
     
     const { error } = await supabase
       .from('conversations')

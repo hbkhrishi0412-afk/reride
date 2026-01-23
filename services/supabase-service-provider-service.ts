@@ -143,7 +143,18 @@ export const supabaseServiceProviderService = {
   async update(id: string, updates: Partial<ServiceProviderPayload>): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
-    // Get existing provider to merge metadata
+    // First, get existing provider to merge metadata properly
+    const { data: existingProvider, error: fetchError } = await supabase
+      .from('service_providers')
+      .select('metadata')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found
+      throw new Error(`Failed to fetch existing service provider: ${fetchError.message}`);
+    }
+    
+    // Get existing provider to merge all data
     const existing = await this.findById(id);
     if (!existing) {
       throw new Error('Service provider not found');
@@ -155,6 +166,24 @@ export const supabaseServiceProviderService = {
 
     // Remove id from updates
     delete row.id;
+
+    // CRITICAL: Merge metadata instead of replacing it
+    if (row.metadata && existingProvider?.metadata) {
+      row.metadata = {
+        ...(existingProvider.metadata || {}),
+        ...(row.metadata || {})
+      };
+    } else if (row.metadata && !existingProvider?.metadata) {
+      // New metadata, no existing - use as is
+    } else if (!row.metadata && existingProvider?.metadata) {
+      // No new metadata, preserve existing
+      row.metadata = existingProvider.metadata;
+    }
+    
+    // Only include metadata if it has values
+    if (row.metadata && Object.keys(row.metadata).length === 0) {
+      delete row.metadata;
+    }
 
     const { error } = await supabase
       .from('service_providers')

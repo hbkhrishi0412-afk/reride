@@ -236,11 +236,44 @@ export const supabaseUserService = {
     }
     
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    
+    // First, get existing user to merge metadata properly
+    const { data: existingUser, error: fetchError } = await supabase
+      .from('users')
+      .select('metadata')
+      .eq('id', emailKey)
+      .single();
+    
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found, which is OK for new users
+      throw new Error(`Failed to fetch existing user: ${fetchError.message}`);
+    }
+    
     const row = userToSupabaseRow(updates);
     
     // Remove id from updates if it's not being changed
     if (row.id === emailKey) {
       delete row.id;
+    }
+    
+    // CRITICAL: Merge metadata instead of replacing it
+    // This preserves existing metadata fields when updating partnerBanks or other metadata fields
+    if (row.metadata && existingUser?.metadata) {
+      // Merge new metadata with existing metadata
+      row.metadata = {
+        ...(existingUser.metadata || {}),
+        ...(row.metadata || {})
+      };
+    } else if (row.metadata && !existingUser?.metadata) {
+      // New metadata, no existing metadata - use as is
+      // row.metadata is already set
+    } else if (!row.metadata && existingUser?.metadata) {
+      // No new metadata, but existing metadata exists - preserve it
+      row.metadata = existingUser.metadata;
+    }
+    
+    // Only include metadata if it has values
+    if (row.metadata && Object.keys(row.metadata).length === 0) {
+      delete row.metadata;
     }
     
     const { error } = await supabase
@@ -260,10 +293,40 @@ export const supabaseUserService = {
     }
     
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    
+    // First, get existing user to merge metadata properly
+    const { data: existingUser, error: fetchError } = await supabase
+      .from('users')
+      .select('metadata')
+      .eq('id', id)
+      .single();
+    
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found
+      throw new Error(`Failed to fetch existing user: ${fetchError.message}`);
+    }
+    
     const row = userToSupabaseRow(updates);
     
     // Remove id from updates
     delete row.id;
+    
+    // CRITICAL: Merge metadata instead of replacing it
+    if (row.metadata && existingUser?.metadata) {
+      row.metadata = {
+        ...(existingUser.metadata || {}),
+        ...(row.metadata || {})
+      };
+    } else if (row.metadata && !existingUser?.metadata) {
+      // New metadata, no existing - use as is
+    } else if (!row.metadata && existingUser?.metadata) {
+      // No new metadata, preserve existing
+      row.metadata = existingUser.metadata;
+    }
+    
+    // Only include metadata if it has values
+    if (row.metadata && Object.keys(row.metadata).length === 0) {
+      delete row.metadata;
+    }
     
     const { error } = await supabase
       .from('users')

@@ -174,6 +174,18 @@ export const supabaseVehicleService = {
   // Update vehicle
   async update(id: number, updates: Partial<Vehicle>): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    
+    // First, get existing vehicle to merge metadata properly
+    const { data: existingVehicle, error: fetchError } = await supabase
+      .from('vehicles')
+      .select('metadata')
+      .eq('id', id.toString())
+      .single();
+    
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found
+      throw new Error(`Failed to fetch existing vehicle: ${fetchError.message}`);
+    }
+    
     const row = vehicleToSupabaseRow(updates);
     
     // Remove id from updates
@@ -186,9 +198,22 @@ export const supabaseVehicleService = {
       }
     });
     
-    // If metadata column doesn't exist in schema, remove it from update
-    // This prevents "Could not find the 'metadata' column" errors
-    // The metadata will still be stored in other columns if they exist
+    // CRITICAL: Merge metadata instead of replacing it
+    // This preserves existing metadata fields when updating specific fields
+    if (row.metadata && existingVehicle?.metadata) {
+      // Merge new metadata with existing metadata
+      row.metadata = {
+        ...(existingVehicle.metadata || {}),
+        ...(row.metadata || {})
+      };
+    } else if (row.metadata && !existingVehicle?.metadata) {
+      // New metadata, no existing metadata - use as is
+    } else if (!row.metadata && existingVehicle?.metadata) {
+      // No new metadata, but existing metadata exists - preserve it
+      row.metadata = existingVehicle.metadata;
+    }
+    
+    // Only include metadata if it has values
     if (row.metadata === null || (typeof row.metadata === 'object' && Object.keys(row.metadata).length === 0)) {
       delete row.metadata;
     }
