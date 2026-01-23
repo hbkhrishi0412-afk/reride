@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { getAuth } from 'firebase/auth';
-import '../lib/firebase';
+import { getSession } from '../services/supabase-auth-service';
 
 type ServiceCategory = 'Essential Service' | 'Deep Detailing' | 'Care Plus';
 
@@ -130,7 +129,6 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     availability: provider?.availability || '',
   });
 
-  const auth = getAuth();
 
   const sortedRequests = useMemo(
     () =>
@@ -181,10 +179,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
 
   const getAuthHeaders = async () => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        const token = await user.getIdToken();
-        return { Authorization: `Bearer ${token}` };
+      const sessionResult = await getSession();
+      if (sessionResult.success && sessionResult.session?.access_token) {
+        return { Authorization: `Bearer ${sessionResult.session.access_token}` };
       }
       if (process.env.NODE_ENV === 'development') {
         return { 'x-mock-provider-id': provider?.email || provider?.name || 'dev-mock-provider' };
