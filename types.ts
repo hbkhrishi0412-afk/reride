@@ -179,6 +179,7 @@ export interface User {
   location: string;
   status: 'active' | 'inactive';
   createdAt: string; // ISO String
+  updatedAt?: string; // ISO String - when the user was last updated
   avatarUrl?: string;
   isVerified?: boolean;
   // Authentication fields

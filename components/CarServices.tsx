@@ -256,45 +256,6 @@ const carBrands = [
   },
 ];
 
-const servicePackages = [
-  {
-    name: 'Essential Service',
-    price: 'Starting ₹2,499',
-    priceValue: 2499,
-    serviceId: 'pkg-essential',
-    highlights: [
-      'Engine oil change',
-      'Filter set',
-      'Top-up fluids',
-      '25-point safety check',
-    ],
-  },
-  {
-    name: 'Deep Detailing',
-    price: 'Starting ₹3,999',
-    priceValue: 3999,
-    serviceId: 'pkg-detailing',
-    highlights: [
-      'Foam wash',
-      'Interior shampoo',
-      'Wax & polish',
-      'Ozone treatment',
-    ],
-  },
-  {
-    name: 'Care Plus',
-    price: 'Custom quote',
-    priceValue: null,
-    serviceId: 'pkg-care-plus',
-    highlights: [
-      'Brake service',
-      'Alignment & balancing',
-      'Battery health',
-      'Pickup & drop',
-    ],
-  },
-];
-
 const pricingComparison = [
   { model: 'Hyundai Elite i20', ourPrice: '₹4,599', serviceCentre: '₹9,000' },
   { model: 'Hyundai Grand i10', ourPrice: '₹4,499', serviceCentre: '₹8,000' },
@@ -576,7 +537,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
             </p>
           </div>
           <div className="space-y-8">
-            {detailedServices.map((service, index) => {
+            {detailedServices.map((service) => {
               const handleServiceClick = () => {
                 console.log('Detailed service clicked:', service.title);
                 // Store only the service title in sessionStorage (not the icon which is a React element)
