@@ -27,8 +27,7 @@ import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
-import { getAuth } from 'firebase/auth';
-import './lib/firebase';
+// Firebase removed - using Supabase
 
 // Simple loading component
 const LoadingSpinner: React.FC = () => (

@@ -801,9 +801,19 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       }
       
       if (!result.success) {
+        // Provide more helpful error messages
+        let reason = result.reason || 'Login failed';
+        if (reason === 'Invalid credentials.') {
+          reason = 'Invalid email or password. Please check your credentials and try again.';
+          console.error('💡 Login troubleshooting:');
+          console.error('   1. Verify email is correct (case-insensitive)');
+          console.error('   2. Check if password is correct');
+          console.error('   3. Ensure user exists in database');
+          console.error('   4. Try registering a new account if user doesn\'t exist');
+        }
         return {
           success: result.success,
-          reason: result.reason,
+          reason: reason,
           detectedRole: result.detectedRole
         };
       }
@@ -815,7 +825,7 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       if (credentials.role && result.user.role !== credentials.role) {
         return { 
           success: false, 
-          reason: `User is not a registered ${credentials.role}.`,
+          reason: `User is not a registered ${credentials.role}. Please login as ${result.user.role} or register as ${credentials.role}.`,
           detectedRole: result.user.role 
         };
       }
@@ -834,7 +844,20 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ API login failed:', errorMessage);
-      return { success: false, reason: errorMessage || 'Login failed. Please try again.' };
+      
+      // Provide more specific error messages
+      let userFriendlyError = 'Login failed. Please try again.';
+      if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('Network error')) {
+        userFriendlyError = 'Cannot connect to server. Please ensure the API server is running.';
+        console.error('💡 API Server Connection Issue:');
+        console.error('   Solution: Start the API server with: npm run dev:api');
+      } else if (errorMessage.includes('timeout')) {
+        userFriendlyError = 'Server is not responding. Please try again later.';
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        userFriendlyError = 'Invalid email or password. Please check your credentials.';
+      }
+      
+      return { success: false, reason: userFriendlyError };
     }
   } else {
     console.log('💻 Development mode - using local storage directly');

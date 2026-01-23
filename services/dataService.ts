@@ -304,6 +304,21 @@ class DataService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Production API failed to load vehicles:', errorMessage);
       
+      // Check for specific error types to provide better diagnostics
+      if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('Network error')) {
+        console.error('💡 API Server Connection Issue:');
+        console.error('   The API server may not be running.');
+        console.error('   Solution: Start the API server with: npm run dev:api');
+      } else if (errorMessage.includes('timeout')) {
+        console.error('💡 API Request Timeout:');
+        console.error('   The API server is not responding in time.');
+        console.error('   Solution: Check if API server is running and responsive');
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        console.error('💡 Authentication Issue:');
+        console.error('   Authentication may be required or token expired.');
+        console.error('   Solution: Try logging in again');
+      }
+      
       // Return cached data if available (even if stale)
       if (cachedVehicles.length > 0) {
         console.warn(`⚠️ Using stale cached data (${cachedVehicles.length} vehicles) due to API failure`);
@@ -320,10 +335,12 @@ class DataService {
       // Show user-friendly error in console (won't break the app)
       if (typeof window !== 'undefined') {
         console.error('💡 Troubleshooting:');
-        console.error('   1. Check if Firebase is properly configured');
-        console.error('   2. Verify /api/vehicles endpoint is working');
-        console.error('   3. Check browser network tab for API errors');
-        console.error('   4. Ensure database is seeded with vehicles');
+        console.error('   1. Check if API server is running: npm run dev:api');
+        console.error('   2. Check if Firebase is properly configured');
+        console.error('   3. Verify /api/vehicles endpoint is working');
+        console.error('   4. Check browser network tab for API errors');
+        console.error('   5. Ensure database is seeded with vehicles');
+        console.error('   6. Run diagnostic: node scripts/diagnose-issues.js');
       }
       
       return [];

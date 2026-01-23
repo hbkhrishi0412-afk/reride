@@ -104,7 +104,7 @@ interface AppContextType {
   onUpdateSettings: (settings: PlatformSettings) => void;
   onSendBroadcast: (message: string) => void;
   onExportUsers: () => void;
-  onImportUsers: (users: Omit<User, 'id' | 'firebaseUid'>[]) => Promise<void>;
+  onImportUsers: (users: Omit<User, 'id'>[]) => Promise<void>;
   onExportVehicles: () => void;
   onImportVehicles: (vehicles: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => Promise<void>;
   onExportSales: () => void;
@@ -483,16 +483,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const handleLogout = useCallback(async () => {
     try {
-      // Sign out from Firebase if authenticated
+      // Sign out from Supabase if authenticated
       try {
-        const { signOut } = await import('firebase/auth');
-        const { auth } = await import('../lib/firebase');
-        if (auth?.currentUser) {
-          await signOut(auth);
-        }
-      } catch (firebaseError) {
-        // Firebase may not be initialized or user may not be using Firebase auth
-        console.log('Firebase sign out skipped:', firebaseError);
+        const { getSupabaseClient } = await import('../lib/supabase');
+        const supabase = getSupabaseClient();
+        await supabase.auth.signOut();
+      } catch (supabaseError) {
+        // Supabase may not be initialized or user may not be using Supabase auth
+        console.log('Supabase sign out skipped:', supabaseError);
       }
 
       // Clear tokens via logout service
@@ -2389,7 +2387,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast('Export failed. Please try again.', 'error');
       }
     },
-    onImportUsers: async (usersToImport: Omit<User, 'id' | 'firebaseUid'>[]) => {
+    onImportUsers: async (usersToImport: Omit<User, 'id'>[]) => {
       try {
         const { dataService } = await import('../services/dataService');
         let successCount = 0;
