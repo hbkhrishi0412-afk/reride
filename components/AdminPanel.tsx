@@ -972,8 +972,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 dataService.getUsers()
             ]);
             
-            // Update localStorage cache to trigger refresh in AppProvider
+            console.log(`🔄 Refresh: Loaded ${vehiclesData.length} vehicles and ${usersData.length} users`);
+            
+            // Update localStorage cache with correct keys (matching AppProvider)
             if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+                // Use production cache keys to match AppProvider
+                localStorage.setItem('reRideVehicles_prod', JSON.stringify(vehiclesData));
+                localStorage.setItem('reRideUsers_prod', JSON.stringify(usersData));
+                // Also update legacy keys for backward compatibility
                 localStorage.setItem('reRideVehicles', JSON.stringify(vehiclesData));
                 localStorage.setItem('reRideUsers', JSON.stringify(usersData));
                 // Trigger storage event to notify other components

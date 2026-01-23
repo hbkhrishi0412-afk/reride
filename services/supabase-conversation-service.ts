@@ -21,10 +21,12 @@ export interface Conversation {
   customerId: string;
   customerName: string;
   sellerId: string;
+  sellerName?: string;
   vehicleId: number;
   vehicleName: string;
   vehiclePrice?: number;
   messages: ChatMessage[];
+  lastMessage?: string;
   lastMessageAt: string;
   isReadBySeller: boolean;
   isReadByCustomer: boolean;
@@ -45,10 +47,12 @@ function supabaseRowToConversation(row: any): Conversation {
     customerId: row.customer_id || '',
     customerName: row.customer_name || '',
     sellerId: row.seller_id || '',
+    sellerName: row.seller_name || undefined,
     vehicleId: Number(row.vehicle_id) || 0,
     vehicleName: row.vehicle_name || '',
     vehiclePrice: row.vehicle_price ? Number(row.vehicle_price) : undefined,
     messages: (row.metadata?.messages || []) as ChatMessage[],
+    lastMessage: row.last_message || undefined,
     lastMessageAt: row.last_message_at || row.lastMessageAt || new Date().toISOString(),
     isReadBySeller: row.is_read_by_seller || false,
     isReadByCustomer: row.is_read_by_customer !== undefined ? row.is_read_by_customer : true,

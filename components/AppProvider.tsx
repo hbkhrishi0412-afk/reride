@@ -1204,8 +1204,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.log(`✅ Updated with ${vehiclesData.length} fresh vehicles from API`);
           }
           
-          if (Array.isArray(usersData) && usersData.length > 0) {
-            setUsers(usersData);
+          // Always update users state, even if empty array (for consistency)
+          if (Array.isArray(usersData)) {
+            if (usersData.length > 0) {
+              setUsers(usersData);
+              console.log(`✅ Updated with ${usersData.length} fresh users from API`);
+            } else {
+              // In development mode, if API returns empty and no cached data, try fallback users
+              const isDevelopment = isDevelopmentEnvironment() || 
+                                    (typeof window !== 'undefined' && 
+                                     (window.location.hostname === 'localhost' || 
+                                      window.location.hostname === '127.0.0.1'));
+              if (isDevelopment) {
+                // Check if we already have users from cache
+                const currentUsersJson = localStorage.getItem('reRideUsers_prod') || localStorage.getItem('reRideUsers');
+                if (currentUsersJson) {
+                  try {
+                    const currentUsers = JSON.parse(currentUsersJson);
+                    if (Array.isArray(currentUsers) && currentUsers.length > 0) {
+                      console.log(`✅ Using ${currentUsers.length} cached users (API returned empty)`);
+                      setUsers(currentUsers);
+                    } else {
+                      // Cached data exists but is empty, try fallback
+                      console.warn('⚠️ Cached users exist but are empty. Checking for fallback users in development mode...');
+                      import('../services/userService').then(({ getUsersLocal }) => {
+                        getUsersLocal().then(fallbackUsers => {
+                          if (fallbackUsers.length > 0 && isMounted) {
+                            console.log(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
+                            setUsers(fallbackUsers);
+                          } else {
+                            console.log('ℹ️ No users available (API returned empty, cache empty, no fallback)');
+                            setUsers([]);
+                          }
+                        }).catch(() => {
+                          if (isMounted) setUsers([]);
+                        });
+                      }).catch(() => {
+                        if (isMounted) setUsers([]);
+                      });
+                    }
+                  } catch (parseError) {
+                    console.warn('Failed to parse cached users, trying fallback:', parseError);
+                    // Try fallback if cache parse fails
+                    import('../services/userService').then(({ getUsersLocal }) => {
+                      getUsersLocal().then(fallbackUsers => {
+                        if (fallbackUsers.length > 0 && isMounted) {
+                          console.log(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
+                          setUsers(fallbackUsers);
+                        } else {
+                          if (isMounted) setUsers([]);
+                        }
+                      }).catch(() => {
+                        if (isMounted) setUsers([]);
+                      });
+                    }).catch(() => {
+                      if (isMounted) setUsers([]);
+                    });
+                  }
+                } else {
+                  // No cached data, try fallback users
+                  console.warn('⚠️ No users found in API or cache. Checking for fallback users in development mode...');
+                  import('../services/userService').then(({ getUsersLocal }) => {
+                    getUsersLocal().then(fallbackUsers => {
+                      if (fallbackUsers.length > 0 && isMounted) {
+                        console.log(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
+                        setUsers(fallbackUsers);
+                      } else {
+                        console.log('ℹ️ No users available (API returned empty, no cache, no fallback)');
+                        setUsers([]);
+                      }
+                    }).catch(() => {
+                      if (isMounted) setUsers([]);
+                    });
+                  }).catch(() => {
+                    if (isMounted) setUsers([]);
+                  });
+                }
+              } else {
+                // Production mode: just set empty array
+                setUsers([]);
+                console.log('ℹ️ API returned empty users array (production mode)');
+              }
+            }
           }
           
           // If no cached data was available, stop loading now
