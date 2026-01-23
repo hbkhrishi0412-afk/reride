@@ -1197,11 +1197,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ]).then(([vehiclesData, usersData]) => {
           if (!isMounted) return;
           
-          // Only update if we got fresh data
-          if (Array.isArray(vehiclesData) && vehiclesData.length > 0) {
+          // Always update vehicles state, even if empty (to clear loading state)
+          if (Array.isArray(vehiclesData)) {
             setVehicles(vehiclesData);
-            setRecommendations(vehiclesData.slice(0, 6));
-            console.log(`✅ Updated with ${vehiclesData.length} fresh vehicles from API`);
+            if (vehiclesData.length > 0) {
+              setRecommendations(vehiclesData.slice(0, 6));
+              console.log(`✅ Updated with ${vehiclesData.length} fresh vehicles from API`);
+            } else {
+              console.warn('⚠️ API returned empty vehicles array. Check database for published vehicles.');
+            }
+          } else {
+            console.error('❌ API returned non-array vehicles data:', typeof vehiclesData);
           }
           
           // Always update users state, even if empty array (for consistency)
