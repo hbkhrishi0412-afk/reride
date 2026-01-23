@@ -39,14 +39,10 @@ function getSupabaseErrorMessage(): string {
   }
 }
 
-// Legacy Firebase references for backward compatibility (will be removed)
-const USE_FIREBASE = USE_SUPABASE; // Map to Supabase
-const firebaseUserService = supabaseUserService;
-const firebaseVehicleService = supabaseVehicleService;
-const firebaseConversationService = supabaseConversationService;
-function getFirebaseErrorMessage(): string {
-  return getSupabaseErrorMessage();
-}
+// All services now use Supabase directly
+const userService = supabaseUserService;
+const vehicleService = supabaseVehicleService;
+const conversationService = supabaseConversationService;
 import { 
   hashPassword, 
   validatePassword, 
@@ -82,12 +78,12 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c;
 }
 
-// Helper: Normalize Firebase user object for frontend consumption
+// Helper: Normalize user object for frontend consumption
 // Ensures role is present, and removes password
 function normalizeUser(user: UserType | null | undefined): NormalizedUser | null {
   if (!user) return null;
   
-  // Firebase users already have id field (no _id conversion needed)
+  // Supabase users already have id field (no _id conversion needed)
   const id = user.id;
   if (!id) {
     logWarn('⚠️ User object missing id field');
@@ -323,7 +319,7 @@ const cleanupVehicleCache = () => {
   }
 };
 
-// Firebase-based rate limiting for serverless environments
+// Rate limiting for serverless environments
 const checkRateLimit = async (identifier: string): Promise<{ allowed: boolean; remaining: number }> => {
   const now = Date.now();
   const resetTime = now + config.RATE_LIMIT.WINDOW_MS;
@@ -692,10 +688,10 @@ async function mainHandler(
       });
     }
     
-    // Check for Firebase/database errors first
+    // Check for Supabase/database errors first
     const isDbError = error instanceof Error && (
-      error.message.includes('FIREBASE') || 
-      error.message.includes('Firebase') ||
+      error.message.includes('SUPABASE') || 
+      error.message.includes('Supabase') ||
       error.message.includes('firebase') ||
       error.message.includes('PERMISSION_DENIED') ||
       error.message.includes('UNAUTHENTICATED') ||
@@ -742,8 +738,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     }
 
     // Check Firebase availability
-    if (!USE_FIREBASE) {
-      const errorMsg = getFirebaseErrorMessage();
+    if (!USE_SUPABASE) {
+      const errorMsg = getSupabaseErrorMessage();
       logWarn('⚠️ Firebase not available:', errorMsg);
       return res.status(503).json({
         success: false,
@@ -790,7 +786,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       
       try {
         // CRITICAL: Use normalized email for lookup
-        user = await firebaseUserService.findByEmail(normalizedEmail);
+        user = await userService.findByEmail(normalizedEmail);
         
         // If user not found, log for debugging (but don't reveal to user for security)
         if (!user) {
@@ -860,13 +856,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             logInfo(`⚠️ ${testUserConfig.role} user not found, auto-creating ${normalizedEmail}...`);
             
             // Check Firebase availability before creating
-            if (!USE_FIREBASE) {
+            if (!USE_SUPABASE) {
               logError('❌ Cannot auto-create user: Firebase not available');
               throw new Error('Firebase database is not available');
             }
             
             const hashedPassword = await hashPassword(testUserConfig.password);
-            const newUser = await firebaseUserService.create({
+            const newUser = await userService.create({
               email: normalizedEmail,
               ...testUserConfig,
               password: hashedPassword, // Override with hashed password after spreading testUserConfig
@@ -1048,7 +1044,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         let existingUser: UserType | null = null;
         
         try {
-          existingUser = await firebaseUserService.findByEmail(normalizedEmail);
+          existingUser = await userService.findByEmail(normalizedEmail);
         } catch (error) {
           logError('❌ Firebase user lookup error:', error);
           return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
@@ -1089,18 +1085,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         
         try {
           logInfo('💾 Attempting to save user to Firebase...');
-          newUser = await firebaseUserService.create(userData);
+          newUser = await userService.create(userData);
           logInfo('✅ New user registered and saved to Firebase:', normalizedEmail);
           
           // CRITICAL FIX: Add retry logic and better error handling
-          let verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
+          let verifyUser = await userService.findByEmail(normalizedEmail);
           let retryCount = 0;
           const maxRetries = 3;
           
           while (!verifyUser && retryCount < maxRetries) {
             logWarn(`⚠️ User not found after save, retrying... (${retryCount + 1}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-            verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
+            verifyUser = await userService.findByEmail(normalizedEmail);
             retryCount++;
           }
           
@@ -1108,7 +1104,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             // CRITICAL FIX: Check if user was actually created (might be a race condition)
             // Try one more time to find the user, and if found, use it
             // This prevents returning error when user was actually created
-            const finalCheck = await firebaseUserService.findByEmail(normalizedEmail);
+            const finalCheck = await userService.findByEmail(normalizedEmail);
             if (finalCheck) {
               logWarn('⚠️ User found on final check - race condition resolved');
               newUser = finalCheck;
@@ -1228,7 +1224,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
       // Normalize email to lowercase for consistent database lookup
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
-      let user = await firebaseUserService.findByEmail(normalizedEmail);
+      let user = await userService.findByEmail(normalizedEmail);
       
       if (!user) {
         logInfo('🔄 OAuth registration - Creating new user:', normalizedEmail);
@@ -1250,25 +1246,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         };
         
         logInfo('💾 Saving OAuth user to Firebase...');
-        user = await firebaseUserService.create(userData);
+        user = await userService.create(userData);
         logInfo('✅ OAuth user saved to Firebase:', normalizedEmail);
         
         // CRITICAL FIX: Add retry logic for OAuth user verification
-        let verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
+        let verifyUser = await userService.findByEmail(normalizedEmail);
         let retryCount = 0;
         const maxRetries = 3;
         
         while (!verifyUser && retryCount < maxRetries) {
           logWarn(`⚠️ OAuth user not found after save, retrying... (${retryCount + 1}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-          verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
+          verifyUser = await userService.findByEmail(normalizedEmail);
           retryCount++;
         }
         
         if (!verifyUser) {
           // CRITICAL FIX: Check if user was actually created (might be a race condition)
           // Try one more time to find the user, and if found, use it
-          const finalCheck = await firebaseUserService.findByEmail(normalizedEmail);
+          const finalCheck = await userService.findByEmail(normalizedEmail);
           if (finalCheck) {
             logWarn('⚠️ OAuth user found on final check - race condition resolved');
             user = finalCheck;
@@ -1419,7 +1415,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           return res.status(403).json({ success: false, reason: 'Unauthorized access to trust score.' });
         }
 
-        const user = await firebaseUserService.findByEmail(normalizedEmail);
+        const user = await userService.findByEmail(normalizedEmail);
         if (!user) {
           return res.status(404).json({ success: false, reason: 'User not found' });
         }
@@ -1447,7 +1443,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     
     try {
       logInfo('📊 Fetching all users from database...');
-      const users = await firebaseUserService.findAll();
+      const users = await userService.findAll();
       logInfo(`✅ Fetched ${users.length} users from database`);
       
       // SECURITY FIX: Normalize all users to remove passwords
@@ -1651,7 +1647,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       
       let existingUser: UserType | null;
       try {
-        existingUser = await firebaseUserService.findByEmail(normalizedEmail);
+        existingUser = await userService.findByEmail(normalizedEmail);
       } catch (findError) {
         logError('❌ Error finding user:', findError);
         const errorMessage = findError instanceof Error ? findError.message : 'Unknown error';
@@ -1671,13 +1667,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       
       // Update user in Firebase
       try {
-        await firebaseUserService.update(normalizedEmail, firebaseUpdates);
+        await userService.update(normalizedEmail, firebaseUpdates);
         logInfo('✅ User update operation completed in Firebase');
         
         // Fetch updated user
         let updatedUser: UserType | null;
         try {
-          updatedUser = await firebaseUserService.findByEmail(normalizedEmail);
+          updatedUser = await userService.findByEmail(normalizedEmail);
         } catch (fetchError) {
           logError('❌ Error fetching updated user:', fetchError);
           const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown error';
@@ -1709,7 +1705,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             const newPlanExpiryDate = updateFields.planExpiryDate || null;
             
             // Find all published vehicles for this seller
-            const allVehicles = await firebaseVehicleService.findAll();
+            const allVehicles = await vehicleService.findAll();
             const sellerVehicles = allVehicles.filter(v => 
               v.sellerEmail?.toLowerCase().trim() === normalizedEmail && v.status === 'published'
             );
@@ -1754,7 +1750,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
                 }
                 
                 if (Object.keys(vehicleUpdateFields).length > 0) {
-                  await firebaseVehicleService.update(vehicle.id, vehicleUpdateFields);
+                  await vehicleService.update(vehicle.id, vehicleUpdateFields);
                 }
               }
               
@@ -1768,7 +1764,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
         // Verify the update by querying again
         const verifyEmail = await sanitizeString(String(email));
-        const verifyUser = await firebaseUserService.findByEmail(verifyEmail.toLowerCase().trim());
+        const verifyUser = await userService.findByEmail(verifyEmail.toLowerCase().trim());
         if (!verifyUser) {
           logWarn('⚠️ User update verification failed - user not found after update');
         } else {
@@ -1847,18 +1843,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       logInfo('🔄 DELETE /users - Deleting user:', normalizedEmail);
 
       // Check if user exists
-      const existingUser = await firebaseUserService.findByEmail(normalizedEmail);
+      const existingUser = await userService.findByEmail(normalizedEmail);
       if (!existingUser) {
         logWarn('⚠️ User not found for deletion:', normalizedEmail);
         return res.status(404).json({ success: false, reason: 'User not found.' });
       }
 
       // Delete user from Firebase
-      await firebaseUserService.delete(normalizedEmail);
+      await userService.delete(normalizedEmail);
       logInfo('✅ User deleted successfully from Firebase:', normalizedEmail);
 
       // Verify the user was deleted by querying it
-      const verifyUser = await firebaseUserService.findByEmail(normalizedEmail);
+      const verifyUser = await userService.findByEmail(normalizedEmail);
       if (verifyUser) {
         logError('❌ User deletion verification failed - user still exists in database');
       } else {
@@ -1983,8 +1979,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     }
 
     // Check Firebase availability
-    if (!USE_FIREBASE) {
-      const errorMsg = getFirebaseErrorMessage();
+    if (!USE_SUPABASE) {
+      const errorMsg = getSupabaseErrorMessage();
       logWarn('⚠️ Firebase not available:', errorMsg);
       return res.status(503).json({
         success: false,
@@ -2124,7 +2120,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       if (action === 'city-stats' && req.query.city) {
         // Sanitize city input
         const sanitizedCity = await sanitizeString(String(req.query.city));
-        const allVehicles = await firebaseVehicleService.findAll();
+        const allVehicles = await vehicleService.findAll();
         const cityVehicles = allVehicles.filter(v => v.city === sanitizedCity && v.status === 'published');
         const stats = {
           totalVehicles: cityVehicles.length,
@@ -2136,7 +2132,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
 
       if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
-        const allVehicles = await firebaseVehicleService.findByStatus('published', {
+        const allVehicles = await vehicleService.findByStatus('published', {
           orderBy: 'created_at',
           orderDirection: 'desc'
         });
@@ -2170,7 +2166,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         }
         
         try {
-          const allVehicles = await firebaseVehicleService.findAll();
+          const allVehicles = await vehicleService.findAll();
           const statusCounts = {
             published: allVehicles.filter(v => v.status === 'published').length,
             unpublished: allVehicles.filter(v => v.status === 'unpublished').length,
@@ -2208,7 +2204,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (!adminAuth) {
           return;
         }
-        const allVehicles = await firebaseVehicleService.findAll();
+        const allVehicles = await vehicleService.findAll();
         const statusCounts = {
           published: allVehicles.filter(v => v.status === 'published').length,
           unpublished: allVehicles.filter(v => v.status === 'unpublished').length,
@@ -2246,7 +2242,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (limit > 0) {
           // For paginated requests, fetch only the paginated subset
           const offset = (page - 1) * limit;
-          vehicles = await firebaseVehicleService.findByStatus('published', {
+          vehicles = await vehicleService.findByStatus('published', {
             orderBy: 'created_at',
             orderDirection: 'desc',
             limit: limit,
@@ -2260,7 +2256,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             console.log(`📊 Using cached total count: ${totalVehiclesCount}`);
           } else {
             // Only fetch count if not cached (optimize: could use COUNT query in future)
-            const allVehiclesForCount = await firebaseVehicleService.findByStatus('published', {
+            const allVehiclesForCount = await vehicleService.findByStatus('published', {
               orderBy: 'created_at',
               orderDirection: 'desc'
             });
@@ -2277,7 +2273,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           console.log(`📊 Published vehicles fetched (paginated): ${vehicles.length} of ${totalVehiclesCount} total`);
         } else {
           // For non-paginated requests, fetch all with database sorting
-          vehicles = await firebaseVehicleService.findByStatus('published', {
+          vehicles = await vehicleService.findByStatus('published', {
             orderBy: 'created_at',
             orderDirection: 'desc'
           });
@@ -2333,7 +2329,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             }, timeoutMs);
             
             try {
-              const user = await firebaseUserService.findByEmail(email);
+              const user = await userService.findByEmail(email);
               if (!resolved) {
                 resolved = true;
                 cleanup();
@@ -2494,7 +2490,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       // Apply all updates to Firebase
       if (vehicleUpdates.length > 0) {
         for (const update of vehicleUpdates) {
-          await firebaseVehicleService.update(update.id, update.updates);
+          await vehicleService.update(update.id, update.updates);
         }
         // Invalidate cache after updates
         vehicleCache.delete('published_vehicles');
@@ -2505,7 +2501,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       let finalVehicles = vehicles;
       if (vehicleUpdates.length > 0) {
         // Only refresh published vehicles after updates (with database sorting)
-        finalVehicles = await firebaseVehicleService.findByStatus('published', {
+        finalVehicles = await vehicleService.findByStatus('published', {
           orderBy: 'created_at',
           orderDirection: 'desc'
         });
@@ -2561,13 +2557,13 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           return res.status(400).json({ success: false, reason: 'Valid vehicleId is required' });
         }
 
-        const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
+        const vehicle = await vehicleService.findById(vehicleIdNum);
         if (!vehicle) {
           return res.status(404).json({ success: false, reason: 'Vehicle not found' });
         }
 
         const currentViews = typeof vehicle.views === 'number' ? vehicle.views : 0;
-        await firebaseVehicleService.update(vehicleIdNum, {
+        await vehicleService.update(vehicleIdNum, {
           views: currentViews + 1
         });
 
@@ -2589,7 +2585,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     }
     
     // CRITICAL FIX: Verify user exists in database
-    const user = await firebaseUserService.findByEmail(auth.user?.email || '');
+    const user = await userService.findByEmail(auth.user?.email || '');
     if (!user) {
       logError('❌ POST /vehicles - User not found in database:', auth.user?.email);
       return res.status(401).json({ 
@@ -2620,7 +2616,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           return res.status(400).json({ success: false, reason: 'Seller email is required' });
         }
             // Load seller
-            const seller = await firebaseUserService.findByEmail(normalizedEmail);
+            const seller = await userService.findByEmail(normalizedEmail);
         if (!seller) {
           return res.status(404).json({ success: false, reason: 'Seller not found' });
         }
@@ -2641,7 +2637,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         const planDetails = PLAN_DETAILS[planKey] || PLAN_DETAILS.free;
         const listingLimit = planDetails.listingLimit;
         if (listingLimit !== 'unlimited') {
-          const sellerVehicles = await firebaseVehicleService.findBySellerEmail(normalizedEmail);
+          const sellerVehicles = await vehicleService.findBySellerEmail(normalizedEmail);
           const currentActiveCount = sellerVehicles.filter(v => v.status === 'published').length;
           if (currentActiveCount >= (Number(listingLimit) || 0)) {
             return res.status(403).json({
@@ -2665,7 +2661,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     if (action === 'refresh') {
       const { vehicleId, refreshAction, sellerEmail } = req.body;
       const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-      const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      const vehicle = await vehicleService.findById(vehicleIdNum);
       
       if (!vehicle) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found' });
@@ -2686,15 +2682,15 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         updates.listingExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       }
       
-      await firebaseVehicleService.update(vehicleIdNum, updates);
-      const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      await vehicleService.update(vehicleIdNum, updates);
+      const updatedVehicle = await vehicleService.findById(vehicleIdNum);
       return res.status(200).json({ success: true, vehicle: updatedVehicle });
     }
 
     if (action === 'boost') {
       const { vehicleId, packageId } = req.body;
       const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
-      const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      const vehicle = await vehicleService.findById(vehicleIdNum);
       
       if (!vehicle) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found' });
@@ -2747,12 +2743,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const activeBoosts = vehicle.activeBoosts || [];
       activeBoosts.push(boostInfo);
       
-      await firebaseVehicleService.update(vehicleIdNum, {
+      await vehicleService.update(vehicleIdNum, {
         activeBoosts,
         isFeatured: true
       });
       
-      const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      const updatedVehicle = await vehicleService.findById(vehicleIdNum);
       return res.status(200).json({ success: true, vehicle: updatedVehicle });
     }
 
@@ -2764,7 +2760,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
+          const vehicle = await vehicleService.findById(vehicleIdNum);
           
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
@@ -2772,7 +2768,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           
           // Sanitize seller email
           const sanitizedSellerEmail = await sanitizeString(String(vehicle.sellerEmail));
-          const seller = await firebaseUserService.findByEmail(sanitizedSellerEmail.toLowerCase().trim());
+          const seller = await userService.findByEmail(sanitizedSellerEmail.toLowerCase().trim());
           if (!seller) {
             return res.status(404).json({ success: false, reason: 'Seller not found for this vehicle' });
           }
@@ -2806,17 +2802,17 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             });
           }
 
-          await firebaseVehicleService.update(vehicleIdNum, {
+          await vehicleService.update(vehicleIdNum, {
             certificationStatus: 'requested',
             certificationRequestedAt: new Date().toISOString()
           });
           
-          await firebaseUserService.update(seller.email, {
+          await userService.update(seller.email, {
             usedCertifications: usedCertifications + 1
           });
           
-          const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
-          const updatedSeller = await firebaseUserService.findByEmail(seller.email);
+          const updatedVehicle = await vehicleService.findById(vehicleIdNum);
+          const updatedSeller = await userService.findByEmail(seller.email);
           const totalUsed = updatedSeller?.usedCertifications ?? usedCertifications + 1;
           const remaining = Math.max(allowedCertifications - totalUsed, 0);
           
@@ -2844,7 +2840,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
+          const vehicle = await vehicleService.findById(vehicleIdNum);
           
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
@@ -2879,7 +2875,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
           // Sanitize seller email
           const sanitizedSellerEmail = await sanitizeString(String(sellerEmail));
-          const seller = await firebaseUserService.findByEmail(sanitizedSellerEmail.toLowerCase().trim());
+          const seller = await userService.findByEmail(sanitizedSellerEmail.toLowerCase().trim());
           if (!seller) {
             return res.status(404).json({ success: false, reason: 'Seller not found for this vehicle.' });
           }
@@ -2916,18 +2912,18 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             });
           }
 
-          await firebaseVehicleService.update(vehicleIdNum, {
+          await vehicleService.update(vehicleIdNum, {
             isFeatured: true,
             featuredAt: new Date().toISOString()
           });
 
           // Deduct one featured credit
-          await firebaseUserService.update(seller.email, {
+          await userService.update(seller.email, {
             featuredCredits: Math.max(0, remainingCredits - 1)
           });
           
-          const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
-          const updatedSeller = await firebaseUserService.findByEmail(seller.email);
+          const updatedVehicle = await vehicleService.findById(vehicleIdNum);
+          const updatedSeller = await userService.findByEmail(seller.email);
           
           return res.status(200).json({ 
             success: true, 
@@ -2959,7 +2955,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           }
           
           console.log('🔍 Finding vehicle with id:', vehicleIdNum);
-          const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
+          const vehicle = await vehicleService.findById(vehicleIdNum);
           
           if (!vehicle) {
             console.warn('⚠️ Vehicle not found with id:', vehicleIdNum);
@@ -2981,14 +2977,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           }
           
           console.log('✏️ Updating vehicle status to sold...');
-          await firebaseVehicleService.update(vehicleIdNum, {
+          await vehicleService.update(vehicleIdNum, {
             status: 'sold',
             listingStatus: 'sold',
             soldAt: new Date().toISOString()
           });
           
           console.log('✅ Vehicle saved successfully');
-          const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+          const updatedVehicle = await vehicleService.findById(vehicleIdNum);
           
           return res.status(200).json({ success: true, vehicle: updatedVehicle });
         } catch (error) {
@@ -3009,7 +3005,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             return res.status(400).json({ success: false, reason: 'Vehicle ID is required' });
           }
 
-          const vehicle = await firebaseVehicleService.findById(vehicleIdNum);
+          const vehicle = await vehicleService.findById(vehicleIdNum);
           
           if (!vehicle) {
             return res.status(404).json({ success: false, reason: 'Vehicle not found' });
@@ -3029,12 +3025,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             });
           }
           
-          await firebaseVehicleService.update(vehicleIdNum, {
+          await vehicleService.update(vehicleIdNum, {
             status: 'published',
             listingStatus: 'active'
           });
           
-          const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+          const updatedVehicle = await vehicleService.findById(vehicleIdNum);
           
           return res.status(200).json({ success: true, vehicle: updatedVehicle });
         } catch (error) {
@@ -3071,7 +3067,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
       
       // Check if seller's plan has expired and block creation if so
-      const seller = await firebaseUserService.findByEmail(sanitizedEmail);
+      const seller = await userService.findByEmail(sanitizedEmail);
       if (seller && seller.planExpiryDate) {
         const expiryDate = new Date(seller.planExpiryDate);
         const isExpired = expiryDate < new Date();
@@ -3090,7 +3086,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     if (req.body.sellerEmail) {
       // Sanitize email input
       const sanitizedEmail = (await sanitizeString(String(req.body.sellerEmail))).toLowerCase().trim();
-      const seller = await firebaseUserService.findByEmail(sanitizedEmail);
+      const seller = await userService.findByEmail(sanitizedEmail);
       if (seller) {
         // Plan is not expired (checked above), so compute expiry for active plans
         if (seller.subscriptionPlan === 'premium') {
@@ -3162,11 +3158,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         sellerEmail: vehicleData.sellerEmail 
       });
       
-      const newVehicle = await firebaseVehicleService.create(vehicleData);
+      const newVehicle = await vehicleService.create(vehicleData);
       console.log('✅ Vehicle saved successfully to Firebase:', newVehicle.id);
       
       // Verify the vehicle was saved by querying it back
-      const verifyVehicle = await firebaseVehicleService.findById(newVehicle.id);
+      const verifyVehicle = await vehicleService.findById(newVehicle.id);
       if (!verifyVehicle) {
         console.error('❌ Vehicle creation verification failed - vehicle not found after save', { id: newVehicle.id });
         return res.status(500).json({ 
@@ -3208,7 +3204,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // SECURITY FIX: Ownership Check
       // Fetch vehicle to verify ownership before update
-      const existingVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      const existingVehicle = await vehicleService.findById(vehicleIdNum);
       if (!existingVehicle) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
       }
@@ -3230,11 +3226,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
       
       // Update vehicle in Firebase
-      await firebaseVehicleService.update(vehicleIdNum, updateData);
+      await vehicleService.update(vehicleIdNum, updateData);
       console.log('✅ Vehicle updated and saved successfully:', vehicleIdNum);
       
       // Verify the update by querying again
-      const updatedVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      const updatedVehicle = await vehicleService.findById(vehicleIdNum);
       if (!updatedVehicle) {
         console.warn('⚠️ Vehicle update verification failed - vehicle not found after update');
         return res.status(500).json({ success: false, reason: 'Failed to update vehicle.' });
@@ -3270,7 +3266,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
       
       // SECURITY FIX: Ownership Check
-      const vehicleToDelete = await firebaseVehicleService.findById(vehicleIdNum);
+      const vehicleToDelete = await vehicleService.findById(vehicleIdNum);
       if (!vehicleToDelete) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found.' });
       }
@@ -3282,11 +3278,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         return res.status(403).json({ success: false, reason: 'Unauthorized: You do not own this listing.' });
       }
       
-      await firebaseVehicleService.delete(vehicleIdNum);
+      await vehicleService.delete(vehicleIdNum);
       console.log('✅ Vehicle deleted successfully from Firebase:', vehicleIdNum);
       
       // Verify the vehicle was deleted by querying it
-      const verifyVehicle = await firebaseVehicleService.findById(vehicleIdNum);
+      const verifyVehicle = await vehicleService.findById(vehicleIdNum);
       if (verifyVehicle) {
         console.error('❌ Vehicle deletion verification failed - vehicle still exists in database');
       } else {
@@ -3404,7 +3400,7 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: Ha
 
   if (action === 'health') {
     try {
-      if (!USE_FIREBASE) {
+      if (!USE_SUPABASE) {
         return res.status(200).json({
           success: false,
           message: 'Firebase environment variables are not configured',
@@ -3445,7 +3441,7 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: Ha
       });
     }
     
-    if (!USE_FIREBASE) {
+    if (!USE_SUPABASE) {
       return res.status(503).json({
         success: false,
         message: 'Firebase is not configured. Cannot seed data.',
@@ -3476,7 +3472,7 @@ async function handleAdmin(req: VercelRequest, res: VercelResponse, _options: Ha
 // Health handler - preserves exact functionality from db-health.ts
 async function handleHealth(_req: VercelRequest, res: VercelResponse) {
   try {
-    if (!USE_FIREBASE) {
+    if (!USE_SUPABASE) {
       return res.status(500).json({
         status: 'error',
         message: 'Firebase is not configured. Please set Firebase environment variables.',
@@ -3541,7 +3537,7 @@ async function handleSeed(req: VercelRequest, res: VercelResponse, _options: Han
     }
   }
 
-  if (!USE_FIREBASE) {
+  if (!USE_SUPABASE) {
     return res.status(503).json({
       success: false,
       message: 'Firebase is not configured. Cannot seed data.',
@@ -3769,7 +3765,7 @@ function getPriceRange(vehicles: VehicleType[]): { min: number; max: number } {
 
 // New Cars handler - CRUD for new car catalog
 async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  if (!USE_FIREBASE) {
+  if (!USE_SUPABASE) {
     return res.status(503).json({
       success: false,
       reason: 'Firebase is not configured. Please set Firebase environment variables.',
@@ -3920,16 +3916,16 @@ async function seedUsers(productionSecret?: string): Promise<UserType[]> {
   ];
 
   // Delete existing users and create new ones in Firebase
-  const existingUsers = await firebaseUserService.findAll();
+  const existingUsers = await userService.findAll();
   for (const user of existingUsers) {
     if (['admin@test.com', 'seller@test.com', 'customer@test.com'].includes(user.email.toLowerCase())) {
-      await firebaseUserService.delete(user.email);
+      await userService.delete(user.email);
     }
   }
   
   const users: UserType[] = [];
   for (const userData of sampleUsers) {
-    const user = await firebaseUserService.create(userData);
+    const user = await userService.create(userData);
     users.push(user);
   }
   
@@ -4020,7 +4016,7 @@ async function seedVehicles(): Promise<VehicleType[]> {
   // Delete existing test vehicles (from seller@test.com) before creating new ones
   // This prevents duplicates when re-seeding
   try {
-    const existingVehicles = await firebaseVehicleService.findAll();
+    const existingVehicles = await vehicleService.findAll();
     const testVehicles = existingVehicles.filter(v => 
       v.sellerEmail?.toLowerCase() === 'seller@test.com'
     );
@@ -4029,7 +4025,7 @@ async function seedVehicles(): Promise<VehicleType[]> {
       console.log(`🗑️ Deleting ${testVehicles.length} existing test vehicles...`);
       for (const vehicle of testVehicles) {
         try {
-          await firebaseVehicleService.delete(vehicle.id);
+          await vehicleService.delete(vehicle.id);
         } catch (deleteError) {
           console.warn(`⚠️ Failed to delete vehicle ${vehicle.id}:`, deleteError);
         }
@@ -4046,7 +4042,7 @@ async function seedVehicles(): Promise<VehicleType[]> {
   for (let i = 0; i < sampleVehicles.length; i++) {
     const vehicleData = sampleVehicles[i];
     try {
-      const vehicle = await firebaseVehicleService.create(vehicleData);
+      const vehicle = await vehicleService.create(vehicleData);
       vehicles.push(vehicle);
       if ((i + 1) % 10 === 0) {
         console.log(`   ✓ Created ${i + 1}/${sampleVehicles.length} vehicles...`);
@@ -4083,7 +4079,7 @@ async function handleTestConnection(_req: VercelRequest, res: VercelResponse) {
   try {
     console.log('🔍 Testing Firebase connection...');
     
-    if (!USE_FIREBASE) {
+    if (!USE_SUPABASE) {
       return res.status(503).json({
         success: false,
         message: 'Firebase is not configured',
@@ -4138,7 +4134,7 @@ async function handleTestFirebaseWrites(req: VercelRequest, res: VercelResponse)
   try {
     console.log('🧪 Testing Firebase write operations...');
     
-    if (!USE_FIREBASE) {
+    if (!USE_SUPABASE) {
       return res.status(503).json({
         success: false,
         message: 'Firebase is not configured',
@@ -4466,7 +4462,7 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
 
 // Content handler - consolidates content.ts
 async function handleContent(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  if (!USE_FIREBASE) {
+  if (!USE_SUPABASE) {
     // For GET requests, return 200 with empty array instead of 503
     if (req.method === 'GET') {
       const { type } = req.query;
@@ -4893,7 +4889,7 @@ async function handleDeleteSupportTicket(
 
 // Sell Car handler - consolidates sell-car/index.ts
 async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  if (!USE_FIREBASE) {
+  if (!USE_SUPABASE) {
     return res.status(503).json({
       success: false,
       reason: 'Firebase is not configured. Please set Firebase environment variables.'
@@ -5121,7 +5117,7 @@ async function handleBusiness(req: VercelRequest, res: VercelResponse, _options:
 // Payments Handler
 async function handlePayments(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
-    if (!USE_FIREBASE) {
+    if (!USE_SUPABASE) {
       return res.status(503).json({
         success: false,
         reason: 'Firebase is not configured. Please set Firebase environment variables.'
@@ -5329,7 +5325,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
 // Conversations Handler
 async function handleConversations(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
-    if (!USE_FIREBASE) {
+    if (!USE_SUPABASE) {
       return res.status(503).json({
         success: false,
         reason: 'Firebase is not configured. Please set Firebase environment variables.'
@@ -5349,7 +5345,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       
       if (conversationId) {
         // Get single conversation
-        const conversation = await firebaseConversationService.findById(String(conversationId));
+        const conversation = await conversationService.findById(String(conversationId));
         if (!conversation) {
           return res.status(404).json({ success: false, reason: 'Conversation not found' });
         }
@@ -5367,18 +5363,18 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
         }
-        conversations = await firebaseConversationService.findByCustomerId(String(customerId));
+        conversations = await conversationService.findByCustomerId(String(customerId));
       } else if (sellerId) {
         const normalizedSellerId = String(sellerId).toLowerCase().trim();
         if (!isAdmin && normalizedAuthEmail !== normalizedSellerId) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
         }
-        conversations = await firebaseConversationService.findBySellerId(String(sellerId));
+        conversations = await conversationService.findBySellerId(String(sellerId));
       } else {
         if (!isAdmin) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
         }
-        conversations = await firebaseConversationService.findAll();
+        conversations = await conversationService.findAll();
       }
       
       // Sort by lastMessageAt descending
@@ -5406,13 +5402,13 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       }
 
       // Check if conversation exists
-      const existing = await firebaseConversationService.findById(conversationData.id);
+      const existing = await conversationService.findById(conversationData.id);
       if (existing) {
-        await firebaseConversationService.update(conversationData.id, conversationData);
-        const updated = await firebaseConversationService.findById(conversationData.id);
+        await conversationService.update(conversationData.id, conversationData);
+        const updated = await conversationService.findById(conversationData.id);
         return res.status(200).json({ success: true, data: updated });
       } else {
-        const conversation = await firebaseConversationService.create(conversationData);
+        const conversation = await conversationService.create(conversationData);
         return res.status(200).json({ success: true, data: conversation });
       }
     }
@@ -5425,7 +5421,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
       }
 
-      const conversation = await firebaseConversationService.findById(String(conversationId));
+      const conversation = await conversationService.findById(String(conversationId));
 
       if (!conversation) {
         return res.status(404).json({ success: false, reason: 'Conversation not found' });
@@ -5437,8 +5433,8 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
       }
 
-      await firebaseConversationService.addMessage(String(conversationId), message);
-      const updatedConversation = await firebaseConversationService.findById(String(conversationId));
+      await conversationService.addMessage(String(conversationId), message);
+      const updatedConversation = await conversationService.findById(String(conversationId));
 
       return res.status(200).json({ success: true, data: updatedConversation });
     }
@@ -5451,7 +5447,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
       }
 
-      const conversation = await firebaseConversationService.findById(String(conversationId));
+      const conversation = await conversationService.findById(String(conversationId));
       if (!conversation) {
         return res.status(404).json({ success: false, reason: 'Conversation not found' });
       }
@@ -5462,7 +5458,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation deletion' });
       }
 
-      await firebaseConversationService.delete(String(conversationId));
+      await conversationService.delete(String(conversationId));
       return res.status(200).json({ success: true, message: 'Conversation deleted successfully' });
     }
 
@@ -5519,7 +5515,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 // Notifications Handler
 async function handleNotifications(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
-    if (!USE_FIREBASE) {
+    if (!USE_SUPABASE) {
       return res.status(503).json({
         success: false,
         reason: 'Firebase is not configured. Please set Firebase environment variables.'
@@ -5705,7 +5701,7 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
 // Plans Handler
 async function handlePlans(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
-    if (!USE_FIREBASE) {
+    if (!USE_SUPABASE) {
       return res.status(503).json({
         success: false,
         reason: 'Firebase is not configured. Please set Firebase environment variables.'

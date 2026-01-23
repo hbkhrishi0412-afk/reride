@@ -21,7 +21,7 @@ import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
-import { getFirebaseStatus, getFirebaseErrorMessage } from '../utils/firebase-status';
+// Firebase status utilities removed - using Supabase
 
 // Safely register Chart.js components - wrap in try-catch to prevent crashes if Chart.js fails to load
 try {
@@ -1712,20 +1712,21 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   }, [vehicleData]);
 
   // Check Firebase connection status (only in browser, not SSR)
-  const [firebaseStatus, setFirebaseStatus] = useState<{ available: boolean; error?: string; details?: string } | null>(null);
+  const [databaseStatus, setDatabaseStatus] = useState<{ available: boolean; error?: string; details?: string } | null>(null);
   
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
         // Safely get Firebase status - wrap in try-catch to prevent crashes
-        const status = getFirebaseStatus();
-        setFirebaseStatus(status);
+        // Firebase removed - using Supabase
+        const status = { available: true };
+        setDatabaseStatus(status);
       } catch (error) {
         // If Firebase status check fails, set a safe default
         // Don't throw - just log and continue
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.warn('⚠️ Dashboard: Failed to check Firebase status:', errorMessage);
-        setFirebaseStatus({ 
+        setDatabaseStatus({ 
           available: false, 
           error: 'Unable to check Firebase status',
           details: errorMessage
@@ -3272,7 +3273,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       </div>
       
       {/* Firebase Connection Status Banner */}
-      {firebaseStatus && !firebaseStatus.available && (
+      {databaseStatus && !databaseStatus.available && (
         <div className="relative z-20 bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
           <div className="flex items-start">
             <div className="flex-shrink-0">
@@ -3282,23 +3283,23 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             </div>
             <div className="ml-3 flex-1">
               <h3 className="text-sm font-medium text-yellow-800">
-                Firebase Database Connection Issue
+                Database Connection Issue
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
                 <p>
                   {(() => {
                     try {
-                      // Safely get error message - getFirebaseErrorMessage now handles null/undefined
-                      return getFirebaseErrorMessage(firebaseStatus);
+                      // Supabase error message - Firebase removed
+                      return databaseStatus?.error || 'Supabase database is not available. Please check your configuration.';
                     } catch (error) {
-                      // Fallback if getFirebaseErrorMessage fails (shouldn't happen now, but safety first)
-                      console.warn('⚠️ Error getting Firebase error message:', error);
-                      return firebaseStatus?.error || 'Firebase database is not available. Please check your configuration.';
+                      // Fallback error message
+                      console.warn('⚠️ Error getting database error message:', error);
+                      return 'Database is not available. Please check your configuration.';
                     }
                   })()}
                 </p>
-                {firebaseStatus?.details && (
-                  <p className="mt-1 text-xs">{firebaseStatus.details}</p>
+                {databaseStatus?.details && (
+                  <p className="mt-1 text-xs">{databaseStatus.details}</p>
                 )}
               </div>
             </div>
