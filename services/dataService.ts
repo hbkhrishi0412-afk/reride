@@ -269,15 +269,26 @@ class DataService {
       if (cachedVehicles.length > 0) {
         // Fetch fresh data in background (don't await) - use pagination for speed
         const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=50&skipExpiryCheck=true';
-      this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
-        .then(response => {
-          // Handle both array response (limit=0) and paginated response (limit>0)
-          const vehicles = Array.isArray(response) ? response : (response.vehicles || []);
-          if (Array.isArray(vehicles) && vehicles.length > 0) {
-            this.setLocalStorageData(cacheKey, vehicles);
-            console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
-          }
-        })
+        this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
+          .then(response => {
+            // Handle both array response (limit=0) and paginated response (limit>0)
+            let vehicles: Vehicle[];
+            if (Array.isArray(response)) {
+              vehicles = response;
+            } else if (response && typeof response === 'object' && 'vehicles' in response) {
+              vehicles = response.vehicles || [];
+            } else {
+              console.warn('⚠️ Invalid background refresh response format:', response);
+              return;
+            }
+            
+            if (Array.isArray(vehicles) && vehicles.length > 0) {
+              this.setLocalStorageData(cacheKey, vehicles);
+              console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
+            } else if (vehicles.length === 0) {
+              console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');
+            }
+          })
         .catch(error => {
           console.warn('Background vehicle refresh failed (using cache):', error);
         });
@@ -288,22 +299,33 @@ class DataService {
     }
 
     // STEP 2: No cache - fetch from API (first load or cache expired)
-    // Use pagination (50 vehicles) for MUCH faster initial load
+    // Use limit=0 to get all vehicles (backward compatible, still fast with optimizations)
     try {
-      // For initial load, use pagination to get first 50 vehicles instantly
-      // Full list can be loaded in background if needed
-      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=50&skipExpiryCheck=true';
+      // Use limit=0 to get all vehicles as array (not paginated object)
+      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0&skipExpiryCheck=true';
       const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
       
       // Handle both array response (limit=0) and paginated response (limit>0)
-      const vehicles = Array.isArray(response) ? response : (response.vehicles || []);
+      let vehicles: Vehicle[];
+      if (Array.isArray(response)) {
+        vehicles = response;
+      } else if (response && typeof response === 'object' && 'vehicles' in response) {
+        vehicles = response.vehicles || [];
+      } else {
+        console.error('❌ Invalid response format:', response);
+        throw new Error('Invalid response format: expected array or object with vehicles property');
+      }
       
       if (!Array.isArray(vehicles)) {
         console.error('❌ Invalid response format: expected array, got:', typeof vehicles);
         throw new Error('Invalid response format: expected array');
       }
       
-      console.log(`✅ Loaded ${vehicles.length} vehicles from production API`);
+      console.log(`✅ Loaded ${vehicles.length} vehicles from production API (response type: ${Array.isArray(response) ? 'array' : 'paginated'})`);
+      
+      if (vehicles.length === 0) {
+        console.warn('⚠️ API returned 0 vehicles. Check if there are published vehicles in the database.');
+      }
       
       // Cache the API data
       this.setLocalStorageData(cacheKey, vehicles);
