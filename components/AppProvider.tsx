@@ -1182,16 +1182,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ]);
         };
         
-        // Load vehicles and users in parallel (no delays)
+        // Load vehicles and users in parallel with aggressive timeout for instant response
         Promise.all([
           loadWithTimeout(
             dataService.getVehicles(isAdmin).catch(() => []),
-            4000, // Reduced from 8000 to 4000 for faster response
+            2000, // Aggressive 2-second timeout for instant response
             []
           ),
           loadWithTimeout(
             dataService.getUsers().catch(() => []),
-            4000, // Reduced from 8000 to 4000
+            2000, // Aggressive 2-second timeout
             []
           )
         ]).then(([vehiclesData, usersData]) => {
