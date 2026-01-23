@@ -2234,8 +2234,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const cached = vehicleCache.get(cacheKey);
       
       // PAGINATION SUPPORT: Parse pagination parameters early
+      // Default to pagination (50 per page) for better performance
       const page = parseInt(String(req.query.page || '1'), 10) || 1;
-      const limit = parseInt(String(req.query.limit || '0'), 10) || 0; // 0 means no limit (return all)
+      const limit = parseInt(String(req.query.limit || '50'), 10) || 50; // Default 50, 0 means no limit (return all)
       
       let vehicles: VehicleType[];
       let totalVehiclesCount: number = 0;
@@ -2257,36 +2258,55 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             offset: offset
           });
           
-          // Get total count from cache if available, otherwise fetch (but cache it)
+          // Get total count from cache if available, otherwise use COUNT query (much faster)
           const cachedCount = cached?.totalCount;
           if (cachedCount !== undefined) {
             totalVehiclesCount = cachedCount;
             console.log(`📊 Using cached total count: ${totalVehiclesCount}`);
           } else {
-            // Only fetch count if not cached (optimize: could use COUNT query in future)
-            const allVehiclesForCount = await vehicleService.findByStatus('published', {
-              orderBy: 'created_at',
-              orderDirection: 'desc'
-            });
-            totalVehiclesCount = allVehiclesForCount.length;
-            // Update cache with total count
-            if (cached) {
-              cached.totalCount = totalVehiclesCount;
-            } else {
-              vehicleCache.set(cacheKey, { vehicles: [], timestamp: Date.now(), totalCount: totalVehiclesCount });
+            // Use COUNT query instead of fetching all vehicles (dramatically faster)
+            try {
+              totalVehiclesCount = await vehicleService.countByStatus('published');
+              // Update cache with total count
+              if (cached) {
+                cached.totalCount = totalVehiclesCount;
+              } else {
+                vehicleCache.set(cacheKey, { vehicles: [], timestamp: Date.now(), totalCount: totalVehiclesCount });
+              }
+              console.log(`📊 Fetched total count using COUNT query: ${totalVehiclesCount}`);
+            } catch (countError) {
+              // Fallback to old method if COUNT query fails
+              console.warn('⚠️ COUNT query failed, falling back to fetch-all method:', countError);
+              const allVehiclesForCount = await vehicleService.findByStatus('published', {
+                orderBy: 'created_at',
+                orderDirection: 'desc'
+              });
+              totalVehiclesCount = allVehiclesForCount.length;
+              if (cached) {
+                cached.totalCount = totalVehiclesCount;
+              } else {
+                vehicleCache.set(cacheKey, { vehicles: [], timestamp: Date.now(), totalCount: totalVehiclesCount });
+              }
+              console.log(`📊 Fetched and cached total count (fallback): ${totalVehiclesCount}`);
             }
-            console.log(`📊 Fetched and cached total count: ${totalVehiclesCount}`);
           }
           
           console.log(`📊 Published vehicles fetched (paginated): ${vehicles.length} of ${totalVehiclesCount} total`);
         } else {
-          // For non-paginated requests, fetch all with database sorting
+          // For non-paginated requests (limit=0), fetch all with database sorting
+          // But still use COUNT query for total count (much faster)
           vehicles = await vehicleService.findByStatus('published', {
             orderBy: 'created_at',
             orderDirection: 'desc'
           });
-          totalVehiclesCount = vehicles.length;
-          console.log(`📊 Published vehicles fetched: ${vehicles.length}`);
+          // Use COUNT query for total count instead of vehicles.length
+          try {
+            totalVehiclesCount = await vehicleService.countByStatus('published');
+            console.log(`📊 Published vehicles fetched: ${vehicles.length} (total: ${totalVehiclesCount})`);
+          } catch (countError) {
+            totalVehiclesCount = vehicles.length;
+            console.log(`📊 Published vehicles fetched: ${vehicles.length} (count query failed, using length)`);
+          }
           
           // DIAGNOSTIC: Log if no vehicles found
           if (vehicles.length === 0) {
@@ -2336,73 +2356,49 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         }
       });
       
-      // PERFORMANCE OPTIMIZATION: Only fetch users for vehicles that need expiry checks
-      // Use Promise.allSettled with individual timeouts to prevent blocking on slow queries
+      // PERFORMANCE OPTIMIZATION: Batch fetch all sellers in a single query (much faster)
       const sellerMap = new Map<string, UserType>();
       if (sellerEmails.size > 0) {
-        // Helper function to add timeout to individual user fetches
-        // Each fetch has a 2-second timeout to prevent blocking the entire operation
-        const fetchUserWithTimeout = async (email: string, timeoutMs: number = 2000): Promise<UserType | null> => {
-          return new Promise(async (resolve) => {
-            let timeoutId: NodeJS.Timeout | null = null;
-            let resolved = false;
-            
-            const cleanup = () => {
-              if (timeoutId) clearTimeout(timeoutId);
-            };
-            
-            // Set up timeout
-            timeoutId = setTimeout(() => {
-              if (!resolved) {
-                resolved = true;
-                cleanup();
-                console.warn(`⏱️ Timeout fetching user ${email} (${timeoutMs}ms)`);
-                resolve(null);
-              }
-            }, timeoutMs);
-            
-            try {
-              const user = await userService.findByEmail(email);
-              if (!resolved) {
-                resolved = true;
-                cleanup();
-                resolve(user);
-              }
-            } catch (err) {
-              if (!resolved) {
-                resolved = true;
-                cleanup();
-                console.warn(`⚠️ Failed to fetch user ${email}:`, err);
-                resolve(null);
-              }
-            }
-          });
-        };
-        
-        // Fetch users in parallel with individual timeouts (2 seconds per fetch)
-        // Use allSettled to not block on slow queries
-        const userPromises = Array.from(sellerEmails).map(email => 
-          fetchUserWithTimeout(email, 2000)
-        );
-        
-        // Use allSettled instead of all to handle partial failures gracefully
-        const results = await Promise.allSettled(userPromises);
-        
-        // Build seller map from successfully fetched users
-        results.forEach((result, index) => {
-          if (result.status === 'fulfilled' && result.value) {
-            const seller = result.value;
+        try {
+          // Use batch fetch method if available (much faster than individual queries)
+          const sellerEmailArray = Array.from(sellerEmails);
+          const sellers = await userService.findByEmails(sellerEmailArray);
+          
+          // Build seller map from batch-fetched users
+          sellers.forEach(seller => {
             if (seller && seller.email) {
               const normalizedEmail = seller.email.toLowerCase().trim();
               sellerMap.set(normalizedEmail, seller);
             }
-          } else if (result.status === 'rejected') {
-            const email = Array.from(sellerEmails)[index];
-            console.warn(`⚠️ User fetch promise rejected for ${email}:`, result.reason);
-          }
-        });
-        
-        console.log(`📊 Fetched ${sellerMap.size} sellers for expiry checks (out of ${sellerEmails.size} needed)`);
+          });
+          
+          console.log(`📊 Batch fetched ${sellerMap.size} sellers for expiry checks (out of ${sellerEmails.size} needed)`);
+        } catch (batchError) {
+          // Fallback to individual fetches if batch fails
+          console.warn('⚠️ Batch user fetch failed, falling back to individual queries:', batchError);
+          const sellerEmailArray = Array.from(sellerEmails);
+          const userPromises = sellerEmailArray.map(async (email) => {
+            try {
+              return await userService.findByEmail(email);
+            } catch (err) {
+              console.warn(`⚠️ Failed to fetch user ${email}:`, err);
+              return null;
+            }
+          });
+          
+          const results = await Promise.allSettled(userPromises);
+          results.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value) {
+              const seller = result.value;
+              if (seller && seller.email) {
+                const normalizedEmail = seller.email.toLowerCase().trim();
+                sellerMap.set(normalizedEmail, seller);
+              }
+            }
+          });
+          
+          console.log(`📊 Fetched ${sellerMap.size} sellers (fallback method)`);
+        }
       }
       
       const vehicleUpdates: Array<{ id: number; updates: Partial<VehicleType> }> = [];

@@ -246,6 +246,22 @@ export const supabaseVehicleService = {
     return (data || []).map(supabaseRowToVehicle);
   },
 
+  // Count vehicles by status (much faster than fetching all and counting)
+  async countByStatus(status: 'published' | 'unpublished' | 'sold'): Promise<number> {
+    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    
+    const { count, error } = await supabase
+      .from('vehicles')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', status);
+    
+    if (error) {
+      throw new Error(`Failed to count vehicles by status: ${error.message}`);
+    }
+    
+    return count || 0;
+  },
+
   // Find vehicles by status with optional sorting and pagination
   async findByStatus(
     status: 'published' | 'unpublished' | 'sold',

@@ -167,6 +167,50 @@ export const supabaseUserService = {
     return supabaseRowToUser(data);
   },
 
+  // Batch fetch users by emails (much faster than individual queries)
+  async findByEmails(emails: string[]): Promise<User[]> {
+    if (emails.length === 0) {
+      return [];
+    }
+    
+    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    
+    // Normalize emails and create email keys
+    const normalizedEmails = emails.map(e => e.toLowerCase().trim());
+    const emailKeys = normalizedEmails.map(e => emailToKey(e));
+    
+    // Fetch by both ID (email key) and email field to handle both cases
+    // Use .in() for array matching in Supabase
+    const { data: dataById, error: errorById } = await supabase
+      .from('users')
+      .select('*')
+      .in('id', emailKeys);
+    
+    const { data: dataByEmail, error: errorByEmail } = await supabase
+      .from('users')
+      .select('*')
+      .in('email', normalizedEmails);
+    
+    // Combine results and deduplicate
+    const allData = [...(dataById || []), ...(dataByEmail || [])];
+    const uniqueData = Array.from(
+      new Map(allData.map(item => [item.id || item.email, item])).values()
+    );
+    
+    if (errorById && errorByEmail) {
+      // If both queries fail, fall back to individual fetches
+      console.warn(`⚠️ Batch user fetch failed, falling back to individual queries`);
+      const results = await Promise.allSettled(
+        emails.map(email => this.findByEmail(email))
+      );
+      return results
+        .filter((r): r is PromiseFulfilledResult<User> => r.status === 'fulfilled' && r.value !== null)
+        .map(r => r.value);
+    }
+    
+    return uniqueData.map(supabaseRowToUser);
+  },
+
   // Get all users
   async findAll(): Promise<User[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();

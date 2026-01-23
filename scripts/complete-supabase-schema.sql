@@ -110,6 +110,10 @@ CREATE INDEX IF NOT EXISTS idx_vehicles_price ON vehicles(price);
 CREATE INDEX IF NOT EXISTS idx_vehicles_year ON vehicles(year);
 CREATE INDEX IF NOT EXISTS idx_vehicles_created_at ON vehicles(created_at DESC);
 
+-- Composite index for common query pattern: published vehicles sorted by created_at
+-- This dramatically speeds up the most common query: fetching published vehicles
+CREATE INDEX IF NOT EXISTS idx_vehicles_status_created_at ON vehicles(status, created_at DESC);
+
 -- Enable RLS (Row Level Security) for vehicles
 ALTER TABLE vehicles ENABLE ROW LEVEL SECURITY;
 
