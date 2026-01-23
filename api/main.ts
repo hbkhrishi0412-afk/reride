@@ -2237,6 +2237,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       // Default to pagination (50 per page) for better performance
       const page = parseInt(String(req.query.page || '1'), 10) || 1;
       const limit = parseInt(String(req.query.limit || '50'), 10) || 50; // Default 50, 0 means no limit (return all)
+      const skipExpiryCheck = req.query.skipExpiryCheck === 'true'; // Skip expensive expiry checks for fast initial load
       
       let vehicles: VehicleType[];
       let totalVehiclesCount: number = 0;
@@ -2346,20 +2347,26 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         });
       }
       
-      const now = new Date();
-      const sellerEmails = new Set<string>();
+      // PERFORMANCE: Skip expensive seller expiry checks for fast initial loads
+      // These checks can be done in background or on-demand
+      let sellerMap = new Map<string, UserType>();
+      let vehicleUpdates: Array<{ id: number; updates: Partial<VehicleType> }> = [];
       
-      // Only collect seller emails for vehicles that need expiry checks
-      vehicles.forEach(vehicle => {
-        if (!vehicle.listingExpiresAt && vehicle.sellerEmail) {
-          sellerEmails.add(vehicle.sellerEmail.toLowerCase());
-        }
-      });
-      
-      // PERFORMANCE OPTIMIZATION: Batch fetch all sellers in a single query (much faster)
-      const sellerMap = new Map<string, UserType>();
-      if (sellerEmails.size > 0) {
-        try {
+      if (!skipExpiryCheck) {
+        // Only do expiry checks if explicitly requested (not for initial fast load)
+        const now = new Date();
+        const sellerEmails = new Set<string>();
+        
+        // Only collect seller emails for vehicles that need expiry checks
+        vehicles.forEach(vehicle => {
+          if (!vehicle.listingExpiresAt && vehicle.sellerEmail) {
+            sellerEmails.add(vehicle.sellerEmail.toLowerCase());
+          }
+        });
+        
+        // PERFORMANCE OPTIMIZATION: Batch fetch all sellers in a single query (much faster)
+        if (sellerEmails.size > 0) {
+          try {
           // Use batch fetch method if available (much faster than individual queries)
           const sellerEmailArray = Array.from(sellerEmails);
           const sellers = await userService.findByEmails(sellerEmailArray);
@@ -2398,12 +2405,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           });
           
           console.log(`📊 Fetched ${sellerMap.size} sellers (fallback method)`);
+          }
         }
-      }
-      
-      const vehicleUpdates: Array<{ id: number; updates: Partial<VehicleType> }> = [];
-      
-      vehicles.forEach(vehicle => {
+        
+        // Process expiry checks only if not skipped
+        vehicles.forEach(vehicle => {
         const updateFields: Record<string, any> = {};
         
         if (!vehicle.listingExpiresAt && vehicle.status === 'published' && vehicle.sellerEmail) {
@@ -2469,8 +2475,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           });
         }
       });
+      } // End of if (!skipExpiryCheck) block
       
       // Enforce plan listing limits: keep most recent listings within limit, unpublish extras
+      // Only enforce if not skipping expiry checks
+      if (!skipExpiryCheck) {
       try {
         // Build per-seller published vehicles list (newest first)
         const sellerToPublished: Map<string, VehicleType[]> = new Map();
@@ -2515,20 +2524,24 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       } catch (limitErr) {
         console.warn('⚠️ Error applying plan listing limits:', limitErr);
       }
+      } // End of plan limits check
       
-      // Apply all updates to Firebase
-      if (vehicleUpdates.length > 0) {
-        for (const update of vehicleUpdates) {
-          await vehicleService.update(update.id, update.updates);
-        }
-        // Invalidate cache after updates
-        vehicleCache.delete('published_vehicles');
+      // Apply all updates in background to not block response (only if not skipping)
+      if (!skipExpiryCheck && vehicleUpdates.length > 0) {
+        // Do updates in background to not block response
+        Promise.all(vehicleUpdates.map(update => 
+          vehicleService.update(update.id, update.updates).catch(err => 
+            console.warn(`⚠️ Failed to update vehicle ${update.id}:`, err)
+          )
+        )).then(() => {
+          // Invalidate cache after updates (in background)
+          vehicleCache.delete('published_vehicles');
+        });
       }
       
-      // PERFORMANCE OPTIMIZATION: Only refresh if we made updates, and only fetch published vehicles
-      // Since we started with published vehicles, any updates that change status will be filtered out
+      // PERFORMANCE OPTIMIZATION: Skip refresh if we skipped expiry checks (for speed)
       let finalVehicles = vehicles;
-      if (vehicleUpdates.length > 0) {
+      if (!skipExpiryCheck && vehicleUpdates.length > 0) {
         // Only refresh published vehicles after updates (with database sorting)
         finalVehicles = await vehicleService.findByStatus('published', {
           orderBy: 'created_at',

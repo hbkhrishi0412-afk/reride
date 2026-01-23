@@ -265,10 +265,10 @@ class DataService {
     const cacheKey = 'reRideVehicles_prod';
     const cachedVehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
     
-    // If we have cached data, return it immediately and fetch fresh data in background
-    if (cachedVehicles.length > 0) {
-      // Fetch fresh data in background (don't await)
-      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0'; // limit=0 gets all for cache
+      // If we have cached data, return it immediately and fetch fresh data in background
+      if (cachedVehicles.length > 0) {
+        // Fetch fresh data in background (don't await) - use pagination for speed
+        const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=50&skipExpiryCheck=true';
       this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
         .then(response => {
           // Handle both array response (limit=0) and paginated response (limit>0)
@@ -288,9 +288,11 @@ class DataService {
     }
 
     // STEP 2: No cache - fetch from API (first load or cache expired)
-    // Use pagination for better performance (50 vehicles per page)
+    // Use pagination (50 vehicles) for MUCH faster initial load
     try {
-      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0'; // limit=0 gets all for initial load
+      // For initial load, use pagination to get first 50 vehicles instantly
+      // Full list can be loaded in background if needed
+      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=50&skipExpiryCheck=true';
       const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
       
       // Handle both array response (limit=0) and paginated response (limit>0)
