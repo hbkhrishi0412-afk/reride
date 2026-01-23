@@ -68,7 +68,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         
         const services = (provider.metadata?.services as Record<string, ProviderService>) || {};
-        const list = Object.entries(services).map(([serviceType, payload]) => ({ serviceType, ...payload }));
+        const list = Object.entries(services).map(([serviceType, payload]) => {
+          const { serviceType: _, ...rest } = payload as any;
+          return { serviceType, ...rest };
+        });
         return res.status(200).json(list);
       }
 
@@ -83,11 +86,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const result = allProviders.flatMap((provider) => {
         const services = (provider.metadata?.services as Record<string, ProviderService>) || {};
-        return Object.entries(services).map(([serviceType, payload]) => ({
-          providerId: provider.id,
-          serviceType,
-          ...payload,
-        }));
+        return Object.entries(services).map(([serviceType, payload]) => {
+          const { serviceType: _, ...rest } = payload as any;
+          return {
+            providerId: provider.id,
+            serviceType,
+            ...rest,
+          };
+        });
       });
       return res.status(200).json(result);
     }
@@ -144,7 +150,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       // Return updated list
-      const list = Object.entries(updatedServices).map(([st, val]) => ({ serviceType: st, ...val }));
+      const list = Object.entries(updatedServices).map(([st, val]) => {
+        const { serviceType: _, ...rest } = val as any;
+        return { serviceType: st, ...rest };
+      });
       return res.status(200).json(list);
     }
 

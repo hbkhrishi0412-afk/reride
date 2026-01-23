@@ -120,9 +120,10 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
     
     setIsVerifying(true);
     try {
-      // Note: Registration verification API is not yet implemented in sellCarAPI
-      // For now, we'll just proceed to manual entry
-      // TODO: Implement registration verification API endpoint
+      // Note: Registration verification API endpoint can be implemented here
+      // This would validate the registration number against a government database
+      // For now, we accept the registration number and proceed to manual entry
+      // Future implementation: Call API endpoint to verify registration number
       setTimeout(() => {
         setCarDetails(prev => ({
           ...prev,

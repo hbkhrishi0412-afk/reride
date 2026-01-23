@@ -277,15 +277,6 @@ export default defineConfig({
         timeout: 30000, // 30 second timeout
         configure: (proxy, _options) => {
           proxy.on('error', (err, req, res) => {
-            // #region agent log
-            const errorInfo = {
-              message: err.message,
-              code: (err as any).code,
-              url: req.url,
-              method: req.method
-            };
-            fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'vite.config.ts:277',message:'Vite proxy error',data:errorInfo,timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-            // #endregion
             console.error('❌ API Proxy Error:', err.message);
             console.error('   Request URL:', req.url);
             console.error('   Error Code:', (err as any).code);

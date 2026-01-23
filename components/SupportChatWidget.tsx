@@ -59,10 +59,6 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
   useEffect(() => {
     if (!isOpen) return;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupportChatWidget.tsx:61',message:'WebSocket connection attempt',data:{isOpen,wsProtocol:window.location.protocol === 'https:' ? 'wss:' : 'ws:',wsHost:process.env.NODE_ENV === 'production' ? window.location.host : 'localhost:3001'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-1'})}).catch(()=>{});
-    // #endregion
-
     // WebSocket connection - use same origin for simplicity
     // In production, you may need to configure WebSocket proxy
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -76,9 +72,6 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
 
     newSocket.onopen = () => {
       setIsConnected(true);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupportChatWidget.tsx:75',message:'WebSocket onopen fired',data:{readyState:newSocket.readyState,url:wsUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-1'})}).catch(()=>{});
-      // #endregion
       if (process.env.NODE_ENV === 'development') {
         console.log('🔧 SupportChat: WebSocket connected');
       }
@@ -131,17 +124,11 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
     };
 
     newSocket.onerror = (error) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupportChatWidget.tsx:128',message:'WebSocket onerror fired',data:{readyState:newSocket.readyState,url:wsUrl,errorType:error?.type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-1'})}).catch(()=>{});
-      // #endregion
       console.error('WebSocket error:', error);
       setIsConnected(false);
     };
 
     newSocket.onclose = (event) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupportChatWidget.tsx:133',message:'WebSocket onclose fired',data:{code:event.code,reason:event.reason,wasClean:event.wasClean,url:wsUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-1'})}).catch(()=>{});
-      // #endregion
       setIsConnected(false);
       if (process.env.NODE_ENV === 'development') {
         console.log('🔧 SupportChat: WebSocket disconnected');
@@ -195,15 +182,9 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
   }, [isOpen, isMinimized]);
 
   const handleToggle = () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupportChatWidget.tsx:186',message:'handleToggle called',data:{currentIsOpen:isOpen,currentIsMinimized:isMinimized},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-1'})}).catch(()=>{});
-    // #endregion
     if (!isOpen) {
       setIsOpen(true);
       setIsMinimized(false);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SupportChatWidget.tsx:190',message:'SupportChatWidget opening',data:{isOpen:true,isMinimized:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-1'})}).catch(()=>{});
-      // #endregion
     } else {
       setIsMinimized(!isMinimized);
     }

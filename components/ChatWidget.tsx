@@ -171,9 +171,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   // This ensures fixed positioning works correctly regardless of parent containers
   // Try to get document.body immediately, fallback to useEffect if not available
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatWidget.tsx:169',message:'Portal target initial state',data:{hasDocument:typeof document !== 'undefined',hasBody:typeof document !== 'undefined' && !!document.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-3'})}).catch(()=>{});
-    // #endregion
     // Try to get document.body synchronously on initial render
     if (typeof document !== 'undefined' && document.body) {
       return document.body;
@@ -183,24 +180,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   
   // Ensure document.body is available before setting portal target
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatWidget.tsx:178',message:'Portal target useEffect',data:{hasPortalTarget:!!portalTarget,hasDocument:typeof document !== 'undefined',hasBody:typeof document !== 'undefined' && !!document.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-3'})}).catch(()=>{});
-    // #endregion
     if (!portalTarget && typeof document !== 'undefined') {
       // If body isn't ready, try again after a short delay
       const checkBody = () => {
         if (document.body) {
           setPortalTarget(document.body);
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatWidget.tsx:183',message:'Portal target set successfully',data:{hasBody:!!document.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-3'})}).catch(()=>{});
-          // #endregion
           if (process.env.NODE_ENV === 'development') {
             console.log('🔧 ChatWidget: Portal target set to document.body');
           }
         } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatWidget.tsx:189',message:'Portal target retry - body not ready',data:{hasBody:!!document.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-3'})}).catch(()=>{});
-          // #endregion
           // Retry after a short delay
           setTimeout(checkBody, 50);
         }
