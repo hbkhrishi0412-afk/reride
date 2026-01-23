@@ -177,7 +177,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     return `${base} bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-800 border-emerald-300`;
   };
 
-  const getAuthHeaders = async () => {
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
     try {
       const sessionResult = await getSession();
       if (sessionResult.success && sessionResult.session?.access_token) {
@@ -273,7 +273,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       };
       const resp = await fetch('/api/provider-services', {
         method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': 'application/json' } as Record<string, string>,
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
@@ -318,7 +318,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       const body = { serviceType, active };
       const resp = await fetch('/api/provider-services', {
         method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': 'application/json' } as Record<string, string>,
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
@@ -352,9 +352,15 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   };
 
   const withToken = async (): Promise<string> => {
-    const user = auth.currentUser;
-    if (!user) throw new Error('Not authenticated');
-    return user.getIdToken();
+    const sessionResult = await getSession();
+    if (!sessionResult.success || !sessionResult.session?.access_token) {
+      // In development, allow with mock provider
+      if (process.env.NODE_ENV === 'development') {
+        return 'dev-mock-token';
+      }
+      throw new Error('Not authenticated');
+    }
+    return sessionResult.session.access_token;
   };
 
   const fetchRequests = async () => {

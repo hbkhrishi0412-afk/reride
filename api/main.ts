@@ -9,7 +9,15 @@ import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
-import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
+// Supabase admin database utilities (replaces Firebase admin functions)
+import { 
+  adminRead, 
+  adminReadAll, 
+  adminCreate, 
+  adminUpdate, 
+  adminDelete,
+  DB_PATHS 
+} from '../server/supabase-admin-db.js';
 
 // Use Supabase instead of Firebase
 // Note: This is checked at module load time. If Supabase is not available,
@@ -820,7 +828,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
               featuredCredits: 100,
             },
             'seller@test.com': {
-              password: 'password',
+              password: 'password123', // Updated to match common test password
               name: 'Prestige Motors',
               mobile: '+91-98765-43210',
               location: 'Delhi, NCR',
@@ -2279,6 +2287,31 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           });
           totalVehiclesCount = vehicles.length;
           console.log(`📊 Published vehicles fetched: ${vehicles.length}`);
+          
+          // DIAGNOSTIC: Log if no vehicles found
+          if (vehicles.length === 0) {
+            console.warn('⚠️ No published vehicles found in database. Checking all vehicles...');
+            try {
+              const allVehicles = await vehicleService.findAll();
+              const statusBreakdown = {
+                published: allVehicles.filter(v => v.status === 'published').length,
+                unpublished: allVehicles.filter(v => v.status === 'unpublished').length,
+                sold: allVehicles.filter(v => v.status === 'sold').length,
+                total: allVehicles.length
+              };
+              console.warn('⚠️ Vehicle status breakdown:', statusBreakdown);
+              
+              // If there are vehicles but none published, log a warning
+              if (allVehicles.length > 0 && statusBreakdown.published === 0) {
+                console.warn('⚠️ Database has vehicles but none are published. Consider publishing some vehicles.');
+              } else if (allVehicles.length === 0) {
+                console.warn('⚠️ Database is empty. No vehicles found at all.');
+              }
+            } catch (diagError) {
+              console.error('❌ Failed to run diagnostic query:', diagError);
+            }
+          }
+          
           // Cache the full result with total count for non-paginated requests
           vehicleCache.set(cacheKey, { vehicles, timestamp: Date.now(), totalCount: totalVehiclesCount });
         }
@@ -3126,7 +3159,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     }
     
     // Estimate total size of images (base64 strings)
-    const totalImageSize = normalizedImages.reduce((total, img) => {
+    const totalImageSize = normalizedImages.reduce((total: number, img: string) => {
       return total + (typeof img === 'string' ? img.length : 0);
     }, 0);
     
@@ -5534,22 +5567,42 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       const { recipientEmail, isRead, notificationId } = req.query;
       
       if (notificationId) {
-        // Get single notification
-        const notification = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
-        if (!notification) {
+        // Get single notification from Supabase
+        const supabase = getSupabaseAdminClient();
+        const { data: notification, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('id', String(notificationId))
+          .single();
+        
+        if (error || !notification) {
           return res.status(404).json({ success: false, reason: 'Notification not found' });
         }
-        const recipient = ((notification as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() || '';
-        if (!isAdmin && recipient !== normalizedAuthEmail) {
+        
+        const recipient = (notification.recipient_email || notification.user_id || '').toString().toLowerCase().trim();
+        if (!isAdmin && recipient && recipient !== normalizedAuthEmail) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to notification' });
         }
-        return res.status(200).json({ success: true, data: { id: notificationId, ...notification } });
+        return res.status(200).json({ success: true, data: notification });
       }
       
-      // Get all notifications and filter
-      const allNotifications = await adminReadAll<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS);
-      // CRITICAL: Spread data first, then set id to preserve string ID from key
-      let notifications = Object.entries(allNotifications).map(([id, data]) => ({ ...data, id }));
+      // Get all notifications from Supabase and filter
+      const supabase = getSupabaseAdminClient();
+      const { data: allNotifications, error: fetchError } = await supabase
+        .from('notifications')
+        .select('*');
+      
+      if (fetchError) {
+        logError('❌ Failed to fetch notifications:', fetchError);
+        return res.status(500).json({ success: false, reason: 'Failed to fetch notifications' });
+      }
+      
+      let notifications = (allNotifications || []).map((notif: any) => ({
+        ...notif,
+        id: notif.id,
+        recipientEmail: notif.recipient_email || notif.user_id,
+        isRead: notif.read || notif.is_read
+      }));
       
       if (recipientEmail) {
         const emailValue = Array.isArray(recipientEmail) ? recipientEmail[0] : recipientEmail;
@@ -5557,7 +5610,10 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         if (!isAdmin && normalizedAuthEmail !== normalizedEmail) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to notifications' });
         }
-        notifications = notifications.filter(n => ((n as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() === normalizedEmail);
+        notifications = notifications.filter(n => {
+          const recipient = n.recipientEmail || n.recipient_email || n.user_id || '';
+          return recipient.toString().toLowerCase().trim() === normalizedEmail;
+        });
       } else if (!isAdmin) {
         return res.status(403).json({ success: false, reason: 'Unauthorized access to notifications' });
       }
@@ -5565,13 +5621,13 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       if (isRead !== undefined) {
         const isReadValue = Array.isArray(isRead) ? isRead[0] : isRead;
         const isReadBool = isReadValue === 'true';
-        notifications = notifications.filter(n => (n as Record<string, unknown>).isRead === isReadBool);
+        notifications = notifications.filter(n => (n.isRead || n.read) === isReadBool);
       }
       
       // Sort by timestamp descending
       notifications = notifications.sort((a, b) => {
-        const aTime = (a as Record<string, unknown>).timestamp ? new Date((a as Record<string, unknown>).timestamp as string).getTime() : 0;
-        const bTime = (b as Record<string, unknown>).timestamp ? new Date((b as Record<string, unknown>).timestamp as string).getTime() : 0;
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
         return bTime - aTime;
       });
       
@@ -5591,15 +5647,34 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       if (!isAdmin && normalizedEmail !== normalizedAuthEmail) {
         return res.status(403).json({ success: false, reason: 'Unauthorized notification creation' });
       }
-      const notification = {
-        ...notificationData,
-        recipientEmail: isAdmin ? normalizedEmail : normalizedAuthEmail,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+      
+      // Create notification in Supabase
+      const supabase = getSupabaseAdminClient();
+      const notificationRecord = {
+        id: String(notificationData.id),
+        user_id: normalizedEmail,
+        recipient_email: normalizedEmail,
+        type: notificationData.targetType || 'general',
+        title: notificationData.title || notificationData.message?.substring(0, 50) || 'Notification',
+        message: notificationData.message || '',
+        read: notificationData.isRead || false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        metadata: notificationData
       };
       
-      await adminCreate(DB_PATHS.NOTIFICATIONS, notification, String(notificationData.id));
-      return res.status(201).json({ success: true, data: notification });
+      const { data: created, error: createError } = await supabase
+        .from('notifications')
+        .insert(notificationRecord)
+        .select()
+        .single();
+      
+      if (createError) {
+        logError('❌ Failed to create notification:', createError);
+        return res.status(500).json({ success: false, reason: 'Failed to create notification' });
+      }
+      
+      return res.status(201).json({ success: true, data: created });
     }
 
     // PUT - Update notification (mark as read, etc.)
@@ -5610,22 +5685,46 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
         return res.status(400).json({ success: false, reason: 'Notification ID is required' });
       }
 
-      const existing = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
-      if (!existing) {
+      // Get existing notification from Supabase
+      const supabase = getSupabaseAdminClient();
+      const { data: existing, error: fetchError } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('id', String(notificationId))
+        .single();
+      
+      if (fetchError || !existing) {
         return res.status(404).json({ success: false, reason: 'Notification not found' });
       }
-      const recipient = ((existing as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() || '';
-      if (!isAdmin && recipient !== normalizedAuthEmail) {
+      
+      const recipient = (existing.recipient_email || existing.user_id || '').toString().toLowerCase().trim();
+      if (!isAdmin && recipient && recipient !== normalizedAuthEmail) {
         return res.status(403).json({ success: false, reason: 'Unauthorized notification update' });
       }
 
-      await adminUpdate(DB_PATHS.NOTIFICATIONS, String(notificationId), {
-        ...updates,
-        updatedAt: new Date().toISOString()
-      });
+      // Update notification in Supabase
+      const updateData: any = {
+        updated_at: new Date().toISOString()
+      };
       
-      const updated = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
-      return res.status(200).json({ success: true, data: { id: notificationId, ...updated } });
+      // Map updates to Supabase column names
+      if (updates.isRead !== undefined) updateData.read = updates.isRead;
+      if (updates.message !== undefined) updateData.message = updates.message;
+      if (updates.title !== undefined) updateData.title = updates.title;
+      
+      const { data: updated, error: updateError } = await supabase
+        .from('notifications')
+        .update(updateData)
+        .eq('id', String(notificationId))
+        .select()
+        .single();
+      
+      if (updateError) {
+        logError('❌ Failed to update notification:', updateError);
+        return res.status(500).json({ success: false, reason: 'Failed to update notification' });
+      }
+      
+      return res.status(200).json({ success: true, data: updated });
     }
 
     // DELETE - Delete notification
@@ -5635,16 +5734,34 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       if (!notificationId) {
         return res.status(400).json({ success: false, reason: 'Notification ID is required' });
       }
-      const existing = await adminRead<Record<string, unknown>>(DB_PATHS.NOTIFICATIONS, String(notificationId));
-      if (!existing) {
+      // Get existing notification from Supabase
+      const supabase = getSupabaseAdminClient();
+      const { data: existing, error: fetchError } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('id', String(notificationId))
+        .single();
+      
+      if (fetchError || !existing) {
         return res.status(404).json({ success: false, reason: 'Notification not found' });
       }
-      const recipient = ((existing as Record<string, unknown>).recipientEmail as string)?.toLowerCase().trim() || '';
-      if (!isAdmin && recipient !== normalizedAuthEmail) {
+      
+      const recipient = (existing.recipient_email || existing.user_id || '').toString().toLowerCase().trim();
+      if (!isAdmin && recipient && recipient !== normalizedAuthEmail) {
         return res.status(403).json({ success: false, reason: 'Unauthorized notification deletion' });
       }
 
-      await adminDelete(DB_PATHS.NOTIFICATIONS, String(notificationId));
+      // Delete notification from Supabase
+      const { error: deleteError } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', String(notificationId));
+      
+      if (deleteError) {
+        logError('❌ Failed to delete notification:', deleteError);
+        return res.status(500).json({ success: false, reason: 'Failed to delete notification' });
+      }
+      
       return res.status(200).json({ success: true, message: 'Notification deleted successfully' });
     }
 

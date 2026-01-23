@@ -47,8 +47,7 @@ function supabaseRowToVehicle(row: any): Vehicle {
 }
 
 // Helper to convert Vehicle type to Supabase row
-// isUpdate: if true, only include fields that are actually defined (for partial updates)
-function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, isUpdate = false): any {
+function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
   const metadata: any = {};
   
   // Extract fields that should go in metadata
@@ -73,85 +72,42 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>, isUpdate = false): any 
     }
   });
   
-  const row: any = {};
-  
-  // Only include fields that are actually defined when doing updates
-  // For creates, include all fields with defaults
-  if (isUpdate) {
-    // For updates, only include fields that are explicitly provided
-    if (vehicle.id !== undefined) row.id = vehicle.id.toString();
-    if (vehicle.category !== undefined) row.category = vehicle.category;
-    if (vehicle.make !== undefined) row.make = vehicle.make;
-    if (vehicle.model !== undefined) row.model = vehicle.model;
-    if (vehicle.variant !== undefined) row.variant = vehicle.variant;
-    if (vehicle.year !== undefined) row.year = vehicle.year;
-    if (vehicle.price !== undefined) row.price = vehicle.price;
-    if (vehicle.mileage !== undefined) row.mileage = vehicle.mileage;
-    if (vehicle.images !== undefined) row.images = vehicle.images;
-    if (vehicle.features !== undefined) row.features = vehicle.features;
-    if (vehicle.description !== undefined) row.description = vehicle.description;
-    if (vehicle.sellerEmail !== undefined) row.seller_email = vehicle.sellerEmail;
-    if (vehicle.sellerName !== undefined) row.seller_name = vehicle.sellerName;
-    if (vehicle.engine !== undefined) row.engine = vehicle.engine;
-    if (vehicle.transmission !== undefined) row.transmission = vehicle.transmission;
-    if (vehicle.fuelType !== undefined) row.fuel_type = vehicle.fuelType;
-    if (vehicle.fuelEfficiency !== undefined) row.fuel_efficiency = vehicle.fuelEfficiency;
-    if (vehicle.color !== undefined) row.color = vehicle.color;
-    if (vehicle.status !== undefined) row.status = vehicle.status;
-    if (vehicle.isFeatured !== undefined) row.is_featured = vehicle.isFeatured;
-    if (vehicle.views !== undefined) row.views = vehicle.views;
-    if (vehicle.inquiriesCount !== undefined) row.inquiries_count = vehicle.inquiriesCount;
-    if (vehicle.registrationYear !== undefined) row.registration_year = vehicle.registrationYear;
-    if (vehicle.insuranceValidity !== undefined) row.insurance_validity = vehicle.insuranceValidity;
-    if (vehicle.insuranceType !== undefined) row.insurance_type = vehicle.insuranceType;
-    if (vehicle.rto !== undefined) row.rto = vehicle.rto;
-    if (vehicle.city !== undefined) row.city = vehicle.city;
-    if (vehicle.state !== undefined) row.state = vehicle.state;
-    if (vehicle.noOfOwners !== undefined) row.no_of_owners = vehicle.noOfOwners;
-    if (vehicle.displacement !== undefined) row.displacement = vehicle.displacement;
-    if (vehicle.groundClearance !== undefined) row.ground_clearance = vehicle.groundClearance;
-    if (vehicle.bootSpace !== undefined) row.boot_space = vehicle.bootSpace;
-    if (vehicle.createdAt !== undefined) row.created_at = vehicle.createdAt;
-    if (vehicle.updatedAt !== undefined) row.updated_at = vehicle.updatedAt;
-    // Always update updated_at on updates
-    row.updated_at = vehicle.updatedAt || new Date().toISOString();
-  } else {
-    // For creates, include all fields with defaults
-    row.id = vehicle.id?.toString() || undefined;
-    row.category = vehicle.category || null;
-    row.make = vehicle.make || '';
-    row.model = vehicle.model || '';
-    row.variant = vehicle.variant || null;
-    row.year = vehicle.year || null;
-    row.price = vehicle.price || 0;
-    row.mileage = vehicle.mileage || null;
-    row.images = vehicle.images || [];
-    row.features = vehicle.features || [];
-    row.description = vehicle.description || null;
-    row.seller_email = vehicle.sellerEmail || null;
-    row.seller_name = vehicle.sellerName || null;
-    row.engine = vehicle.engine || null;
-    row.transmission = vehicle.transmission || null;
-    row.fuel_type = vehicle.fuelType || null;
-    row.fuel_efficiency = vehicle.fuelEfficiency || null;
-    row.color = vehicle.color || null;
-    row.status = vehicle.status || 'published';
-    row.is_featured = vehicle.isFeatured || false;
-    row.views = vehicle.views || 0;
-    row.inquiries_count = vehicle.inquiriesCount || 0;
-    row.registration_year = vehicle.registrationYear || null;
-    row.insurance_validity = vehicle.insuranceValidity || null;
-    row.insurance_type = vehicle.insuranceType || null;
-    row.rto = vehicle.rto || null;
-    row.city = vehicle.city || null;
-    row.state = vehicle.state || null;
-    row.no_of_owners = vehicle.noOfOwners || null;
-    row.displacement = vehicle.displacement || null;
-    row.ground_clearance = vehicle.groundClearance || null;
-    row.boot_space = vehicle.bootSpace || null;
-    row.created_at = vehicle.createdAt || new Date().toISOString();
-    row.updated_at = vehicle.updatedAt || new Date().toISOString();
-  }
+  const row: any = {
+    id: vehicle.id?.toString() || undefined,
+    category: vehicle.category || null,
+    make: vehicle.make || '',
+    model: vehicle.model || '',
+    variant: vehicle.variant || null,
+    year: vehicle.year || null,
+    price: vehicle.price || 0,
+    mileage: vehicle.mileage || null,
+    images: vehicle.images || [],
+    features: vehicle.features || [],
+    description: vehicle.description || null,
+    seller_email: vehicle.sellerEmail || null,
+    seller_name: vehicle.sellerName || null,
+    engine: vehicle.engine || null,
+    transmission: vehicle.transmission || null,
+    fuel_type: vehicle.fuelType || null,
+    fuel_efficiency: vehicle.fuelEfficiency || null,
+    color: vehicle.color || null,
+    status: vehicle.status || 'published',
+    is_featured: vehicle.isFeatured || false,
+    views: vehicle.views || 0,
+    inquiries_count: vehicle.inquiriesCount || 0,
+    registration_year: vehicle.registrationYear || null,
+    insurance_validity: vehicle.insuranceValidity || null,
+    insurance_type: vehicle.insuranceType || null,
+    rto: vehicle.rto || null,
+    city: vehicle.city || null,
+    state: vehicle.state || null,
+    no_of_owners: vehicle.noOfOwners || null,
+    displacement: vehicle.displacement || null,
+    ground_clearance: vehicle.groundClearance || null,
+    boot_space: vehicle.bootSpace || null,
+    created_at: vehicle.createdAt || new Date().toISOString(),
+    updated_at: vehicle.updatedAt || new Date().toISOString(),
+  };
 
   // Only include metadata if it has values (don't include null/empty metadata to avoid schema errors)
   if (Object.keys(metadata).length > 0) {
@@ -218,19 +174,10 @@ export const supabaseVehicleService = {
   // Update vehicle
   async update(id: number, updates: Partial<Vehicle>): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    const row = vehicleToSupabaseRow(updates, true); // true = isUpdate, only include defined fields
+    const row = vehicleToSupabaseRow(updates);
     
-    // Remove id from updates (id is used in WHERE clause, not in SET)
+    // Remove id from updates
     delete row.id;
-    
-    // Remove undefined and null values for required fields to avoid constraint violations
-    // Required fields: category, make, model - if they're null/undefined, exclude them
-    const requiredFields = ['category', 'make', 'model'];
-    requiredFields.forEach(field => {
-      if (row[field] === null || row[field] === undefined) {
-        delete row[field];
-      }
-    });
     
     // Remove undefined values to avoid issues
     Object.keys(row).forEach(key => {
@@ -244,11 +191,6 @@ export const supabaseVehicleService = {
     // The metadata will still be stored in other columns if they exist
     if (row.metadata === null || (typeof row.metadata === 'object' && Object.keys(row.metadata).length === 0)) {
       delete row.metadata;
-    }
-    
-    // If no fields to update, return early
-    if (Object.keys(row).length === 0) {
-      return;
     }
     
     const { error } = await supabase
