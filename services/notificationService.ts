@@ -25,24 +25,14 @@ const getAuthHeaders = (): Record<string, string> => {
  */
 export async function saveNotificationToSupabase(notification: Notification): Promise<{ success: boolean; data?: Notification; error?: string }> {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notificationService.ts:11',message:'POST /api/notifications request',data:{notificationId:notification.id,recipientEmail:notification.recipientEmail},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-    // #endregion
     const response = await fetch(`${API_BASE_URL}/notifications`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(notification),
     });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notificationService.ts:19',message:'POST /api/notifications response',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-    // #endregion
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notificationService.ts:22',message:'POST /api/notifications error',data:{status:response.status,error:errorData.reason},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-      // #endregion
       return { success: false, error: errorData.reason || 'Failed to save notification' };
     }
 

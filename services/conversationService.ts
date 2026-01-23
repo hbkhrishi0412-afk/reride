@@ -25,24 +25,14 @@ const getAuthHeaders = (): Record<string, string> => {
  */
 export async function saveConversationToSupabase(conversation: Conversation): Promise<{ success: boolean; data?: Conversation; error?: string }> {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'conversationService.ts:11',message:'POST /api/conversations request',data:{conversationId:conversation.id,hasMessages:conversation.messages.length > 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-    // #endregion
     const response = await fetch(`${API_BASE_URL}/conversations`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(conversation),
     });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'conversationService.ts:19',message:'POST /api/conversations response',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-    // #endregion
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'conversationService.ts:22',message:'POST /api/conversations error',data:{status:response.status,error:errorData.reason},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-      // #endregion
       return { success: false, error: errorData.reason || 'Failed to save conversation' };
     }
 
@@ -59,24 +49,14 @@ export async function saveConversationToSupabase(conversation: Conversation): Pr
  */
 export async function addMessageToConversation(conversationId: string, message: any): Promise<{ success: boolean; data?: Conversation; error?: string }> {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'conversationService.ts:37',message:'PUT /api/conversations request',data:{conversationId,hasMessage:!!message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-    // #endregion
     const response = await fetch(`${API_BASE_URL}/conversations`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify({ conversationId, message }),
     });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'conversationService.ts:45',message:'PUT /api/conversations response',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-    // #endregion
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'conversationService.ts:48',message:'PUT /api/conversations error',data:{status:response.status,error:errorData.reason},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-      // #endregion
       return { success: false, error: errorData.reason || 'Failed to add message' };
     }
 

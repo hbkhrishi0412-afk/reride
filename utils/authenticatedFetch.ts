@@ -25,9 +25,6 @@ export const getAuthHeaders = (): HeadersInit => {
   try {
     // Try to get Supabase session token first (synchronous check)
     try {
-      const { getSupabaseClient } = require('../lib/supabase.js');
-      const supabase = getSupabaseClient();
-      // Use getSession synchronously if possible, otherwise fall back
       // Note: Supabase getSession is async, so we'll check localStorage for cached token
       const supabaseToken = localStorage.getItem('sb-access-token') || 
                            localStorage.getItem('supabase.auth.token');

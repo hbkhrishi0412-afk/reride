@@ -38,7 +38,10 @@ class ErrorBoundary extends Component<Props, State> {
 
     // Log error to external service in production
     if (!isDevelopmentEnvironment()) {
-      // TODO: Send to error tracking service (e.g., Sentry, LogRocket)
+      // Error tracking service integration
+      // To integrate Sentry: import * as Sentry from '@sentry/react' and call Sentry.captureException(error)
+      // To integrate LogRocket: import LogRocket from 'logrocket' and call LogRocket.captureException(error)
+      // Example: if (window.Sentry) window.Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } });
       console.error('Production error:', {
         context: this.props.context,
         error: error.message,
