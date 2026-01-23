@@ -268,9 +268,11 @@ class DataService {
     // If we have cached data, return it immediately and fetch fresh data in background
     if (cachedVehicles.length > 0) {
       // Fetch fresh data in background (don't await)
-      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles';
-      this.makeApiRequest<Vehicle[]>(endpoint)
-        .then(vehicles => {
+      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0'; // limit=0 gets all for cache
+      this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
+        .then(response => {
+          // Handle both array response (limit=0) and paginated response (limit>0)
+          const vehicles = Array.isArray(response) ? response : (response.vehicles || []);
           if (Array.isArray(vehicles) && vehicles.length > 0) {
             this.setLocalStorageData(cacheKey, vehicles);
             console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
@@ -286,9 +288,13 @@ class DataService {
     }
 
     // STEP 2: No cache - fetch from API (first load or cache expired)
+    // Use pagination for better performance (50 vehicles per page)
     try {
-      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles';
-      const vehicles = await this.makeApiRequest<Vehicle[]>(endpoint);
+      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0'; // limit=0 gets all for initial load
+      const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
+      
+      // Handle both array response (limit=0) and paginated response (limit>0)
+      const vehicles = Array.isArray(response) ? response : (response.vehicles || []);
       
       if (!Array.isArray(vehicles)) {
         console.error('❌ Invalid response format: expected array, got:', typeof vehicles);
