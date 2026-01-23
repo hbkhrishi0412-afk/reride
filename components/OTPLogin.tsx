@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { sendOTP, verifyOTP, syncWithBackend, initializeRecaptcha, cleanupRecaptcha } from '../services/authService';
-import { ConfirmationResult } from 'firebase/auth';
 import { User } from '../types';
 import useIsMobileApp from '../hooks/useIsMobileApp';
 
@@ -14,7 +13,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
   const { isMobileApp } = useIsMobileApp();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [confirmationResult, setConfirmationResult] = useState<any | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);

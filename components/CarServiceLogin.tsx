@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmail, signUpWithEmail, resetPassword } from '../services/supabase-auth-service';
 import { View as ViewEnum } from '../types';
-import '../lib/firebase'; // ensure firebase client is initialized
 
 interface CarServiceLoginProps {
   onNavigate: (view: ViewEnum) => void;
@@ -44,13 +43,15 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
     setResetMessage(null);
     setLoading(true);
     try {
-      const auth = getAuth();
-      const cred = await signInWithEmailAndPassword(auth, email, password);
-      const idToken = await cred.user.getIdToken();
+      const result = await signInWithEmail(email, password);
+      
+      if (!result.success || !result.session) {
+        throw new Error(result.reason || 'Login failed');
+      }
 
       const resp = await fetch('/api/service-providers', {
         method: 'GET',
-        headers: { Authorization: `Bearer ${idToken}` },
+        headers: { Authorization: `Bearer ${result.session.access_token}` },
       });
 
       if (resp.status === 404) {
@@ -86,13 +87,20 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
         setLoading(false);
         return;
       }
-      const auth = getAuth();
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await cred.user.getIdToken();
+      
+      const result = await signUpWithEmail(email, password, {
+        name,
+        mobile: phone,
+        role: 'seller',
+      });
+      
+      if (!result.success || !result.session) {
+        throw new Error(result.reason || 'Signup failed');
+      }
 
       const resp = await fetch('/api/service-providers', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${result.session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           email,
@@ -236,8 +244,10 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
                   return;
                 }
                 try {
-                  const auth = getAuth();
-                  await sendPasswordResetEmail(auth, email);
+                  const result = await resetPassword(email);
+                  if (!result.success) {
+                    throw new Error(result.reason || 'Failed to send reset email');
+                  }
                   setResetMessage('Password reset email sent.');
                 } catch (err) {
                   const message = err instanceof Error ? err.message : 'Failed to send reset email';
