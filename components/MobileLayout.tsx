@@ -42,7 +42,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   inboxCount = 0
 }) => {
   const headerHeight = showHeader ? 56 : 0;
-  const bottomNavHeight = showBottomNav ? 64 : 0;
+  const bottomNavHeight = showBottomNav ? 70 : 0; // Updated to match refined premium nav height
   
   // Memoize computed styles to prevent recalculation
   const mainStyles = useMemo(() => {

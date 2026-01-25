@@ -320,6 +320,32 @@ a:focus,
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Sticky Filter Bar - Prevent Content Overlap */
+.sticky-filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  isolation: isolate;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Ensure content doesn't scroll under sticky filter bar */
+.vehicle-list-container {
+  position: relative;
+  z-index: 1;
+}
+
+.vehicle-list-container::before {
+  content: '';
+  display: block;
+  height: 0;
+  margin-top: 0;
+}
+
 /* Compact card design for mobile app */
 .mobile-card {
   @apply bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden;
@@ -752,6 +778,40 @@ input, textarea, select {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Premium Badge Pulse Animation */
+@keyframes badgePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.95;
+  }
+}
+
+/* Ripple Effect Animation */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* Fade In Animation for Modals */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

@@ -37,23 +37,33 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
   const allCommands = useMemo<Command[]>(() => {
     const commands: Command[] = [
       // Navigation
-      { id: 'home', title: 'Go to Home', icon: ICONS.HOME, action: () => onNavigate(View.HOME), section: 'Navigation' },
-      { id: 'used_cars', title: 'Browse Used Cars', icon: ICONS.SEARCH, action: () => onNavigate(View.USED_CARS), section: 'Navigation' },
-      { id: 'car_services', title: 'Car Services', icon: ICONS.SERVICE, action: () => onNavigate(View.CAR_SERVICES), section: 'Navigation' },
-      { id: 'pricing', title: 'View Pricing', icon: ICONS.PRICE, action: () => onNavigate(View.PRICING), section: 'Navigation' },
-      { id: 'sell_car', title: 'Sell a Car', icon: ICONS.SELL, action: () => onNavigate(View.SELLER_LOGIN), section: 'Navigation' },
+      { id: 'home', title: 'Go to Home', icon: ICONS.HOME, action: () => { onNavigate(View.HOME); onClose(); }, section: 'Navigation' },
+      { id: 'used_cars', title: 'Browse Used Cars', icon: ICONS.SEARCH, action: () => { onNavigate(View.USED_CARS); onClose(); }, section: 'Navigation' },
+      { id: 'car_services', title: 'Car Services', icon: ICONS.SERVICE, action: () => { onNavigate(View.CAR_SERVICES); onClose(); }, section: 'Navigation' },
+      { id: 'pricing', title: 'View Pricing', icon: ICONS.PRICE, action: () => { onNavigate(View.PRICING); onClose(); }, section: 'Navigation' },
+      { id: 'sell_car', title: 'Sell a Car', icon: ICONS.SELL, action: () => { onNavigate(View.SELLER_LOGIN); onClose(); }, section: 'Navigation' },
       // Conditional Navigation
       ...(currentUser ? [
-        { id: 'profile', title: 'My Profile', icon: ICONS.USER, action: () => onNavigate(View.PROFILE), section: 'Navigation' as const },
-        { id: 'wishlist', title: 'My Wishlist', icon: ICONS.HEART, action: () => onNavigate(View.WISHLIST), section: 'Navigation' as const },
-        { id: 'compare', title: 'Compare Vehicles', icon: ICONS.COMPARE, action: () => onNavigate(View.COMPARISON), section: 'Navigation' as const },
+        { id: 'profile', title: 'My Profile', icon: ICONS.USER, action: () => { onNavigate(View.PROFILE); onClose(); }, section: 'Navigation' as const },
+        { id: 'wishlist', title: 'My Wishlist', icon: ICONS.HEART, action: () => { onNavigate(View.WISHLIST); onClose(); }, section: 'Navigation' as const },
+        { id: 'compare', title: 'Compare Vehicles', icon: ICONS.COMPARE, action: () => { onNavigate(View.COMPARISON); onClose(); }, section: 'Navigation' as const },
+        { id: 'inbox', title: 'My Inbox', icon: ICONS.USER, action: () => { onNavigate(View.INBOX); onClose(); }, section: 'Navigation' as const },
       ] : []),
-      ...(currentUser?.role === 'seller' ? [{ id: 'dashboard', title: 'Seller Dashboard', icon: ICONS.DASHBOARD, action: () => onNavigate(View.SELLER_DASHBOARD), section: 'Navigation' as const }] : []),
+      ...(currentUser?.role === 'seller' ? [
+        { id: 'dashboard', title: 'Seller Dashboard', icon: ICONS.DASHBOARD, action: () => { onNavigate(View.SELLER_DASHBOARD); onClose(); }, section: 'Navigation' as const },
+        { id: 'new_cars', title: 'New Cars', icon: ICONS.SEARCH, action: () => { onNavigate(View.NEW_CARS); onClose(); }, section: 'Navigation' as const },
+      ] : []),
+      ...(currentUser?.role === 'customer' ? [
+        { id: 'buyer_dashboard', title: 'Buyer Dashboard', icon: ICONS.DASHBOARD, action: () => { onNavigate(View.BUYER_DASHBOARD); onClose(); }, section: 'Navigation' as const },
+      ] : []),
+      ...(currentUser?.role === 'admin' ? [
+        { id: 'admin_panel', title: 'Admin Panel', icon: ICONS.DASHBOARD, action: () => { onNavigate(View.ADMIN_PANEL); onClose(); }, section: 'Navigation' as const },
+      ] : []),
       // Actions
-      ...(currentUser ? [{ id: 'logout', title: 'Logout', icon: ICONS.LOGOUT, action: onLogout, section: 'Actions' as const }] : []),
+      ...(currentUser ? [{ id: 'logout', title: 'Logout', icon: ICONS.LOGOUT, action: () => { onLogout(); onClose(); }, section: 'Actions' as const }] : []),
     ];
     return commands;
-  }, [currentUser, onNavigate, onLogout]);
+  }, [currentUser, onNavigate, onLogout, onClose]);
 
   const filteredCommands = useMemo(() => {
     if (!query) return allCommands;
@@ -125,6 +135,11 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
             onChange={e => setQuery(e.target.value)}
             className="w-full bg-transparent focus:outline-none text-lg font-semibold text-gray-800 placeholder-gray-500"
           />
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <kbd className="px-2 py-1 bg-gray-100 rounded border border-gray-300 font-mono">⌘K</kbd>
+            <span className="text-gray-400">or</span>
+            <kbd className="px-2 py-1 bg-gray-100 rounded border border-gray-300 font-mono">Ctrl+K</kbd>
+          </div>
         </div>
         <div className="max-h-96 overflow-y-auto premium-scrollbar">
           {Object.entries(groupedCommands).map(([section, commands]) => (

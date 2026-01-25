@@ -44,6 +44,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   const [isMobile, setIsMobile] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
+  const [userManuallyClosed, setUserManuallyClosed] = useState(false); // Track if user explicitly closed
   
   // Detect mobile on mount and resize
   useEffect(() => {
@@ -54,7 +55,13 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   }, []);
   
   // Auto-open chat when conversation starts (even with no messages) or has new messages
+  // BUT only if user hasn't manually closed it
   useEffect(() => {
+    // Don't auto-open if user has manually closed the chat or if exiting
+    if (userManuallyClosed || isExiting) {
+      return;
+    }
+    
     // Auto-open when conversation is first set (even with no messages)
     if (!hasOpenedOnce) {
       if (process.env.NODE_ENV === 'development') {
@@ -65,18 +72,19 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
       }
       setIsMinimized(false);
       setHasOpenedOnce(true);
-    } else if (conversation.messages.length > 0 && isMinimized) {
-      // Also auto-open if new messages arrive while minimized
+    } else if (conversation.messages.length > 0 && isMinimized && !userManuallyClosed && !isExiting) {
+      // Also auto-open if new messages arrive while minimized (only if not manually closed and not exiting)
       if (process.env.NODE_ENV === 'development') {
         console.log('🔧 Auto-opening chat - new messages received');
       }
       setIsMinimized(false);
     }
-  }, [conversation.id, conversation.messages.length, hasOpenedOnce, isMinimized]);
+  }, [conversation.id, conversation.messages.length, hasOpenedOnce, isMinimized, userManuallyClosed, isExiting]);
   
-  // Reset hasOpenedOnce when conversation changes
+  // Reset states when conversation changes
   useEffect(() => {
     setHasOpenedOnce(false);
+    setUserManuallyClosed(false); // Reset manual close flag for new conversation
   }, [conversation.id]);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -120,9 +128,53 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
     setShowEmojiPicker(false);
   };
 
-  const handleClose = () => {
+  const handleClose = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 ChatWidget: handleClose called', { 
+        isExiting, 
+        isMinimized,
+        conversationId: conversation.id 
+      });
+    }
+    
+    // Prevent multiple close calls
+    if (isExiting) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔧 ChatWidget: Already closing, ignoring duplicate close call');
+      }
+      return;
+    }
+    
+    // Set states immediately
+    setUserManuallyClosed(true); // Mark that user explicitly closed
     setIsExiting(true);
-    setTimeout(onClose, 400); // Wait for animation
+    setIsMinimized(true); // Ensure it's minimized before closing
+    setIsOfferModalOpen(false); // Close any open modals
+    setShowEmojiPicker(false); // Close emoji picker if open
+    
+    // Close immediately - call onClose directly
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔧 ChatWidget: Calling onClose callback immediately');
+      }
+      // Call onClose directly - no delays
+      onClose();
+    } catch (error) {
+      console.error('❌ Error closing chat:', error);
+      // Fallback: try again after a very short delay
+      setTimeout(() => {
+        try {
+          onClose();
+        } catch (fallbackError) {
+          console.error('❌ Fallback close also failed:', fallbackError);
+        }
+      }, 50);
+    }
   };
 
   const handleFlagClick = (e: React.MouseEvent) => {
@@ -158,6 +210,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
       }, 300);
     } else {
       setIsMinimized(false);
+      setUserManuallyClosed(false); // Reset manual close flag when user manually opens
     }
   };
 
@@ -299,7 +352,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
       }}
     >
         {/* Header - OLX-like compact bar */}
-        <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-white">
+        <div 
+          className="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-white"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
             <div className="flex items-center gap-3 flex-grow min-w-0">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 text-white flex items-center justify-center flex-shrink-0 shadow-inner">
                     <span className="font-semibold text-sm">
@@ -330,22 +387,78 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                 <button onClick={(e) => { e.stopPropagation(); handleToggleMinimize(); }} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Minimize chat">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); handleClose(); }} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Close chat">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log('🔧 Close button clicked - calling handleClose');
+                    }
+                    // Call handleClose directly without delay
+                    if (!isExiting) {
+                      handleClose(e);
+                    }
+                  }}
+                  onMouseDown={(e) => {
+                    // Prevent event bubbling but don't close here (let onClick handle it)
+                    e.stopPropagation();
+                  }}
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                  }}
+                  className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors active:opacity-70 active:bg-gray-200" 
+                  aria-label="Close chat"
+                  type="button"
+                  style={{
+                    pointerEvents: 'auto',
+                    cursor: 'pointer',
+                    WebkitTapHighlightColor: 'transparent',
+                    touchAction: 'manipulation',
+                    userSelect: 'none',
+                    zIndex: 1000 // Ensure button is clickable
+                  }}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
             </div>
         </div>
 
         {/* Messages - compact list */}
-        <div className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3" style={{ backgroundColor: '#F7F7F9' }}>
+        <div className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3 relative" style={{ backgroundColor: '#F7F7F9' }}>
             {conversation.messages.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                <div className="text-center">
+              <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                <div className="text-center mb-6">
                   <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
-                  <p>No messages yet. Start the conversation!</p>
+                  <p className="text-gray-600 mb-2">No messages yet. Start the conversation!</p>
                 </div>
+                {/* Make an Offer Button - Prominent in empty state */}
+                {currentUserRole === 'customer' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      if (process.env.NODE_ENV === 'development') {
+                        console.log('🔧 Make Offer button clicked (empty state), opening modal');
+                      }
+                      setIsOfferModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-6 py-3 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 active:scale-95"
+                    style={{
+                      background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)',
+                      boxShadow: '0 4px 12px rgba(255, 107, 53, 0.4)',
+                      pointerEvents: 'auto',
+                      zIndex: 10
+                    }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" />
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" />
+                    </svg>
+                    <span>Make an Offer</span>
+                  </button>
+                )}
               </div>
             ) : (
               <>
@@ -370,6 +483,42 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
               </>
             )}
         </div>
+        
+        {/* Make an Offer Button - Fixed at bottom when messages exist (outside scrollable area) */}
+        {conversation.messages.length > 0 && currentUserRole === 'customer' && (
+          <div 
+            className="px-3 pt-2 pb-1 bg-white border-t border-gray-100"
+            style={{
+              position: 'relative',
+              zIndex: 20,
+              pointerEvents: 'auto'
+            }}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔧 Make Offer button clicked (with messages), opening modal');
+                }
+                setIsOfferModalOpen(true);
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-200 active:scale-95 text-sm"
+              style={{
+                background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)',
+                boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
+                pointerEvents: 'auto',
+                zIndex: 21
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" />
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" />
+              </svg>
+              <span>Make an Offer</span>
+            </button>
+          </div>
+        )}
 
         {/* Input - Facebook Messenger style */}
         <div className="p-3 border-t border-gray-200 bg-white relative">
@@ -387,11 +536,47 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </button>
                 {currentUserRole === 'customer' ? (
-                     <button type="button" onClick={() => setIsOfferModalOpen(true)} className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors" aria-label="Make an offer">
+                     <button 
+                       type="button" 
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         e.preventDefault();
+                         if (process.env.NODE_ENV === 'development') {
+                           console.log('🔧 Make Offer button clicked (input area), opening modal');
+                         }
+                         setIsOfferModalOpen(true);
+                       }} 
+                       className="p-2 rounded-full transition-colors active:scale-95" 
+                       aria-label="Make an offer"
+                       style={{
+                         color: '#F97316',
+                         pointerEvents: 'auto',
+                         zIndex: 10
+                       }}
+                       onMouseEnter={(e) => {
+                         e.currentTarget.style.backgroundColor = 'rgba(249, 115, 22, 0.1)';
+                       }}
+                       onMouseLeave={(e) => {
+                         e.currentTarget.style.backgroundColor = 'transparent';
+                       }}
+                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
                     </button>
                 ) : ( onMakeOffer && 
-                     <button type="button" onClick={onMakeOffer} className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors" aria-label="Make an offer">
+                     <button 
+                       type="button" 
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         e.preventDefault();
+                         onMakeOffer();
+                       }} 
+                       className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors active:scale-95" 
+                       aria-label="Make an offer"
+                       style={{
+                         pointerEvents: 'auto',
+                         zIndex: 10
+                       }}
+                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 00-1.134 0V7.151c.22.07.412.164.567.267zM11.567 7.418c.155-.103.346-.196.567-.267v1.698a2.5 2.5 0 01-1.134 0V7.151c.22.07.412.164.567.267z" /><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.5 4.5 0 00-1.876.662C6.168 6.23 5.5 7.085 5.5 8.003v.486c0 .918.668 1.773 1.624 2.214.509.232.957.488 1.376.786V12.5a.5.5 0 01.5.5h1a.5.5 0 01.5-.5v-1.214c.419-.298.867-.554 1.376-.786C14.332 10.26 15 9.405 15 8.489v-.486c0-.918-.668-1.773-1.624-2.214A4.5 4.5 0 0011 5.092V5z" clipRule="evenodd" /></svg>
                     </button>
                 )}
@@ -451,14 +636,30 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
       {portalTarget && createPortal(chatButton, portalTarget)}
       {/* Render chat window when not minimized */}
       {!isMinimized && createPortal(chatWindow, portalTarget)}
-      {isOfferModalOpen && (
-        <OfferModal
+      {/* Render Offer Modal in portal to ensure proper z-index and positioning */}
+      {isOfferModalOpen && portalTarget && (() => {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔧 Rendering Offer Modal in portal', { 
+            isOfferModalOpen, 
+            hasPortalTarget: !!portalTarget,
+            conversationId: conversation.id 
+          });
+        }
+        return createPortal(
+          <OfferModal
             title="Make an Offer"
             listingPrice={conversation.vehiclePrice}
             onSubmit={handleSendOffer}
-            onClose={() => setIsOfferModalOpen(false)}
-        />
-      )}
+            onClose={() => {
+              if (process.env.NODE_ENV === 'development') {
+                console.log('🔧 Closing Offer Modal');
+              }
+              setIsOfferModalOpen(false);
+            }}
+          />,
+          portalTarget
+        );
+      })()}
     </>
   );
 });

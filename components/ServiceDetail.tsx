@@ -295,46 +295,46 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
   const pricing = servicePricing[selectedService.title] || { basePrice: 0, customQuote: true };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen pb-safe">
       {/* Back Button */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-8">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-6"
+          className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors mb-4 sm:mb-6 touch-manipulation min-h-[44px]"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          <span className="font-semibold">Back to Services</span>
+          <span className="font-semibold text-sm sm:text-base">Back to Services</span>
         </button>
       </div>
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-700 text-white py-12">
+      <section className="bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-700 text-white py-8 sm:py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-6">
-            <div className="w-20 h-20 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white flex-shrink-0">
               {selectedService.icon}
             </div>
-            <div>
-              <h1 className="text-4xl md:text-5xl font-black mb-2">{selectedService.title}</h1>
-              <p className="text-xl text-white/90 max-w-3xl">{selectedService.description}</p>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-4xl md:text-5xl font-black mb-2 break-words">{selectedService.title}</h1>
+              <p className="text-base sm:text-xl text-white/90 max-w-3xl break-words">{selectedService.description}</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
           {/* Left Column - Service Details */}
           <div className="lg:col-span-2 space-y-6">
             {/* Services Included */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg border border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-6">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-8 shadow-lg border border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-4 sm:mb-6">
                 Services Included
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {selectedService.services.map((service, index) => (
                   <div key={index} className="flex items-start gap-3">
                     <svg className="w-6 h-6 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -347,21 +347,21 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
             </div>
 
             {/* Benefits */}
-            <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-8 shadow-lg border border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-4">
+            <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-4 sm:p-8 shadow-lg border border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-3 sm:mb-4">
                 Why Choose This Service?
               </h2>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-lg">
+              <p className="text-gray-700 dark:text-gray-300 leading-relaxed text-base sm:text-lg">
                 {selectedService.benefits}
               </p>
             </div>
 
             {/* Service Quality Features */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg border border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-6">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-8 shadow-lg border border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-4 sm:mb-6">
                 Service Quality Assured
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <div className="flex items-start gap-3">
                   <svg className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -403,9 +403,9 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
           </div>
 
           {/* Right Column - Pricing & Booking */}
-          <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-xl border-2 border-gray-200 dark:border-gray-700 sticky top-8">
-              <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-6">
+          <div className="lg:col-span-1 order-first lg:order-last">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 sm:p-8 shadow-xl border-2 border-gray-200 dark:border-gray-700 lg:sticky lg:top-8">
+              <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-4 sm:mb-6">
                 Pricing & Booking
               </h2>
 
@@ -471,19 +471,19 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
               <div className="space-y-3">
                 <button
                   onClick={handleBookNow}
-                  className="w-full px-6 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+                  className="w-full px-6 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
                 >
                   Book Now
                 </button>
                 <button
                   onClick={handleAddToCart}
-                  className="w-full px-6 py-4 rounded-xl border-2 border-blue-600 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                  className="w-full px-6 py-4 rounded-xl border-2 border-blue-600 text-blue-600 dark:text-blue-400 font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
                 >
                   Add to Cart
                 </button>
                 <a
                   href="tel:+917277277275"
-                  className="block w-full px-6 py-4 rounded-xl border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors"
+                  className="block w-full px-6 py-4 rounded-xl border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
                 >
                   Call for Quote
                 </a>

@@ -40,6 +40,25 @@ export const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({
     }
   };
 
+  // Prevent body scroll when sheet is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      const originalPosition = document.body.style.position;
+      const originalWidth = document.body.style.width;
+      
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.body.style.position = originalPosition;
+        document.body.style.width = originalWidth;
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -48,14 +67,14 @@ export const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({
       <div
         ref={backdropRef}
         onClick={handleBackdropClick}
-        className="fixed inset-0 bg-black/50 z-40 animate-fade-in"
+        className="fixed inset-0 bg-black/50 z-[9998] animate-fade-in"
         style={{ animation: 'fade-in 0.2s ease-out' }}
       />
 
       {/* Sheet */}
       <div
         ref={sheetRef}
-        className="mobile-sheet z-50 flex flex-col"
+        className="mobile-sheet z-[9999] flex flex-col"
         style={{
           maxHeight: '85vh',
           paddingBottom: 'env(safe-area-inset-bottom, 0)'
