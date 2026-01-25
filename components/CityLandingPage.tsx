@@ -42,7 +42,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
   return (
     <div className="container mx-auto py-8">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-spinny-orange to-orange-600 text-white rounded-2xl p-8 mb-8 animate-fade-in">
+      <div className="bg-gradient-to-r from-reride-orange to-orange-600 text-white rounded-2xl p-8 mb-8 animate-fade-in">
         <h1 className="text-4xl font-bold mb-4">Used Cars in {city}</h1>
         <p className="text-xl mb-6">
           Find your perfect car from {cityStats.totalListings} quality listings
@@ -65,7 +65,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
 
       {/* Vehicles Grid */}
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-spinny-text-dark mb-4">
+        <h2 className="text-2xl font-bold text-reride-text-dark mb-4">
           Latest Cars in {city}
         </h2>
         <p className="text-gray-600 mb-6">
@@ -92,7 +92,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
 
       {/* SEO Content */}
       <div className="mt-12 prose max-w-none">
-        <h2 className="text-2xl font-bold text-spinny-text-dark mb-4">
+        <h2 className="text-2xl font-bold text-reride-text-dark mb-4">
           Buy Used Cars in {city}
         </h2>
         <p className="text-gray-600 mb-4">
@@ -101,7 +101,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
           and find your perfect car today. All our vehicles undergo thorough quality checks to ensure you get 
           the best value for your money.
         </p>
-        <h3 className="text-xl font-semibold text-spinny-text-dark mb-3">
+        <h3 className="text-xl font-semibold text-reride-text-dark mb-3">
           Popular Car Brands in {city}
         </h3>
         <p className="text-gray-600 mb-4">
@@ -109,7 +109,7 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
           We have a wide range of options from budget-friendly hatchbacks to luxury sedans. Every listing 
           comes with complete vehicle history, service records, and financing options.
         </p>
-        <h3 className="text-xl font-semibold text-spinny-text-dark mb-3">
+        <h3 className="text-xl font-semibold text-reride-text-dark mb-3">
           Why Buy from ReRide in {city}?
         </h3>
         <ul className="list-disc list-inside text-gray-600 space-y-2">

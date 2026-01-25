@@ -47,7 +47,7 @@ const PricingGuidance: React.FC<PricingGuidanceProps> = ({ vehicleDetails, allVe
                 type="button"
                 onClick={handleAnalysis}
                 disabled={isLoading}
-                className="font-semibold text-spinny-orange disabled:opacity-50 flex items-center gap-1 hover:text-spinny-orange"
+                className="font-semibold text-reride-orange disabled:opacity-50 flex items-center gap-1 hover:text-reride-orange"
             >
                 {isLoading ? (
                     <><div className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-current"></div><span>Analyzing...</span></>
@@ -55,7 +55,7 @@ const PricingGuidance: React.FC<PricingGuidanceProps> = ({ vehicleDetails, allVe
                     <>✨ Get AI Price Suggestion</>
                 )}
             </button>
-            {error && <div className="mt-2 p-3 bg-spinny-orange-light dark:bg-spinny-orange/20 text-spinny-orange dark:text-spinny-orange rounded-lg">{error}</div>}
+            {error && <div className="mt-2 p-3 bg-reride-orange-light dark:bg-reride-orange/20 text-reride-orange dark:text-reride-orange rounded-lg">{error}</div>}
             {result && (
                 <div className="mt-2 p-3 rounded-lg animate-fade-in" style={{ backgroundColor: 'rgba(30, 136, 229, 0.1)', color: '#1A1A1A' }}>
                     <p className="font-bold">Suggested Range: {formatCurrency(result.min)} - {formatCurrency(result.max)}</p>

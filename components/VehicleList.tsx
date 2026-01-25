@@ -39,23 +39,23 @@ const BASE_ITEMS_PER_PAGE = 12;
 
 const VehicleCardSkeleton: React.FC = () => (
     <div className="bg-white rounded-xl shadow-soft-lg overflow-hidden">
-      <div className="w-full h-40 sm:h-56 bg-spinny-light-gray dark:bg-brand-gray-700 animate-pulse"></div>
+      <div className="w-full h-40 sm:h-56 bg-reride-light-gray dark:bg-brand-gray-700 animate-pulse"></div>
       <div className="p-3 sm:p-5">
         <div className="flex justify-between items-start">
-          <div className="h-5 sm:h-6 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-3/5 mb-2 animate-pulse"></div>
-          <div className="h-5 sm:h-6 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-1/5 mb-2 animate-pulse"></div>
+          <div className="h-5 sm:h-6 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-3/5 mb-2 animate-pulse"></div>
+          <div className="h-5 sm:h-6 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-1/5 mb-2 animate-pulse"></div>
         </div>
-        <div className="h-3 sm:h-4 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-1/3 mb-4 animate-pulse"></div>
-        <div className="h-px bg-spinny-light-gray dark:bg-brand-gray-700 my-3 sm:my-4"></div>
+        <div className="h-3 sm:h-4 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-1/3 mb-4 animate-pulse"></div>
+        <div className="h-px bg-reride-light-gray dark:bg-brand-gray-700 my-3 sm:my-4"></div>
         <div className="grid grid-cols-2 gap-2">
-           <div className="h-4 sm:h-5 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
-           <div className="h-4 sm:h-5 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
-           <div className="h-4 sm:h-5 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
-           <div className="h-4 sm:h-5 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
+           <div className="h-4 sm:h-5 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
+           <div className="h-4 sm:h-5 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
+           <div className="h-4 sm:h-5 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
+           <div className="h-4 sm:h-5 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
         </div>
         <div className="flex justify-between items-center mt-4 sm:mt-6">
-           <div className="h-7 sm:h-8 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-2/5 animate-pulse"></div>
-           <div className="h-5 sm:h-6 bg-spinny-light-gray dark:bg-brand-gray-700 rounded w-1/4 animate-pulse"></div>
+           <div className="h-7 sm:h-8 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-2/5 animate-pulse"></div>
+           <div className="h-5 sm:h-6 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-1/4 animate-pulse"></div>
         </div>
       </div>
     </div>
@@ -1157,7 +1157,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   if (isWishlistMode) {
      return (
       <div className="animate-fade-in container mx-auto py-8">
-        <h1 className="text-3xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark mb-5 border-b border-gray-200-200 dark:border-gray-200-200 pb-3">{categoryTitle}</h1>
+        <h1 className="text-3xl font-extrabold text-reride-text-dark dark:text-reride-text-dark mb-5 border-b border-gray-200-200 dark:border-gray-200-200 pb-3">{categoryTitle}</h1>
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {isLoading ? (
             Array.from({ length: 3 }).map((_, index) => <VehicleCardSkeleton key={index} />)
@@ -1167,8 +1167,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             ))
           ) : (
             <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
-              <h3 className="text-xl font-semibold text-spinny-text-dark dark:text-brand-gray-200">Your Wishlist is Empty</h3>
-              <p className="text-spinny-text dark:text-spinny-text mt-2">Click the heart icon on any vehicle to save it here.</p>
+              <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">Your Wishlist is Empty</h3>
+              <p className="text-reride-text dark:text-reride-text mt-2">Click the heart icon on any vehicle to save it here.</p>
             </div>
           )}
         </div>
@@ -1177,7 +1177,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     );
   }
 
-  const formElementClass = "block w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg focus:outline-none transition bg-white dark:bg-white dark:text-spinny-text-dark disabled:bg-spinny-light-gray dark:disabled:bg-spinny-light-gray disabled:cursor-not-allowed";
+  const formElementClass = "block w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg focus:outline-none transition bg-white dark:bg-white dark:text-reride-text-dark disabled:bg-reride-light-gray dark:disabled:bg-reride-light-gray disabled:cursor-not-allowed";
 
   const renderFilterControls = (isMobile: boolean) => {
     const state = isMobile ? tempFilters : { categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, featureSearch };
@@ -1300,7 +1300,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     return (
         <div className="space-y-4">
             <div>
-                <label htmlFor="category-select" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Category</label>
+                <label htmlFor="category-select" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Category</label>
                 <select id="category-select" name="categoryFilter" value={state.categoryFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="ALL">All Categories</option>
                     {uniqueCategories.map(cat => (
@@ -1311,27 +1311,27 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </select>
             </div>
             <div>
-                <label htmlFor="make-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Make</label>
+                <label htmlFor="make-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Make</label>
                 <select id="make-filter" name="makeFilter" value={state.makeFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any Make</option>
                     {(isMobile ? tempUniqueMakes : uniqueMakes).map(make => <option key={make} value={make}>{make}</option>)}
                 </select>
             </div>
             <div>
-                <label htmlFor="model-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Model</label>
+                <label htmlFor="model-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Model</label>
                 <select id="model-filter" name="modelFilter" value={state.modelFilter} onChange={handleSelectChange} disabled={!state.makeFilter || (isMobile ? tempAvailableModels.length === 0 : availableModels.length === 0)} className={formElementClass}>
                     <option value="">Any Model</option>
                     {(isMobile ? tempAvailableModels : availableModels).map(model => <option key={model} value={model}>{model}</option>)}
                 </select>
             </div>
             <div>
-                <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-2">Price Range</label>
-                <div className="flex justify-between items-center text-xs text-brand-gray-600 dark:text-spinny-text">
+                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-2">Price Range</label>
+                <div className="flex justify-between items-center text-xs text-brand-gray-600 dark:text-reride-text">
                     <span>₹{state.priceRange.min.toLocaleString('en-IN')}</span>
                     <span>₹{state.priceRange.max.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="relative h-8 flex items-center">
-                    <div className="relative w-full h-1.5 bg-spinny-light-gray dark:bg-brand-gray-600 rounded-full">
+                    <div className="relative w-full h-1.5 bg-reride-light-gray dark:bg-brand-gray-600 rounded-full">
                         <div className="absolute h-1.5 rounded-full" style={{ left: `${((state.priceRange.min - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100}%`, right: `${100 - ((state.priceRange.max - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100}%`, background: 'var(--gradient-warm)' }}></div>
                     </div>
                     <input name="min" type="range" min={MIN_PRICE} max={MAX_PRICE} step="10000" value={state.priceRange.min} onChange={(e) => handleRangeChange(e, 'price')} className="absolute w-full h-1.5 bg-transparent appearance-none z-20 slider-thumb" />
@@ -1339,13 +1339,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </div>
             </div>
              <div>
-                <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-2">Mileage (kms)</label>
-                <div className="flex justify-between items-center text-xs text-brand-gray-600 dark:text-spinny-text">
+                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-2">Mileage (kms)</label>
+                <div className="flex justify-between items-center text-xs text-brand-gray-600 dark:text-reride-text">
                     <span>{state.mileageRange.min.toLocaleString('en-IN')}</span>
                     <span>{state.mileageRange.max.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="relative h-8 flex items-center">
-                    <div className="relative w-full h-1.5 bg-spinny-light-gray dark:bg-brand-gray-600 rounded-full">
+                    <div className="relative w-full h-1.5 bg-reride-light-gray dark:bg-brand-gray-600 rounded-full">
                         <div className="absolute h-1.5 rounded-full" style={{ left: `${((state.mileageRange.min - MIN_MILEAGE) / (MAX_MILEAGE - MIN_MILEAGE)) * 100}%`, right: `${100 - ((state.mileageRange.max - MIN_MILEAGE) / (MAX_MILEAGE - MIN_MILEAGE)) * 100}%`, background: 'var(--gradient-warm)' }}></div>
                     </div>
                     <input name="min" type="range" min={MIN_MILEAGE} max={MAX_MILEAGE} step="1000" value={state.mileageRange.min} onChange={(e) => handleRangeChange(e, 'mileage')} className="absolute w-full h-1.5 bg-transparent appearance-none z-20 slider-thumb" />
@@ -1353,60 +1353,60 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </div>
             </div>
             <div>
-                <label htmlFor="fuel-type-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Fuel Type</label>
+                <label htmlFor="fuel-type-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Fuel Type</label>
                 <select id="fuel-type-filter" name="fuelTypeFilter" value={state.fuelTypeFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any Fuel Type</option>
                     {(isMobile ? tempUniqueFuelTypes : uniqueFuelTypes).map(fuel => <option key={fuel} value={fuel}>{fuel}</option>)}
                 </select>
             </div>
             <div>
-                <label htmlFor="year-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Year</label>
+                <label htmlFor="year-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Year</label>
                 <select id="year-filter" name="yearFilter" value={state.yearFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="0">Any Year</option>
                     {(isMobile ? tempUniqueYears : uniqueYears).map(year => <option key={year} value={year}>{year}</option>)}
                 </select>
             </div>
             <div>
-                <label htmlFor="color-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Color</label>
+                <label htmlFor="color-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Color</label>
                 <select id="color-filter" name="colorFilter" value={state.colorFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any Color</option>
                     {(isMobile ? tempUniqueColors : uniqueColors).map(color => <option key={color} value={color}>{color}</option>)}
                 </select>
             </div>
             <div>
-                <label htmlFor="state-filter" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">State</label>
+                <label htmlFor="state-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">State</label>
                 <select id="state-filter" name="stateFilter" value={state.stateFilter} onChange={handleSelectChange} className={formElementClass}>
                     <option value="">Any State</option>
                     {uniqueStates.map(st => <option key={st.code} value={st.code}>{st.name}</option>)}
                 </select>
             </div>
             <div className="relative" ref={isMobile ? mobileFeaturesFilterRef : featuresFilterRef}>
-                <label htmlFor="features-filter-button" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Features</label>
+                <label htmlFor="features-filter-button" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Features</label>
                 <button id="features-filter-button" type="button" onClick={() => isMobile ? setIsMobileFeaturesOpen(p => !p) : setIsFeaturesOpen(p => !p)} className={`${formElementClass} flex justify-between items-center text-left min-h-[50px]`}>
                     <div className="flex flex-wrap gap-1 items-center">
-                        {state.selectedFeatures.length > 0 ? ( state.selectedFeatures.slice(0, 2).map(feature => ( <span key={feature} className="text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1.5" style={{ background: '#FF6B35' }}>{feature} <button type="button" onClick={(e) => { e.stopPropagation(); handleFeatureToggleLocal(feature); }} className="bg-white/20 hover:bg-white/40 rounded-full h-4 w-4 flex items-center justify-center text-white" aria-label={`Remove ${feature}`}>&times;</button></span>)) ) : ( <span className="text-spinny-text dark:text-spinny-text">Select features...</span> )}
-                        {state.selectedFeatures.length > 2 && ( <span className="text-xs font-semibold text-spinny-text dark:text-spinny-text">+{state.selectedFeatures.length - 2} more</span> )}
+                        {state.selectedFeatures.length > 0 ? ( state.selectedFeatures.slice(0, 2).map(feature => ( <span key={feature} className="text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1.5" style={{ background: '#FF6B35' }}>{feature} <button type="button" onClick={(e) => { e.stopPropagation(); handleFeatureToggleLocal(feature); }} className="bg-white/20 hover:bg-white/40 rounded-full h-4 w-4 flex items-center justify-center text-white" aria-label={`Remove ${feature}`}>&times;</button></span>)) ) : ( <span className="text-reride-text dark:text-reride-text">Select features...</span> )}
+                        {state.selectedFeatures.length > 2 && ( <span className="text-xs font-semibold text-reride-text dark:text-reride-text">+{state.selectedFeatures.length - 2} more</span> )}
                     </div>
                     <svg className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${(isMobile ? isMobileFeaturesOpen : isFeaturesOpen) ? 'transform rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                 </button>
                 {(isMobile ? isMobileFeaturesOpen : isFeaturesOpen) && (
                     <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200-200 dark:border-gray-200-300 z-20 overflow-hidden animate-fade-in">
-                        <div className="p-2"><input ref={featuresSearchInputRef} type="text" placeholder="Search features..." value={isMobile ? tempFilters.featureSearch : featureSearch} onChange={e => { isMobile ? setTempFilters(p => ({...p, featureSearch: e.target.value})) : setFeatureSearch(e.target.value) }} className="block w-full p-2 border border-gray-200-300 dark:border-gray-200-500 rounded-md bg-white text-sm focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--spinny-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }} /></div>
+                        <div className="p-2"><input ref={featuresSearchInputRef} type="text" placeholder="Search features..." value={isMobile ? tempFilters.featureSearch : featureSearch} onChange={e => { isMobile ? setTempFilters(p => ({...p, featureSearch: e.target.value})) : setFeatureSearch(e.target.value) }} className="block w-full p-2 border border-gray-200-300 dark:border-gray-200-500 rounded-md bg-white text-sm focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }} /></div>
                         <div className="max-h-48 overflow-y-auto">
-                            {(isMobile ? tempFilteredFeatures : filteredFeatures).map(feature => ( <label key={feature} className="flex items-center space-x-3 cursor-pointer group p-3 transition-colors hover:bg-spinny-off-white dark:hover:bg-brand-gray-600"><input type="checkbox" checked={state.selectedFeatures.includes(feature)} onChange={() => handleFeatureToggleLocal(feature)} className="h-4 w-4 rounded border-gray-200-300 dark:border-gray-200-500 bg-transparent" style={{ accentColor: '#FF6B35' }} /><span className="text-sm text-spinny-text-dark dark:text-brand-gray-200">{feature}</span></label> ))}
-                            {(isMobile ? tempFilteredFeatures.length === 0 : filteredFeatures.length === 0) && ( <p className="p-3 text-sm text-center text-spinny-text dark:text-spinny-text">No features found.</p> )}
+                            {(isMobile ? tempFilteredFeatures : filteredFeatures).map(feature => ( <label key={feature} className="flex items-center space-x-3 cursor-pointer group p-3 transition-colors hover:bg-reride-off-white dark:hover:bg-brand-gray-600"><input type="checkbox" checked={state.selectedFeatures.includes(feature)} onChange={() => handleFeatureToggleLocal(feature)} className="h-4 w-4 rounded border-gray-200-300 dark:border-gray-200-500 bg-transparent" style={{ accentColor: '#FF6B35' }} /><span className="text-sm text-reride-text-dark dark:text-brand-gray-200">{feature}</span></label> ))}
+                            {(isMobile ? tempFilteredFeatures.length === 0 : filteredFeatures.length === 0) && ( <p className="p-3 text-sm text-center text-reride-text dark:text-reride-text">No features found.</p> )}
                         </div>
                     </div>
                 )}
             </div>
             {!isMobile && (
               <div className="space-y-2 mt-2">
-                <button onClick={handleResetFilters} className="w-full bg-spinny-light-gray dark:bg-brand-gray-700 text-spinny-text-dark dark:text-brand-gray-200 font-bold py-3 px-4 rounded-lg hover:bg-brand-gray-300 dark:hover:bg-brand-gray-600 transition-colors">
+                <button onClick={handleResetFilters} className="w-full bg-reride-light-gray dark:bg-brand-gray-700 text-reride-text-dark dark:text-brand-gray-200 font-bold py-3 px-4 rounded-lg hover:bg-brand-gray-300 dark:hover:bg-brand-gray-600 transition-colors">
                   Reset Filters
                 </button>
                 <button 
                   onClick={handleSaveSearch} 
-                  className="w-full bg-spinny-orange text-white font-bold py-3 px-4 rounded-lg hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-reride-orange text-white font-bold py-3 px-4 rounded-lg hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -1698,8 +1698,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             {/* Mobile-optimized search - collapsible on mobile */}
             <div className="intelligent-search bg-white/80 backdrop-blur-xl rounded-xl lg:rounded-2xl shadow-xl border border-white/20 p-2.5 lg:p-4 -mt-12">
               <div className="flex items-center gap-2 mb-1.5 lg:mb-1.5">
-                <label htmlFor="ai-search" className="text-xs lg:text-sm font-semibold text-spinny-text-dark dark:text-spinny-text-dark flex-shrink-0">✨ Intelligent Search</label>
-                <p className={`hidden lg:block text-xs text-spinny-text dark:text-spinny-text flex-1 truncate`}>
+                <label htmlFor="ai-search" className="text-xs lg:text-sm font-semibold text-reride-text-dark dark:text-reride-text-dark flex-shrink-0">✨ Intelligent Search</label>
+                <p className={`hidden lg:block text-xs text-reride-text dark:text-reride-text flex-1 truncate`}>
                   Describe what you're looking for, e.g., "a white Tata Nexon under ₹15 lakhs with a sunroof"
                 </p>
                 <button 
@@ -1712,7 +1712,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   </svg>
                 </button>
               </div>
-              <p className={`lg:hidden text-xs text-spinny-text dark:text-spinny-text mb-1.5 ${isAiSearchCollapsed ? 'hidden' : ''}`}>
+              <p className={`lg:hidden text-xs text-reride-text dark:text-reride-text mb-1.5 ${isAiSearchCollapsed ? 'hidden' : ''}`}>
                 Describe what you're looking for, e.g., "a white Tata Nexon under ₹15 lakhs with a sunroof"
               </p>
               <div className={`relative ${isAiSearchCollapsed ? 'hidden lg:block' : ''}`} ref={aiSearchRef}>
@@ -1721,7 +1721,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                       <button onClick={() => handleAiSearch()} disabled={isAiSearching} className="btn-brand-primary text-white font-bold py-2 px-3 lg:px-4 rounded-lg transition-colors disabled:bg-brand-gray-400 disabled:cursor-wait text-xs lg:text-sm whitespace-nowrap flex-shrink-0">{isAiSearching ? '...' : 'Search'}</button>
                   </div>
                   {showSuggestions && suggestions.length > 0 && (
-                      <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200-200 dark:border-gray-200-300 z-10 overflow-hidden"><ul className="divide-y divide-brand-gray-100 dark:divide-brand-gray-600">{suggestions.map((suggestion, index) => ( <li key={index}><button onClick={() => handleSuggestionClick(suggestion)} className="w-full text-left px-4 py-2 text-spinny-text-dark dark:text-brand-gray-200 hover:bg-spinny-off-white dark:hover:bg-brand-gray-600 transition-colors">{suggestion}</button></li>))}</ul></div>
+                      <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200-200 dark:border-gray-200-300 z-10 overflow-hidden"><ul className="divide-y divide-brand-gray-100 dark:divide-brand-gray-600">{suggestions.map((suggestion, index) => ( <li key={index}><button onClick={() => handleSuggestionClick(suggestion)} className="w-full text-left px-4 py-2 text-reride-text-dark dark:text-brand-gray-200 hover:bg-reride-off-white dark:hover:bg-brand-gray-600 transition-colors">{suggestion}</button></li>))}</ul></div>
                   )}
               </div>
           </div>
@@ -1730,7 +1730,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           <div className="sticky top-[56px] lg:static z-20 bg-white/95 backdrop-blur-sm lg:bg-transparent py-0.5 lg:py-0 border-b border-gray-200 lg:border-none -mx-4 px-4 lg:mx-0 lg:px-0 -mt-2">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-2 lg:gap-3">
               <div className='flex items-center gap-1.5 w-full sm:w-auto'>
-                <button onClick={() => setIsDesktopFilterVisible(prev => !prev)} className="hidden lg:block p-1.5 rounded-md bg-white dark:bg-brand-gray-700 hover:bg-spinny-off-white dark:hover:bg-brand-gray-600 transition-colors">
+                <button onClick={() => setIsDesktopFilterVisible(prev => !prev)} className="hidden lg:block p-1.5 rounded-md bg-white dark:bg-brand-gray-700 hover:bg-reride-off-white dark:hover:bg-brand-gray-600 transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
                 </button>
                 <button 
@@ -1756,11 +1756,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </p>
               </div>
               <div className="flex items-center gap-2 lg:gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                <div className="flex items-center p-0.5 bg-spinny-off-white dark:bg-brand-gray-700 rounded-md">
-                  <button title="Grid View" onClick={() => setViewMode('grid')} className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white shadow' : 'text-spinny-text hover:text-spinny-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'grid' ? { color: '#FF6B35' } : undefined}>
+                <div className="flex items-center p-0.5 bg-reride-off-white dark:bg-brand-gray-700 rounded-md">
+                  <button title="Grid View" onClick={() => setViewMode('grid')} className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white shadow' : 'text-reride-text hover:text-reride-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'grid' ? { color: '#FF6B35' } : undefined}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                   </button>
-                  <button title="List View" onClick={() => setViewMode('tile')} className={`p-1.5 rounded transition-colors ${viewMode === 'tile' ? 'bg-white shadow' : 'text-spinny-text hover:text-spinny-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'tile' ? { color: '#FF6B35' } : undefined}>
+                  <button title="List View" onClick={() => setViewMode('tile')} className={`p-1.5 rounded transition-colors ${viewMode === 'tile' ? 'bg-white shadow' : 'text-reride-text hover:text-reride-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'tile' ? { color: '#FF6B35' } : undefined}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M2 4a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 9a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 14a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" /></svg>
                   </button>
                 </div>
@@ -1846,8 +1846,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               </>
             ) : (
               <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
-                <h3 className="text-xl font-semibold text-spinny-text-dark dark:text-brand-gray-200">No Vehicles Found</h3>
-                <p className="text-spinny-text dark:text-spinny-text mt-2">Try adjusting your filters or using the AI search to find your perfect vehicle.</p>
+                <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">No Vehicles Found</h3>
+                <p className="text-reride-text dark:text-reride-text mt-2">Try adjusting your filters or using the AI search to find your perfect vehicle.</p>
               </div>
             )}
           </div>
@@ -1933,11 +1933,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </div>
                  <style>{`
                   .slider-thumb { -webkit-appearance: none; appearance: none; background-color: transparent; pointer-events: none; }
-                  .slider-thumb::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background-color: var(--spinny-orange); border: 3px solid var(--spinny-white); box-shadow: 0 0 0 1px var(--spinny-text-dark-light); border-radius: 50%; cursor: pointer; pointer-events: auto; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
-                  html.dark .slider-thumb::-webkit-slider-thumb { border-color: var(--spinny-text-dark-dark); box-shadow: 0 0 0 1px var(--spinny-text-dark); }
+                  .slider-thumb::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background-color: var(--reride-orange); border: 3px solid var(--reride-white); box-shadow: 0 0 0 1px var(--reride-text-dark-light); border-radius: 50%; cursor: pointer; pointer-events: auto; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+                  html.dark .slider-thumb::-webkit-slider-thumb { border-color: var(--reride-text-dark-dark); box-shadow: 0 0 0 1px var(--reride-text-dark); }
                   .slider-thumb:hover::-webkit-slider-thumb, .slider-thumb:focus::-webkit-slider-thumb { transform: scale(1.15); box-shadow: 0 0 0 4px rgba(255, 107, 53, 0.1); }
-                  .slider-thumb::-moz-range-thumb { width: 20px; height: 20px; background-color: var(--spinny-orange); border: 3px solid var(--spinny-white); box-shadow: 0 0 0 1px var(--spinny-text-dark-light); border-radius: 50%; cursor: pointer; pointer-events: auto; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
-                  html.dark .slider-thumb::-moz-range-thumb { border-color: var(--spinny-text-dark-dark); box-shadow: 0 0 0 1px var(--spinny-text-dark); }
+                  .slider-thumb::-moz-range-thumb { width: 20px; height: 20px; background-color: var(--reride-orange); border: 3px solid var(--reride-white); box-shadow: 0 0 0 1px var(--reride-text-dark-light); border-radius: 50%; cursor: pointer; pointer-events: auto; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+                  html.dark .slider-thumb::-moz-range-thumb { border-color: var(--reride-text-dark-dark); box-shadow: 0 0 0 1px var(--reride-text-dark); }
                   .slider-thumb:hover::-moz-range-thumb, .slider-thumb:focus::-moz-range-thumb { transform: scale(1.15); box-shadow: 0 0 0 4px rgba(255, 107, 53, 0.1); }
                 `}</style>
             </div>

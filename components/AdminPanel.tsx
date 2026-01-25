@@ -180,8 +180,8 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
   <div className={`bg-white p-6 rounded-lg shadow-md flex items-center ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-transform' : ''}`} onClick={onClick}>
     <div className="p-3 rounded-full mr-4" style={{ background: 'rgba(30, 136, 229, 0.1)' }}>{icon}</div>
     <div>
-      <h3 className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">{title}</h3>
-      <p className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">{value}</p>
+      <h3 className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">{title}</h3>
+      <p className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark">{value}</p>
     </div>
   </div>
 );
@@ -189,7 +189,7 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
 const TableContainer: React.FC<{ title: string; children: React.ReactNode; actions?: React.ReactNode }> = ({ title, children, actions }) => (
     <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-            <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">{title}</h2>
+            <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">{title}</h2>
             {actions && <div className="w-full sm:w-auto">{actions}</div>}
         </div>
         <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
@@ -225,11 +225,11 @@ const BarChart: React.FC<{ title: string; data: { label: string; value: number }
     const maxValue = Math.max(...(data || []).map(d => d.value), 1);
     return (
         <div className="bg-white p-6 rounded-lg shadow-md">
-            <h3 className="text-lg font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-4">{title}</h3>
+            <h3 className="text-lg font-bold text-reride-text-dark dark:text-reride-text-dark mb-4">{title}</h3>
             <div className="space-y-4">
                 {(data || []).map(({ label, value }) => (
                     <div key={label} className="grid grid-cols-[100px_1fr] items-center gap-4 text-sm">
-                        <span className="font-medium text-spinny-text-dark dark:text-spinny-text-dark truncate text-right">{label}</span>
+                        <span className="font-medium text-reride-text-dark dark:text-reride-text-dark truncate text-right">{label}</span>
                         <div className="flex items-center gap-2">
                             <div className="w-full bg-white-dark dark:bg-white rounded-full h-5">
                                 <div
@@ -291,11 +291,11 @@ const CertificationRequestsView: React.FC<{
                 <td className="px-6 py-4">
                     <div>Plan: <span className="font-semibold">{sellerInfo.planName}</span></div>
                     <div className="text-sm">Free Certs Used: {sellerInfo.usage}</div>
-                    {!sellerInfo.hasFreeCredits && <div className="text-xs text-spinny-text-dark">No free credits left</div>}
+                    {!sellerInfo.hasFreeCredits && <div className="text-xs text-reride-text-dark">No free credits left</div>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                    <button onClick={() => onCertificationApproval(vehicle.id, 'approved')} className="text-spinny-orange hover:text-spinny-orange">Approve</button>
-                    <button onClick={() => onCertificationApproval(vehicle.id, 'rejected')} className="text-spinny-orange hover:text-spinny-orange">Reject</button>
+                    <button onClick={() => onCertificationApproval(vehicle.id, 'approved')} className="text-reride-orange hover:text-reride-orange">Approve</button>
+                    <button onClick={() => onCertificationApproval(vehicle.id, 'rejected')} className="text-reride-orange hover:text-reride-orange">Reject</button>
                 </td>
             </tr>
         );
@@ -319,7 +319,7 @@ const CertificationRequestsView: React.FC<{
                         ))}
                     </tbody>
                 </table>
-            ) : <p className="text-center py-8 text-spinny-text-dark dark:text-spinny-text-dark">No pending certification requests.</p>}
+            ) : <p className="text-center py-8 text-reride-text-dark dark:text-reride-text-dark">No pending certification requests.</p>}
         </TableContainer>
     );
 };
@@ -345,14 +345,14 @@ const AuditLogView: React.FC<{ auditLog: AuditLogEntry[] }> = ({ auditLog }) => 
       placeholder="Search logs..."
       value={searchTerm}
       onChange={(e) => setSearchTerm(e.target.value)}
-      className="flex-grow p-2 border border-gray-200 dark:border-gray-200-300 rounded-lg bg-white dark:text-spinny-text-dark focus:outline-none transition w-full sm:w-64" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--spinny-orange)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
+      className="flex-grow p-2 border border-gray-200 dark:border-gray-200-300 rounded-lg bg-white dark:text-reride-text-dark focus:outline-none transition w-full sm:w-64" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
     />
   );
 
   return (
     <TableContainer title="Audit Log" actions={searchAction}>
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-white dark:bg-white text-spinny-text-dark dark:text-spinny-text-dark">
+        <thead className="bg-white dark:bg-white text-reride-text-dark dark:text-reride-text-dark">
           <tr>
             <th className="px-6 py-3 text-left text-xs font-medium uppercase">Timestamp</th>
             <th className="px-6 py-3 text-left text-xs font-medium uppercase">Actor</th>
@@ -364,16 +364,16 @@ const AuditLogView: React.FC<{ auditLog: AuditLogEntry[] }> = ({ auditLog }) => 
         <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
           {filteredLog.map(entry => (
             <tr key={entry.id}>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-spinny-text-dark dark:text-spinny-text-dark">{new Date(entry.timestamp).toLocaleString()}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-reride-text-dark dark:text-reride-text-dark">{new Date(entry.timestamp).toLocaleString()}</td>
               <td className="px-6 py-4 whitespace-nowrap font-medium">{entry.actor}</td>
               <td className="px-6 py-4 whitespace-nowrap">{entry.action}</td>
               <td className="px-6 py-4 whitespace-nowrap">{entry.target}</td>
-              <td className="px-6 py-4 text-sm text-spinny-text-dark dark:text-spinny-text-dark truncate max-w-xs" title={entry.details}>{entry.details}</td>
+              <td className="px-6 py-4 text-sm text-reride-text-dark dark:text-reride-text-dark truncate max-w-xs" title={entry.details}>{entry.details}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {filteredLog.length === 0 && <p className="text-center py-8 text-spinny-text-dark dark:text-spinny-text-dark">No log entries found matching your search.</p>}
+      {filteredLog.length === 0 && <p className="text-center py-8 text-reride-text-dark dark:text-reride-text-dark">No log entries found matching your search.</p>}
     </TableContainer>
   );
 };
@@ -472,14 +472,14 @@ const AddNewPlanModal: React.FC<{
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <form onSubmit={handleSubmit} className="p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-white">Create New Plan</h2>
+                        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white">Create New Plan</h2>
                         <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
                     </div>
 
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
                                     Plan Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -487,17 +487,17 @@ const AddNewPlanModal: React.FC<{
                                     name="name"
                                     value={formData.name}
                                     onChange={handleChange}
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.name 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                     placeholder="Enter plan name"
                                 />
                                 {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
                                     Price (₹/month) <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -507,10 +507,10 @@ const AddNewPlanModal: React.FC<{
                                     onChange={handleChange}
                                     min="0"
                                     step="1"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.price 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                     placeholder="0"
                                 />
@@ -520,7 +520,7 @@ const AddNewPlanModal: React.FC<{
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Listing Limit</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Listing Limit</label>
                                 <input
                                     type="number"
                                     name="listingLimit"
@@ -528,42 +528,42 @@ const AddNewPlanModal: React.FC<{
                                     onChange={handleChange}
                                     min="1"
                                     placeholder="Leave empty for unlimited"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.listingLimit 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.listingLimit && <p className="mt-1 text-sm text-red-500">{errors.listingLimit}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Featured Credits</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Featured Credits</label>
                                 <input
                                     type="number"
                                     name="featuredCredits"
                                     value={formData.featuredCredits}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.featuredCredits 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.featuredCredits && <p className="mt-1 text-sm text-red-500">{errors.featuredCredits}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Free Certifications</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Free Certifications</label>
                                 <input
                                     type="number"
                                     name="freeCertifications"
                                     value={formData.freeCertifications}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.freeCertifications 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.freeCertifications && <p className="mt-1 text-sm text-red-500">{errors.freeCertifications}</p>}
@@ -577,16 +577,16 @@ const AddNewPlanModal: React.FC<{
                                     name="isMostPopular"
                                     checked={formData.isMostPopular}
                                     onChange={handleCheckboxChange}
-                                    className="w-4 h-4 text-spinny-orange bg-gray-100 border-gray-300 rounded focus:ring-spinny-orange"
+                                    className="w-4 h-4 text-reride-orange bg-gray-100 border-gray-300 rounded focus:ring-reride-orange"
                                 />
-                                <label className="text-sm font-medium text-spinny-text-dark dark:text-white">
+                                <label className="text-sm font-medium text-reride-text-dark dark:text-white">
                                     Mark as Most Popular
                                 </label>
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Features</label>
+                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Features</label>
                             <div className="flex gap-2 mb-3">
                                 <input
                                     type="text"
@@ -594,16 +594,16 @@ const AddNewPlanModal: React.FC<{
                                     onChange={(e) => setNewFeature(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }}
                                     placeholder="Add new feature..."
-                                    className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-spinny-orange"
+                                    className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-reride-orange"
                                 />
-                                <button type="button" onClick={handleAddFeature} className="px-4 py-2 bg-spinny-orange text-white rounded-lg hover:bg-spinny-orange/90">
+                                <button type="button" onClick={handleAddFeature} className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90">
                                     Add
                                 </button>
                             </div>
                             <div className="space-y-2">
                                 {formData.features.map((feature, index) => (
                                     <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                                        <span className="text-spinny-text-dark dark:text-white">{feature}</span>
+                                        <span className="text-reride-text-dark dark:text-white">{feature}</span>
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveFeature(feature)}
@@ -626,14 +626,14 @@ const AddNewPlanModal: React.FC<{
                                 <button 
                                     type="button" 
                                     onClick={onClose} 
-                                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-spinny-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-reride-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button 
                                     type="submit" 
                                     disabled={isCreating || Object.keys(errors).length > 0}
-                                    className="px-6 py-2 bg-spinny-orange text-white rounded-lg hover:bg-spinny-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                                    className="px-6 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                                 >
                                     {isCreating ? (
                                         <>
@@ -735,14 +735,14 @@ const PlanEditModal: React.FC<{
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <form onSubmit={handleSubmit} className="p-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-white">Edit Plan</h2>
+                        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white">Edit Plan</h2>
                         <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">×</button>
                     </div>
 
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
                                     Plan Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -750,17 +750,17 @@ const PlanEditModal: React.FC<{
                                     name="name"
                                     value={formData.name}
                                     onChange={handleChange}
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.name 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                     placeholder="Enter plan name"
                                 />
                                 {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
                                     Price (₹/month) <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -770,10 +770,10 @@ const PlanEditModal: React.FC<{
                                     onChange={handleChange}
                                     min="0"
                                     step="1"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.price 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                     placeholder="0"
                                 />
@@ -783,7 +783,7 @@ const PlanEditModal: React.FC<{
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Listing Limit</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Listing Limit</label>
                                 <input
                                     type="number"
                                     name="listingLimit"
@@ -791,42 +791,42 @@ const PlanEditModal: React.FC<{
                                     onChange={handleChange}
                                     min="0"
                                     placeholder="Leave empty for unlimited"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.listingLimit 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.listingLimit && <p className="mt-1 text-sm text-red-500">{errors.listingLimit}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Featured Credits</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Featured Credits</label>
                                 <input
                                     type="number"
                                     name="featuredCredits"
                                     value={formData.featuredCredits}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.featuredCredits 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.featuredCredits && <p className="mt-1 text-sm text-red-500">{errors.featuredCredits}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Free Certifications</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Free Certifications</label>
                                 <input
                                     type="number"
                                     name="freeCertifications"
                                     value={formData.freeCertifications}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
+                                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 transition-colors ${
                                         errors.freeCertifications 
                                             ? 'border-red-500 focus:ring-red-500' 
-                                            : 'border-gray-200 dark:border-gray-600 focus:ring-spinny-orange'
+                                            : 'border-gray-200 dark:border-gray-600 focus:ring-reride-orange'
                                     }`}
                                 />
                                 {errors.freeCertifications && <p className="mt-1 text-sm text-red-500">{errors.freeCertifications}</p>}
@@ -840,16 +840,16 @@ const PlanEditModal: React.FC<{
                                     name="isMostPopular"
                                     checked={formData.isMostPopular}
                                     onChange={(e) => setFormData(prev => ({ ...prev, isMostPopular: e.target.checked }))}
-                                    className="w-4 h-4 text-spinny-orange bg-gray-100 border-gray-300 rounded focus:ring-spinny-orange"
+                                    className="w-4 h-4 text-reride-orange bg-gray-100 border-gray-300 rounded focus:ring-reride-orange"
                                 />
-                                <label className="text-sm font-medium text-spinny-text-dark dark:text-white">
+                                <label className="text-sm font-medium text-reride-text-dark dark:text-white">
                                     Mark as Most Popular
                                 </label>
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Features</label>
+                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Features</label>
                             <div className="flex gap-2 mb-3">
                                 <input
                                     type="text"
@@ -857,16 +857,16 @@ const PlanEditModal: React.FC<{
                                     onChange={(e) => setNewFeature(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }}
                                     placeholder="Add new feature..."
-                                    className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-spinny-orange"
+                                    className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-reride-orange"
                                 />
-                                <button type="button" onClick={handleAddFeature} className="px-4 py-2 bg-spinny-orange text-white rounded-lg hover:bg-spinny-orange/90">
+                                <button type="button" onClick={handleAddFeature} className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90">
                                     Add
                                 </button>
                             </div>
                             <div className="space-y-2">
                                 {formData.features.map((feature, index) => (
                                     <div key={index} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                                        <span className="text-spinny-text-dark dark:text-white">{feature}</span>
+                                        <span className="text-reride-text-dark dark:text-white">{feature}</span>
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveFeature(feature)}
@@ -889,14 +889,14 @@ const PlanEditModal: React.FC<{
                                 <button 
                                     type="button" 
                                     onClick={onClose} 
-                                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-spinny-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                    className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-reride-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button 
                                     type="submit" 
                                     disabled={isSaving || Object.keys(errors).length > 0}
-                                    className="px-6 py-2 bg-spinny-orange text-white rounded-lg hover:bg-spinny-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                                    className="px-6 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                                 >
                                     {isSaving ? (
                                         <>
@@ -1115,7 +1115,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <BarChart title="Top Vehicle Makes" data={analytics.listingsByMake} />
             <div className="bg-white p-6 rounded-lg shadow-md">
-                                <h3 className="text-lg font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Quick Stats</h3>
+                                <h3 className="text-lg font-bold text-reride-text-dark dark:text-reride-text-dark mb-4">Quick Stats</h3>
                                 <div className="space-y-4">
                                     <div className="flex justify-between">
                                         <span>Flagged Content:</span>
@@ -2295,7 +2295,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                             <div className="flex-shrink-0 h-10 w-10">
-                                <div className="h-10 w-10 rounded-full bg-spinny-orange flex items-center justify-center text-white font-bold">
+                                <div className="h-10 w-10 rounded-full bg-reride-orange flex items-center justify-center text-white font-bold">
                                     {user.name.charAt(0).toUpperCase()}
                                 </div>
                             </div>
@@ -2441,14 +2441,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     <div className="flex justify-between items-start mb-4">
                         <div>
                             <div className="flex items-center gap-2">
-                                <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark">{plan.name}</h3>
+                                <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark">{plan.name}</h3>
                                 {isCustom && (
                                     <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded-full">
                                         CUSTOM
                                     </span>
                                 )}
                             </div>
-                            <p className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mt-2">
+                            <p className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mt-2">
                                 ₹{plan.price.toLocaleString()}
                                 <span className="text-sm font-normal text-gray-500">/month</span>
                             </p>
@@ -2641,7 +2641,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 <div className="bg-white p-6 rounded-lg shadow-md">
                     <div className="flex justify-between items-center mb-6">
                         <div>
-                            <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Plan Configuration</h2>
+                            <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Plan Configuration</h2>
                             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                                 {(plans || []).length}/4 plans configured
                             </p>
@@ -2662,7 +2662,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 disabled={(plans || []).length >= 4}
                                 className={`font-bold py-2 px-4 rounded-lg transition-colors ${
                                     (plans || []).length < 4
-                                        ? 'bg-spinny-orange text-white hover:bg-spinny-orange/90'
+                                        ? 'bg-reride-orange text-white hover:bg-reride-orange/90'
                                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 }`}
                             >
@@ -2685,7 +2685,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         <select 
                             value={planFilter} 
                             onChange={(e) => setPlanFilter(e.target.value as SubscriptionPlan)}
-                            className="p-2 border border-gray-200 dark:border-gray-200-300 rounded-lg bg-white dark:text-spinny-text-dark"
+                            className="p-2 border border-gray-200 dark:border-gray-200-300 rounded-lg bg-white dark:text-reride-text-dark"
                         >
                             <option value="all">All Plans</option>
                             <option value="free">Free</option>
@@ -2915,7 +2915,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         }}
                                         max={today}
                                         required
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-spinny-orange"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-reride-orange"
                                     />
                                     <p className="text-xs text-gray-500 mt-1">Select when the plan was/will be activated</p>
                                 </div>
@@ -2947,7 +2947,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             onChange={(e) => setExpiryDate(e.target.value)}
                                             min={activationDate}
                                             required={useCustomExpiry && plan !== 'free'}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-spinny-orange"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-reride-orange"
                                         />
                                     )}
                                     {plan === 'free' && (
@@ -2966,7 +2966,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-2 bg-spinny-orange text-white rounded-md hover:bg-orange-600 transition-colors"
+                                    className="flex-1 px-4 py-2 bg-reride-orange text-white rounded-md hover:bg-orange-600 transition-colors"
                                 >
                                     Assign Plan
                                 </button>
@@ -3083,7 +3083,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     onChange={(e) => setExpiryDate(e.target.value)}
                                                     min={user.planActivatedDate ? new Date(user.planActivatedDate).toISOString().split('T')[0] : today}
                                                     required={useCustomExpiry && currentPlan !== 'free'}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-spinny-orange mt-2"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-reride-orange mt-2"
                                                 />
                                                 {user.planActivatedDate && (
                                                     <p className="text-xs text-gray-500 mt-1">
@@ -3122,7 +3122,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-2 bg-spinny-orange text-white rounded-md hover:bg-orange-600 transition-colors"
+                                    className="flex-1 px-4 py-2 bg-reride-orange text-white rounded-md hover:bg-orange-600 transition-colors"
                                 >
                                     Save Expiry Date
                                 </button>

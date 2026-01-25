@@ -54,10 +54,10 @@ const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan }) 
         <div className="bg-white dark:bg-white py-12 sm:py-20 animate-fade-in">
             <div className="container mx-auto">
                 <div className="max-w-2xl mx-auto text-center mb-12">
-                    <h1 className="text-4xl md:text-5xl font-extrabold text-spinny-text-dark dark:text-white">
+                    <h1 className="text-4xl md:text-5xl font-extrabold text-reride-text-dark dark:text-white">
                         Find the Perfect Plan for Your Dealership
                     </h1>
-                    <p className="mt-4 text-lg text-brand-gray-600 dark:text-spinny-text">
+                    <p className="mt-4 text-lg text-brand-gray-600 dark:text-reride-text">
                         Unlock powerful tools to sell your vehicles faster. Choose a plan that fits your needs.
                     </p>
                 </div>
@@ -75,19 +75,19 @@ const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan }) 
                                     </span>
                                 </div>
                             )}
-                            <h3 className="text-2xl font-bold text-spinny-text-dark dark:text-white">{plan.name}</h3>
-                            <p className="mt-4 text-4xl font-extrabold text-spinny-text-dark dark:text-white">
+                            <h3 className="text-2xl font-bold text-reride-text-dark dark:text-white">{plan.name}</h3>
+                            <p className="mt-4 text-4xl font-extrabold text-reride-text-dark dark:text-white">
                                 ₹{plan.price.toLocaleString('en-IN')}
-                                <span className="text-base font-medium text-spinny-text dark:text-spinny-text">/month</span>
+                                <span className="text-base font-medium text-reride-text dark:text-reride-text">/month</span>
                             </p>
-                            <p className="mt-2 text-sm text-spinny-text dark:text-spinny-text">
+                            <p className="mt-2 text-sm text-reride-text dark:text-reride-text">
                                 {plan.id === 'free' ? 'Get started for free' : 'Billed monthly'}
                             </p>
 
-                            <ul className="mt-8 space-y-4 text-brand-gray-600 dark:text-spinny-text-dark flex-grow">
+                            <ul className="mt-8 space-y-4 text-brand-gray-600 dark:text-reride-text-dark flex-grow">
                                 {plan.features.map((feature) => (
                                     <li key={feature} className="flex items-start">
-                                        <svg className="w-5 h-5 text-spinny-orange mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <svg className="w-5 h-5 text-reride-orange mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
                                         </svg>
                                         <span>{feature}</span>

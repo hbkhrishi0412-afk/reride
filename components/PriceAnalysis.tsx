@@ -41,16 +41,16 @@ const PriceAnalysis: React.FC<PriceAnalysisProps> = ({ vehicle, similarVehicles 
 
   return (
     <div className="bg-white rounded-xl shadow-soft-lg p-6">
-      <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">AI Price Analysis</h3>
+      <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">AI Price Analysis</h3>
       
       {!analysis && !isLoading && !error && (
         <>
-          <p className="text-sm text-brand-gray-600 dark:text-spinny-text mb-4">
+          <p className="text-sm text-brand-gray-600 dark:text-reride-text mb-4">
             Get a fair market value estimation for this vehicle based on its condition and similar listings.
           </p>
           <button
             onClick={handleAnalyzePrice}
-            className="w-full bg-spinny-orange text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-spinny-orange transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+            className="w-full bg-reride-orange text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-reride-orange transition-all transform hover:scale-105 flex items-center justify-center gap-2"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
             Analyze Price
@@ -61,33 +61,33 @@ const PriceAnalysis: React.FC<PriceAnalysisProps> = ({ vehicle, similarVehicles 
       {isLoading && (
         <div className="text-center py-8">
             <div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin mx-auto" style={{ borderColor: '#FF6B35' }}></div>
-            <p className="mt-3 text-sm font-semibold text-brand-gray-600 dark:text-spinny-text">Analyzing market data...</p>
+            <p className="mt-3 text-sm font-semibold text-brand-gray-600 dark:text-reride-text">Analyzing market data...</p>
         </div>
       )}
 
       {error && (
-        <div className="text-center p-4 bg-spinny-orange-light dark:bg-spinny-orange/20 text-spinny-orange dark:text-spinny-orange rounded-lg">
+        <div className="text-center p-4 bg-reride-orange-light dark:bg-reride-orange/20 text-reride-orange dark:text-reride-orange rounded-lg">
             <p className="font-semibold">Analysis Failed</p>
             <p className="text-sm">{error}</p>
-            <button onClick={handleAnalyzePrice} className="mt-2 text-sm font-bold text-spinny-orange hover:underline">Try Again</button>
+            <button onClick={handleAnalyzePrice} className="mt-2 text-sm font-bold text-reride-orange hover:underline">Try Again</button>
         </div>
       )}
 
       {analysis && (
         <div className="animate-fade-in space-y-4">
             <div>
-                <p className="text-sm text-brand-gray-600 dark:text-spinny-text">Fair Market Value (est.)</p>
-                <p className="text-2xl font-extrabold text-spinny-orange dark:text-spinny-orange">
+                <p className="text-sm text-brand-gray-600 dark:text-reride-text">Fair Market Value (est.)</p>
+                <p className="text-2xl font-extrabold text-reride-orange dark:text-reride-orange">
                     {formatCurrency(analysis.min)} - {formatCurrency(analysis.max)}
                 </p>
             </div>
             <div>
-                <p className="text-sm font-semibold text-spinny-text-dark dark:text-spinny-text-dark">AI Summary:</p>
-                <p className="text-sm text-brand-gray-600 dark:text-spinny-text italic">
+                <p className="text-sm font-semibold text-reride-text-dark dark:text-reride-text-dark">AI Summary:</p>
+                <p className="text-sm text-brand-gray-600 dark:text-reride-text italic">
                     "{analysis.summary}"
                 </p>
             </div>
-            <button onClick={handleAnalyzePrice} className="text-xs font-bold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>Re-analyze</button>
+            <button onClick={handleAnalyzePrice} className="text-xs font-bold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>Re-analyze</button>
         </div>
       )}
     </div>

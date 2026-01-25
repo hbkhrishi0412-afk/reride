@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import { PLAN_DETAILS } from '../constants.js';
 import { planService } from '../services/planService.js';
 import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan } from '../types.js';
@@ -927,20 +927,44 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
       
       // Verify password using bcrypt
-      const isPasswordValid = await validatePassword(sanitizedData.password, user.password);
+      let isPasswordValid = await validatePassword(sanitizedData.password, user.password);
+      
+      // CRITICAL FIX: If password validation failed and password is stored as plain text, try to fix it
+      // This can happen if password was updated directly in Supabase UI
+      if (!isPasswordValid && user.password && !user.password.startsWith('$2')) {
+        logWarn('⚠️ Password stored as plain text - attempting to fix by hashing and updating...');
+        try {
+          // Try to validate as plain text first
+          if (user.password.trim() === sanitizedData.password.trim()) {
+            // Password matches in plain text - hash it and update the database
+            const hashedPassword = await hashPassword(sanitizedData.password);
+            await supabaseUserService.update(normalizedEmail, {
+              password: hashedPassword,
+              updatedAt: new Date().toISOString()
+            });
+            
+            // Update the user object with the new hashed password for this request
+            user.password = hashedPassword;
+            
+            logInfo('✅ Fixed: Password was plain text, hashed and updated in database');
+            // Password is now valid - continue with login
+            isPasswordValid = true;
+          }
+        } catch (fixError) {
+          logError('❌ Failed to fix plain text password:', fixError);
+          // Continue to return error below
+        }
+      }
+      
       if (!isPasswordValid) {
         // SECURITY: Log minimal details - don't expose password hash prefixes
         if (process.env.NODE_ENV !== 'production') {
           logWarn('⚠️ Password validation failed:', {
             email: normalizedEmail,
             hasPassword: !!user.password,
-            authProvider: user.authProvider
+            authProvider: user.authProvider,
+            passwordIsHashed: user.password?.startsWith('$2') || false
           });
-        }
-        
-        // CRITICAL FIX: Check if user just registered (password might not be hashed yet)
-        if (user.authProvider === 'email' && !user.password?.startsWith('$2')) {
-          logWarn('⚠️ User password is not hashed - this should not happen for email auth');
         }
         
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
@@ -2234,9 +2258,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const cached = vehicleCache.get(cacheKey);
       
       // PAGINATION SUPPORT: Parse pagination parameters early
-      // Default to pagination (50 per page) for better performance
+      // OLX-STYLE: Default to 30 vehicles per page (OLX loads 20-30 initially for instant display)
       const page = parseInt(String(req.query.page || '1'), 10) || 1;
-      const limit = parseInt(String(req.query.limit || '50'), 10) || 50; // Default 50, 0 means no limit (return all)
+      const limit = parseInt(String(req.query.limit || '30'), 10) || 30; // Default 30 (OLX-style), 0 means no limit (return all)
       const skipExpiryCheck = req.query.skipExpiryCheck === 'true'; // Skip expensive expiry checks for fast initial load
       
       let vehicles: VehicleType[];
@@ -2558,6 +2582,27 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // Use the total count we fetched earlier (or from cache)
       const finalTotalCount = totalVehiclesCount || normalizedVehicles.length;
+      
+      // OLX-STYLE OPTIMIZATION: Add HTTP cache headers for CDN/edge caching
+      // Generate ETag for conditional requests (reduces bandwidth)
+      const responseData = limit > 0 
+        ? { vehicles: normalizedVehicles, pagination: { page, limit, total: finalTotalCount, pages: Math.ceil(finalTotalCount / limit), hasMore: page < Math.ceil(finalTotalCount / limit) } }
+        : normalizedVehicles;
+      const etag = createHash('md5').update(JSON.stringify(responseData)).digest('hex');
+      
+      // Set cache headers (OLX-style: aggressive caching with stale-while-revalidate)
+      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+      res.setHeader('ETag', `"${etag}"`);
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.setHeader('X-Total-Count', String(finalTotalCount));
+      res.setHeader('X-Page', String(page));
+      res.setHeader('X-Per-Page', String(limit));
+      
+      // Check If-None-Match header for 304 Not Modified (saves bandwidth)
+      const clientETag = req.headers['if-none-match'];
+      if (clientETag === `"${etag}"`) {
+        return res.status(304).end();
+      }
       
       // Return paginated response with metadata if pagination was requested
       if (limit > 0) {

@@ -63,7 +63,7 @@ type DashboardView = 'overview' | 'listings' | 'form' | 'inquiries' | 'analytics
 
 const HelpTooltip: React.FC<{ text: string }> = memo(({ text }) => (
     <span className="group relative ml-1">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-spinny-text-dark cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-reride-text-dark cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
         <span className="absolute bottom-full mb-2 w-48 bg-white text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 left-1/2 -translate-x-1/2 z-10">{text}</span>
     </span>
 ));
@@ -187,8 +187,8 @@ const ComboboxInput: React.FC<{
 
   return (
     <div className="relative">
-      <label htmlFor={name} className="flex items-center text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">
-        {label}{required && <span className="text-spinny-orange ml-0.5">*</span>}
+      <label htmlFor={name} className="flex items-center text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+        {label}{required && <span className="text-reride-orange ml-0.5">*</span>}
         {tooltip && <HelpTooltip text={tooltip} />}
       </label>
       <div className="relative">
@@ -204,7 +204,7 @@ const ComboboxInput: React.FC<{
           disabled={disabled}
           placeholder={placeholder}
           required={required}
-          className={`block w-full p-3 pr-10 border rounded-lg focus:outline-none transition bg-white dark:text-spinny-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-spinny-orange' : 'border-gray-200 dark:border-gray-200-300'}`}
+          className={`block w-full p-3 pr-10 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-200-300'}`}
           style={!error ? { boxShadow: 'none' } : {}}
         />
         <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
@@ -238,7 +238,7 @@ const ComboboxInput: React.FC<{
           </div>
         )}
       </div>
-      {error && <p className="mt-1 text-xs text-spinny-orange">{error}</p>}
+      {error && <p className="mt-1 text-xs text-reride-orange">{error}</p>}
     </div>
   );
 };
@@ -246,20 +246,20 @@ const ComboboxInput: React.FC<{
 const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type?: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; error?: string; tooltip?: string; required?: boolean; children?: React.ReactNode; disabled?: boolean; placeholder?: string; rows?: number }> = 
   ({ label, name, type = 'text', value, onChange, onBlur, error, tooltip, required = false, children, disabled = false, placeholder, rows }) => (
   <div>
-    <label htmlFor={String(name)} className="flex items-center text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">
-        {label}{required && <span className="text-spinny-orange ml-0.5">*</span>}
+    <label htmlFor={String(name)} className="flex items-center text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+        {label}{required && <span className="text-reride-orange ml-0.5">*</span>}
         {tooltip && <HelpTooltip text={tooltip} />}
     </label>
     {type === 'select' ? (
-        <select id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-spinny-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-spinny-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''}>
+        <select id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''}>
             {children}
         </select>
     ) : type === 'textarea' ? (
-        <textarea id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} rows={rows} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-spinny-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-spinny-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''} />
+        <textarea id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} rows={rows} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''} />
     ) : (
-        <input type={type} id={String(name)} name={String(name)} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-spinny-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-spinny-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => { e.currentTarget.style.boxShadow = ''; if (onBlur) onBlur(e); }} />
+        <input type={type} id={String(name)} name={String(name)} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => { e.currentTarget.style.boxShadow = ''; if (onBlur) onBlur(e); }} />
     )}
-    {error && <p className="mt-1 text-xs text-spinny-orange">{error}</p>}
+    {error && <p className="mt-1 text-xs text-reride-orange">{error}</p>}
   </div>
 );
 
@@ -350,7 +350,7 @@ const PlanStatusCard: React.FC<{
     return (
         <div className="text-white p-6 rounded-lg shadow-lg flex flex-col h-full" style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}>
             <h3 className="text-lg font-bold flex justify-between items-center">
-                <span>Your Plan: <span className="text-spinny-text-dark">{plan.name}</span></span>
+                <span>Your Plan: <span className="text-reride-text-dark">{plan.name}</span></span>
             </h3>
             <div className="mt-4 space-y-3 text-sm flex-grow">
                 <div className="flex justify-between">
@@ -359,7 +359,7 @@ const PlanStatusCard: React.FC<{
                 </div>
                 <div className="w-full rounded-full h-2 mb-2" style={{ background: 'rgba(30, 136, 229, 0.1)' }}>
                     <div
-                        className="bg-spinny-blue h-2 rounded-full transition-all duration-500"
+                        className="bg-reride-blue h-2 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min(usagePercentage, 100)}%` }}
                     ></div>
                 </div>
@@ -375,7 +375,7 @@ const PlanStatusCard: React.FC<{
                 </div>
 
                 {/* Always show expiry date section */}
-                <div className="mt-4 pt-4 border-t border-spinny-white/20 space-y-2">
+                <div className="mt-4 pt-4 border-t border-reride-white/20 space-y-2">
                     {seller.planActivatedDate && (
                         <div className="flex justify-between text-xs">
                             <span>Plan Activated:</span>
@@ -425,12 +425,12 @@ const PlanStatusCard: React.FC<{
                     </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-spinny-white/20">
+                <div className="mt-4 pt-4 border-t border-reride-white/20">
                     <h4 className="font-semibold mb-2">Plan Features:</h4>
                     <ul className="space-y-2 text-xs">
                         {(plan.features || []).map((feature: string) => (
                             <li key={feature} className="flex items-start">
-                                <svg className="w-4 h-4 text-spinny-orange mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <svg className="w-4 h-4 text-reride-orange mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
                                 </svg>
                                 <span>{feature}</span>
@@ -442,7 +442,7 @@ const PlanStatusCard: React.FC<{
             {(planIsExpired || plan.id !== 'premium') && (
                 <button
                     onClick={() => onNavigate(View.PRICING)}
-                    className="mt-6 w-full bg-white text-spinny-orange font-bold py-2 px-4 rounded-lg hover:bg-white transition-colors"
+                    className="mt-6 w-full bg-white text-reride-orange font-bold py-2 px-4 rounded-lg hover:bg-white transition-colors"
                 >
                     {planIsExpired ? 'Renew Plan' : 'Upgrade Plan'}
                 </button>
@@ -482,7 +482,7 @@ const FormFieldset: React.FC<{ title: string; children: React.ReactNode }> = ({ 
     const [isOpen, setIsOpen] = useState(true);
     return (
         <fieldset className="border border-gray-200 dark:border-gray-200-200 rounded-lg p-4">
-            <legend className="px-2 text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark">
+            <legend className="px-2 text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark">
                 <button type="button" onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2">
                     <span>{isOpen ? '▼' : '►'}</span>
                     {title}
@@ -579,7 +579,7 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
 
   return (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Settings</h2>
+      <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Settings</h2>
       
       <div className="space-y-6">
         {/* Finance Partner Banks Section */}
@@ -1210,7 +1210,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
 
     return (
       <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6 border-b dark:border-gray-200-200 pb-4">
+        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6 border-b dark:border-gray-200-200 pb-4">
           {editingVehicle ? 'Edit Vehicle Listing' : 'List a New Vehicle'}
         </h2>
         {isPlanExpired && (
@@ -1224,7 +1224,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             <FormFieldset title="Vehicle Overview">
                 <div className="flex justify-between items-center mb-4 -mt-4">
                     <div className="flex items-center gap-2">
-                        <p className="text-xs text-spinny-text-dark dark:text-spinny-text-dark">Enter core details about your vehicle.</p>
+                        <p className="text-xs text-reride-text-dark dark:text-reride-text-dark">Enter core details about your vehicle.</p>
                         {hasVehicleData && (
                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
                                 <span className="w-2 h-2 bg-green-500 rounded-full"></span>
@@ -1232,7 +1232,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             </span>
                         )}
                     </div>
-                    <button type="button" onClick={handleGetAiSuggestions} disabled={isGeneratingSuggestions || !formData.make || !formData.model || !formData.year} className="text-sm font-semibold text-spinny-orange disabled:opacity-50 flex items-center gap-1">
+                    <button type="button" onClick={handleGetAiSuggestions} disabled={isGeneratingSuggestions || !formData.make || !formData.model || !formData.year} className="text-sm font-semibold text-reride-orange disabled:opacity-50 flex items-center gap-1">
                         {isGeneratingSuggestions ? (<><div className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-current"></div><span>Generating...</span></>) : '✨ Auto-fill with AI'}
                     </button>
                 </div>
@@ -1315,35 +1315,35 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                     <div>
                         <FormInput label="Engine" name="engine" value={formData.engine} onChange={handleChange} tooltip="e.g., 1.5L Petrol, 150kW Motor"/>
-                        {aiSuggestions?.structuredSpecs.engine && formData.engine !== aiSuggestions.structuredSpecs.engine && (<button type="button" onClick={() => applyAiSpec('engine')} className="text-xs text-spinny-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.engine}"</button>)}
+                        {aiSuggestions?.structuredSpecs.engine && formData.engine !== aiSuggestions.structuredSpecs.engine && (<button type="button" onClick={() => applyAiSpec('engine')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.engine}"</button>)}
                     </div>
                     <div>
                         <FormInput label="Displacement" name="displacement" value={formData.displacement} onChange={handleChange} placeholder="e.g., 1497 cc"/>
-                        {aiSuggestions?.structuredSpecs.displacement && formData.displacement !== aiSuggestions.structuredSpecs.displacement && (<button type="button" onClick={() => applyAiSpec('displacement')} className="text-xs text-spinny-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.displacement}"</button>)}
+                        {aiSuggestions?.structuredSpecs.displacement && formData.displacement !== aiSuggestions.structuredSpecs.displacement && (<button type="button" onClick={() => applyAiSpec('displacement')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.displacement}"</button>)}
                     </div>
                      <div>
                         <FormInput label="Transmission" name="transmission" type="select" value={formData.transmission} onChange={handleChange}>
                             <option>Automatic</option><option>Manual</option><option>CVT</option><option>DCT</option>
                         </FormInput>
-                        {aiSuggestions?.structuredSpecs.transmission && formData.transmission !== aiSuggestions.structuredSpecs.transmission && (<button type="button" onClick={() => applyAiSpec('transmission')} className="text-xs text-spinny-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.transmission}"</button>)}
+                        {aiSuggestions?.structuredSpecs.transmission && formData.transmission !== aiSuggestions.structuredSpecs.transmission && (<button type="button" onClick={() => applyAiSpec('transmission')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.transmission}"</button>)}
                     </div>
                     <div>
                         <FormInput label="Fuel Type" name="fuelType" type="select" value={formData.fuelType} onChange={handleChange}>
                             <option>Petrol</option><option>Diesel</option><option>Electric</option><option>CNG</option><option>Hybrid</option>
                         </FormInput>
-                         {aiSuggestions?.structuredSpecs.fuelType && formData.fuelType !== aiSuggestions.structuredSpecs.fuelType && (<button type="button" onClick={() => applyAiSpec('fuelType')} className="text-xs text-spinny-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.fuelType}"</button>)}
+                         {aiSuggestions?.structuredSpecs.fuelType && formData.fuelType !== aiSuggestions.structuredSpecs.fuelType && (<button type="button" onClick={() => applyAiSpec('fuelType')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.fuelType}"</button>)}
                     </div>
                     <div>
                         <FormInput label="Mileage / Range" name="fuelEfficiency" value={formData.fuelEfficiency} onChange={handleChange} tooltip="e.g., 18 KMPL or 300 km range"/>
-                         {aiSuggestions?.structuredSpecs.fuelEfficiency && formData.fuelEfficiency !== aiSuggestions.structuredSpecs.fuelEfficiency && (<button type="button" onClick={() => applyAiSpec('fuelEfficiency')} className="text-xs text-spinny-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.fuelEfficiency}"</button>)}
+                         {aiSuggestions?.structuredSpecs.fuelEfficiency && formData.fuelEfficiency !== aiSuggestions.structuredSpecs.fuelEfficiency && (<button type="button" onClick={() => applyAiSpec('fuelEfficiency')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.fuelEfficiency}"</button>)}
                     </div>
                      <div>
                         <FormInput label="Ground Clearance" name="groundClearance" value={formData.groundClearance} onChange={handleChange} placeholder="e.g., 190 mm"/>
-                        {aiSuggestions?.structuredSpecs.groundClearance && formData.groundClearance !== aiSuggestions.structuredSpecs.groundClearance && (<button type="button" onClick={() => applyAiSpec('groundClearance')} className="text-xs text-spinny-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.groundClearance}"</button>)}
+                        {aiSuggestions?.structuredSpecs.groundClearance && formData.groundClearance !== aiSuggestions.structuredSpecs.groundClearance && (<button type="button" onClick={() => applyAiSpec('groundClearance')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.groundClearance}"</button>)}
                     </div>
                     <div>
                         <FormInput label="Boot Space" name="bootSpace" value={formData.bootSpace} onChange={handleChange} placeholder="e.g., 433 litres"/>
-                        {aiSuggestions?.structuredSpecs.bootSpace && formData.bootSpace !== aiSuggestions.structuredSpecs.bootSpace && (<button type="button" onClick={() => applyAiSpec('bootSpace')} className="text-xs text-spinny-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.bootSpace}"</button>)}
+                        {aiSuggestions?.structuredSpecs.bootSpace && formData.bootSpace !== aiSuggestions.structuredSpecs.bootSpace && (<button type="button" onClick={() => applyAiSpec('bootSpace')} className="text-xs text-reride-orange hover:underline mt-1">Apply: "{aiSuggestions.structuredSpecs.bootSpace}"</button>)}
                     </div>
                     <FormInput label="Color" name="color" value={formData.color} onChange={handleChange} onBlur={handleBlur} />
                  </div>
@@ -1353,14 +1353,14 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 <div className="space-y-4">
                     <FormInput label="Summary" name="summary" type="textarea" value={formData.qualityReport?.summary || ''} onChange={handleQualityReportChange} rows={3} placeholder="e.g., Excellent condition, single owner, full service history..."/>
                     <div>
-                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Fixes Done / Upgrades</label>
+                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Fixes Done / Upgrades</label>
                         <div className="flex gap-2">
                             <input type="text" value={fixInput} onChange={(e) => setFixInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFix(); } }} placeholder="e.g., New tires installed" className="flex-grow p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg" />
                             <button type="button" onClick={handleAddFix} className="bg-white-dark dark:bg-white font-bold py-2 px-4 rounded-lg">Add Fix</button>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                             {(formData.qualityReport?.fixesDone || []).map(fix => (
-                                <span key={fix} className="bg-spinny-orange-light text-spinny-orange text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-2">
+                                <span key={fix} className="bg-reride-orange-light text-reride-orange text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-2">
                                     {fix}
                                     <button type="button" onClick={() => handleRemoveFix(fix)}>&times;</button>
                                 </span>
@@ -1373,10 +1373,10 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             <FormFieldset title="Media, Documents & Description">
                 <div className="space-y-4">
                      <div>
-                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Images</label>
+                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Images</label>
                         <div className="mt-1">
-                            <label htmlFor="file-upload" className={`relative cursor-pointer bg-white rounded-lg border-2 border-gray-200 dark:border-gray-200-300 border-dashed transition-colors duration-200 flex flex-col items-center justify-center text-center p-6 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`} style={{ borderColor: isUploading ? '' : undefined }} onMouseEnter={(e) => !isUploading && (e.currentTarget.style.borderColor = 'var(--spinny-orange)')} onMouseLeave={(e) => !isUploading && (e.currentTarget.style.borderColor = '')}>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-spinny-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <label htmlFor="file-upload" className={`relative cursor-pointer bg-white rounded-lg border-2 border-gray-200 dark:border-gray-200-300 border-dashed transition-colors duration-200 flex flex-col items-center justify-center text-center p-6 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`} style={{ borderColor: isUploading ? '' : undefined }} onMouseEnter={(e) => !isUploading && (e.currentTarget.style.borderColor = 'var(--reride-orange)')} onMouseLeave={(e) => !isUploading && (e.currentTarget.style.borderColor = '')}>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                                 <span className="mt-2 block text-sm font-semibold" style={{ color: '#FF6B35' }}>
@@ -1389,15 +1389,15 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             {formData.images.map((url, index) => (
                                 <div key={index} className="relative group aspect-square bg-gray-100 rounded-lg overflow-hidden">
                                     <img src={getSafeImageSrc(url)} className="w-full h-full object-cover rounded-lg shadow-sm" alt={`Vehicle thumbnail ${index + 1}`} />
-                                    <button type="button" onClick={() => handleRemoveImageUrl(url)} className="absolute top-1 right-1 bg-spinny-orange text-white rounded-full h-6 w-6 flex items-center justify-center text-sm opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+                                    <button type="button" onClick={() => handleRemoveImageUrl(url)} className="absolute top-1 right-1 bg-reride-orange text-white rounded-full h-6 w-6 flex items-center justify-center text-sm opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
                                 </div>
                             ))}
                         </div>
                     </div>
                      <div>
-                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Documents</label>
+                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Documents</label>
                         <div className="mt-1 flex items-center gap-2">
-                             <select id="document-type" className="p-3 border rounded-lg bg-white dark:text-spinny-text-dark border-gray-200 dark:border-gray-200-300">
+                             <select id="document-type" className="p-3 border rounded-lg bg-white dark:text-reride-text-dark border-gray-200 dark:border-gray-200-300">
                                 <option>Registration Certificate (RC)</option>
                                 <option>Insurance</option>
                                 <option>Pollution Under Control (PUC)</option>
@@ -1419,7 +1419,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">Key Features</label>
+                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Key Features</label>
                         <div className="flex gap-2">
                             <input type="text" value={featureInput} onChange={(e) => setFeatureInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }} placeholder="e.g., Sunroof" className="flex-grow p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg" />
                             <button type="button" onClick={handleAddFeature} className="bg-white-dark dark:bg-white font-bold py-2 px-4 rounded-lg">Add</button>
@@ -1429,7 +1429,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                      <div>
                         <div className="flex justify-between items-center mb-1">
                             <label htmlFor="description" className="block text-sm font-medium">Vehicle Description</label>
-                            <button type="button" onClick={handleGenerateDescription} disabled={isGeneratingDesc || !formData.make || !formData.model} className="text-sm font-semibold text-spinny-orange disabled:opacity-50"> {isGeneratingDesc ? '...' : '✨ Generate with AI'}</button>
+                            <button type="button" onClick={handleGenerateDescription} disabled={isGeneratingDesc || !formData.make || !formData.model} className="text-sm font-semibold text-reride-orange disabled:opacity-50"> {isGeneratingDesc ? '...' : '✨ Generate with AI'}</button>
                         </div>
                         <textarea id="description" name="description" rows={4} value={formData.description} onChange={handleChange} className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg" />
                     </div>
@@ -1438,7 +1438,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
 
             <FormFieldset title="Promotion">
                 {(!editingVehicle || !editingVehicle.isFeatured) && (
-                    <div className="p-4 bg-spinny-orange dark:bg-spinny-orange/20 border border-spinny-orange dark:border-spinny-orange rounded-lg">
+                    <div className="p-4 bg-reride-orange dark:bg-reride-orange/20 border border-reride-orange dark:border-reride-orange rounded-lg">
                         <div className="flex items-center justify-between">
                             <div>
                                 <label htmlFor="feature-listing" className="font-bold text-white dark:text-white flex items-center gap-2">
@@ -1455,10 +1455,10 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                 checked={isFeaturing}
                                 onChange={(e) => setIsFeaturing(e.target.checked)}
                                 disabled={(seller.featuredCredits || 0) <= 0}
-                                className="h-6 w-6 text-spinny-orange bg-white border-gray-200 rounded focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="h-6 w-6 text-reride-orange bg-white border-gray-200 rounded focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                         </div>
-                        {(seller.featuredCredits || 0) <= 0 && <p className="text-xs text-spinny-orange mt-2">You have no featured credits. Upgrade your plan to get more.</p>}
+                        {(seller.featuredCredits || 0) <= 0 && <p className="text-xs text-reride-orange mt-2">You have no featured credits. Upgrade your plan to get more.</p>}
                     </div>
                 )}
             </FormFieldset>
@@ -1482,25 +1482,25 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
           <div className="hidden lg:block">
               <div className="sticky top-24 self-start space-y-6">
                   <div>
-                      <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Live Preview</h3>
+                      <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Live Preview</h3>
                       <div className="pointer-events-none">
                          <VehicleCard vehicle={previewVehicle} onSelect={() => {}} onToggleCompare={() => {}} isSelectedForCompare={false} onToggleWishlist={() => {}} isInWishlist={false} isCompareDisabled={true} onViewSellerProfile={() => {}} onQuickView={() => {}} />
                       </div>
                   </div>
                    {aiSuggestions && Object.keys(aiSuggestions.featureSuggestions).length > 0 && (
                      <div>
-                        <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4 flex items-center gap-2">✨ Suggested Features</h3>
+                        <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4 flex items-center gap-2">✨ Suggested Features</h3>
                         <div className="bg-brand-gray-light dark:bg-white p-4 rounded-lg border dark:border-gray-200-200 max-h-96 overflow-y-auto">
                             {Object.entries(aiSuggestions.featureSuggestions).map(([category, features]) => {
                                 if (!Array.isArray(features) || features.length === 0) return null;
                                 return (
                                     <div key={category} className="mb-4 last:mb-0">
-                                        <h4 className="font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-2 pb-1 border-b dark:border-gray-200-300">{category}</h4>
+                                        <h4 className="font-bold text-reride-text-dark dark:text-reride-text-dark mb-2 pb-1 border-b dark:border-gray-200-300">{category}</h4>
                                         <div className="space-y-2">
                                             {features.map(feature => (
                                                 <label key={feature} className="flex items-center space-x-3 cursor-pointer group">
                                                     <input type="checkbox" checked={formData.features.includes(feature)} onChange={() => handleSuggestedFeatureToggle(feature)} className="h-4 w-4 rounded border-gray-200 dark:border-gray-500 bg-transparent" style={{ accentColor: '#FF6B35' }} />
-                                                    <span className="text-sm text-spinny-text-dark dark:text-spinny-text-dark transition-colors" onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'} onMouseLeave={(e) => e.currentTarget.style.color = ''}>{feature}</span>
+                                                    <span className="text-sm text-reride-text-dark dark:text-reride-text-dark transition-colors" onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-orange)'} onMouseLeave={(e) => e.currentTarget.style.color = ''}>{feature}</span>
                                                 </label>
                                             ))}
                                         </div>
@@ -1555,7 +1555,7 @@ const InquiriesView: React.FC<{
 
     return (
        <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-         <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Customer Inquiries</h2>
+         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Customer Inquiries</h2>
          <div className="space-y-2">
             {sortedConversations.length > 0 ? sortedConversations.map(conv => {
               if (!conv) return null;
@@ -1570,24 +1570,24 @@ const InquiriesView: React.FC<{
                 <div className="flex items-center gap-3">
                     {!conv.isReadBySeller && <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF6B35' }}></div>}
                     <div>
-                      <p className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">
-                        {conv.customerName || 'Unknown'} - <span className="font-normal text-spinny-text-dark dark:text-spinny-text-dark">{conv.vehicleName || 'Unknown Vehicle'}</span>
+                      <p className="font-bold text-reride-text-dark dark:text-reride-text-dark">
+                        {conv.customerName || 'Unknown'} - <span className="font-normal text-reride-text-dark dark:text-reride-text-dark">{conv.vehicleName || 'Unknown Vehicle'}</span>
                       </p>
-                      <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark truncate max-w-md">
+                      <p className="text-sm text-reride-text-dark dark:text-reride-text-dark truncate max-w-md">
                         {lastMessage?.text || 'New conversation'}
                       </p>
                     </div>
                 </div>
-                <span className="text-xs text-spinny-text-dark dark:text-spinny-text-dark">{lastMessageTime}</span>
+                <span className="text-xs text-reride-text-dark dark:text-reride-text-dark">{lastMessageTime}</span>
               </div>
             );
             }) : (
                 <div className="text-center py-16 px-6">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-spinny-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
-                    <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">No inquiries yet</h3>
-                    <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">When a customer sends a message about one of your listings, it will appear here.</p>
+                    <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">No inquiries yet</h3>
+                    <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">When a customer sends a message about one of your listings, it will appear here.</p>
                 </div>
             )}
          </div>
@@ -1608,15 +1608,15 @@ const ReportsView: React.FC<{
     
     return (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Reported Listings</h2>
+        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Reported Listings</h2>
         {safeReportedVehicles.length > 0 ? (
             <div className="space-y-4">
                 {safeReportedVehicles.map(v => (
-                    <div key={v.id} className="border border-gray-200 dark:border-gray-200 bg-spinny-blue-light dark:bg-spinny-blue/20 p-4 rounded-lg">
-                        <h3 className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{v.year} {v.make} {v.model}</h3>
-                        <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark mt-1">Reported on: {v.flaggedAt ? new Date(v.flaggedAt).toLocaleString() : 'N/A'}</p>
-                        <p className="mt-2 text-sm italic text-spinny-text-dark dark:text-spinny-text-dark">Reason: "{v.flagReason || 'No reason provided.'}"</p>
-                        <p className="text-xs text-spinny-text-dark dark:text-spinny-text-dark mt-2">An administrator will review this report. You can edit the listing to correct any issues or delete it if it's no longer valid.</p>
+                    <div key={v.id} className="border border-gray-200 dark:border-gray-200 bg-reride-blue-light dark:bg-reride-blue/20 p-4 rounded-lg">
+                        <h3 className="font-bold text-reride-text-dark dark:text-reride-text-dark">{v.year} {v.make} {v.model}</h3>
+                        <p className="text-sm text-reride-text-dark dark:text-reride-text-dark mt-1">Reported on: {v.flaggedAt ? new Date(v.flaggedAt).toLocaleString() : 'N/A'}</p>
+                        <p className="mt-2 text-sm italic text-reride-text-dark dark:text-reride-text-dark">Reason: "{v.flagReason || 'No reason provided.'}"</p>
+                        <p className="text-xs text-reride-text-dark dark:text-reride-text-dark mt-2">An administrator will review this report. You can edit the listing to correct any issues or delete it if it's no longer valid.</p>
                         <div className="mt-3 space-x-4">
                             <button 
                                 type="button"
@@ -1627,8 +1627,8 @@ const ReportsView: React.FC<{
                                 }} 
                                 className="font-semibold text-sm hover:underline transition-colors cursor-pointer" 
                                 style={{ color: '#FF6B35' }} 
-                                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} 
-                                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}
+                                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} 
+                                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}
                             > 
                                 Edit Listing
                             </button>
@@ -1639,7 +1639,7 @@ const ReportsView: React.FC<{
                                     e.stopPropagation();
                                     onDeleteVehicle(v.id);
                                 }} 
-                                className="text-spinny-orange font-semibold text-sm hover:underline cursor-pointer"
+                                className="text-reride-orange font-semibold text-sm hover:underline cursor-pointer"
                             >
                                 Delete Listing
                             </button>
@@ -1649,9 +1649,9 @@ const ReportsView: React.FC<{
             </div>
         ) : (
              <div className="text-center py-16 px-6">
-                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-spinny-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">All Clear!</h3>
-                <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">You have no reported listings at this time.</p>
+                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">All Clear!</h3>
+                <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">You have no reported listings at this time.</p>
             </div>
         )}
     </div>
@@ -2486,9 +2486,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         const status = vehicle.certificationStatus || 'none';
         switch (status) {
             case 'requested':
-                return <button type="button" disabled className="px-1.5 py-0.5 text-spinny-text-dark text-xs border border-gray-300 rounded opacity-50" title="Certification pending approval">🕐 Pending</button>;
+                return <button type="button" disabled className="px-1.5 py-0.5 text-reride-text-dark text-xs border border-gray-300 rounded opacity-50" title="Certification pending approval">🕐 Pending</button>;
             case 'approved':
-                return <span className="px-1.5 py-0.5 text-spinny-green text-xs border border-spinny-green rounded bg-spinny-green-light" title="Vehicle is certified">✅ Certified</span>;
+                return <span className="px-1.5 py-0.5 text-reride-green text-xs border border-reride-green rounded bg-reride-green-light" title="Vehicle is certified">✅ Certified</span>;
             case 'rejected':
                 return <button 
                   type="button"
@@ -2497,7 +2497,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     e.stopPropagation();
                     handleCertifyVehicle(vehicle.id);
                   }} 
-                  className="px-1.5 py-0.5 text-spinny-orange hover:text-spinny-orange text-xs border border-spinny-orange rounded hover:bg-spinny-orange-light cursor-pointer" 
+                  className="px-1.5 py-0.5 text-reride-orange hover:text-reride-orange text-xs border border-reride-orange rounded hover:bg-reride-orange-light cursor-pointer" 
                   title="Certification was rejected, you can request again."
                 >🔄 Retry</button>;
             case 'none':
@@ -2548,7 +2548,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             <div className="space-y-6">
                 {/* Month Selector */}
                 <div className="bg-white p-4 rounded-lg shadow-md flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Analytics Overview</h2>
+                    <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Analytics Overview</h2>
                     <div className="flex items-center gap-3">
                         <label htmlFor="month-selector" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                             Filter by Month:
@@ -2557,7 +2557,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             id="month-selector"
                             value={selectedMonth}
                             onChange={(e) => setSelectedMonth(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg bg-white dark:bg-white text-spinny-text-dark focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-transparent"
+                            className="px-4 py-2 border border-gray-300 rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent"
                         >
                             {getMonthOptions().map(month => (
                                 <option key={month.value} value={month.value}>{month.label}</option>
@@ -2631,7 +2631,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 })()}
                 
                 <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-                    <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Listing Performance</h2>
+                    <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Listing Performance</h2>
                     {filteredActiveListings.length > 0 ? (
                         (() => {
                           try {
@@ -2639,8 +2639,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             if (!analyticsData?.chartData || !analyticsData.chartData.labels || !analyticsData.chartData.datasets) {
                               return (
                                 <div className="text-center py-16 px-6">
-                                  <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">Chart Data Unavailable</h3>
-                                  <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">
+                                  <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">Chart Data Unavailable</h3>
+                                  <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">
                                     Unable to load chart data. Please refresh the page.
                                   </p>
                                 </div>
@@ -2651,8 +2651,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             if (typeof ChartJS === 'undefined' || typeof Bar === 'undefined') {
                               return (
                                 <div className="text-center py-16 px-6">
-                                  <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">Chart Library Not Loaded</h3>
-                                  <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">
+                                  <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">Chart Library Not Loaded</h3>
+                                  <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">
                                     Please refresh the page to load the chart library.
                                   </p>
                                 </div>
@@ -2701,8 +2701,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             }
                             return (
                               <div className="text-center py-16 px-6">
-                                <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">Chart Error</h3>
-                                <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">
+                                <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">Chart Error</h3>
+                                <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">
                                   Unable to display chart. Please refresh the page.
                                 </p>
                               </div>
@@ -2711,8 +2711,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                         })()
                     ) : (
                         <div className="text-center py-16 px-6">
-                            <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">No Data to Display</h3>
-                            <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">
+                            <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">No Data to Display</h3>
+                            <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">
                                 {selectedMonth === 'all' 
                                     ? 'Add a vehicle to see performance data.' 
                                     : 'No data available for the selected month.'}
@@ -2726,9 +2726,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         return (
           <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-              <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Active Listings</h2>
+              <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark">Active Listings</h2>
               <div className="flex gap-2">
-                <button onClick={() => setIsBulkUploadOpen(true)} className="bg-spinny-orange text-white font-bold py-2 px-4 rounded-lg hover:bg-spinny-orange">Bulk Upload</button>
+                <button onClick={() => setIsBulkUploadOpen(true)} className="bg-reride-orange text-white font-bold py-2 px-4 rounded-lg hover:bg-reride-orange">Bulk Upload</button>
                 <button onClick={handleAddNewClick} className="btn-brand-primary text-white font-bold py-2 px-4 rounded-lg">List New Vehicle</button>
               </div>
             </div>
@@ -2811,7 +2811,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                     setVehicleToBoost(v);
                                     setShowBoostModal(true);
                                   }} 
-                                className="px-2 py-0.5 bg-spinny-orange text-white rounded hover:bg-orange-600 text-xs font-medium cursor-pointer" 
+                                className="px-2 py-0.5 bg-reride-orange text-white rounded hover:bg-orange-600 text-xs font-medium cursor-pointer" 
                                 title="Boost for more visibility"
                               >
                                 🚀 Boost
@@ -2824,7 +2824,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                       e.stopPropagation();
                                       handleFeatureVehicle(v.id);
                                     }} 
-                                  className="px-1.5 py-0.5 text-spinny-orange hover:text-spinny-orange text-xs border border-spinny-orange rounded hover:bg-spinny-orange-light cursor-pointer" 
+                                  className="px-1.5 py-0.5 text-reride-orange hover:text-reride-orange text-xs border border-reride-orange rounded hover:bg-reride-orange-light cursor-pointer" 
                                   title="Use a credit to feature this listing"
                                 >
                                   ⭐ Feature
@@ -2847,7 +2847,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                     console.log('🔄 Mark as sold button clicked for vehicle:', v.id);
                                     handleMarkAsSold(v.id);
                                 }} 
-                                className="px-1.5 py-0.5 text-spinny-orange hover:text-spinny-orange text-xs border border-spinny-orange rounded hover:bg-spinny-orange-light cursor-pointer"
+                                className="px-1.5 py-0.5 text-reride-orange hover:text-reride-orange text-xs border border-reride-orange rounded hover:bg-reride-orange-light cursor-pointer"
                               >
                                 ✅ Sold
                               </button>
@@ -2859,7 +2859,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                     console.log('🔄 Edit vehicle button clicked for vehicle:', v.id);
                                     handleEditClick(v);
                                 }} 
-                                className="px-1.5 py-0.5 text-spinny-blue hover:text-spinny-blue text-xs border border-spinny-blue rounded hover:bg-spinny-blue-light cursor-pointer"
+                                className="px-1.5 py-0.5 text-reride-blue hover:text-reride-blue text-xs border border-reride-blue rounded hover:bg-reride-blue-light cursor-pointer"
                               >
                                 ✏️ Edit
                               </button>
@@ -2891,7 +2891,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                       setVehicleToBoost(v);
                                       setShowBoostModal(true);
                                     }} 
-                                  className="px-1.5 py-0.5 bg-spinny-orange text-white rounded text-xs cursor-pointer"
+                                  className="px-1.5 py-0.5 bg-reride-orange text-white rounded text-xs cursor-pointer"
                                   title="Boost"
                                 >
                                   🚀
@@ -2903,7 +2903,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                       e.stopPropagation();
                                       handleFeatureVehicle(v.id);
                                     }} 
-                                  className="px-1.5 py-0.5 text-spinny-orange text-xs border border-spinny-orange rounded cursor-pointer"
+                                  className="px-1.5 py-0.5 text-reride-orange text-xs border border-reride-orange rounded cursor-pointer"
                                   title="Feature"
                                 >
                                   ⭐
@@ -2921,7 +2921,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                       console.log('🔄 Mark as sold button clicked for vehicle:', v.id);
                                       handleMarkAsSold(v.id);
                                   }} 
-                                  className="px-1.5 py-0.5 text-spinny-orange text-xs border border-spinny-orange rounded cursor-pointer"
+                                  className="px-1.5 py-0.5 text-reride-orange text-xs border border-reride-orange rounded cursor-pointer"
                                   title="Sold"
                                 >
                                   ✅
@@ -2934,7 +2934,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                       console.log('🔄 Edit vehicle button clicked for vehicle:', v.id);
                                       handleEditClick(v);
                                   }} 
-                                  className="px-1.5 py-0.5 text-spinny-blue text-xs border border-spinny-blue rounded cursor-pointer"
+                                  className="px-1.5 py-0.5 text-reride-blue text-xs border border-reride-blue rounded cursor-pointer"
                                   title="Edit"
                                 >
                                   ✏️
@@ -3043,7 +3043,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                                 onClick={() => setCurrentPage(page)}
                                 className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
                                   currentPage === page
-                                    ? 'z-10 bg-spinny-orange border-spinny-orange text-white'
+                                    ? 'z-10 bg-reride-orange border-reride-orange text-white'
                                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                                 }`}
                               >
@@ -3070,11 +3070,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               </>
             ) : (
                 <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-200 dark:border-gray-200-300">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-spinny-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2-2H5a2 2 0 01-2-2z" />
                     </svg>
-                    <h3 className="mt-2 text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">No vehicles listed yet</h3>
-                    <p className="mt-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark">Ready to sell? Add your first vehicle to get started.</p>
+                    <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">No vehicles listed yet</h3>
+                    <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">Ready to sell? Add your first vehicle to get started.</p>
                     <div className="mt-6">
                         <button
                             onClick={handleAddNewClick}
@@ -3090,7 +3090,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       case 'salesHistory':
         return (
           <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Sales History</h2>
+            <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Sales History</h2>
             {soldListings.length > 0 ? (
                 <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -3163,7 +3163,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 )}
               </div>
             ) : (
-                <p className="text-center text-spinny-text-dark dark:text-spinny-text-dark py-8">You have not sold any vehicles yet.</p>
+                <p className="text-center text-reride-text-dark dark:text-reride-text-dark py-8">You have not sold any vehicles yet.</p>
             )}
           </div>
         );
@@ -3231,7 +3231,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       default:
         return (
           <div className="text-center py-8">
-            <h2 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">
+            <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
               Page Not Found
             </h2>
             <p className="text-gray-600">The requested dashboard section could not be found.</p>

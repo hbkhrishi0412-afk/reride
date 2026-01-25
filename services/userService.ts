@@ -415,7 +415,24 @@ const loginLocal = async (
     if (!isPasswordValid) {
         console.log('❌ loginLocal: Password mismatch');
         console.warn('💡 TIP: If you recently updated the password, clear localStorage cache: localStorage.removeItem("reRideUsers")');
-        return { success: false, reason: 'Invalid credentials.' };
+        
+        // CRITICAL FIX: Clear localStorage cache when password validation fails
+        // This might be stale cache from before password was updated
+        console.log('🧹 Clearing localStorage cache due to password mismatch...');
+        try {
+            localStorage.removeItem('reRideUsers');
+            localStorage.removeItem('reRideUsers_prod');
+            localStorage.removeItem('reRideCurrentUser');
+            if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.removeItem('currentUser');
+                sessionStorage.removeItem('accessToken');
+            }
+            console.log('✅ Cache cleared - please try logging in again');
+        } catch (cacheError) {
+            console.warn('⚠️ Failed to clear cache:', cacheError);
+        }
+        
+        return { success: false, reason: 'Invalid credentials. Cache cleared - please try again.' };
     }
     
     if (!skipRoleCheck && role && user.role !== role) {
@@ -807,6 +824,23 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       // Production: do NOT fall back to local storage. Without tokens, protected APIs will 401.
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ API login failed (production, no fallback):', errorMessage);
+      
+      // CRITICAL FIX: Clear localStorage cache when API login fails
+      // This ensures fresh data is fetched on next attempt
+      console.log('🧹 Clearing localStorage cache due to API login failure...');
+      try {
+        localStorage.removeItem('reRideUsers');
+        localStorage.removeItem('reRideUsers_prod');
+        localStorage.removeItem('reRideCurrentUser');
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('currentUser');
+          sessionStorage.removeItem('accessToken');
+        }
+        console.log('✅ Cache cleared');
+      } catch (cacheError) {
+        console.warn('⚠️ Failed to clear cache:', cacheError);
+      }
+      
       return { success: false, reason: errorMessage || 'Login failed. Please try again.' };
     }
   } else {

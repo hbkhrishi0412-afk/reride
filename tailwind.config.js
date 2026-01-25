@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Spinny-Inspired Theme - Vibrant & Professional
-        'spinny': {
+        // Reride-Inspired Theme - Vibrant & Professional
+        'reride': {
           // Primary Blue (Main Brand Color)
           'orange': '#2563EB',
           'orange-hover': '#3B82F6',
@@ -78,18 +78,18 @@ export default {
         'gradient-primary': 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
       },
       boxShadow: {
-        'spinny': '0 2px 8px rgba(0, 0, 0, 0.08)',
-        'spinny-md': '0 4px 16px rgba(0, 0, 0, 0.1)',
-        'spinny-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
+        'reride': '0 2px 8px rgba(0, 0, 0, 0.08)',
+        'reride-md': '0 4px 16px rgba(0, 0, 0, 0.1)',
+        'reride-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
         'orange': '0 4px 20px rgba(37, 99, 235, 0.3)',
         'soft': '0 2px 8px rgba(0, 0, 0, 0.08)',
         'soft-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
       },
       borderRadius: {
-        'spinny-sm': '6px',
-        'spinny-md': '8px',
-        'spinny-lg': '12px',
-        'spinny-xl': '16px',
+        'reride-sm': '6px',
+        'reride-md': '8px',
+        'reride-lg': '12px',
+        'reride-xl': '16px',
         'brand-sm': '6px',
         'brand-md': '8px',
         'brand-lg': '12px',

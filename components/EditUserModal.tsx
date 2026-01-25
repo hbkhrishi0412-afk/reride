@@ -152,24 +152,24 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                         </section>
 
                         <div className="flex justify-between items-center mb-4">
-                           <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Edit User: {user.name}</h2>
-                           <button type="button" onClick={onClose} className="text-spinny-text-dark dark:text-spinny-text-dark text-2xl hover:text-spinny-text-dark dark:hover:text-spinny-text-dark">&times;</button>
+                           <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Edit User: {user.name}</h2>
+                           <button type="button" onClick={onClose} className="text-reride-text-dark dark:text-reride-text-dark text-2xl hover:text-reride-text-dark dark:hover:text-reride-text-dark">&times;</button>
                         </div>
                         <div className="space-y-4">
                              <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Email (Cannot be changed)</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Email (Cannot be changed)</label>
                                 <input type="email" value={user.email} disabled className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-white" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Full Name</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Full Name</label>
                                 <input type="text" name="name" value={formData.name} onChange={handleChange} required className="mt-1 block w-full p-2 border rounded-md" />
                             </div>
                              <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Mobile Number</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Mobile Number</label>
                                 <input type="tel" name="mobile" value={formData.mobile} onChange={handleChange} required className="mt-1 block w-full p-2 border rounded-md" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Role</label>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Role</label>
                                 <select name="role" value={formData.role} onChange={handleChange} className="mt-1 block w-full p-2 border rounded-md">
                                     <option value="customer">Customer</option>
                                     <option value="seller">Seller</option>
@@ -181,7 +181,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                         {/* Password Reset Section */}
                         <div className="mt-6 pt-6 border-t border-gray-200">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Password Management</h3>
+                                <h3 className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Password Management</h3>
                                 <button 
                                     type="button"
                                     onClick={() => {
@@ -199,7 +199,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                             {showPasswordReset && (
                                 <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
                                     <div>
-                                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">
+                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
                                             New Password
                                         </label>
                                         <input 
@@ -211,7 +211,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">
+                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
                                             Confirm Password
                                         </label>
                                         <input 
@@ -241,7 +241,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
 
                         {/* Verification Status Section */}
                         <div className="mt-6 pt-6 border-t border-gray-200">
-                            <h3 className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-4">Verification Status</h3>
+                            <h3 className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-4">Verification Status</h3>
                             
                             <div className="space-y-3">
                                 {/* Phone Verification */}
@@ -250,7 +250,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                         <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                                         </svg>
-                                        <span className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Phone Verification</span>
+                                        <span className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Phone Verification</span>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -289,7 +289,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                         <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                         </svg>
-                                        <span className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Email Verification</span>
+                                        <span className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Email Verification</span>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -328,7 +328,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                         <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
                                         </svg>
-                                        <span className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">ID Verification</span>
+                                        <span className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">ID Verification</span>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -365,12 +365,12 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
 
                         {/* Document Verification Section */}
                         <div className="mt-6 pt-6 border-t border-gray-200">
-                            <h3 className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-4">Document Verification</h3>
+                            <h3 className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-4">Document Verification</h3>
                             
                             {/* Aadhar Card Verification */}
                             <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                                 <div className="flex items-center justify-between mb-2">
-                                    <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">Aadhar Card</label>
+                                    <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Aadhar Card</label>
                                     {user.aadharCard?.isVerified ? (
                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                             <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -417,7 +417,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                             {/* PAN Card Verification */}
                             <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                                 <div className="flex items-center justify-between mb-2">
-                                    <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">PAN Card</label>
+                                    <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">PAN Card</label>
                                     {user.panCard?.isVerified ? (
                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                             <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -463,7 +463,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                         </div>
                     </div>
                     <div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-white-dark text-spinny-text-dark rounded-md hover:bg-white">Cancel</button>
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-white-dark text-reride-text-dark rounded-md hover:bg-white">Cancel</button>
                         <button type="submit" className="px-4 py-2 btn-brand-primary text-white rounded-md">Save Changes</button>
                     </div>
                 </form>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
-import { fetchCarDataFromSpinny, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/spinnyScraper';
+import { fetchCarDataFromReride, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
 import { sellCarAPI } from '../services/sellCarService';
 
 interface SellCarPageProps {
@@ -147,7 +147,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
     const loadCarData = async () => {
       setIsLoading(true);
       try {
-        const data = await fetchCarDataFromSpinny();
+        const data = await fetchCarDataFromReride();
         setCarData(data);
       } catch (error) {
         console.error('Failed to load car data:', error);

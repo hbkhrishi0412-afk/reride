@@ -105,13 +105,13 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
   };
 
   const isLogin = mode === 'login';
-  const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-spinny-text-dark bg-spinny-white dark:bg-white focus:outline-none focus:ring-spinny-orange focus:border-spinny-orange focus:z-10 sm:text-sm";
+  const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-reride-text-dark bg-reride-white dark:bg-white focus:outline-none focus:ring-reride-orange focus:border-reride-orange focus:z-10 sm:text-sm";
 
 
   // Handle OTP mode
   if (mode === 'otp') {
     return (
-      <div className="w-full max-w-md space-y-8 bg-spinny-white dark:bg-white p-10 rounded-xl shadow-soft-xl">
+      <div className="w-full max-w-md space-y-8 bg-reride-white dark:bg-white p-10 rounded-xl shadow-soft-xl">
         <OTPLogin 
           onLogin={onLogin} 
           role="customer" 
@@ -192,23 +192,23 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <input id="remember-me" name="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 text-spinny-orange focus:ring-spinny-orange-light border-brand-gray-300 rounded" />
+                className="h-4 w-4 text-reride-orange focus:ring-reride-orange-light border-brand-gray-300 rounded" />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-brand-gray-900 dark:text-brand-gray-300">Remember me</label>
             </div>
             <div className="text-sm">
               <button
                 type="button"
                 onClick={onForgotPassword}
-                className="font-medium text-spinny-orange hover:text-spinny-orange-dark"
+                className="font-medium text-reride-orange hover:text-reride-orange-dark"
               >
                 Forgot your password?
               </button>
             </div>
           </div>
         )}
-        {error && <p className="text-spinny-orange text-sm text-center" role="alert" aria-live="polite">{error}</p>}
+        {error && <p className="text-reride-orange text-sm text-center" role="alert" aria-live="polite">{error}</p>}
         <div>
-          <button type="submit" disabled={isLoading} className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-spinny-orange hover:bg-spinny-orange focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-spinny-orange-light transition-colors disabled:opacity-50">
+          <button type="submit" disabled={isLoading} className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-reride-orange hover:bg-reride-orange focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-reride-orange-light transition-colors disabled:opacity-50">
             {isLoading ? 'Processing...' : (isLogin ? 'Sign in' : 'Create Account')}
           </button>
         </div>
@@ -230,7 +230,7 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
             type="button"
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="w-full inline-flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-spinny-orange transition-colors disabled:opacity-50"
+            className="w-full inline-flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-reride-orange transition-colors disabled:opacity-50"
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -245,7 +245,7 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
             type="button"
             onClick={() => setMode('otp')}
             disabled={isLoading}
-            className="w-full inline-flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-spinny-orange transition-colors disabled:opacity-50"
+            className="w-full inline-flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-reride-orange transition-colors disabled:opacity-50"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -255,12 +255,12 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
         </div>
       </div>
       <div className="text-sm text-center">
-        <button onClick={toggleMode} className="font-medium text-spinny-orange hover:text-spinny-orange-dark">
+        <button onClick={toggleMode} className="font-medium text-reride-orange hover:text-reride-orange-dark">
           {isLogin ? "Don't have an account? Register" : "Already have an account? Sign in"}
         </button>
       </div>
       <div className="text-center">
-          <button onClick={() => onNavigate(View.LOGIN_PORTAL)} className="font-medium text-spinny-orange hover:text-spinny-orange-dark">&larr; Back to Role Selection</button>
+          <button onClick={() => onNavigate(View.LOGIN_PORTAL)} className="font-medium text-reride-orange hover:text-reride-orange-dark">&larr; Back to Role Selection</button>
       </div>
       </div>
       </div>
