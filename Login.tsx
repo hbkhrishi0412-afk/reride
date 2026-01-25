@@ -106,12 +106,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
   }
 
   const isLogin = mode === 'login';
-  const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-spinny-text-dark bg-white focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-spinny-orange focus:z-10 sm:text-sm";
+  const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-reride-text-dark bg-white focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-reride-orange focus:z-10 sm:text-sm";
 
   // Handle OTP mode
   if (mode === 'otp') {
     return (
-      <div className="seller-dashboard-login w-full max-w-md space-y-8 bg-spinny-white dark:bg-white p-10 rounded-xl shadow-soft-xl">
+      <div className="seller-dashboard-login w-full max-w-md space-y-8 bg-reride-white dark:bg-white p-10 rounded-xl shadow-soft-xl">
         <OTPLogin 
           onLogin={onLogin} 
           role="seller" 
@@ -167,12 +167,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
               <label htmlFor="remember-me" className="ml-2 block text-sm text-brand-gray-900 dark:text-brand-gray-300">Remember me</label>
             </div>
             <div className="text-sm">
-              <button type="button" onClick={onForgotPassword} className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>Forgot your password?</button>
+              <button type="button" onClick={onForgotPassword} className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>Forgot your password?</button>
             </div>
           </div>
         )}
 
-        {error && <p className="text-spinny-orange text-sm text-center" role="alert" aria-live="polite">{error}</p>}
+        {error && <p className="text-reride-orange text-sm text-center" role="alert" aria-live="polite">{error}</p>}
 
         <div>
           <button type="submit" disabled={isLoading} className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 transform hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
@@ -237,12 +237,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
       </div>
 
       <div className="text-sm text-center">
-        <button onClick={toggleMode} className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>
+        <button onClick={toggleMode} className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>
           {isLogin ? "Don't have a seller account? Register" : "Already have a seller account? Sign in"}
         </button>
       </div>
       <div className="text-center">
-        <button onClick={() => onNavigate(View.LOGIN_PORTAL)} className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>
+        <button onClick={() => onNavigate(View.LOGIN_PORTAL)} className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>
           &larr; Back to Role Selection
         </button>
       </div>

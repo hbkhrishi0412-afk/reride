@@ -82,7 +82,7 @@ const SavedSearchesPanel: React.FC<SavedSearchesPanelProps> = ({
         <h3 className="text-xl font-bold text-gray-900 dark:text-white">
           Saved Searches
         </h3>
-        <span className="px-3 py-1 bg-spinny-orange text-white text-sm font-semibold rounded-full">
+        <span className="px-3 py-1 bg-reride-orange text-white text-sm font-semibold rounded-full">
           {savedSearches.length}
         </span>
       </div>
@@ -94,7 +94,7 @@ const SavedSearchesPanel: React.FC<SavedSearchesPanelProps> = ({
         return (
           <div
             key={search.id}
-            className="bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 overflow-hidden hover:border-spinny-orange transition-colors"
+            className="bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 overflow-hidden hover:border-reride-orange transition-colors"
           >
             {/* Header */}
             <div className="p-4">
@@ -116,7 +116,7 @@ const SavedSearchesPanel: React.FC<SavedSearchesPanelProps> = ({
                   {matchCount > 0 && (
                     <button
                       onClick={() => onSearchClick(search)}
-                      className="text-sm text-spinny-orange hover:underline font-semibold"
+                      className="text-sm text-reride-orange hover:underline font-semibold"
                     >
                       {matchCount} new {matchCount === 1 ? 'match' : 'matches'} →
                     </button>

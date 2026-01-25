@@ -231,7 +231,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h3 className="text-2xl font-bold text-spinny-text-dark mb-2">
+        <h3 className="text-2xl font-bold text-reride-text-dark mb-2">
           Login with Mobile OTP
         </h3>
         <p className="text-sm text-gray-600">
@@ -256,7 +256,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                 placeholder="Enter 10-digit mobile number"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-spinny-orange"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-reride-orange"
                 required
               />
             </div>
@@ -275,7 +275,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="flex-1 py-3 px-4 bg-spinny-orange text-white rounded-md hover:bg-spinny-orange-dark focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:ring-offset-2 transition-colors disabled:opacity-50"
+              className="flex-1 py-3 px-4 bg-reride-orange text-white rounded-md hover:bg-reride-orange-dark focus:outline-none focus:ring-2 focus:ring-reride-orange focus:ring-offset-2 transition-colors disabled:opacity-50"
             >
               {isLoading ? 'Sending...' : 'Send OTP'}
             </button>
@@ -294,7 +294,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
               placeholder="Enter 6-digit OTP"
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-              className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-spinny-orange text-center text-2xl tracking-widest"
+              className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-reride-orange text-center text-2xl tracking-widest"
               required
             />
             <p className="text-xs text-gray-600 mt-2">
@@ -316,7 +316,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="flex-1 py-3 px-4 bg-spinny-orange text-white rounded-md hover:bg-spinny-orange-dark focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:ring-offset-2 transition-colors disabled:opacity-50"
+              className="flex-1 py-3 px-4 bg-reride-orange text-white rounded-md hover:bg-reride-orange-dark focus:outline-none focus:ring-2 focus:ring-reride-orange focus:ring-offset-2 transition-colors disabled:opacity-50"
             >
               {isLoading ? 'Verifying...' : 'Verify OTP'}
             </button>

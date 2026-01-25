@@ -5,8 +5,8 @@ import { getFirstValidImage, getValidImages, getSafeImageSrc } from '../utils/im
 // KeySpec component copied for reuse
 const KeySpec: React.FC<{ label: string; value: string | number; }> = memo(({ label, value }) => (
     <div className="flex justify-between items-baseline py-2 border-b border-gray-200-100 dark:border-gray-200-200">
-        <span className="text-sm font-medium text-brand-gray-600 dark:text-spinny-text">{label}</span>
-        <span className="font-bold text-spinny-text-dark dark:text-spinny-text-dark text-right">{value}</span>
+        <span className="text-sm font-medium text-brand-gray-600 dark:text-reride-text">{label}</span>
+        <span className="font-bold text-reride-text-dark dark:text-reride-text-dark text-right">{value}</span>
     </div>
 ));
 

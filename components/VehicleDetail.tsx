@@ -72,8 +72,8 @@ const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; d
                 className="w-full flex justify-between items-center text-left p-6"
                 aria-expanded={isOpen}
             >
-                <h3 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">{title}</h3>
-                <svg className={`w-6 h-6 text-spinny-text transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">{title}</h3>
+                <svg className={`w-6 h-6 text-reride-text transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
@@ -90,10 +90,10 @@ const CollapsibleSection: React.FC<{ title: string; children: React.ReactNode; d
 
 
 const KeySpec: React.FC<{ label: string; value: string | number; icon?: React.ReactNode }> = memo(({ label, value, icon }) => (
-    <div className="flex flex-col gap-1 p-4 bg-spinny-off-white dark:bg-white rounded-lg text-center">
+    <div className="flex flex-col gap-1 p-4 bg-reride-off-white dark:bg-white rounded-lg text-center">
         {icon && <div className="mx-auto mb-1" style={{ color: '#1E88E5' }}>{icon}</div>}
-        <span className="text-sm font-medium text-brand-gray-600 dark:text-spinny-text">{label}</span>
-        <span className="font-bold text-spinny-text-dark dark:text-spinny-text-dark">{value}</span>
+        <span className="text-sm font-medium text-brand-gray-600 dark:text-reride-text">{label}</span>
+        <span className="font-bold text-reride-text-dark dark:text-reride-text-dark">{value}</span>
     </div>
 ));
 
@@ -198,8 +198,8 @@ const getBankLogo = (bankName: string, size: 'sm' | 'md' | 'lg' = 'md'): React.R
 
 const SpecDetail: React.FC<{ label: string; value: string | number | undefined }> = ({ label, value }) => (
     <div className="flex justify-between py-2 border-b border-gray-200-100 dark:border-gray-200-200 last:border-b-0">
-        <dt className="text-sm text-brand-gray-600 dark:text-spinny-text">{label}</dt>
-        <dd className="text-sm font-semibold text-spinny-text-dark dark:text-brand-gray-200 text-right">{value || '-'}</dd>
+        <dt className="text-sm text-brand-gray-600 dark:text-reride-text">{label}</dt>
+        <dd className="text-sm font-semibold text-reride-text-dark dark:text-brand-gray-200 text-right">{value || '-'}</dd>
     </div>
 );
 
@@ -207,7 +207,7 @@ const SpecDetail: React.FC<{ label: string; value: string | number | undefined }
 const DocumentChip: React.FC<{ doc: VehicleDocument }> = ({ doc }) => {
     return (
         <a href={doc.url} target="_blank" rel="noopener noreferrer" title={`View ${doc.fileName}`}
-           className="flex items-center gap-2 bg-white dark:bg-white text-spinny-text-dark dark:text-spinny-text-dark px-3 py-1.5 rounded-full text-sm font-medium hover:bg-white-dark dark:hover:bg-white transition-colors">
+           className="flex items-center gap-2 bg-white dark:bg-white text-reride-text-dark dark:text-reride-text-dark px-3 py-1.5 rounded-full text-sm font-medium hover:bg-white-dark dark:hover:bg-white transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2-2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
             </svg>
@@ -218,33 +218,33 @@ const DocumentChip: React.FC<{ doc: VehicleDocument }> = ({ doc }) => {
 
 const CertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ report }) => {
     const scoreColor = (score: number) => {
-        if (score >= 90) return 'bg-spinny-orange-light0';
-        if (score >= 75) return 'bg-spinny-blue-light0';
-        return 'bg-spinny-orange-light0';
+        if (score >= 90) return 'bg-reride-orange-light0';
+        if (score >= 75) return 'bg-reride-blue-light0';
+        return 'bg-reride-orange-light0';
     };
     return (
         <div className="p-6">
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center border-b dark:border-gray-200-200 pb-4 mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-spinny-orange flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-reride-orange flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44-1.22a.75.75 0 00-1.06 0L8.172 6.172a.75.75 0 00-1.06 1.06L8.94 9.332a.75.75 0 001.191.04l3.22-4.294a.75.75 0 00-.04-1.19z" clipRule="evenodd" />
                 </svg>
                 <div>
-                    <h3 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">ReRide Certified Inspection</h3>
-                    <p className="text-sm text-brand-gray-600 dark:text-spinny-text">Inspected by {report.inspector} on {new Date(report.date).toLocaleDateString()}</p>
+                    <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">ReRide Certified Inspection</h3>
+                    <p className="text-sm text-brand-gray-600 dark:text-reride-text">Inspected by {report.inspector} on {new Date(report.date).toLocaleDateString()}</p>
                 </div>
             </div>
-            <p className="italic text-spinny-text-dark dark:text-spinny-text-dark mb-6">{report.summary}</p>
+            <p className="italic text-reride-text-dark dark:text-reride-text-dark mb-6">{report.summary}</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                 {Object.entries(report.scores).map(([key, score]) => (
                     <div key={key}>
                         <div className="flex justify-between items-center mb-1">
-                            <span className="font-medium text-sm text-spinny-text-dark dark:text-spinny-text-dark">{key}</span>
-                            <span className="font-bold text-sm text-spinny-text-dark dark:text-spinny-text-dark">{score}/100</span>
+                            <span className="font-medium text-sm text-reride-text-dark dark:text-reride-text-dark">{key}</span>
+                            <span className="font-bold text-sm text-reride-text-dark dark:text-reride-text-dark">{score}/100</span>
                         </div>
-                        <div className="w-full bg-spinny-light-gray dark:bg-brand-gray-700 rounded-full h-2.5">
+                        <div className="w-full bg-reride-light-gray dark:bg-brand-gray-700 rounded-full h-2.5">
                             <div className={`${scoreColor(Number(score))} h-2.5 rounded-full`} style={{ width: `${score}%` }}></div>
                         </div>
-                        <p className="text-xs text-spinny-text dark:text-spinny-text mt-1">{report.details[key]}</p>
+                        <p className="text-xs text-reride-text dark:text-reride-text mt-1">{report.details[key]}</p>
                     </div>
                 ))}
             </div>
@@ -477,7 +477,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                 Back to Listings
               </button>
 
-              {/* Offer Banner - Spinny Style */}
+              {/* Offer Banner - Reride Style */}
               <div className="mb-6 bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg p-4 text-white">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-3">
@@ -571,7 +571,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                       </div>
                     )}
                     
-                    {/* Tab Navigation - Spinny Style */}
+                    {/* Tab Navigation - Reride Style */}
                     <div className="mt-10 lg:mt-12">
                       <div className="bg-white rounded-t-xl border-b-2 border-gray-200">
                         <div className="flex space-x-1">
@@ -638,8 +638,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 </div>
                                 {safeVehicle.description && (
                                   <div>
-                                    <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-2">Description</h4>
-                                    <p className="text-spinny-text-dark dark:text-spinny-text-dark whitespace-pre-line">{safeVehicle.description}</p>
+                                    <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-2">Description</h4>
+                                    <p className="text-reride-text-dark dark:text-reride-text-dark whitespace-pre-line">{safeVehicle.description}</p>
                                   </div>
                                 )}
                               </div>
@@ -739,7 +739,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           <div className="p-6 space-y-8">
                             {/* Detailed Specifications */}
                             <div>
-                              <h3 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Detailed Specifications</h3>
+                              <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Detailed Specifications</h3>
                               <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                                 <SpecDetail label="Engine" value={safeVehicle.engine} />
                                 <SpecDetail label="Displacement" value={safeVehicle.displacement} />
@@ -755,35 +755,35 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             {/* Features, Pros & Cons */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                               <div>
-                                <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Included Features</h4>
+                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Included Features</h4>
                                 {safeVehicle.features.length > 0 ? (
                                   <div className="flex flex-wrap gap-3">
                                     {safeVehicle.features.map(feature => (
-                                      <div key={feature} className="flex items-center gap-2 text-spinny-text-dark dark:text-spinny-text-dark bg-spinny-off-white dark:bg-brand-gray-700 px-3 py-1 rounded-full text-sm">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-spinny-orange" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                      <div key={feature} className="flex items-center gap-2 text-reride-text-dark dark:text-reride-text-dark bg-reride-off-white dark:bg-brand-gray-700 px-3 py-1 rounded-full text-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-reride-orange" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                                         {feature}
                                       </div>
                                     ))}
                                   </div>
-                                ) : <p className="text-spinny-text">No features listed.</p>}
+                                ) : <p className="text-reride-text">No features listed.</p>}
                               </div>
                               <div>
-                                <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">AI Expert Analysis</h4>
+                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">AI Expert Analysis</h4>
                                 {isGeneratingProsCons ? (
-                                  <div className="flex items-center gap-2 text-spinny-text"><div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin" style={{ borderColor: '#FF6B35' }}></div> Generating...</div>
+                                  <div className="flex items-center gap-2 text-reride-text"><div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin" style={{ borderColor: '#FF6B35' }}></div> Generating...</div>
                                 ) : prosAndCons ? (
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                      <h5 className="font-semibold text-spinny-orange mb-2">Pros</h5>
+                                      <h5 className="font-semibold text-reride-orange mb-2">Pros</h5>
                                       <ul className="list-disc list-inside space-y-1 text-sm">{prosAndCons.pros.map((p, i) => <li key={i}>{p}</li>)}</ul>
                                     </div>
                                     <div>
-                                      <h5 className="font-semibold text-spinny-orange mb-2">Cons</h5>
+                                      <h5 className="font-semibold text-reride-orange mb-2">Cons</h5>
                                       <ul className="list-disc list-inside space-y-1 text-sm">{prosAndCons.cons.map((c, i) => <li key={i}>{c}</li>)}</ul>
                                     </div>
                                   </div>
                                 ) : (
-                                  <button onClick={handleGenerateProsCons} className="text-sm font-bold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}>Generate Pros & Cons</button>
+                                  <button onClick={handleGenerateProsCons} className="text-sm font-bold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>Generate Pros & Cons</button>
                                 )}
                               </div>
                             </div>
@@ -801,7 +801,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 <VehicleHistory serviceRecords={safeVehicle.serviceRecords || []} accidentHistory={safeVehicle.accidentHistory || []} />
                             )}
                             {safeVehicle.documents && safeVehicle.documents.length > 0 && <div className="mt-6">
-                                <h4 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Available Documents</h4>
+                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Available Documents</h4>
                                 <div className="flex flex-wrap gap-4">
                                     {safeVehicle.documents.map(doc => <DocumentChip key={doc.name} doc={doc} />)}
                                 </div>
@@ -818,7 +818,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                   </div>
                   </div>
                   
-                  {/* Right Column: All in One Compact Card - Spinny Style - Fixed on Scroll */}
+                  {/* Right Column: All in One Compact Card - Reride Style - Fixed on Scroll */}
                   <div className="lg:sticky lg:top-24 lg:h-fit lg:self-start lg:z-10">
                       <div className="bg-white rounded-xl shadow-lg p-4 h-[500px] lg:h-[500px] flex flex-col">
                         {/* Scrollable Content Area */}
@@ -1012,11 +1012,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
               </div>
 
               <div className="text-center mt-12">
-                  <button onClick={handleFlagClick} className="text-xs text-spinny-text hover:text-spinny-orange">Report this listing</button>
+                  <button onClick={handleFlagClick} className="text-xs text-reride-text hover:text-reride-orange">Report this listing</button>
               </div>
 
               {filteredRecommendations.length > 0 && <div className="mt-12">
-                  <h2 className="text-3xl font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-6">Similar Vehicles</h2>
+                  <h2 className="text-3xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Similar Vehicles</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                       {filteredRecommendations.map(v => (
                           <VehicleCard key={v.id} vehicle={v} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(v.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(v.id)} isCompareDisabled={!comparisonList.includes(v.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} onQuickView={setQuickViewVehicle}/>

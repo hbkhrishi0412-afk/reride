@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
-import { fetchCarDataFromSpinny, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/spinnyScraper';
+import { fetchCarDataFromReride, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/rerideScraper';
 import { useCamera } from '../hooks/useMobileFeatures';
 
 interface MobileSellCarPageProps {
@@ -64,7 +64,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   useEffect(() => {
     const loadCarData = async () => {
       try {
-        const data = await fetchCarDataFromSpinny();
+        const data = await fetchCarDataFromReride();
         setCarData(data);
       } catch (error) {
         console.error('Failed to load car data:', error);

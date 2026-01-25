@@ -365,15 +365,15 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between p-6 border-b dark:border-gray-200-200">
                     <div>
-                        <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">Select your city</h2>
-                        <p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark mt-1">Prices and availability may vary based on your location.</p>
+                        <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Select your city</h2>
+                        <p className="text-sm text-reride-text-dark dark:text-reride-text-dark mt-1">Prices and availability may vary based on your location.</p>
                         {currentLocation && (
                             <div className="mt-3 flex items-center gap-2 text-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1E88E5' }}>
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
-                                <span className="text-spinny-text-dark dark:text-spinny-text-dark">Current: <strong style={{ color: '#FF6B35' }}>{currentLocation}</strong></span>
+                                <span className="text-reride-text-dark dark:text-reride-text-dark">Current: <strong style={{ color: '#FF6B35' }}>{currentLocation}</strong></span>
                             </div>
                         )}
                     </div>
@@ -415,7 +415,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         <button
                             onClick={handleDetectLocation}
                             disabled={isDetecting}
-                            className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-spinny-text-dark hover:text-blue-600 disabled:opacity-70"
+                            className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-reride-text-dark hover:text-blue-600 disabled:opacity-70"
                         >
                             {isDetecting ? (
                                 <span className="flex items-center gap-2">
@@ -434,7 +434,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     </div>
 
                     <div>
-                        <p className="text-sm font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-3">Popular cities</p>
+                        <p className="text-sm font-semibold text-reride-text-dark dark:text-reride-text-dark mb-3">Popular cities</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             {popularCities.map((city) => (
                                 <button
@@ -445,13 +445,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                     <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-blue-500 font-semibold">
                                         {city.slice(0, 1)}
                                     </div>
-                                    <span className="text-sm font-medium text-spinny-text-dark">{city}</span>
+                                    <span className="text-sm font-medium text-reride-text-dark">{city}</span>
                                 </button>
                             ))}
                         </div>
                     </div>
 
-                    <div className="flex items-center text-xs text-spinny-text-dark">
+                    <div className="flex items-center text-xs text-reride-text-dark">
                         <span className="flex-grow border-t dark:border-gray-200-300"></span>
                         <span className="px-4">OR</span>
                         <span className="flex-grow border-t dark:border-gray-200-300"></span>
@@ -459,7 +459,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label htmlFor="state-select" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">State</label>
+                            <label htmlFor="state-select" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">State</label>
                             <select
                                 id="state-select"
                                 value={selectedState}
@@ -476,7 +476,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                             </select>
                         </div>
                         <div>
-                            <label htmlFor="city-select" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">City</label>
+                            <label htmlFor="city-select" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">City</label>
                             <select id="city-select" value={selectedCity} onChange={e => setSelectedCity(e.target.value)} disabled={!selectedState || availableCities.length === 0} className="w-full p-2 border border-gray-200 dark:border-gray-200-300 rounded-md bg-white dark:bg-brand-gray-700 disabled:bg-white dark:disabled:bg-white">
                                 <option value="" disabled>Select a city</option>
                                 {availableCities.map(city => <option key={city} value={city}>{city}</option>)}
@@ -485,7 +485,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     </div>
                 </div>
                 <div className="bg-white px-6 py-4 flex justify-end gap-4 rounded-b-xl">
-                    <button onClick={onClose} className="px-4 py-2 bg-white-dark dark:bg-white text-spinny-text-dark dark:text-spinny-text-dark rounded-md hover:bg-white dark:hover:bg-white0">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 bg-white-dark dark:bg-white text-reride-text-dark dark:text-reride-text-dark rounded-md hover:bg-white dark:hover:bg-white0">Cancel</button>
                     <button onClick={handleManualSelect} disabled={!selectedCity || !selectedState} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50">Set Location</button>
                 </div>
             </div>

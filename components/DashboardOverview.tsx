@@ -15,8 +15,8 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
   <div className="bg-white p-6 rounded-lg shadow-md flex items-center">
     <div className="p-3 rounded-full mr-4" style={{ background: 'rgba(30, 136, 229, 0.1)' }}>{icon}</div>
     <div>
-      <h3 className="text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark">{title}</h3>
-      <p className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">{value}</p>
+      <h3 className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">{title}</h3>
+      <p className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark">{value}</p>
     </div>
   </div>
 ));
@@ -119,13 +119,13 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = memo(({ seller, sell
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Views Over Time</h3>
+          <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Views Over Time</h3>
           <div className="h-64">
             <Line data={viewsData} options={chartOptions} />
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">Inquiries Over Time</h3>
+          <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Inquiries Over Time</h3>
           <div className="h-64">
             <Bar data={inquiriesData} options={chartOptions} />
           </div>

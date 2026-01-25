@@ -422,7 +422,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
           <div className="max-w-3xl space-y-6">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm text-sm font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-300 animate-pulse" />
-              Spinny Professionals
+              Reride Professionals
             </div>
             <h1 className="text-5xl md:text-6xl font-black leading-tight">
               At your service

@@ -91,8 +91,8 @@ const LoginPortal: React.FC<LoginPortalProps> = ({ onNavigate }) => {
       <div className="flex justify-center mb-4">
         <Logo className="scale-125" showText={false} />
       </div>
-      <h2 className="text-2xl font-extrabold text-spinny-text-dark dark:text-spinny-text-dark">Welcome to ReRide</h2>
-      <p className="mt-2 text-brand-gray-600 dark:text-spinny-text">Please select your role to continue.</p>
+      <h2 className="text-2xl font-extrabold text-reride-text-dark dark:text-reride-text-dark">Welcome to ReRide</h2>
+      <p className="mt-2 text-brand-gray-600 dark:text-reride-text">Please select your role to continue.</p>
       <div className="mt-8 space-y-4">
         <button
           onClick={() => onNavigate(View.CUSTOMER_LOGIN)}
@@ -110,7 +110,7 @@ const LoginPortal: React.FC<LoginPortalProps> = ({ onNavigate }) => {
       <div className="text-sm mt-6">
           <button
               onClick={() => onNavigate(View.USED_CARS)}
-              className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'}
+              className="font-medium transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}
           >
               Or continue as a guest &rarr;
           </button>
@@ -119,7 +119,7 @@ const LoginPortal: React.FC<LoginPortalProps> = ({ onNavigate }) => {
            <div className="text-sm">
               <button
                   onClick={() => onNavigate(View.ADMIN_LOGIN)}
-                  className="font-medium text-spinny-text dark:text-spinny-text transition-colors" onMouseEnter={(e) => e.currentTarget.style.color = 'var(--spinny-orange)'} onMouseLeave={(e) => e.currentTarget.style.color = ''}
+                  className="font-medium text-reride-text dark:text-reride-text transition-colors" onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-orange)'} onMouseLeave={(e) => e.currentTarget.style.color = ''}
               >
                   Administrator Login
               </button>

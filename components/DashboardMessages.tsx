@@ -60,7 +60,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">
+        <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">
           Messages ({safeConversations.length})
         </h2>
         <div className="flex gap-2">
@@ -68,7 +68,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
             onClick={() => setFilter('all')}
             className={`px-3 py-1 rounded-full text-sm ${
               filter === 'all' 
-                ? 'bg-spinny-orange text-white' 
+                ? 'bg-reride-orange text-white' 
                 : 'bg-gray-200 text-gray-700'
             }`}
           >
@@ -78,7 +78,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
             onClick={() => setFilter('unread')}
             className={`px-3 py-1 rounded-full text-sm ${
               filter === 'unread' 
-                ? 'bg-spinny-orange text-white' 
+                ? 'bg-reride-orange text-white' 
                 : 'bg-gray-200 text-gray-700'
             }`}
           >
@@ -92,7 +92,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow-md">
             <div className="p-4 border-b border-gray-200">
-              <h3 className="font-semibold text-spinny-text-dark dark:text-spinny-text-dark">
+              <h3 className="font-semibold text-reride-text-dark dark:text-reride-text-dark">
                 Conversations
               </h3>
             </div>
@@ -115,7 +115,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-spinny-text-dark dark:text-spinny-text-dark truncate">
+                        <h4 className="font-medium text-reride-text-dark dark:text-reride-text-dark truncate">
                           {conversation.customerName}
                         </h4>
                         <p className="text-sm text-gray-600 truncate">

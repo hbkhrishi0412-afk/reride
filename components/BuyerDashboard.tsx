@@ -42,7 +42,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-brand-gray-900 flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text mb-4">
+          <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text mb-4">
             Please log in to view your dashboard
           </h2>
           <button
@@ -217,7 +217,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           <main className="lg:col-span-1">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-spinny-text-dark dark:text-spinny-text mb-2">
+          <h1 className="text-3xl font-bold text-reride-text-dark dark:text-reride-text mb-2">
             My Dashboard
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
@@ -235,7 +235,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             >
               <div className="flex items-center justify-between mb-2 gap-3">
                 <span className="text-2xl flex-shrink-0">{stat.icon}</span>
-                <span className="text-lg sm:text-xl lg:text-2xl font-bold text-spinny-orange whitespace-nowrap overflow-hidden text-ellipsis min-w-0 flex-1 text-right">
+                <span className="text-lg sm:text-xl lg:text-2xl font-bold text-reride-orange whitespace-nowrap overflow-hidden text-ellipsis min-w-0 flex-1 text-right">
                   {stat.value}
                 </span>
               </div>
@@ -272,13 +272,13 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                       className="bg-white dark:bg-brand-gray-800 rounded-lg p-4 mb-2 cursor-pointer hover:shadow-md transition-shadow"
                       onClick={() => onSelectVehicle(vehicle)}
                     >
-                      <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+                      <p className="font-semibold text-reride-text-dark dark:text-reride-text">
                         {vehicle.year} {vehicle.make} {vehicle.model}
                       </p>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         <span className="line-through">₹{drop.oldPrice.toLocaleString('en-IN')}</span>
                         {' → '}
-                        <span className="text-spinny-orange font-bold">
+                        <span className="text-reride-orange font-bold">
                           ₹{drop.newPrice.toLocaleString('en-IN')}
                         </span>
                         {' '}
@@ -306,7 +306,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                       key={result.searchId}
                       className="bg-white dark:bg-brand-gray-800 rounded-lg p-4 mb-2"
                     >
-                      <p className="font-semibold text-spinny-text-dark dark:text-spinny-text mb-1">
+                      <p className="font-semibold text-reride-text-dark dark:text-reride-text mb-1">
                         {search.name}
                       </p>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -331,12 +331,12 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 {wishlistVehicles.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text">
+                      <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
                         ❤️ Your Wishlist
                       </h3>
                       <button
                         onClick={() => onNavigate(View.WISHLIST)}
-                        className="text-spinny-orange hover:underline text-sm font-semibold"
+                        className="text-reride-orange hover:underline text-sm font-semibold"
                       >
                         View All →
                       </button>
@@ -363,7 +363,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 {/* Recently Viewed Section */}
                 {recentlyViewed.length > 0 && (
                   <div>
-                    <h3 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text mb-4">
+                    <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-4">
                       👁️ Recently Viewed
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -391,7 +391,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {activeTab === 'searches' && (
               <div>
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text">
+                  <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
                     Your Saved Searches
                   </h3>
                 </div>
@@ -419,7 +419,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         >
                           <div className="flex items-start justify-between mb-2">
                             <div>
-                              <h4 className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+                              <h4 className="font-semibold text-reride-text-dark dark:text-reride-text">
                                 {search.name}
                               </h4>
                               <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -478,7 +478,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {/* Activity Tab */}
             {activeTab === 'activity' && (
               <div>
-                <h3 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text mb-6">
+                <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-6">
                   Recent Activity
                 </h3>
                 {recentlyViewed.length === 0 ? (
@@ -509,7 +509,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {/* Alerts Tab */}
             {activeTab === 'alerts' && (
               <div>
-                <h3 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text mb-6">
+                <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-6">
                   Your Alerts
                 </h3>
                 {priceDrops.length === 0 && newMatches.length === 0 ? (
@@ -520,7 +520,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   <div className="space-y-6">
                     {priceDrops.length > 0 && (
                       <div>
-                        <h4 className="font-semibold text-spinny-text-dark dark:text-spinny-text mb-4">
+                        <h4 className="font-semibold text-reride-text-dark dark:text-reride-text mb-4">
                           🔽 Price Drops
                         </h4>
                         <div className="space-y-3">
@@ -542,13 +542,13 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                                     quality={80}
                                   />
                                   <div className="flex-1">
-                                    <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+                                    <p className="font-semibold text-reride-text-dark dark:text-reride-text">
                                       {vehicle.year} {vehicle.make} {vehicle.model}
                                     </p>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">
                                       <span className="line-through">₹{drop.oldPrice.toLocaleString('en-IN')}</span>
                                       {' → '}
-                                      <span className="text-spinny-orange font-bold">
+                                      <span className="text-reride-orange font-bold">
                                         ₹{drop.newPrice.toLocaleString('en-IN')}
                                       </span>
                                     </p>

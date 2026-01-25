@@ -125,7 +125,7 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
                 onClick={() => setSelectedPackage(pkg.id)}
                 className={`relative p-5 rounded-xl border-2 cursor-pointer transition-all ${
                   selectedPackage === pkg.id
-                    ? 'border-spinny-orange bg-orange-50 dark:bg-orange-900/20'
+                    ? 'border-reride-orange bg-orange-50 dark:bg-orange-900/20'
                     : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
@@ -159,7 +159,7 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
                     </div>
                   </div>
                   <div className="text-right ml-4">
-                    <div className="text-3xl font-bold text-spinny-orange">
+                    <div className="text-3xl font-bold text-reride-orange">
                       ₹{pkg.price}
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -170,7 +170,7 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
 
                 {selectedPackage === pkg.id && (
                   <div className="absolute top-3 right-3">
-                    <div className="w-6 h-6 bg-spinny-orange rounded-full flex items-center justify-center">
+                    <div className="w-6 h-6 bg-reride-orange rounded-full flex items-center justify-center">
                       <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
                       </svg>
@@ -199,7 +199,7 @@ const BoostListingModal: React.FC<BoostListingModalProps> = ({
                 <button
                   onClick={handleBoost}
                   disabled={!selectedPackage || isProcessing}
-                  className="px-8 py-3 bg-spinny-orange text-white rounded-lg font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-8 py-3 bg-reride-orange text-white rounded-lg font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isProcessing ? (
                     <span className="flex items-center gap-2">

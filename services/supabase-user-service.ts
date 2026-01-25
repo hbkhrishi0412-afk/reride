@@ -238,21 +238,50 @@ export const supabaseUserService = {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
     // First, get existing user to merge metadata properly
-    const { data: existingUser, error: fetchError } = await supabase
+    // Try to find by ID first, then by email if not found
+    let existingUser: any = null;
+    let userIdentifier: { field: 'id' | 'email'; value: string } = { field: 'id', value: emailKey };
+    
+    let { data, error: fetchError } = await supabase
       .from('users')
-      .select('metadata')
+      .select('id, metadata')
       .eq('id', emailKey)
       .single();
     
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found, which is OK for new users
+    if (fetchError && fetchError.code === 'PGRST116') {
+      // User not found by ID, try by email
+      const result = await supabase
+        .from('users')
+        .select('id, metadata')
+        .eq('email', normalizedEmail)
+        .single();
+      
+      if (result.data) {
+        existingUser = result.data;
+        userIdentifier = { field: 'id', value: result.data.id };
+      } else if (result.error && result.error.code !== 'PGRST116') {
+        throw new Error(`Failed to fetch existing user: ${result.error.message}`);
+      }
+    } else if (fetchError) {
       throw new Error(`Failed to fetch existing user: ${fetchError.message}`);
+    } else if (data) {
+      existingUser = data;
+    }
+    
+    // If user doesn't exist, throw an error
+    if (!existingUser) {
+      throw new Error(`User not found: ${normalizedEmail}`);
     }
     
     const row = userToSupabaseRow(updates);
     
-    // Remove id from updates if it's not being changed
-    if (row.id === emailKey) {
-      delete row.id;
+    // Remove id from updates to avoid conflicts
+    delete row.id;
+    
+    // CRITICAL: Only include password field if it's actually being updated
+    // If password is not in updates, remove it from row to avoid clearing existing password
+    if (!('password' in updates)) {
+      delete row.password;
     }
     
     // CRITICAL: Merge metadata instead of replacing it
@@ -276,13 +305,20 @@ export const supabaseUserService = {
       delete row.metadata;
     }
     
-    const { error } = await supabase
+    // Update by the correct identifier (ID or email)
+    const { error, data: updateData } = await supabase
       .from('users')
       .update(row)
-      .eq('id', emailKey);
+      .eq(userIdentifier.field, userIdentifier.value)
+      .select();
     
     if (error) {
       throw new Error(`Failed to update user: ${error.message}`);
+    }
+    
+    // Verify that the update actually affected a row
+    if (!updateData || updateData.length === 0) {
+      throw new Error(`User update failed: No rows were updated. User may not exist or identifier mismatch.`);
     }
   },
 

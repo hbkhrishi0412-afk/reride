@@ -288,6 +288,8 @@ export const supabaseVehicleService = {
   },
 
   // Find vehicles by status with optional sorting and pagination
+  // OLX-STYLE: Optimized query using composite index (status, created_at DESC)
+  // This index dramatically speeds up the most common query pattern
   async findByStatus(
     status: 'published' | 'unpublished' | 'sold',
     options?: { orderBy?: string; orderDirection?: 'asc' | 'desc'; limit?: number; offset?: number }
@@ -297,13 +299,15 @@ export const supabaseVehicleService = {
     let query = supabase
       .from('vehicles')
       .select('*')
-      .eq('status', status);
+      .eq('status', status); // Uses idx_vehicles_status_created_at index
     
     // Apply database-level sorting (much faster than in-memory sorting)
+    // Uses composite index idx_vehicles_status_created_at for optimal performance
     if (options?.orderBy) {
       query = query.order(options.orderBy, { ascending: options.orderDirection === 'asc' });
     } else {
       // Default: sort by created_at descending (newest first)
+      // This uses the composite index idx_vehicles_status_created_at
       query = query.order('created_at', { ascending: false });
     }
     

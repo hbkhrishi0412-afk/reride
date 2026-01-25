@@ -117,7 +117,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
         {/* Active Listings */}
         <div>
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark">
+            <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">
               Active Listings ({activeVehicles.length})
             </h2>
           </div>
@@ -144,7 +144,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
         {/* Sold Vehicles */}
         {soldVehicles.length > 0 && (
           <div>
-            <h2 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">
+            <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
               Sold Vehicles ({soldVehicles.length})
             </h2>
             <VirtualizedVehicleList
@@ -163,7 +163,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
 
         {/* Quick Actions */}
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">
+          <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
             Quick Actions
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

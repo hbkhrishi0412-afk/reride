@@ -299,18 +299,46 @@ class DataService {
     }
 
     // STEP 2: No cache - fetch from API (first load or cache expired)
-    // Use limit=0 to get all vehicles (backward compatible, still fast with optimizations)
+    // OLX-STYLE OPTIMIZATION: Load only 30 vehicles initially for fast display (like OLX)
+    // Load more vehicles in background for complete cache
     try {
-      // Use limit=0 to get all vehicles as array (not paginated object)
-      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0&skipExpiryCheck=true';
+      // Use limit=30 for fast initial load (OLX loads 20-30 initially)
+      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=30&skipExpiryCheck=true';
       const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
       
+      // Load remaining vehicles in background for complete cache (don't await)
+      if (!includeAllStatuses) {
+        this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>('/vehicles?limit=0&skipExpiryCheck=true')
+          .then(fullResponse => {
+            let allVehicles: Vehicle[];
+            if (Array.isArray(fullResponse)) {
+              allVehicles = fullResponse;
+            } else if (fullResponse && typeof fullResponse === 'object' && 'vehicles' in fullResponse) {
+              allVehicles = fullResponse.vehicles || [];
+            } else {
+              return;
+            }
+            if (Array.isArray(allVehicles) && allVehicles.length > 0) {
+              this.setLocalStorageData(cacheKey, allVehicles);
+              console.log(`✅ Background: Cached all ${allVehicles.length} vehicles`);
+            }
+          })
+          .catch(err => {
+            console.warn('Background full load failed (non-critical):', err);
+          });
+      }
+      
       // Handle both array response (limit=0) and paginated response (limit>0)
+      // OLX-STYLE: Support paginated responses for fast initial load
       let vehicles: Vehicle[];
       if (Array.isArray(response)) {
         vehicles = response;
       } else if (response && typeof response === 'object' && 'vehicles' in response) {
         vehicles = response.vehicles || [];
+        // If paginated response, log pagination info
+        if ('pagination' in response && response.pagination) {
+          console.log(`📊 Loaded page ${response.pagination.page} of ${response.pagination.pages} (${vehicles.length} vehicles)`);
+        }
       } else {
         console.error('❌ Invalid response format:', response);
         throw new Error('Invalid response format: expected array or object with vehicles property');
@@ -321,7 +349,7 @@ class DataService {
         throw new Error('Invalid response format: expected array');
       }
       
-      console.log(`✅ Loaded ${vehicles.length} vehicles from production API (response type: ${Array.isArray(response) ? 'array' : 'paginated'})`);
+      console.log(`✅ Loaded ${vehicles.length} vehicles from production API (OLX-style: fast initial load)`);
       
       if (vehicles.length === 0) {
         console.warn('⚠️ API returned 0 vehicles. Check if there are published vehicles in the database.');

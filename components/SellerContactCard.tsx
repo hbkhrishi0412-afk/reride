@@ -63,7 +63,7 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
     <div className="bg-white dark:bg-brand-gray-800 rounded-xl shadow-soft-lg p-6 sticky top-24">
       {/* Price */}
       <div className="mb-6">
-        <p className="text-4xl font-extrabold text-spinny-orange mb-2">
+        <p className="text-4xl font-extrabold text-reride-orange mb-2">
           ₹{vehicle.price.toLocaleString('en-IN')}
         </p>
         <div className="flex flex-wrap gap-2">
@@ -100,12 +100,12 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
               className="w-12 h-12 rounded-full object-cover"
             />
           ) : (
-            <div className="w-12 h-12 rounded-full bg-spinny-orange text-white flex items-center justify-center text-lg font-bold">
+            <div className="w-12 h-12 rounded-full bg-reride-orange text-white flex items-center justify-center text-lg font-bold">
               {seller.name.charAt(0).toUpperCase()}
             </div>
           )}
           <div className="flex-1">
-            <h3 className="font-bold text-spinny-text-dark dark:text-spinny-text">
+            <h3 className="font-bold text-reride-text-dark dark:text-reride-text">
               {seller.dealershipName || seller.name}
             </h3>
             <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -135,37 +135,37 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-gray-600 dark:text-gray-400">Response Time</p>
-            <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+            <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {responseTime}
             </p>
           </div>
           <div>
             <p className="text-gray-600 dark:text-gray-400">Response Rate</p>
-            <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+            <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {seller.responseRate ? `${seller.responseRate}%` : 'N/A'}
             </p>
           </div>
           <div>
             <p className="text-gray-600 dark:text-gray-400">Followers</p>
-            <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+            <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {getFollowersCount(seller.email)}
             </p>
           </div>
           <div>
             <p className="text-gray-600 dark:text-gray-400">Following</p>
-            <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+            <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {getFollowingCount(seller.email)}
             </p>
           </div>
           <div>
             <p className="text-gray-600 dark:text-gray-400">Member Since</p>
-            <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+            <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {new Date(seller.joinedDate || seller.createdAt).getFullYear()}
             </p>
           </div>
           <div>
             <p className="text-gray-600 dark:text-gray-400">Active Listings</p>
-            <p className="font-semibold text-spinny-text-dark dark:text-spinny-text">
+            <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {seller.activeListings || 0}
             </p>
           </div>
@@ -191,7 +191,7 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
             {!showPhone ? (
               <button
                 onClick={handleShowPhone}
-                className="w-full bg-white border-2 border-spinny-orange text-spinny-orange font-bold py-3 px-6 rounded-lg text-lg hover:bg-spinny-orange hover:text-white transition-all flex items-center justify-center gap-2"
+                className="w-full bg-white border-2 border-reride-orange text-reride-orange font-bold py-3 px-6 rounded-lg text-lg hover:bg-reride-orange hover:text-white transition-all flex items-center justify-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />

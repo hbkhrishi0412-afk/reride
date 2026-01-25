@@ -26,7 +26,7 @@ const EMOJIS = ['😀', '😂', '👍', '❤️', '🙏', '😊', '🔥', '🎉'
 
 const TypingIndicator: React.FC<{ name: string }> = ({ name }) => (
     <div className="flex items-start">
-        <div className="rounded-xl px-4 py-3 max-w-lg bg-spinny-light-gray dark:bg-brand-gray-700 text-spinny-text-dark dark:text-brand-gray-200 flex items-center space-x-2">
+        <div className="rounded-xl px-4 py-3 max-w-lg bg-reride-light-gray dark:bg-brand-gray-700 text-reride-text-dark dark:text-brand-gray-200 flex items-center space-x-2">
             <span className="text-sm font-medium">{name} is typing</span>
             <div className="w-1.5 h-1.5 bg-white0 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
             <div className="w-1.5 h-1.5 bg-white0 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
@@ -376,7 +376,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
             {showEmojiPicker && (
                 <div ref={emojiPickerRef} className="absolute bottom-full mb-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-lg p-2 grid grid-cols-6 gap-2">
                     {EMOJIS.map(emoji => (
-                        <button key={emoji} onClick={() => handleEmojiClick(emoji)} className="text-2xl hover:bg-spinny-light-gray dark:hover:bg-brand-gray-600 rounded-md p-1">
+                        <button key={emoji} onClick={() => handleEmojiClick(emoji)} className="text-2xl hover:bg-reride-light-gray dark:hover:bg-brand-gray-600 rounded-md p-1">
                             {emoji}
                         </button>
                     ))}

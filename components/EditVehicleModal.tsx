@@ -212,7 +212,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
 
     const FormInput = ({ label, name, type = 'text', value, required = false, placeholder }: { label: string, name: keyof Vehicle | string, type?: string, value: any, required?: boolean, placeholder?: string }) => (
         <div>
-            <label className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark mb-1">
+            <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
                 {label}
                 {required && <span className="text-red-500 ml-1">*</span>}
             </label>
@@ -224,7 +224,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                 onBlur={handleBlur}
                 required={required}
                 placeholder={placeholder}
-                className={`mt-1 block w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-transparent transition-all duration-200 ${
+                className={`mt-1 block w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent transition-all duration-200 ${
                     errors[name as string] 
                         ? 'border-red-500 focus:ring-red-500' 
                         : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
@@ -242,8 +242,8 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             onClick={() => setActiveTab(tab as any)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                 activeTab === tab
-                    ? 'bg-spinny-orange text-white shadow-md'
-                    : 'text-spinny-text-dark dark:text-spinny-text-dark hover:bg-gray-100 dark:hover:bg-gray-700'
+                    ? 'bg-reride-orange text-white shadow-md'
+                    : 'text-reride-text-dark dark:text-reride-text-dark hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
         >
             <span>{icon}</span>
@@ -256,7 +256,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
                 <form onSubmit={handleSubmit} className="flex flex-col h-full">
                     {/* Header */}
-                    <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-spinny-orange to-spinny-blue">
+                    <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-reride-orange to-reride-blue">
                         <div>
                             <h2 className="text-2xl font-bold text-white">Edit Vehicle</h2>
                             <p className="text-white/90 text-sm">{vehicle.year} {vehicle.make} {vehicle.model}</p>
@@ -283,7 +283,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                         {activeTab === 'basic' && (
                             <div className="space-y-6">
                                 <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                                    <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-white mb-4 flex items-center gap-2">
+                                    <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-4 flex items-center gap-2">
                                         <span>📋</span> Core Details
                                     </h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -300,18 +300,18 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                 </div>
 
                                 <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                                    <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-white mb-4 flex items-center gap-2">
+                                    <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-4 flex items-center gap-2">
                                         <span>🛡️</span> Insurance Details
                                     </h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <FormInput label="Insurance Validity" name="insuranceValidity" value={formData.insuranceValidity} placeholder="Aug 2027" />
                                         <div>
-                                            <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Insurance Type</label>
+                                            <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Insurance Type</label>
                                             <select 
                                                 name="insuranceType" 
                                                 value={formData.insuranceType} 
                                                 onChange={handleChange} 
-                                                className="mt-1 block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-transparent"
+                                                className="mt-1 block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent"
                                             >
                                                 <option value="">Select insurance type</option>
                                                 <option value="Third Party">Third Party</option>
@@ -323,18 +323,18 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                 </div>
 
                                 <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                                    <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-white mb-4 flex items-center gap-2">
+                                    <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-4 flex items-center gap-2">
                                         <span>📝</span> Description
                                     </h3>
                                     <div>
-                                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">Vehicle Description</label>
+                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">Vehicle Description</label>
                                         <textarea 
                                             name="description" 
                                             value={formData.description} 
                                             onChange={handleChange} 
                                             rows={4} 
                                             placeholder="Describe the vehicle's condition, history, and key selling points..."
-                                            className="block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-transparent resize-none"
+                                            className="block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent resize-none"
                                         />
                                     </div>
                                 </div>
@@ -343,7 +343,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
 
                         {activeTab === 'specs' && (
                             <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                                <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-white mb-6 flex items-center gap-2">
+                                <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-6 flex items-center gap-2">
                                     <span>⚙️</span> Technical Specifications
                                 </h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -361,17 +361,17 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                         {activeTab === 'media' && (
                             <div className="space-y-6">
                                 <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                                    <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-white mb-4 flex items-center gap-2">
+                                    <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-4 flex items-center gap-2">
                                         <span>📷</span> Vehicle Images
                                     </h3>
-                                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-spinny-orange transition-colors">
+                                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-reride-orange transition-colors">
                                         <div className="flex flex-col items-center gap-4">
-                                            <div className="w-12 h-12 bg-spinny-orange/10 rounded-full flex items-center justify-center">
+                                            <div className="w-12 h-12 bg-reride-orange/10 rounded-full flex items-center justify-center">
                                                 <span className="text-2xl">📸</span>
                                             </div>
                                             <div>
                                                 <label htmlFor="file-upload" className="cursor-pointer">
-                                                    <span className="text-lg font-medium text-spinny-orange hover:text-spinny-blue transition-colors">
+                                                    <span className="text-lg font-medium text-reride-orange hover:text-reride-blue transition-colors">
                                                         Click to upload images
                                                     </span>
                                                     <input 
@@ -392,7 +392,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                     </div>
                                     {formData.images.length > 0 && (
                                         <div className="mt-4">
-                                            <p className="text-sm font-medium text-spinny-text-dark dark:text-white mb-3">
+                                            <p className="text-sm font-medium text-reride-text-dark dark:text-white mb-3">
                                                 Uploaded Images ({formData.images.length})
                                             </p>
                                             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -418,7 +418,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                 </div>
 
                                 <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                                    <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-white mb-4 flex items-center gap-2">
+                                    <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-4 flex items-center gap-2">
                                         <span>⭐</span> Key Features
                                     </h3>
                                     <div className="flex gap-2 mb-4">
@@ -428,12 +428,12 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                             onChange={(e) => setFeatureInput(e.target.value)} 
                                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }} 
                                             placeholder="e.g., Sunroof, Leather Seats, Navigation System" 
-                                            className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-transparent" 
+                                            className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent" 
                                         />
                                         <button 
                                             type="button" 
                                             onClick={handleAddFeature} 
-                                            className="px-4 py-2 bg-spinny-orange text-white rounded-lg hover:bg-spinny-orange/90 transition-colors font-medium"
+                                            className="px-4 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90 transition-colors font-medium"
                                         >
                                             Add
                                         </button>
@@ -443,13 +443,13 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                             {formData.features.map(feature => (
                                                 <span 
                                                     key={feature} 
-                                                    className="bg-spinny-orange/10 text-spinny-orange text-sm font-medium px-3 py-1 rounded-full flex items-center gap-2 border border-spinny-orange/20"
+                                                    className="bg-reride-orange/10 text-reride-orange text-sm font-medium px-3 py-1 rounded-full flex items-center gap-2 border border-reride-orange/20"
                                                 >
                                                     {feature}
                                                     <button 
                                                         type="button" 
                                                         onClick={() => handleRemoveFeature(feature)} 
-                                                        className="text-spinny-orange hover:text-red-500 transition-colors"
+                                                        className="text-reride-orange hover:text-red-500 transition-colors"
                                                     >
                                                         ×
                                                     </button>
@@ -463,12 +463,12 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
 
                         {activeTab === 'quality' && (
                             <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-                                <h3 className="text-lg font-semibold text-spinny-text-dark dark:text-white mb-6 flex items-center gap-2">
+                                <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-6 flex items-center gap-2">
                                     <span>✅</span> Quality Report
                                 </h3>
                                 <div className="space-y-6">
                                     <div>
-                                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">
+                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
                                             Quality Summary
                                         </label>
                                         <textarea 
@@ -477,11 +477,11 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                             onChange={handleQualityReportChange} 
                                             rows={4} 
                                             placeholder="Describe the overall condition and quality of the vehicle..."
-                                            className="block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-transparent resize-none"
+                                            className="block w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent resize-none"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-spinny-text-dark dark:text-white mb-1">
+                                        <label className="block text-sm font-medium text-reride-text-dark dark:text-white mb-1">
                                             Fixes Done / Upgrades
                                         </label>
                                         <div className="flex gap-2 mb-4">
@@ -491,7 +491,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                                 onChange={(e) => setFixInput(e.target.value)} 
                                                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFix(); } }} 
                                                 placeholder="e.g., New tires, Brake pads replaced, AC service" 
-                                                className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-spinny-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-spinny-orange focus:border-transparent" 
+                                                className="flex-grow px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-reride-text-dark dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent" 
                                             />
                                             <button 
                                                 type="button" 
@@ -537,14 +537,14 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                             <button 
                                 type="button" 
                                 onClick={onClose} 
-                                className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-spinny-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
+                                className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-reride-text-dark dark:text-white rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
                             >
                                 Cancel
                             </button>
                             <button 
                                 type="submit" 
                                 disabled={isSubmitting || Object.keys(errors).length > 0}
-                                className="px-6 py-2 bg-spinny-orange text-white rounded-lg hover:bg-spinny-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                                className="px-6 py-2 bg-reride-orange text-white rounded-lg hover:bg-reride-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
                             >
                                 {isSubmitting ? (
                                     <>

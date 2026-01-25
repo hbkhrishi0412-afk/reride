@@ -123,7 +123,7 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
       case 'analytics':
         return (
           <div className="text-center py-8">
-            <h2 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">
+            <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
               Analytics
             </h2>
             <p className="text-gray-600">Analytics view coming soon...</p>
@@ -132,7 +132,7 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
       case 'profile':
         return (
           <div className="text-center py-8">
-            <h2 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4">
+            <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
               Profile Settings
             </h2>
             <p className="text-gray-600">Profile settings coming soon...</p>
@@ -148,7 +148,7 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">
+          <h1 className="text-3xl font-bold text-reride-text-dark dark:text-reride-text-dark">
             Seller Dashboard
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">

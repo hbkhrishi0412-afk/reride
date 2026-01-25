@@ -25,7 +25,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
     if (!seller) {
         return (
             <div className="flex items-center justify-center min-h-screen">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spinny-orange"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-reride-orange"></div>
                 <span className="ml-3 text-gray-600 dark:text-gray-300">Loading Seller Profile...</span>
             </div>
         );
@@ -84,7 +84,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
             {/* Premium Back Button */}
             <button 
                 onClick={onBack} 
-                className="mb-6 group flex items-center gap-2 bg-white text-spinny-text-dark dark:text-brand-gray-200 font-semibold py-2.5 px-5 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 dark:hover:bg-brand-gray-700 transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-0.5"
+                className="mb-6 group flex items-center gap-2 bg-white text-reride-text-dark dark:text-brand-gray-200 font-semibold py-2.5 px-5 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 dark:hover:bg-brand-gray-700 transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-0.5"
             >
                 <svg className="w-5 h-5 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />

@@ -48,7 +48,7 @@ function supabaseRowToConversation(row: any): Conversation {
     customerName: row.customer_name || '',
     sellerId: row.seller_id || '',
     sellerName: row.seller_name || undefined,
-    vehicleId: Number(row.vehicle_id) || 0,
+    vehicleId: row.vehicle_id != null ? Number(row.vehicle_id) : 0,
     vehicleName: row.vehicle_name || '',
     vehiclePrice: row.vehicle_price ? Number(row.vehicle_price) : undefined,
     messages: (row.metadata?.messages || []) as ChatMessage[],
@@ -65,8 +65,9 @@ function supabaseRowToConversation(row: any): Conversation {
 }
 
 // Helper to convert Conversation type to Supabase row
-function conversationToSupabaseRow(conversation: Partial<Conversation>): any {
-  return {
+// isUpdate: if true, don't set created_at (preserve original), always set updated_at
+function conversationToSupabaseRow(conversation: Partial<Conversation>, isUpdate: boolean = false): any {
+  const row: any = {
     id: conversation.id,
     customer_id: conversation.customerId || null,
     seller_id: conversation.sellerId || null,
@@ -82,12 +83,28 @@ function conversationToSupabaseRow(conversation: Partial<Conversation>): any {
     is_flagged: conversation.isFlagged || false,
     flag_reason: conversation.flagReason || null,
     flagged_at: conversation.flaggedAt || null,
-    created_at: conversation.createdAt || new Date().toISOString(),
-    updated_at: conversation.updatedAt || new Date().toISOString(),
-    metadata: {
-      messages: conversation.messages || [],
-    },
   };
+  
+  // Only set created_at on create, not on update (preserve original timestamp)
+  if (!isUpdate) {
+    row.created_at = conversation.createdAt || new Date().toISOString();
+  }
+  
+  // Always set updated_at to current time on updates, or use provided value
+  if (isUpdate) {
+    row.updated_at = new Date().toISOString();
+  } else {
+    row.updated_at = conversation.updatedAt || new Date().toISOString();
+  }
+  
+  // Only include metadata if messages are provided
+  if (conversation.messages !== undefined) {
+    row.metadata = {
+      messages: Array.isArray(conversation.messages) ? conversation.messages : [],
+    };
+  }
+  
+  return row;
 }
 
 // Conversation service for Supabase
@@ -97,7 +114,7 @@ export const supabaseConversationService = {
     const id = `${conversationData.customerId}_${conversationData.vehicleId}`;
     
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    const row = conversationToSupabaseRow({ ...conversationData, id });
+    const row = conversationToSupabaseRow({ ...conversationData, id }, false); // false = create operation
     
     const { data, error } = await supabase
       .from('conversations')
@@ -106,7 +123,19 @@ export const supabaseConversationService = {
       .single();
     
     if (error) {
+      // Check for connection/network errors
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+      }
+      // Check for duplicate key errors
+      if (error.code === '23505' || error.message.includes('duplicate') || error.message.includes('unique')) {
+        throw new Error(`Conversation already exists: ${id}`);
+      }
       throw new Error(`Failed to create conversation: ${error.message}`);
+    }
+    
+    if (!data) {
+      throw new Error(`Failed to create conversation: No data returned from insert operation.`);
     }
     
     return supabaseRowToConversation(data);
@@ -122,7 +151,21 @@ export const supabaseConversationService = {
       .eq('id', id)
       .single();
     
-    if (error || !data) {
+    // PGRST116 = not found (expected when conversation doesn't exist)
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      // For connection errors, throw to allow caller to handle
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+      }
+      // For other errors, log and return null (permission issues, etc.)
+      console.error('Error fetching conversation:', error.message);
+      return null;
+    }
+    
+    if (!data) {
       return null;
     }
     
@@ -138,6 +181,10 @@ export const supabaseConversationService = {
       .select('*');
     
     if (error) {
+      // Check for connection/network errors
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+      }
       throw new Error(`Failed to fetch conversations: ${error.message}`);
     }
     
@@ -155,56 +202,88 @@ export const supabaseConversationService = {
       .eq('id', id)
       .single();
     
-    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = not found
+    // Check if conversation exists
+    if (fetchError) {
+      if (fetchError.code === 'PGRST116') {
+        // Conversation not found
+        throw new Error(`Conversation not found: ${id}`);
+      }
+      // Other errors (connection issues, etc.)
       throw new Error(`Failed to fetch existing conversation: ${fetchError.message}`);
     }
     
-    const row = conversationToSupabaseRow(updates);
+    if (!existingConversation) {
+      throw new Error(`Conversation not found: ${id}`);
+    }
     
-    // Remove id from updates
+    // Convert updates to row format (isUpdate=true to preserve created_at and set updated_at)
+    const row = conversationToSupabaseRow(updates, true); // true = update operation
+    
+    // Remove id from updates (don't update the id field)
     delete row.id;
+    
+    // Remove created_at from updates (preserve original creation timestamp)
+    delete row.created_at;
     
     // CRITICAL: Merge metadata (messages) instead of replacing it
     // This preserves existing messages when updating other conversation fields
-    if (row.metadata && existingConversation?.metadata) {
-      // Merge metadata fields first
-      row.metadata = {
-        ...(existingConversation.metadata || {}),
-        ...(row.metadata || {})
-      };
-      // Then handle messages specifically
-      if (updates.messages && Array.isArray(updates.messages)) {
-        // New messages provided - use them (they should be the full array)
-        row.metadata.messages = updates.messages;
-      } else {
-        // No new messages - preserve existing messages (already merged above, but ensure it's set)
-        if (!row.metadata.messages) {
-          row.metadata.messages = existingConversation.metadata.messages || [];
-        }
+    const existingMessages = existingConversation?.metadata?.messages || [];
+    
+    if (updates.messages !== undefined) {
+      // Messages are being updated - use the provided messages array
+      // This handles both adding new messages and replacing the entire array
+      if (!row.metadata) {
+        row.metadata = {};
       }
-    } else if (row.metadata && !existingConversation?.metadata) {
-      // New metadata, no existing - use as is
-      // Ensure messages array exists if provided
-      if (updates.messages && Array.isArray(updates.messages)) {
-        row.metadata.messages = updates.messages;
+      row.metadata.messages = Array.isArray(updates.messages) ? updates.messages : [];
+    } else {
+      // No messages in updates - preserve existing messages
+      // Ensure metadata object exists to store messages
+      if (!row.metadata) {
+        row.metadata = {};
       }
-    } else if (!row.metadata && existingConversation?.metadata) {
-      // No new metadata, preserve existing
-      row.metadata = existingConversation.metadata;
+      // Preserve existing messages
+      row.metadata.messages = existingMessages;
+      
+      // Preserve any other metadata fields that might exist
+      if (existingConversation?.metadata) {
+        Object.keys(existingConversation.metadata).forEach(key => {
+          if (key !== 'messages' && !row.metadata![key]) {
+            row.metadata![key] = existingConversation.metadata![key];
+          }
+        });
+      }
     }
     
-    // Only include metadata if it has values
-    if (row.metadata && Object.keys(row.metadata).length === 0) {
-      delete row.metadata;
+    // Always ensure messages array exists (even if empty)
+    if (row.metadata && !row.metadata.messages) {
+      row.metadata.messages = [];
     }
     
-    const { error } = await supabase
+    // Only include metadata if it has at least the messages field
+    if (row.metadata && (!row.metadata.messages || Object.keys(row.metadata).length === 0)) {
+      // If metadata is empty or has no messages, ensure messages array exists
+      row.metadata.messages = row.metadata.messages || [];
+    }
+    
+    // Update and verify that rows were actually updated
+    const { error, data: updateData } = await supabase
       .from('conversations')
       .update(row)
-      .eq('id', id);
+      .eq('id', id)
+      .select();
     
     if (error) {
+      // Check for connection/network errors
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+      }
       throw new Error(`Failed to update conversation: ${error.message}`);
+    }
+    
+    // Verify that the update actually affected a row
+    if (!updateData || updateData.length === 0) {
+      throw new Error(`Conversation update failed: No rows were updated. Conversation may not exist or identifier mismatch.`);
     }
   },
 
@@ -212,13 +291,23 @@ export const supabaseConversationService = {
   async delete(id: string): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
-    const { error } = await supabase
+    const { error, data: deleteData } = await supabase
       .from('conversations')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select();
     
     if (error) {
+      // Check for connection/network errors
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+      }
       throw new Error(`Failed to delete conversation: ${error.message}`);
+    }
+    
+    // Verify that the delete actually affected a row
+    if (!deleteData || deleteData.length === 0) {
+      throw new Error(`Conversation delete failed: No rows were deleted. Conversation may not exist.`);
     }
   },
 
@@ -232,6 +321,10 @@ export const supabaseConversationService = {
       .eq('customer_id', customerId);
     
     if (error) {
+      // Check for connection/network errors
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+      }
       throw new Error(`Failed to fetch conversations by customer: ${error.message}`);
     }
     
@@ -248,6 +341,10 @@ export const supabaseConversationService = {
       .eq('seller_id', sellerId);
     
     if (error) {
+      // Check for connection/network errors
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+      }
       throw new Error(`Failed to fetch conversations by seller: ${error.message}`);
     }
     
@@ -265,7 +362,21 @@ export const supabaseConversationService = {
       .eq('customer_id', customerId)
       .single();
     
-    if (error || !data) {
+    // PGRST116 = not found (expected when conversation doesn't exist)
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      // For connection errors, throw to allow caller to handle
+      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+      }
+      // For other errors, log and return null (permission issues, etc.)
+      console.error('Error fetching conversation by vehicle and customer:', error.message);
+      return null;
+    }
+    
+    if (!data) {
       return null;
     }
     
@@ -287,4 +398,5 @@ export const supabaseConversationService = {
     });
   },
 };
+
 

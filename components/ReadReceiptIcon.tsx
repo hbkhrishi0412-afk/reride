@@ -70,12 +70,12 @@ export const OfferModal: React.FC<{
                 <form onSubmit={handleSubmit}>
                     <div className="p-6">
                         <div className="flex justify-between items-start mb-4">
-                            <h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark">{title}</h2>
+                            <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">{title}</h2>
                             <button type="button" onClick={onClose} className="text-gray-400 text-2xl">&times;</button>
                         </div>
-                        {listingPrice && <p className="text-sm text-spinny-text dark:text-spinny-text mb-4">Listing Price: {formatCurrency(listingPrice)}</p>}
+                        {listingPrice && <p className="text-sm text-reride-text dark:text-reride-text mb-4">Listing Price: {formatCurrency(listingPrice)}</p>}
                         <div>
-                            <label htmlFor="offer-price" className="block text-sm font-medium mb-1 text-spinny-text-dark dark:text-spinny-text-dark">Your Offer Amount (₹)</label>
+                            <label htmlFor="offer-price" className="block text-sm font-medium mb-1 text-reride-text-dark dark:text-reride-text-dark">Your Offer Amount (₹)</label>
                             <input
                                 type="text"
                                 id="offer-price"
@@ -85,10 +85,10 @@ export const OfferModal: React.FC<{
                                 style={{ colorScheme: 'light dark' }}
                                 autoFocus
                                 required
-                                className="w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg bg-white dark:bg-brand-gray-700 text-lg text-gray-900 dark:text-white focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--spinny-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
+                                className="w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg bg-white dark:bg-brand-gray-700 text-lg text-gray-900 dark:text-white focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
                             />
                         </div>
-                        {error && <p className="text-sm text-spinny-orange mt-2">{error}</p>}
+                        {error && <p className="text-sm text-reride-orange mt-2">{error}</p>}
                     </div>
                     <div className="bg-white dark:bg-gray-800 px-6 py-4 flex justify-end rounded-b-xl">
                         <button type="submit" className="px-6 py-2 btn-brand-primary text-white font-bold rounded-lg transition-colors">Submit Offer</button>
@@ -124,11 +124,11 @@ export const OfferMessage: React.FC<{
     });
     
     const statusInfo = {
-        pending: { text: "Pending", color: "bg-spinny-blue-light text-spinny-text-dark dark:bg-spinny-blue/50 dark:text-spinny-text-dark border-gray-200" },
-        accepted: { text: "Accepted", color: "bg-spinny-orange-light text-spinny-orange dark:bg-spinny-orange/50 dark:text-spinny-orange border-spinny-orange" },
-        rejected: { text: "Rejected", color: "bg-spinny-orange-light text-spinny-orange dark:bg-spinny-orange/50 dark:text-spinny-orange border-spinny-orange" },
-        countered: { text: "Countered", color: "bg-white-dark text-spinny-text-dark dark:bg-white dark:text-spinny-text-dark border-gray-500" },
-        confirmed: { text: "Confirmed", color: "bg-spinny-orange-light text-spinny-orange dark:bg-spinny-orange/50 dark:text-spinny-orange border-spinny-orange" },
+        pending: { text: "Pending", color: "bg-reride-blue-light text-reride-text-dark dark:bg-reride-blue/50 dark:text-reride-text-dark border-gray-200" },
+        accepted: { text: "Accepted", color: "bg-reride-orange-light text-reride-orange dark:bg-reride-orange/50 dark:text-reride-orange border-reride-orange" },
+        rejected: { text: "Rejected", color: "bg-reride-orange-light text-reride-orange dark:bg-reride-orange/50 dark:text-reride-orange border-reride-orange" },
+        countered: { text: "Countered", color: "bg-white-dark text-reride-text-dark dark:bg-white dark:text-reride-text-dark border-gray-500" },
+        confirmed: { text: "Confirmed", color: "bg-reride-orange-light text-reride-orange dark:bg-reride-orange/50 dark:text-reride-orange border-reride-orange" },
     };
 
     const handleCounterSubmit = (price: number) => {
@@ -138,18 +138,18 @@ export const OfferMessage: React.FC<{
     
     return (
         <>
-            <div className={`p-3 border-l-4 rounded-r-lg bg-spinny-off-white dark:bg-brand-gray-700/50 border-gray-200`}>
+            <div className={`p-3 border-l-4 rounded-r-lg bg-reride-off-white dark:bg-brand-gray-700/50 border-gray-200`}>
                 <div className="flex justify-between items-start">
                     <div>
-                        <p className="font-semibold text-spinny-text-dark dark:text-spinny-text-dark">{msg.sender === 'user' ? 'Offer Made' : 'Counter-Offer'}</p>
-                        <p className="text-xl font-bold text-spinny-text-dark dark:text-white">{formatCurrency(offerPrice || 0)}</p>
+                        <p className="font-semibold text-reride-text-dark dark:text-reride-text-dark">{msg.sender === 'user' ? 'Offer Made' : 'Counter-Offer'}</p>
+                        <p className="text-xl font-bold text-reride-text-dark dark:text-white">{formatCurrency(offerPrice || 0)}</p>
                         {counterPrice && (
-                            <p className="text-xs text-spinny-text dark:text-gray-300 line-through">
+                            <p className="text-xs text-reride-text dark:text-gray-300 line-through">
                                 Original: {formatCurrency(counterPrice)}
                             </p>
                         )}
                     </div>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-spinny-blue-light text-spinny-text-dark`}>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-reride-blue-light text-reride-text-dark`}>
                         {statusInfo[status || 'pending'].text}
                     </span>
                 </div>

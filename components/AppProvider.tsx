@@ -1195,11 +1195,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ]);
         };
         
-        // Load vehicles and users in parallel with aggressive timeout for instant response
+        // Load vehicles and users in parallel with OLX-style timeout (3 seconds for initial 30 vehicles)
         Promise.all([
           loadWithTimeout(
             dataService.getVehicles(isAdmin).catch(() => []),
-            2000, // Aggressive 2-second timeout for instant response
+            3000, // OLX-style: 3 seconds for initial 30 vehicles (faster than loading all)
             []
           ),
           loadWithTimeout(
