@@ -79,3 +79,4 @@ Or use the provided script:
 - `MIGRATION_GUIDE.md` - Updated schema documentation
 - `scripts/add-password-column-to-users.sql` - SQL script to add password column
 
+

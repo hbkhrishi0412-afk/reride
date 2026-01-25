@@ -13,6 +13,7 @@ import { getAuthHeaders } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
+import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 
 interface VehicleUpdateOptions {
   successMessage?: string;
@@ -1131,6 +1132,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Load initial data with instant cache display and background refresh
   useEffect(() => {
     let isMounted = true;
+    let hasLoadedFreshData = false; // Track if we've already loaded fresh data
     
     const loadInitialData = async () => {
       try {
@@ -1166,6 +1168,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         } catch (cacheError) {
           console.warn('Failed to load cached users:', cacheError);
+        }
+        
+        // STEP 2.5: Load cached conversations IMMEDIATELY (for admin panel)
+        try {
+          const cachedConversations = getConversations();
+          if (cachedConversations && cachedConversations.length > 0 && isMounted) {
+            setConversations(cachedConversations);
+            console.log(`✅ Instantly loaded ${cachedConversations.length} cached conversations`);
+          }
+        } catch (cacheError) {
+          console.warn('Failed to load cached conversations:', cacheError);
         }
         
         // STEP 3: Fetch fresh data from API in background (non-blocking)
@@ -1330,9 +1343,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           })(),
           
-          // Conversations
+          // Conversations - load cached first, then refresh in background
           (async () => {
             try {
+              // STEP 1: Load cached conversations immediately (non-blocking)
+              try {
+                const cachedConversations = getConversations();
+                if (cachedConversations && cachedConversations.length > 0 && isMounted) {
+                  setConversations(cachedConversations);
+                  console.log(`✅ Instantly loaded ${cachedConversations.length} cached conversations`);
+                }
+              } catch (cacheError) {
+                console.warn('Failed to load cached conversations:', cacheError);
+              }
+              
+              // STEP 2: Fetch fresh conversations in background (non-blocking, with timeout)
               let userEmail: string | undefined;
               let userRole: string | undefined;
               try {
@@ -1345,27 +1370,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               } catch {}
               
               if (userEmail || userRole) {
-                const { getConversationsFromMongoDB } = await import('../services/conversationService');
-                const result = userRole === 'seller' 
-                  ? await getConversationsFromMongoDB(undefined, userEmail)
-                  : userRole === 'customer'
-                  ? await getConversationsFromMongoDB(userEmail)
-                  : await getConversationsFromMongoDB();
+                // Use timeout to prevent blocking - max 3 seconds
+                const conversationPromise = (async () => {
+                  const { getConversationsFromMongoDB } = await import('../services/conversationService');
+                  return userRole === 'seller' 
+                    ? await getConversationsFromMongoDB(undefined, userEmail)
+                    : userRole === 'customer'
+                    ? await getConversationsFromMongoDB(userEmail)
+                    : await getConversationsFromMongoDB();
+                })();
+                
+                const timeoutPromise = new Promise<{ success: boolean; data?: Conversation[] }>((resolve) => {
+                  setTimeout(() => resolve({ success: false }), 3000);
+                });
+                
+                const result = await Promise.race([conversationPromise, timeoutPromise]);
                 
                 if (isMounted) {
                   if (result.success && result.data) {
                     setConversations(result.data);
-                  } else {
-                    const localConversations = getConversations();
-                    setConversations(localConversations || []);
+                    // Cache the fresh data
+                    try {
+                      localStorage.setItem('reRideConversations', JSON.stringify(result.data));
+                    } catch {}
                   }
+                  // If result failed but we already have cached data, keep using cache
                 }
               }
             } catch (error) {
               console.warn('Failed to load conversations:', error);
               if (isMounted) {
                 const localConversations = getConversations();
-                setConversations(localConversations || []);
+                if (localConversations && localConversations.length > 0) {
+                  setConversations(localConversations);
+                } else {
+                  setConversations([]);
+                }
               }
             }
           })(),
@@ -1433,41 +1473,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [addToast, currentUser?.role]);
 
   // Refresh server-sourced data whenever the authenticated user changes
+  // Only runs when user changes, not on initial load (to avoid duplicate fetches)
   useEffect(() => {
     if (!currentUser) {
       return;
     }
 
     let isSubscribed = true;
+    let hasRunOnce = false; // Prevent multiple runs
 
     const syncLatestData = async () => {
+      // Skip if we've already run this sync (prevent duplicate fetches on rapid user changes)
+      if (hasRunOnce) {
+        return;
+      }
+      hasRunOnce = true;
+
       try {
-        setIsLoading(true);
+        // Don't set loading to true if we already have cached data - show it immediately
+        // Only show loading if we have no cached data
+        const hasCachedVehicles = localStorage.getItem('reRideVehicles_prod');
+        const hasCachedUsers = localStorage.getItem('reRideUsers_prod');
         
-        // dataService now uses request queue internally
-        // Load sequentially with delays
+        if (!hasCachedVehicles && !hasCachedUsers) {
+          setIsLoading(true);
+        }
+        
         // For admin users, load all vehicles (including unpublished/sold)
         const isAdmin = currentUser?.role === 'admin';
-        const vehiclesData = await dataService.getVehicles(isAdmin);
         
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        const usersData = await dataService.getUsers();
+        // Load vehicles and users in PARALLEL for faster loading (no sequential delays)
+        // Use Promise.allSettled to ensure both complete even if one fails
+        const [vehiclesResult, usersResult] = await Promise.allSettled([
+          dataService.getVehicles(isAdmin),
+          dataService.getUsers()
+        ]);
 
         if (!isSubscribed) {
           return;
         }
 
-        setVehicles(vehiclesData);
-        setUsers(usersData);
+        // Update vehicles if fetch succeeded
+        if (vehiclesResult.status === 'fulfilled' && Array.isArray(vehiclesResult.value)) {
+          setVehicles(vehiclesResult.value);
+          // Update recommendations with the latest data
+          if (vehiclesResult.value.length > 0) {
+            setRecommendations(vehiclesResult.value.slice(0, 6));
+          }
+        } else if (vehiclesResult.status === 'rejected') {
+          console.warn('Failed to sync vehicles:', vehiclesResult.reason);
+        }
 
-        // Update recommendations with the latest data
-        if (vehiclesData && vehiclesData.length > 0) {
-          setRecommendations(vehiclesData.slice(0, 6));
+        // Update users if fetch succeeded
+        if (usersResult.status === 'fulfilled' && Array.isArray(usersResult.value)) {
+          setUsers(usersResult.value);
+        } else if (usersResult.status === 'rejected') {
+          console.warn('Failed to sync users:', usersResult.reason);
         }
       } catch (error) {
         console.error('AppProvider: Failed to sync latest data after authentication:', error);
-        addToast('Unable to sync the latest listings. Showing cached data instead.', 'warning');
+        // Don't show toast on every error - only if critical
       } finally {
         if (isSubscribed) {
           setIsLoading(false);
@@ -1475,12 +1540,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    syncLatestData();
+    // Small delay to ensure initial load completes first (prevents duplicate fetches)
+    const timeoutId = setTimeout(() => {
+      syncLatestData();
+    }, 100);
 
     return () => {
       isSubscribed = false;
+      clearTimeout(timeoutId);
     };
-  }, [currentUser?.email, currentUser?.role, addToast]);
+  }, [currentUser?.email, currentUser?.role]);
 
   // Watch for new notifications and show browser notifications
   useEffect(() => {

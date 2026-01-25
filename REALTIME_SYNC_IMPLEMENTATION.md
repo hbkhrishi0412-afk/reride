@@ -616,3 +616,4 @@ For issues:
 3. Check browser console for errors
 4. Test with Supabase CLI: `supabase realtime status`
 
+

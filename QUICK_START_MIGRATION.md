@@ -132,3 +132,4 @@ Instead of:
 - See `MIGRATION_FIX_SUMMARY.md` for technical details
 - Check the error messages - they're now more helpful!
 
+

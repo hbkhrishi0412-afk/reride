@@ -136,3 +136,4 @@ export function getSupabaseAdminClient(): SupabaseClient {
 // Export a default client instance for convenience
 export const supabase = getSupabaseClient();
 
+

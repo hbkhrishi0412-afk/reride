@@ -34,8 +34,8 @@ interface VehicleListProps {
   onCityChange?: (city: string) => void;
 }
 
-// Base items per page - increased from 12 for better browsing experience
-const BASE_ITEMS_PER_PAGE = 24;
+// Base items per page - optimized for performance (10-12 vehicles per load)
+const BASE_ITEMS_PER_PAGE = 12;
 
 const VehicleCardSkeleton: React.FC = () => (
     <div className="bg-white rounded-xl shadow-soft-lg overflow-hidden">
@@ -184,8 +184,10 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [isDesktopFilterVisible, setIsDesktopFilterVisible] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'tile'>('grid');
   const [isAiSearchCollapsed, setIsAiSearchCollapsed] = useState(true); // Start collapsed on mobile for better UX
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   
-  // Pagination removed - showing all vehicles for better user experience
+  // Infinite scroll pagination - load 12 vehicles at a time
 
   // Mobile modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -1113,10 +1115,44 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     return count;
   }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, isWishlistMode, isStateFilterUserSet, initialCategory]);
 
-  // Show all vehicles - no pagination limit
-  // Removed pagination to display all vehicles from database
-  const paginatedVehicles = processedVehicles;
-  const totalPages = 1; // Set to 1 to hide pagination controls
+  // Pagination with infinite scroll - show 12 vehicles per page
+  const paginatedVehicles = useMemo(() => {
+    const startIndex = 0;
+    const endIndex = currentPage * BASE_ITEMS_PER_PAGE;
+    return processedVehicles.slice(startIndex, endIndex);
+  }, [processedVehicles, currentPage]);
+  
+  const totalPages = Math.ceil(processedVehicles.length / BASE_ITEMS_PER_PAGE);
+  const hasMore = currentPage < totalPages;
+  
+  // Infinite scroll: Load more when user scrolls near bottom
+  useEffect(() => {
+    if (!hasMore || isLoadingMore) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          setIsLoadingMore(true);
+          // Small delay for smooth UX
+          setTimeout(() => {
+            setCurrentPage(prev => prev + 1);
+            setIsLoadingMore(false);
+          }, 300);
+        }
+      },
+      { rootMargin: '200px' } // Start loading 200px before reaching bottom
+    );
+    
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+    
+    return () => {
+      if (loadMoreRef.current) {
+        observer.unobserve(loadMoreRef.current);
+      }
+    };
+  }, [hasMore, isLoadingMore]);
 
   if (isWishlistMode) {
      return (
@@ -1532,18 +1568,38 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </div>
               ))
             ) : paginatedVehicles.length > 0 ? (
-              paginatedVehicles.map(vehicle => (
-                <MobileVehicleCard
-                  key={vehicle.id}
-                  vehicle={vehicle}
-                  onSelect={onSelectVehicle}
-                  onToggleWishlist={onToggleWishlist}
-                  onToggleCompare={onToggleCompare}
-                  isInWishlist={wishlist.includes(vehicle.id)}
-                  isInCompare={comparisonList.includes(vehicle.id)}
-                  showActions={true}
-                />
-              ))
+              <>
+                {paginatedVehicles.map(vehicle => (
+                  <MobileVehicleCard
+                    key={vehicle.id}
+                    vehicle={vehicle}
+                    onSelect={onSelectVehicle}
+                    onToggleWishlist={onToggleWishlist}
+                    onToggleCompare={onToggleCompare}
+                    isInWishlist={wishlist.includes(vehicle.id)}
+                    isInCompare={comparisonList.includes(vehicle.id)}
+                    showActions={true}
+                  />
+                ))}
+                {/* Infinite scroll trigger for mobile */}
+                {hasMore && (
+                  <div ref={loadMoreRef} className="flex justify-center py-8">
+                    {isLoadingMore ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin border-orange-500"></div>
+                        <span className="text-gray-600 text-sm">Loading more...</span>
+                      </div>
+                    ) : (
+                      <div className="h-20" />
+                    )}
+                  </div>
+                )}
+                {!hasMore && processedVehicles.length > BASE_ITEMS_PER_PAGE && (
+                  <div className="text-center py-4 text-xs text-gray-600">
+                    Showing all {processedVehicles.length} vehicles
+                  </div>
+                )}
+              </>
             ) : (
               <div 
                 className="text-center py-16 px-4 bg-white rounded-2xl shadow-lg"
@@ -1722,51 +1778,72 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 viewMode === 'grid' ? <VehicleCardSkeleton key={index} /> : <VehicleTileSkeleton key={index} />
               )
             ) : paginatedVehicles.length > 0 ? (
-              paginatedVehicles.map(vehicle => {
-                // Use MobileVehicleCard in mobile app mode
-                if (isMobileApp) {
-                  return (
-                    <MobileVehicleCard
-                      key={vehicle.id}
-                      vehicle={vehicle}
-                      onSelect={onSelectVehicle}
-                      onToggleWishlist={onToggleWishlist}
-                      onToggleCompare={onToggleCompare}
-                      isInWishlist={wishlist.includes(vehicle.id)}
-                      isInCompare={comparisonList.includes(vehicle.id)}
-                      showActions={true}
+              <>
+                {paginatedVehicles.map(vehicle => {
+                  // Use MobileVehicleCard in mobile app mode
+                  if (isMobileApp) {
+                    return (
+                      <MobileVehicleCard
+                        key={vehicle.id}
+                        vehicle={vehicle}
+                        onSelect={onSelectVehicle}
+                        onToggleWishlist={onToggleWishlist}
+                        onToggleCompare={onToggleCompare}
+                        isInWishlist={wishlist.includes(vehicle.id)}
+                        isInCompare={comparisonList.includes(vehicle.id)}
+                        showActions={true}
+                      />
+                    );
+                  }
+                  
+                  // Desktop mode
+                  return viewMode === 'grid' ? (
+                    <VehicleCard 
+                      key={vehicle.id} 
+                      vehicle={vehicle} 
+                      onSelect={onSelectVehicle} 
+                      onToggleCompare={onToggleCompare} 
+                      isSelectedForCompare={comparisonList.includes(vehicle.id)} 
+                      onToggleWishlist={onToggleWishlist} 
+                      isInWishlist={wishlist.includes(vehicle.id)} 
+                      isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} 
+                      onViewSellerProfile={onViewSellerProfile} 
+                      onQuickView={setQuickViewVehicle} 
+                    />
+                  ) : (
+                    <VehicleTile 
+                      key={vehicle.id} 
+                      vehicle={vehicle} 
+                      onSelect={onSelectVehicle} 
+                      onToggleCompare={onToggleCompare} 
+                      isSelectedForCompare={comparisonList.includes(vehicle.id)} 
+                      onToggleWishlist={onToggleWishlist} 
+                      isInWishlist={wishlist.includes(vehicle.id)} 
+                      isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} 
+                      onViewSellerProfile={onViewSellerProfile}
                     />
                   );
-                }
-                
-                // Desktop mode
-                return viewMode === 'grid' ? (
-                  <VehicleCard 
-                    key={vehicle.id} 
-                    vehicle={vehicle} 
-                    onSelect={onSelectVehicle} 
-                    onToggleCompare={onToggleCompare} 
-                    isSelectedForCompare={comparisonList.includes(vehicle.id)} 
-                    onToggleWishlist={onToggleWishlist} 
-                    isInWishlist={wishlist.includes(vehicle.id)} 
-                    isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} 
-                    onViewSellerProfile={onViewSellerProfile} 
-                    onQuickView={setQuickViewVehicle} 
-                  />
-                ) : (
-                  <VehicleTile 
-                    key={vehicle.id} 
-                    vehicle={vehicle} 
-                    onSelect={onSelectVehicle} 
-                    onToggleCompare={onToggleCompare} 
-                    isSelectedForCompare={comparisonList.includes(vehicle.id)} 
-                    onToggleWishlist={onToggleWishlist} 
-                    isInWishlist={wishlist.includes(vehicle.id)} 
-                    isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} 
-                    onViewSellerProfile={onViewSellerProfile}
-                  />
-                );
-              })
+                })}
+                {/* Infinite scroll trigger */}
+                {hasMore && (
+                  <div ref={loadMoreRef} className="col-span-full flex justify-center py-8">
+                    {isLoadingMore ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin border-orange-500"></div>
+                        <span className="text-gray-600">Loading more vehicles...</span>
+                      </div>
+                    ) : (
+                      <div className="h-20" /> // Spacer for intersection observer
+                    )}
+                  </div>
+                )}
+                {/* Show total count */}
+                {!hasMore && processedVehicles.length > BASE_ITEMS_PER_PAGE && (
+                  <div className="col-span-full text-center py-4 text-sm text-gray-600">
+                    Showing all {processedVehicles.length} vehicles
+                  </div>
+                )}
+              </>
             ) : (
               <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
                 <h3 className="text-xl font-semibold text-spinny-text-dark dark:text-brand-gray-200">No Vehicles Found</h3>
@@ -1774,7 +1851,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               </div>
             )}
           </div>
-          {/* Pagination removed - showing all vehicles */}
         </main>
       </div>
 

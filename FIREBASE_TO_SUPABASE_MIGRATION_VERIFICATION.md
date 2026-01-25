@@ -225,3 +225,4 @@ Expected results:
 - No Firebase in package.json
 - Only test files and scripts contain Firebase references
 
+

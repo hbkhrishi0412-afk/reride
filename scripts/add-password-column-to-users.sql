@@ -7,3 +7,4 @@ ADD COLUMN IF NOT EXISTS password TEXT;
 -- Add comment to document the column
 COMMENT ON COLUMN users.password IS 'Bcrypt hashed password for email/password authentication. NULL for OAuth-only users.';
 
+

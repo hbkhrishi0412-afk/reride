@@ -82,3 +82,4 @@ After migration, verify:
 - After migration, configure proper RLS policies in Supabase for production use
 - The Firebase rules update is optional but recommended for future client SDK usage
 
+

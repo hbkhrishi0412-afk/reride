@@ -7,9 +7,13 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { reportWebVitals, logPerformanceMetrics } from './utils/performance';
 import { isDevelopmentEnvironment } from './utils/environment';
 import { initializeViewportZoom } from './utils/viewportZoom';
+import { injectCriticalCSS } from './utils/criticalCSS';
 
 // Initialize viewport zoom fix immediately on app load - applies to ALL pages
 initializeViewportZoom();
+
+// Inject critical CSS for above-the-fold content (prevents render-blocking)
+injectCriticalCSS();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
