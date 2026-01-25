@@ -84,3 +84,4 @@ After migration, verify in Supabase Dashboard:
 - The `metadata` column in notifications stores all additional notification fields that don't have dedicated columns
 - The `flagged_at` column in conversations stores when a conversation was flagged (if applicable)
 
+

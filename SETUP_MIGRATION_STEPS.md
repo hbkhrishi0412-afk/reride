@@ -153,3 +153,4 @@ After migration completes successfully:
 3. Test the migrated data in your application
 4. Consider setting up proper RLS policies (see commented examples in SQL script)
 
+

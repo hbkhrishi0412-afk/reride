@@ -1,85 +1,66 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "vite",
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/api/vehicles",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=600, s-maxage=600, stale-while-revalidate=3600"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/api/vehicle-data",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/main"
-    },
-    {
-      "source": "/manifest.webmanifest",
-      "destination": "/manifest.webmanifest"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/api/main.ts"
     }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Credentials", "value": "true" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,HEAD,OPTIONS,PATCH,DELETE,POST,PUT" },
-        { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization" }
-      ]
-    },
-    {
-      "source": "/index.html",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
-    },
-    {
-      "source": "/assets/(.*).css",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" },
-        { "key": "Content-Type", "value": "text/css; charset=utf-8" }
-      ]
-    },
-    {
-      "source": "/assets/(.*).js",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
-        { "key": "Content-Type", "value": "application/javascript; charset=utf-8" }
-      ]
-    },
-    {
-      "source": "/assets/(.*)\\.(jpg|jpeg|png|gif|webp|svg|ico)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    },
-    {
-      "source": "/manifest.webmanifest",
-      "headers": [
-        { "key": "Content-Type", "value": "application/manifest+json" },
-        { "key": "Cache-Control", "value": "public, max-age=3600" },
-        { "key": "Access-Control-Allow-Origin", "value": "*" }
-      ]
-    },
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" },
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
-    }
-  ],
-  "functions": {
-    "api/**/*.ts": {
-      "maxDuration": 10,
-      "memory": 1024
-    }
-  },
-  "trailingSlash": false
+  ]
 }

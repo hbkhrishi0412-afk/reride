@@ -1,5 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { optimizeImageUrl } from '../utils/imageUtils';
+import { getOptimizedImageUrl } from '../utils/imageUtils';
+
+// Detect format support once
+let formatSupport: { webp: boolean; avif: boolean } | null = null;
+const detectFormatSupport = (): { webp: boolean; avif: boolean } => {
+  if (typeof window === 'undefined') {
+    return { webp: false, avif: false };
+  }
+  if (formatSupport) return formatSupport;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  
+  formatSupport = {
+    webp: ctx ? canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0 : false,
+    avif: ctx ? canvas.toDataURL('image/avif').indexOf('data:image/avif') === 0 : false
+  };
+  return formatSupport;
+};
 
 interface LazyImageProps {
   src: string;
@@ -33,11 +53,16 @@ export const LazyImage: React.FC<LazyImageProps> = ({
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInView, setIsInView] = useState(eager); // Load immediately if eager
   const [hasError, setHasError] = useState(false);
+  const [formatSupportState, setFormatSupportState] = useState<{ webp: boolean; avif: boolean } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
+    // Detect format support on mount
+    const support = detectFormatSupport();
+    setFormatSupportState(support);
+    
     // Skip lazy loading for eager images (critical LCP images)
     if (eager) {
       setIsInView(true);
@@ -90,7 +115,7 @@ export const LazyImage: React.FC<LazyImageProps> = ({
 
   // Ensure src is valid before optimizing
   const validSrc = src && src.trim() !== '' ? src : (placeholder || 'https://via.placeholder.com/800x600?text=Car+Image');
-  const optimizedSrc = isInView ? optimizeImageUrl(validSrc, width, quality) : '';
+  const optimizedSrc = isInView ? getOptimizedImageUrl(validSrc, width, quality) : '';
   const displaySrc = hasError ? (placeholder || 'https://via.placeholder.com/800x600?text=Car+Image') : optimizedSrc;
 
   const handleLoad = () => {
@@ -126,27 +151,72 @@ export const LazyImage: React.FC<LazyImageProps> = ({
         </div>
       )}
 
-      {/* Actual Image */}
-      {isInView && !hasError && finalSrc && (
-        <img
-          ref={imgRef}
-          src={finalSrc}
-          alt={alt}
-          className={`w-full h-full transition-opacity duration-300 ${
-            isLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{ objectFit: 'cover' }}
-          loading={eager ? 'eager' : 'lazy'}
-          fetchPriority={fetchPriority}
-          onLoad={handleLoad}
-          onError={handleError}
-        />
-      )}
+      {/* Actual Image - optimized with WebP/AVIF support */}
+      {isInView && !hasError && finalSrc && (() => {
+        const optimizedUrl = getOptimizedImageUrl(finalSrc, width, quality);
+        const supports = formatSupportState || detectFormatSupport();
+        
+        // Use <picture> element for format selection if browser supports it
+        // Otherwise fall back to single img with optimized URL
+        if (supports.avif || supports.webp) {
+          return (
+            <picture>
+              {/* AVIF source for modern browsers */}
+              {supports.avif && (
+                <source
+                  srcSet={optimizedUrl}
+                  type="image/avif"
+                />
+              )}
+              {/* WebP source as fallback */}
+              {supports.webp && !supports.avif && (
+                <source
+                  srcSet={optimizedUrl}
+                  type="image/webp"
+                />
+              )}
+              {/* Fallback img element */}
+              <img
+                ref={imgRef}
+                src={optimizedUrl}
+                alt={alt}
+                className={`w-full h-full transition-opacity duration-300 ${
+                  isLoaded ? 'opacity-100' : 'opacity-0'
+                }`}
+                style={{ objectFit: 'cover' }}
+                loading={eager ? 'eager' : 'lazy'}
+                fetchPriority={fetchPriority}
+                onLoad={handleLoad}
+                onError={handleError}
+                decoding="async"
+              />
+            </picture>
+          );
+        }
+        
+        // Fallback for browsers without format support
+        return (
+          <img
+            ref={imgRef}
+            src={optimizedUrl}
+            alt={alt}
+            className={`w-full h-full transition-opacity duration-300 ${
+              isLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{ objectFit: 'cover' }}
+            loading={eager ? 'eager' : 'lazy'}
+            fetchPriority={fetchPriority}
+            onLoad={handleLoad}
+            onError={handleError}
+            decoding="async"
+          />
+        );
+      })()}
 
       {/* Fallback for browsers without Intersection Observer or immediate load */}
       {(typeof window === 'undefined' || !window.IntersectionObserver) && !hasError && finalSrc && (
         <img
-          src={optimizeImageUrl(finalSrc, width, quality)}
+          src={getOptimizedImageUrl(finalSrc, width, quality)}
           alt={alt}
           className={`w-full h-full`}
           style={{ objectFit: 'cover' }}

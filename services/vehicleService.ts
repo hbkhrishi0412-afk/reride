@@ -209,6 +209,50 @@ const deleteVehicleLocal = async (vehicleId: number): Promise<{ success: boolean
 
 // --- Production (API) Functions ---
 
+/**
+ * Fetch vehicles with pagination support
+ * @param page - Page number (1-indexed)
+ * @param limit - Number of vehicles per page (default: 12 for optimal performance)
+ * @returns Object with vehicles array and pagination metadata
+ */
+export const getVehiclesApiPaginated = async (
+  page: number = 1,
+  limit: number = 12
+): Promise<{ vehicles: Vehicle[]; pagination: { page: number; limit: number; total: number; pages: number; hasMore: boolean } }> => {
+  const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
+  const response = await authenticatedFetch(`/api/vehicles?page=${page}&limit=${limit}`, {
+    method: 'GET',
+  });
+  const result = await handleApiResponse<{ vehicles: Vehicle[]; pagination?: any }>(response);
+  
+  if (!result.success) {
+    throw new Error(result.reason || result.error || 'Failed to fetch vehicles');
+  }
+  
+  if (result.data && typeof result.data === 'object' && 'vehicles' in result.data) {
+    const vehicles = result.data.vehicles || [];
+    const pagination = result.data.pagination || { page, limit, total: vehicles.length, pages: 1, hasMore: false };
+    
+    const validVehicles = vehicles.filter(isVehicle);
+    if (validVehicles.length !== vehicles.length) {
+      console.warn(`Filtered out ${vehicles.length - validVehicles.length} invalid vehicles`);
+    }
+    
+    return {
+      vehicles: validVehicles,
+      pagination: {
+        page: pagination.page || page,
+        limit: pagination.limit || limit,
+        total: pagination.total || validVehicles.length,
+        pages: pagination.pages || 1,
+        hasMore: pagination.hasMore || false
+      }
+    };
+  }
+  
+  throw new Error('Invalid response format: expected object with vehicles property');
+};
+
 const getVehiclesApi = async (): Promise<Vehicle[]> => {
   const { authenticatedFetch, handleApiResponse } = await import('../utils/authenticatedFetch');
   // Use limit=0 to get all vehicles (backward compatible) or limit=50 for faster load

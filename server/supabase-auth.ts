@@ -45,3 +45,4 @@ export async function verifyIdTokenFromHeader(
   return verifySupabaseToken(req.headers.authorization);
 }
 
+
