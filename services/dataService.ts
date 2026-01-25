@@ -586,6 +586,19 @@ class DataService {
     }
 
     try {
+      // Check if we have an access token before making the request
+      const accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
+      if (!accessToken) {
+        console.warn('⚠️ No access token found. Cannot fetch users from API.');
+        // Try to use cached data
+        const cachedUsers = this.getLocalStorageData<User[]>('reRideUsers_prod', []);
+        if (cachedUsers.length > 0) {
+          console.warn('⚠️ Using cached users data (no token available)');
+          return cachedUsers;
+        }
+        return [];
+      }
+
       const users = await this.makeApiRequest<User[]>('/users');
       // Validate response is an array
       if (!Array.isArray(users)) {
@@ -593,9 +606,35 @@ class DataService {
       }
       // Cache the API data locally for offline use (use production cache key)
       this.setLocalStorageData('reRideUsers_prod', users);
+      console.log(`✅ Successfully fetched ${users.length} users from API`);
       return users;
     } catch (error) {
-      console.error('❌ Production API failed to load users:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('❌ Production API failed to load users:', errorMessage);
+      
+      // Check if it's an authentication/authorization error
+      if (errorMessage.includes('403') || errorMessage.includes('Forbidden') || errorMessage.includes('Admin access required')) {
+        console.error('❌ Access denied: Admin role required to fetch users. Please ensure you are logged in as an admin.');
+        // Still try to use cached data if available
+        const cachedUsers = this.getLocalStorageData<User[]>('reRideUsers_prod', []);
+        if (cachedUsers.length > 0) {
+          console.warn('⚠️ Using cached users data due to access denied');
+          return cachedUsers;
+        }
+        return [];
+      }
+      
+      if (errorMessage.includes('401') || errorMessage.includes('Authentication')) {
+        console.error('❌ Authentication failed: Please log in again.');
+        // Clear potentially stale tokens
+        try {
+          localStorage.removeItem('reRideAccessToken');
+          sessionStorage.removeItem('accessToken');
+        } catch (e) {
+          // Ignore storage errors
+        }
+      }
+      
       // In production, try to use cached API data (not mock data)
       const cachedUsers = this.getLocalStorageData<User[]>('reRideUsers_prod', []);
       if (cachedUsers.length > 0) {
