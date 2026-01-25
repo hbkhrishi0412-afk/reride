@@ -23,7 +23,7 @@ const MobileSearch: React.FC<MobileSearchProps> = ({ onNavigate, onSearch }) => 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50" onClick={() => setIsOpen(false)}>
-      <div className="bg-white rounded-t-lg p-4 mt-20" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-t-lg p-4 mt-20 safe-top" style={{ paddingTop: 'max(5rem, env(safe-area-inset-top, 0px) + 5rem)' }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Search Vehicles</h3>
           <button

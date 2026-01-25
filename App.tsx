@@ -128,6 +128,7 @@ const ServiceCart = React.lazy(() => import('./components/ServiceCart'));
 
 // Lazy-loaded non-critical components (loaded on demand)
 const CommandPalette = React.lazy(() => import('./components/CommandPalette'));
+const KeyboardShortcutsHelp = React.lazy(() => import('./components/KeyboardShortcutsHelp'));
 const ChatWidget = React.lazy(() => import('./components/ChatWidget').then(module => ({ default: module.ChatWidget })));
 const SupportChatWidget = React.lazy(() => import('./components/SupportChatWidget'));
 
@@ -298,6 +299,24 @@ const AppContent: React.FC = React.memo(() => {
     onOfferResponse,
   } = useApp();
   const [serviceProvider, setServiceProvider] = React.useState<any>(null);
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = React.useState(false);
+
+  // Helper function to properly close chat and clear localStorage
+  const handleCloseChat = React.useCallback(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 handleCloseChat called, clearing activeChat');
+    }
+    // Clear localStorage first to prevent auto-restore
+    try {
+      localStorage.removeItem('reRideActiveChat');
+    } catch (e) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to clear activeChat from localStorage:', e);
+      }
+    }
+    // Then clear the active chat state
+    setActiveChat(null);
+  }, [setActiveChat]);
 
   // Simple handler for service cart submissions (wire to real API as needed)
   const handleServiceRequestSubmit = React.useCallback(async (payload: any) => {
@@ -512,18 +531,37 @@ const AppContent: React.FC = React.memo(() => {
           updatedAt: Date.now(),
         }));
       } catch {}
+    } else {
+      // Clear localStorage when chat is closed
+      try {
+        localStorage.removeItem('reRideActiveChat');
+      } catch {}
     }
   }, [activeChat?.id, currentUser?.email]);
 
   // Restore last active chat if present and belongs to the logged-in user
+  // Use a ref to track if we've already attempted restoration to prevent re-opening closed chats
+  const hasRestoredChatRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!currentUser || activeChat) return;
+    // Only restore once per user session, not every time conversations change
+    const userKey = currentUser?.email || 'anonymous';
+    if (!currentUser || activeChat || hasRestoredChatRef.current === userKey) return;
+    
+    // Only restore if conversations are loaded
+    if (!conversations || conversations.length === 0) return;
+    
     try {
       const stored = localStorage.getItem('reRideActiveChat');
-      if (!stored) return;
+      if (!stored) {
+        hasRestoredChatRef.current = userKey;
+        return;
+      }
       const parsed = JSON.parse(stored);
       const storedId = parsed?.id;
-      if (!storedId) return;
+      if (!storedId) {
+        hasRestoredChatRef.current = userKey;
+        return;
+      }
       const normalizedEmail = currentUser.email?.toLowerCase().trim();
       const isCustomer = currentUser.role === 'customer';
       const candidate = conversations.find(c => {
@@ -535,8 +573,16 @@ const AppContent: React.FC = React.memo(() => {
       if (candidate && candidate.id === storedId) {
         setActiveChat(candidate);
       }
-    } catch {}
-  }, [currentUser?.email, currentUser?.role, conversations, activeChat, setActiveChat]);
+      hasRestoredChatRef.current = userKey;
+    } catch {
+      hasRestoredChatRef.current = userKey;
+    }
+  }, [currentUser?.email, currentUser?.role]); // Only depend on user, not conversations
+  
+  // Reset restoration flag when user changes
+  React.useEffect(() => {
+    hasRestoredChatRef.current = null;
+  }, [currentUser?.email]);
 
   // Debug: Log when activeChat changes (must be after destructuring)
   React.useEffect(() => {
@@ -693,6 +739,44 @@ const AppContent: React.FC = React.memo(() => {
     }
   }, [currentUser, currentView, navigate, isMobileApp]);
 
+  // Website-only keyboard shortcuts (Ctrl/Cmd+K for Command Palette)
+  // Only enabled on website, not mobile app
+  useEffect(() => {
+    // Don't add keyboard shortcuts on mobile app
+    if (isMobileApp) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore if user is typing in an input, textarea, or contenteditable
+      const target = event.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Ctrl+K or Cmd+K to open Command Palette
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+      
+      // ? or Ctrl+? to open Keyboard Shortcuts Help
+      if (event.key === '?' && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        setIsKeyboardShortcutsOpen(true);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+        event.preventDefault();
+        setIsKeyboardShortcutsOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileApp, setIsCommandPaletteOpen]);
+
   // Recover vehicle from sessionStorage on mount
   useEffect(() => {
     if (!selectedVehicle && currentView === ViewEnum.DETAIL) {
@@ -738,65 +822,51 @@ const AppContent: React.FC = React.memo(() => {
     switch (currentView) {
       case ViewEnum.HOME:
         if (isMobileApp) {
+          // Return just the component - MobileLayout wrapper is handled by outer wrapper
           return (
-            <MobileLayout
-              showHeader={true}
-              showBottomNav={true}
-              headerTitle={getPageTitle()}
-              currentUser={currentUser}
-              onLogout={handleLogout}
+            <MobileHomePage
+              onSearch={(query) => {
+                setInitialSearchQuery(query);
+                navigate(ViewEnum.USED_CARS);
+              }}
+              onSelectCategory={(category) => {
+                setSelectedCategory(category);
+                navigate(ViewEnum.USED_CARS);
+              }}
+              featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4)}
+              onSelectVehicle={selectVehicle}
+              onToggleCompare={(id) => {
+                setComparisonList(prev => 
+                  prev.includes(id) 
+                    ? prev.filter(vId => vId !== id)
+                    : [...prev, id]
+                );
+              }}
+              comparisonList={comparisonList}
+              onToggleWishlist={(id) => {
+                setWishlist(prev => 
+                  prev.includes(id) 
+                    ? prev.filter(vId => vId !== id)
+                    : [...prev, id]
+                );
+              }}
+              wishlist={wishlist}
+              onViewSellerProfile={(sellerEmail) => {
+                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
+                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
+                if (seller) {
+                  setPublicProfile(seller);
+                  navigate(ViewEnum.SELLER_PROFILE);
+                }
+              }}
+              recommendations={recommendations}
+              allVehicles={vehicles.filter(v => v.status === 'published')}
               onNavigate={navigate}
-              currentView={currentView}
-              wishlistCount={wishlist.length}
-              inboxCount={conversations.filter(c => {
-                if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
-                return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-              }).length}
-            >
-              <MobileHomePage
-                onSearch={(query) => {
-                  setInitialSearchQuery(query);
-                  navigate(ViewEnum.USED_CARS);
-                }}
-                onSelectCategory={(category) => {
-                  setSelectedCategory(category);
-                  navigate(ViewEnum.USED_CARS);
-                }}
-                featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4)}
-                onSelectVehicle={selectVehicle}
-                onToggleCompare={(id) => {
-                  setComparisonList(prev => 
-                    prev.includes(id) 
-                      ? prev.filter(vId => vId !== id)
-                      : [...prev, id]
-                  );
-                }}
-                comparisonList={comparisonList}
-                onToggleWishlist={(id) => {
-                  setWishlist(prev => 
-                    prev.includes(id) 
-                      ? prev.filter(vId => vId !== id)
-                      : [...prev, id]
-                  );
-                }}
-                wishlist={wishlist}
-                onViewSellerProfile={(sellerEmail) => {
-                  const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                  const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                  if (seller) {
-                    setPublicProfile(seller);
-                    navigate(ViewEnum.SELLER_PROFILE);
-                  }
-                }}
-                recommendations={recommendations}
-                allVehicles={vehicles.filter(v => v.status === 'published')}
-                onNavigate={navigate}
-                onSelectCity={(city) => {
-                  setSelectedCity(city);
-                  navigate(ViewEnum.USED_CARS);
-                }}
-              />
-            </MobileLayout>
+              onSelectCity={(city) => {
+                setSelectedCity(city);
+                navigate(ViewEnum.USED_CARS);
+              }}
+            />
           );
         }
         return (
@@ -1313,23 +1383,10 @@ const AppContent: React.FC = React.memo(() => {
 
         // Use MobileDashboard for mobile app, Dashboard for desktop
         if (isMobileApp) {
+          // Return just the component - MobileLayout wrapper is handled by outer wrapper
           return (
             <DashboardErrorBoundary>
-              <MobileLayout
-                showHeader={false}
-                showBottomNav={true}
-                headerTitle={getPageTitle()}
-                currentUser={currentUser}
-                onLogout={handleLogout}
-                onNavigate={navigate}
-                currentView={currentView}
-                wishlistCount={wishlist.length}
-                inboxCount={conversations.filter(c => {
-                  if (!c || !c.sellerId || !currentUser?.email || c.isReadBySeller) return false;
-                  return c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-                }).length}
-              >
-                <MobileDashboard
+              <MobileDashboard
                   currentUser={currentUser}
                   userVehicles={enrichVehiclesWithSellerInfo(
                     sellerVehiclesFiltered,
@@ -1480,7 +1537,6 @@ const AppContent: React.FC = React.memo(() => {
                   onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
                   addToast={addToast}
                 />
-              </MobileLayout>
             </DashboardErrorBoundary>
           );
         }
@@ -2967,7 +3023,7 @@ const AppContent: React.FC = React.memo(() => {
                     if (!phone) return;
                     window.open(`tel:${phone}`);
                   }}
-                  onClose={() => setActiveChat(null)}
+                  onClose={handleCloseChat}
                   onSendMessage={(messageText, type, payload) => {
                     if (type || payload) {
                       sendMessageWithType(activeChat.id, messageText, type, payload);
@@ -3077,7 +3133,17 @@ const AppContent: React.FC = React.memo(() => {
                       const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
                       return seller?.name || seller?.dealershipName || 'Seller';
                     })()}
-                    onClose={() => setActiveChat(null)}
+                    onClose={() => {
+                      // Clear localStorage to prevent auto-restore
+                      try {
+                        localStorage.removeItem('reRideActiveChat');
+                      } catch (e) {
+                        if (process.env.NODE_ENV === 'development') {
+                          console.warn('Failed to clear activeChat from localStorage:', e);
+                        }
+                      }
+                      setActiveChat(null);
+                    }}
                     onSendMessage={(messageText, _type, _payload) => {
                       sendMessage(activeChat.id, messageText);
                     }}
@@ -3172,7 +3238,7 @@ const AppContent: React.FC = React.memo(() => {
                     return activeChat.customerName;
                   }
                 })()}
-                onClose={() => setActiveChat(null)}
+                onClose={handleCloseChat}
                 onSendMessage={(messageText, _type, _payload) => {
                   sendMessage(activeChat.id, messageText);
                 }}
@@ -3255,6 +3321,12 @@ const AppContent: React.FC = React.memo(() => {
             onNavigate={navigate}
             currentUser={currentUser}
             onLogout={handleLogout}
+          />
+        </Suspense>
+        <Suspense fallback={<MinimalLoader />}>
+          <KeyboardShortcutsHelp
+            isOpen={isKeyboardShortcutsOpen}
+            onClose={() => setIsKeyboardShortcutsOpen(false)}
           />
         </Suspense>
         {/* Support Chat Widget - Always available */}

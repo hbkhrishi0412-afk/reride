@@ -795,56 +795,89 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   };
 
   const handleApplyFilters = () => {
-    // Get available options for the selected category/make/model
-    const categoryForValidation = tempFilters.categoryFilter;
-    const makeForValidation = tempFilters.makeFilter?.trim() || '';
-    const modelForValidation = tempFilters.modelFilter?.trim() || '';
-    
-    // Validate fuel type - reset if not available for selected category/make/model
-    let validFuelType = tempFilters.fuelTypeFilter?.trim() || '';
-    if (validFuelType) {
-      const tempFuelTypes = tempUniqueFuelTypes;
-      if (!tempFuelTypes.includes(validFuelType)) {
-        validFuelType = '';
+    try {
+      // Get available options for the selected category/make/model
+      const categoryForValidation = tempFilters.categoryFilter;
+      const makeForValidation = tempFilters.makeFilter?.trim() || '';
+      const modelForValidation = tempFilters.modelFilter?.trim() || '';
+      
+      // Validate fuel type - reset if not available for selected category/make/model
+      let validFuelType = tempFilters.fuelTypeFilter?.trim() || '';
+      if (validFuelType) {
+        const tempFuelTypes = tempUniqueFuelTypes;
+        if (!tempFuelTypes.includes(validFuelType)) {
+          validFuelType = '';
+        }
       }
-    }
-    
-    // Validate year - reset if not available for selected category/make/model
-    let validYear = tempFilters.yearFilter || '0';
-    if (validYear !== '0') {
-      const tempYears = tempUniqueYears;
-      if (!tempYears.includes(Number(validYear))) {
-        validYear = '0';
+      
+      // Validate year - reset if not available for selected category/make/model
+      let validYear = tempFilters.yearFilter || '0';
+      if (validYear !== '0') {
+        const tempYears = tempUniqueYears;
+        if (!tempYears.includes(Number(validYear))) {
+          validYear = '0';
+        }
       }
-    }
-    
-    // Validate color - reset if not available for selected category/make/model
-    let validColor = tempFilters.colorFilter?.trim() || '';
-    if (validColor) {
-      const tempColors = tempUniqueColors;
-      if (!tempColors.includes(validColor)) {
-        validColor = '';
+      
+      // Validate color - reset if not available for selected category/make/model
+      let validColor = tempFilters.colorFilter?.trim() || '';
+      if (validColor) {
+        const tempColors = tempUniqueColors;
+        if (!tempColors.includes(validColor)) {
+          validColor = '';
+        }
       }
+      
+      // Batch all state updates together - use functional updates to ensure consistency
+      setCategoryFilter(categoryForValidation);
+      setMakeFilter(makeForValidation);
+      setModelFilter(modelForValidation);
+      // Create new objects/arrays to ensure React detects the change
+      setPriceRange({ 
+        min: Number(tempFilters.priceRange.min), 
+        max: Number(tempFilters.priceRange.max) 
+      });
+      setMileageRange({ 
+        min: Number(tempFilters.mileageRange.min), 
+        max: Number(tempFilters.mileageRange.max) 
+      });
+      setFuelTypeFilter(validFuelType);
+      setYearFilter(validYear);
+      setColorFilter(validColor);
+      setStateFilter(tempFilters.stateFilter?.trim() || '');
+      
+      // Only mark state filter as user-set if it was actually changed in the modal
+      const newStateFilter = tempFilters.stateFilter?.trim() || '';
+      const stateFilterChanged = newStateFilter !== initialStateFilter;
+      setIsStateFilterUserSet(stateFilterChanged ? !!(newStateFilter && newStateFilter !== '') : initialIsStateFilterUserSet);
+      
+      // Create new array to ensure React detects the change
+      setSelectedFeatures(tempFilters.selectedFeatures ? [...tempFilters.selectedFeatures] : []);
+      setFeatureSearch(''); // Clear feature search when applying filters
+      setCurrentPage(1); // Reset to first page when filters are applied
+      
+      // Close modal
+      setIsFilterModalOpen(false);
+      
+      // Force scroll to top after a brief delay to ensure DOM updates
+      requestAnimationFrame(() => {
+        if (isMobileApp) {
+          // Scroll to top of results
+          const resultsContainer = document.querySelector('[data-testid="vehicle-results"]') || 
+                                   document.querySelector('.vehicle-list-container') ||
+                                   window;
+          if (resultsContainer && 'scrollTo' in resultsContainer) {
+            (resultsContainer as Element).scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error applying filters:', error);
+      // Still close the modal even if there's an error
+      setIsFilterModalOpen(false);
     }
-    
-    setCategoryFilter(categoryForValidation);
-    setMakeFilter(makeForValidation);
-    setModelFilter(modelForValidation);
-    setPriceRange(tempFilters.priceRange);
-    setMileageRange(tempFilters.mileageRange);
-    setFuelTypeFilter(validFuelType);
-    setYearFilter(validYear);
-    setColorFilter(validColor);
-    setStateFilter(tempFilters.stateFilter?.trim() || '');
-    // Only mark state filter as user-set if it was actually changed in the modal
-    // Preserve the original isStateFilterUserSet flag if the value hasn't changed
-    const newStateFilter = tempFilters.stateFilter?.trim() || '';
-    const stateFilterChanged = newStateFilter !== initialStateFilter;
-    setIsStateFilterUserSet(stateFilterChanged ? !!(newStateFilter && newStateFilter !== '') : initialIsStateFilterUserSet);
-    setSelectedFeatures(tempFilters.selectedFeatures || []);
-    setFeatureSearch(''); // Clear feature search when applying filters
-    setCurrentPage(1); // Reset to first page when filters are applied
-    setIsFilterModalOpen(false);
   };
   
   const handleResetTempFilters = () => {
@@ -1485,16 +1518,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </div>
         </div>
 
-        {/* Premium Filter & Sort Bar */}
+        {/* Premium Filter & Sort Bar - Sticky positioning for mobile app */}
         <div 
-          className="sticky top-[56px] z-20 px-4 py-3 mb-2"
-          style={{
-            background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
-            backdropFilter: 'blur(20px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-            borderBottom: '0.5px solid rgba(0, 0, 0, 0.08)',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)'
-          }}
+          className="sticky-filter-bar px-4 py-3 mb-2"
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 flex-1">
@@ -1547,9 +1573,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </div>
         </div>
 
-        {/* Vehicle List */}
-        <div className="px-4 pb-24">
-          <div className="flex flex-col gap-4">
+        {/* Vehicle List - with proper spacing to prevent overlap with sticky filter bar */}
+        <div className="vehicle-list-container px-4 pb-24">
+          <div className="flex flex-col gap-4" data-testid="vehicle-results">
             {isLoading || isAiSearching ? (
               Array.from({ length: 6 }).map((_, index) => (
                 <div
@@ -1727,7 +1753,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </div>
 
           {/* Mobile-optimized filters and sort bar - sticky on mobile */}
-          <div className="sticky top-[56px] lg:static z-20 bg-white/95 backdrop-blur-sm lg:bg-transparent py-0.5 lg:py-0 border-b border-gray-200 lg:border-none -mx-4 px-4 lg:mx-0 lg:px-0 -mt-2">
+          <div 
+            className="sticky-filter-bar lg:static lg:bg-transparent py-2 lg:py-0 lg:border-none -mx-4 px-4 lg:mx-0 lg:px-0 mb-2"
+          >
             <div className="flex flex-col sm:flex-row justify-between items-center gap-2 lg:gap-3">
               <div className='flex items-center gap-1.5 w-full sm:w-auto'>
                 <button onClick={() => setIsDesktopFilterVisible(prev => !prev)} className="hidden lg:block p-1.5 rounded-md bg-white dark:bg-brand-gray-700 hover:bg-reride-off-white dark:hover:bg-brand-gray-600 transition-colors">
@@ -1771,7 +1799,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             </div>
           </div>
 
-          <div className={isMobileApp ? "flex flex-col gap-3" : viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6" : "flex flex-col gap-3 lg:gap-4"}>
+          <div 
+            className={isMobileApp ? "flex flex-col gap-3" : viewMode === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6" : "flex flex-col gap-3 lg:gap-4"}
+            data-testid="vehicle-results"
+            style={isMobileApp ? { paddingTop: '0.5rem' } : {}}
+          >
             {isLoading || isAiSearching ? (
               Array.from({ length: 8 }).map((_, index) => 
                 isMobileApp ? <VehicleCardSkeleton key={index} /> :

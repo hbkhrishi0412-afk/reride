@@ -215,13 +215,19 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       {/* Featured Vehicles Carousel */}
       {featuredVehicles.length > 0 ? (
         <div className="px-4 py-6 bg-white">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Featured Vehicles</h2>
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-1">Featured Vehicles</h2>
+              <p className="text-xs text-gray-500">Handpicked quality vehicles</p>
+            </div>
             <button
               onClick={() => onNavigate(ViewEnum.USED_CARS)}
-              className="text-sm text-orange-500 font-semibold"
+              className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-orange-50 active:scale-95 transition-all"
             >
               View All
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
           
@@ -236,26 +242,35 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 className="flex-shrink-0 w-[calc(100%-2rem)] snap-center"
                 onClick={() => onSelectVehicle(vehicle)}
               >
-                <div className="bg-white rounded-xl shadow-lg overflow-hidden active:scale-[0.98] transition-transform">
-                  <div className="relative h-48">
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden active:scale-[0.98] transition-all duration-300 hover:shadow-2xl border border-gray-100">
+                  <div className="relative h-52 overflow-hidden">
                     <img
                       src={optimizeImageUrl(getFirstValidImage(vehicle.images), 800, 85)}
                       alt={`${vehicle.make} ${vehicle.model}`}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
                     />
-                    <div className="absolute top-3 left-3 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-semibold">
+                    {/* Gradient Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent"></div>
+                    
+                    {/* Verified Badge - Premium Style */}
+                    <div className="absolute top-3 left-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
                       Verified
                     </div>
+                    
+                    {/* Wishlist Button - Premium Style */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onToggleWishlist(vehicle.id);
                       }}
-                      className="absolute top-3 right-3 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center"
+                      className="absolute top-3 right-3 w-11 h-11 bg-white/95 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-all duration-300 hover:scale-110 active:scale-95"
                       style={{ minWidth: '44px', minHeight: '44px' }}
                     >
                       <svg
-                        className={`w-5 h-5 ${wishlist.includes(vehicle.id) ? 'fill-red-500 text-red-500' : 'text-gray-700'}`}
+                        className={`w-5 h-5 transition-all duration-300 ${wishlist.includes(vehicle.id) ? 'fill-red-500 text-red-500 scale-110' : 'text-gray-700'}`}
                         fill={wishlist.includes(vehicle.id) ? 'currentColor' : 'none'}
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -264,25 +279,38 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                       </svg>
                     </button>
                   </div>
-                  <div className="p-4">
-                    <h3 className="font-bold text-gray-900 mb-1">
+                  <div className="p-5">
+                    <h3 className="font-bold text-lg text-gray-900 mb-2 leading-tight">
                       {vehicle.year} {vehicle.make} {vehicle.model}
                     </h3>
-                    <p className="text-lg font-bold text-orange-500 mb-2">
-                      {formatCurrency(vehicle.price)}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
-                      <span>{vehicle.mileage.toLocaleString()} km</span>
-                      <span>•</span>
-                      <span>{vehicle.fuelType}</span>
-                      <span>•</span>
-                      <span>{vehicle.transmission}</span>
+                    <div className="flex items-baseline gap-2 mb-3">
+                      <p className="text-2xl font-black text-orange-500">
+                        {formatCurrency(vehicle.price)}
+                      </p>
+                      <span className="text-xs text-gray-500 line-through opacity-60">
+                        {formatCurrency(vehicle.price * 1.1)}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-gray-600">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex items-center gap-2 text-xs text-gray-600 mb-3 flex-wrap">
+                      <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-lg">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        {vehicle.mileage.toLocaleString()} km
+                      </span>
+                      <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-lg">
+                        {vehicle.fuelType}
+                      </span>
+                      <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-lg">
+                        {vehicle.transmission}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-600 pt-2 border-t border-gray-100">
+                      <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
-                      <span>{vehicle.city || 'N/A'}</span>
+                      <span className="font-medium">{vehicle.city || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
@@ -329,55 +357,179 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         </div>
       )}
 
-      {/* Categories Section */}
-      <div className="px-4 py-6 bg-white border-t border-gray-100">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Browse by Category</h2>
-        <div className="grid grid-cols-5 gap-3">
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              onClick={() => {
-                onSelectCategory(category.id);
-                onNavigate(ViewEnum.USED_CARS);
-              }}
-              className="flex flex-col items-center gap-2 p-3 bg-gray-50 rounded-xl active:scale-95 transition-transform"
-            >
-              <span className="text-3xl">{category.icon}</span>
-              <span className="text-xs font-medium text-gray-700 text-center leading-tight">
-                {category.name}
-              </span>
-              <span className="text-[10px] text-gray-500">{category.count} cars</span>
-            </button>
-          ))}
+      {/* Categories Section - Premium Design */}
+      <div className="px-4 py-6 bg-gradient-to-b from-white to-gray-50">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-2xl font-bold text-gray-900">Browse by Category</h2>
+          <button
+            onClick={() => onNavigate(ViewEnum.USED_CARS)}
+            className="text-sm text-orange-500 font-semibold flex items-center gap-1"
+          >
+            View All
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+        <div className="grid grid-cols-5 gap-2.5">
+          {categories.map((category, index) => {
+            // Define gradient backgrounds for each category
+            const categoryGradients: Record<VehicleCategory, string> = {
+              [VehicleCategory.FOUR_WHEELER]: 'from-blue-500 to-indigo-600',
+              [VehicleCategory.TWO_WHEELER]: 'from-red-500 to-pink-600',
+              [VehicleCategory.THREE_WHEELER]: 'from-yellow-500 to-orange-600',
+              [VehicleCategory.COMMERCIAL]: 'from-purple-500 to-violet-600',
+              [VehicleCategory.FARM]: 'from-green-500 to-emerald-600',
+            };
+            
+            const gradient = categoryGradients[category.id] || 'from-gray-500 to-gray-600';
+            const hasVehicles = category.count > 0;
+            
+            return (
+              <button
+                key={category.id}
+                onClick={() => {
+                  onSelectCategory(category.id);
+                  onNavigate(ViewEnum.USED_CARS);
+                }}
+                className="group relative flex flex-col items-center gap-2.5 p-3.5 bg-white rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+                style={{
+                  animationDelay: `${index * 50}ms`,
+                  minHeight: '100px'
+                }}
+              >
+                {/* Gradient Background on Hover */}
+                <div className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-2xl opacity-0 group-active:opacity-5 group-hover:opacity-10 transition-opacity duration-300`}></div>
+                
+                {/* Icon Container with Gradient */}
+                <div className={`relative w-12 h-12 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-110 transition-all duration-300`}>
+                  <span className="text-2xl relative z-10">{category.icon}</span>
+                  {/* Shine effect */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-xl"></div>
+                </div>
+                
+                {/* Category Name */}
+                <span className="text-xs font-bold text-gray-900 text-center leading-tight group-hover:text-orange-600 transition-colors duration-300">
+                  {category.name}
+                </span>
+                
+                {/* Car Count Badge */}
+                <div className={`flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all duration-300 ${
+                  hasVehicles 
+                    ? 'bg-orange-100 text-orange-600 group-hover:bg-orange-200' 
+                    : 'bg-gray-100 text-gray-500'
+                }`}>
+                  <span>{category.count}</span>
+                  <span className="ml-0.5">cars</span>
+                </div>
+                
+                {/* Active Indicator */}
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Cities Section */}
-      <div className="px-4 py-6 bg-white border-t border-gray-100">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Explore by Location</h2>
+      <div className="px-4 py-6 bg-gradient-to-b from-white to-gray-50">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-1">Explore by Location</h2>
+            <p className="text-xs text-gray-500">Find vehicles near you</p>
+          </div>
           <button
             onClick={() => onNavigate(ViewEnum.USED_CARS)}
-            className="text-sm text-orange-500 font-semibold"
+            className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-orange-50 active:scale-95 transition-all"
           >
             View All
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4" style={{ scrollbarWidth: 'none' }}>
-          {cities.map((city, idx) => (
-            <button
-              key={idx}
-              onClick={() => {
-                onSelectCity(city.name);
-                onNavigate(ViewEnum.USED_CARS);
-              }}
-              className="flex-shrink-0 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl p-4 text-white min-w-[110px] active:scale-95 transition-transform"
-            >
-              <div className="text-2xl font-bold mb-1">{city.abbr}</div>
-              <div className="text-xs font-medium">{city.name}</div>
-              <div className="text-[11px] text-white/90 mt-1">{city.count} cars</div>
-            </button>
-          ))}
+        <div className="flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 scrollbar-hide" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+          {cities.map((city, idx) => {
+            // Define vibrant, premium gradients for each city - matching the design
+            // Using inline styles to ensure colors always render correctly
+            const gradientStyles = [
+              // Purple gradient (Hyderabad) - #A855F7 to #7C3AED to #6D28D9
+              { background: 'linear-gradient(135deg, #A855F7 0%, #9333EA 50%, #7C3AED 100%)' },
+              // Pink/Red gradient (Bangalore) - #EC4899 to #F43F5E to #DC2626
+              { background: 'linear-gradient(135deg, #EC4899 0%, #F43F5E 50%, #DC2626 100%)' },
+              // Green gradient (Pune) - #4ADE80 to #10B981 to #14B8A6
+              { background: 'linear-gradient(135deg, #4ADE80 0%, #10B981 50%, #14B8A6 100%)' },
+              // Purple/Violet gradient (Mumbai) - #8B5CF6 to #9333EA to #D946EF
+              { background: 'linear-gradient(135deg, #8B5CF6 0%, #9333EA 50%, #D946EF 100%)' },
+              // Orange gradient (fallback) - #F97316 to #EA580C to #DC2626
+              { background: 'linear-gradient(135deg, #F97316 0%, #EA580C 50%, #DC2626 100%)' },
+            ];
+            const gradientStyle = gradientStyles[idx % gradientStyles.length];
+            const hasVehicles = city.count > 0;
+            
+            return (
+              <button
+                key={idx}
+                onClick={() => {
+                  onSelectCity(city.name);
+                  onNavigate(ViewEnum.USED_CARS);
+                }}
+                className="group flex-shrink-0 rounded-full p-5 text-white w-[135px] h-[135px] active:scale-95 transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-2 relative overflow-hidden border border-white/30 flex items-center justify-center"
+                style={{
+                  ...gradientStyle,
+                  boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                {/* Animated Background Pattern */}
+                <div className="absolute inset-0 opacity-10">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-3xl transform translate-x-8 -translate-y-8 group-hover:scale-150 transition-transform duration-500"></div>
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full blur-2xl transform -translate-x-6 translate-y-6 group-hover:scale-125 transition-transform duration-500"></div>
+                </div>
+                
+                {/* Shine effect on hover */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                
+                {/* Content */}
+                <div className="relative z-10 flex flex-col items-center justify-center text-center">
+                  {/* City Abbreviation - Large and Bold */}
+                  <div className="text-3xl font-black mb-1.5 drop-shadow-lg leading-none tracking-tight">
+                    {city.abbr}
+                  </div>
+                  
+                  {/* City Name */}
+                  <div className="text-xs font-bold mb-2 text-white/95 leading-tight px-2">
+                    {city.name}
+                  </div>
+                  
+                  {/* Car Count Badge - Premium Glassmorphism Style */}
+                  <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full backdrop-blur-md transition-all duration-300 ${
+                    hasVehicles 
+                      ? 'bg-white/30 hover:bg-white/40 shadow-lg border border-white/40' 
+                      : 'bg-white/20 border border-white/30'
+                  }`}
+                  style={{
+                    backdropFilter: 'blur(12px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(12px) saturate(180%)'
+                  }}>
+                    <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                      <path d="M3 4a1 1 0 00-1 1v10a1 1 0 001 1h1.05a2.5 2.5 0 014.9 0H10a1 1 0 001-1V5a1 1 0 00-1-1H3zM14 7a1 1 0 00-1 1v6.05A2.5 2.5 0 0115.95 16H17a1 1 0 001-1v-5a1 1 0 00-.293-.707l-2-2A1 1 0 0015 7h-1z" />
+                    </svg>
+                    <span className="text-[10px] font-black text-white">
+                      {city.count}
+                    </span>
+                  </div>
+                  
+                  {/* Arrow indicator on hover */}
+                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

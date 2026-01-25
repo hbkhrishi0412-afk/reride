@@ -1880,6 +1880,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentUser, activeChat?.id]);
 
   // Sync activeChat when conversations change
+  // BUT only if activeChat is already set (don't auto-open closed chats)
   useEffect(() => {
     if (activeChat) {
       const updatedConversation = conversations.find(conv => conv.id === activeChat.id);
@@ -1892,7 +1893,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedConversation.isReadByCustomer !== activeChat.isReadByCustomer;
         
         if (hasChanges) {
+          // Only update if chat is still active (not closed)
           setActiveChat(updatedConversation);
+        }
+      } else {
+        // Conversation no longer exists, close the chat
+        setActiveChat(null);
+        try {
+          localStorage.removeItem('reRideActiveChat');
+        } catch (e) {
+          // Silently fail
         }
       }
     }

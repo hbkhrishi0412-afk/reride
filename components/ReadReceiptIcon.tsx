@@ -65,8 +65,37 @@ export const OfferModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[101] p-4 animate-fade-in" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        <div 
+          className="fixed inset-0 flex items-center justify-center p-4" 
+          onClick={onClose}
+          style={{ 
+            zIndex: 2147483000, // Higher than chat widget z-index (2147482000)
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.2s ease-out',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+            <div 
+              className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4" 
+              onClick={e => e.stopPropagation()}
+              style={{ 
+                position: 'relative',
+                zIndex: 2147483001,
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                animation: 'fadeInScale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                transform: 'scale(1)'
+              }}
+            >
                 <form onSubmit={handleSubmit}>
                     <div className="p-6">
                         <div className="flex justify-between items-start mb-4">
