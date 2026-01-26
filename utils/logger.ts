@@ -15,10 +15,12 @@ function sanitizeLogArgs(args: unknown[]): unknown[] {
       return sanitizeError(arg);
     }
     if (typeof arg === 'string') {
-      return sanitizeObject(arg);
+      return sanitizeError(arg);
     }
     if (typeof arg === 'object' && arg !== null) {
-      return sanitizeObject(arg);
+      // Ensure object has index signature
+      const obj = arg as Record<string, unknown>;
+      return sanitizeObject(obj);
     }
     return arg;
   });

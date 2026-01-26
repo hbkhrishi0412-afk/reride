@@ -391,5 +391,23 @@ export const supabaseVehicleService = {
     
     return (data || []).map(supabaseRowToVehicle);
   },
+
+  // Find vehicles by city and status (optimized for city-stats endpoint)
+  async findByCityAndStatus(city: string, status: 'published' | 'unpublished' | 'sold'): Promise<Vehicle[]> {
+    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('city', city)
+      .eq('status', status)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      throw new Error(`Failed to fetch vehicles by city and status: ${error.message}`);
+    }
+    
+    return (data || []).map(supabaseRowToVehicle);
+  },
 };
 

@@ -34,25 +34,24 @@ export default defineConfig({
           return id.endsWith('.ts') || id.endsWith('.js');
         }
         
-        // Exclude server-only Firebase Admin files from client bundle
+        // Exclude server-only Supabase Admin files from client bundle
         // Check for both forward and backslash paths (Windows/Unix compatibility)
-        if (id.includes('/lib/firebase-admin') || id.includes('\\lib\\firebase-admin') ||
-            id.includes('/server/firebase-admin') || id.includes('\\server\\firebase-admin') ||
+        if (id.includes('/server/supabase-admin') || id.includes('\\server\\supabase-admin') ||
             id.includes('/server/') || id.includes('\\server\\') ||
-            id.includes('firebase-admin-db') ||
-            id.includes('firebase-admin-db.js') ||
-            id.includes('firebase-admin-db.ts')) {
+            id.includes('supabase-admin-db') ||
+            id.includes('supabase-admin-db.js') ||
+            id.includes('supabase-admin-db.ts')) {
           return true;
         }
         
-        // Exclude server-side service files that import firebase-admin-db
+        // Exclude server-side service files that import supabase-admin-db
         // These should only be used in API routes, not in client code
-        if (id.includes('/services/firebase-user-service') ||
-            id.includes('/services/firebase-vehicle-service') ||
-            id.includes('/services/firebase-conversation-service') ||
-            id.includes('\\services\\firebase-user-service') ||
-            id.includes('\\services\\firebase-vehicle-service') ||
-            id.includes('\\services\\firebase-conversation-service')) {
+        if (id.includes('/services/supabase-user-service') ||
+            id.includes('/services/supabase-vehicle-service') ||
+            id.includes('/services/supabase-conversation-service') ||
+            id.includes('\\services\\supabase-user-service') ||
+            id.includes('\\services\\supabase-vehicle-service') ||
+            id.includes('\\services\\supabase-conversation-service')) {
           return true;
         }
         
@@ -85,8 +84,8 @@ export default defineConfig({
             }
             
             // Separate heavy libraries into their own chunks for better caching
-            if (id.includes('firebase')) {
-              return 'firebase';
+            if (id.includes('@supabase/supabase-js')) {
+              return 'supabase';
             }
             if (id.includes('chart.js') || id.includes('react-chartjs')) {
               return 'charts';

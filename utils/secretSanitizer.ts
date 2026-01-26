@@ -54,7 +54,7 @@ export function sanitizeError(error: unknown): string {
   
   // Replace sensitive patterns with placeholders
   SENSITIVE_PATTERNS.forEach(pattern => {
-    sanitized = sanitized.replace(pattern, (match, key, value) => {
+    sanitized = sanitized.replace(pattern, (_match, key) => {
       if (key) {
         return `${key}=[REDACTED]`;
       }
@@ -94,11 +94,11 @@ export function sanitizeObject<T extends Record<string, unknown>>(
   obj: T,
   sensitiveFields: string[] = ['password', 'token', 'secret', 'key', 'apiKey', 'accessToken', 'refreshToken', 'privateKey', 'serviceRoleKey']
 ): Partial<T> {
-  const sanitized = { ...obj };
+  const sanitized: Partial<T> = { ...obj };
   
   sensitiveFields.forEach(field => {
     if (field in sanitized) {
-      sanitized[field] = '[REDACTED]' as T[Extract<keyof T, string>];
+      (sanitized as Record<string, unknown>)[field] = '[REDACTED]';
     }
   });
 

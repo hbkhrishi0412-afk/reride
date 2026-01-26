@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes } from 'crypto';
 import { PLAN_DETAILS } from '../constants.js';
 import { planService } from '../services/planService.js';
 import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan } from '../types.js';
@@ -28,25 +28,22 @@ try {
   // Try to initialize Supabase admin client to check availability
   getSupabaseAdminClient();
   USE_SUPABASE = true;
-  } catch (error) {
-    // Don't crash the function if Supabase initialization fails at module load
-    // We'll handle this gracefully in each handler by returning 503 errors
-    // SECURITY: Sanitize error message to prevent secret exposure
-    const { sanitizeError } = await import('../utils/secretSanitizer.js');
-    const errorMessage = sanitizeError(error);
-    logWarn('⚠️ Supabase initialization failed at module load (function will still work, but Supabase operations will return 503):', errorMessage);
-    USE_SUPABASE = false;
-  }
+} catch (error) {
+  // Don't crash the function if Supabase initialization fails at module load
+  // We'll handle this gracefully in each handler by returning 503 errors
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  console.warn('⚠️ Supabase initialization failed at module load (function will still work, but Supabase operations will return 503):', errorMessage);
+  USE_SUPABASE = false;
+}
 
 // Get Supabase status with detailed error information
-// SECURITY: Error messages are sanitized to prevent secret exposure
 function getSupabaseErrorMessage(): string {
   try {
     getSupabaseAdminClient();
     return '';
   } catch (error) {
-    // SECURITY: Sanitize error message - don't expose actual keys or connection strings
-    return 'Supabase database is not available. Please check your SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY configuration.';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return `Supabase database is not available: ${errorMessage}. Please check your SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY configuration.`;
   }
 }
 
@@ -70,8 +67,6 @@ import {
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
-import { createError, createErrorResponse, ErrorCode, getHttpStatusFromErrorCode } from '../utils/errorUtils.js';
-import { sanitizeError } from '../utils/secretSanitizer.js';
 
 // Type for normalized user (without password)
 interface NormalizedUser extends Omit<UserType, 'password'> {
@@ -415,7 +410,7 @@ async function mainHandler(
     return res.status(200).end();
   }
 
-  // Extract pathname early for routing and Firebase Admin checks
+  // Extract pathname early for routing and Supabase Admin checks
   // Handle Vercel rewrites - check original path if available
   let pathname = '/';
   try {
@@ -497,10 +492,11 @@ async function mainHandler(
         if (process.env.NODE_ENV !== 'production') {
           logWarn(`⚠️ Rate limit exceeded for ${rateLimitIdentifier} on ${pathname}`);
         }
-        const error = createError('Too many requests. Please try again later.', ErrorCode.RATE_LIMIT_EXCEEDED, {
+        return res.status(429).json({
+          success: false,
+          reason: 'Too many requests. Please try again later.',
           retryAfter: Math.ceil(config.RATE_LIMIT.WINDOW_MS / 1000)
         });
-        return res.status(getHttpStatusFromErrorCode(error.code)).json(createErrorResponse(error));
       }
       
       res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
@@ -708,10 +704,10 @@ async function mainHandler(
       error.message.includes('PERMISSION_DENIED') ||
       error.message.includes('UNAUTHENTICATED') ||
       error.message.includes('UNAVAILABLE') ||
-      // Firebase connection-related errors
+      // Database connection-related errors
       ((error.message.includes('connect') || error.message.includes('timeout') || error.message.includes('network')) && (
-        error.message.includes('Firebase') ||
-        error.message.includes('firebase') ||
+        error.message.includes('Supabase') ||
+        error.message.includes('supabase') ||
         error.message.includes('database') ||
         error.message.includes('ECONNREFUSED') ||
         error.message.includes('ENOTFOUND')
@@ -721,23 +717,22 @@ async function mainHandler(
     if (isDbError) {
       logError('❌ Database error in main handler:', error instanceof Error ? error.message : 'Unknown error');
       // Check if it's a configuration error vs connection error
-      if (error instanceof Error && (error.message.includes('FIREBASE') || error.message.includes('Firebase') || error.message.includes('firebase'))) {
+      if (error instanceof Error && (error.message.includes('SUPABASE') || error.message.includes('Supabase') || error.message.includes('supabase'))) {
         return res.status(503).json({ 
           success: false, 
-          reason: 'Firebase configuration error. Please check Firebase environment variables.',
-          details: 'The application requires Firebase to be properly configured. Please verify your Firebase credentials and project settings.'
+          reason: 'Supabase configuration error. Please check Supabase environment variables.',
+          details: 'The application requires Supabase to be properly configured. Please verify your Supabase credentials and project settings.'
         });
       }
       // General database connection/auth error
       return res.status(503).json({ 
         success: false, 
-        reason: 'Database connection failed. Please ensure Firebase is properly configured and accessible.',
-        details: 'Unable to connect to Firebase Realtime Database. Please check your Firebase configuration, credentials, and network connectivity.'
+        reason: 'Database connection failed. Please ensure Supabase is properly configured and accessible.',
+        details: 'Unable to connect to Supabase database. Please check your Supabase configuration, credentials, and network connectivity.'
       });
     }
     
-    // SECURITY: Sanitize error message to prevent secret exposure
-    const message = sanitizeError(error);
+    const message = error instanceof Error ? error.message : 'An unexpected server error occurred.';
     return res.status(500).json({ success: false, reason: message, error: message });
   }
 }
@@ -794,7 +789,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       // This MUST match the normalization used when saving users
       const normalizedEmail = sanitizedData.email.toLowerCase().trim();
       
-      // Use Firebase only
+      // Use Supabase for user lookup
       let user: UserType | null = null;
       
       try {
@@ -810,7 +805,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           });
         }
       } catch (error) {
-        logError('❌ Firebase user lookup error:', error);
+        logError('❌ Supabase user lookup error:', error);
         return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
       }
 
@@ -868,10 +863,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           try {
             logInfo(`⚠️ ${testUserConfig.role} user not found, auto-creating ${normalizedEmail}...`);
             
-            // Check Firebase availability before creating
+            // Check Supabase availability before creating
             if (!USE_SUPABASE) {
-              logError('❌ Cannot auto-create user: Firebase not available');
-              throw new Error('Firebase database is not available');
+              logError('❌ Cannot auto-create user: Supabase not available');
+              throw new Error('Supabase database is not available');
             }
             
             const hashedPassword = await hashPassword(testUserConfig.password);
@@ -932,44 +927,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
       
       // Verify password using bcrypt
-      let isPasswordValid = await validatePassword(sanitizedData.password, user.password);
-      
-      // CRITICAL FIX: If password validation failed and password is stored as plain text, try to fix it
-      // This can happen if password was updated directly in Supabase UI
-      if (!isPasswordValid && user.password && !user.password.startsWith('$2')) {
-        logWarn('⚠️ Password stored as plain text - attempting to fix by hashing and updating...');
-        try {
-          // Try to validate as plain text first
-          if (user.password.trim() === sanitizedData.password.trim()) {
-            // Password matches in plain text - hash it and update the database
-            const hashedPassword = await hashPassword(sanitizedData.password);
-            await supabaseUserService.update(normalizedEmail, {
-              password: hashedPassword,
-              updatedAt: new Date().toISOString()
-            });
-            
-            // Update the user object with the new hashed password for this request
-            user.password = hashedPassword;
-            
-            logInfo('✅ Fixed: Password was plain text, hashed and updated in database');
-            // Password is now valid - continue with login
-            isPasswordValid = true;
-          }
-        } catch (fixError) {
-          logError('❌ Failed to fix plain text password:', fixError);
-          // Continue to return error below
-        }
-      }
-      
+      const isPasswordValid = await validatePassword(sanitizedData.password, user.password);
       if (!isPasswordValid) {
         // SECURITY: Log minimal details - don't expose password hash prefixes
         if (process.env.NODE_ENV !== 'production') {
           logWarn('⚠️ Password validation failed:', {
             email: normalizedEmail,
             hasPassword: !!user.password,
-            authProvider: user.authProvider,
-            passwordIsHashed: user.password?.startsWith('$2') || false
+            authProvider: user.authProvider
           });
+        }
+        
+        // CRITICAL FIX: Check if user just registered (password might not be hashed yet)
+        if (user.authProvider === 'email' && !user.password?.startsWith('$2')) {
+          logWarn('⚠️ User password is not hashed - this should not happen for email auth');
         }
         
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
@@ -1049,7 +1020,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(400).json({ success: false, reason: 'All fields are required.' });
       }
 
-      // Firebase connection is handled automatically - no need for connection checks
+      // Supabase connection is handled automatically - no need for connection checks
 
       // Sanitize and validate input data
       const sanitizedData = await sanitizeObject({ email, password, name, mobile, role });
@@ -1083,7 +1054,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         try {
           existingUser = await userService.findByEmail(normalizedEmail);
         } catch (error) {
-          logError('❌ Firebase user lookup error:', error);
+          logError('❌ Supabase user lookup error:', error);
           return res.status(500).json({ success: false, reason: 'Database error. Please try again.' });
         }
         
@@ -1099,8 +1070,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           logInfo('🔐 Password hashed successfully for user:', normalizedEmail);
         }
 
-        // CRITICAL FIX: Don't generate userId - firebase-user-service will use emailKey as id
-        // This ensures consistent id format matching the Firebase key
+        // CRITICAL FIX: Don't generate userId - supabase-user-service will use emailKey as id
+        // This ensures consistent id format matching the Supabase key
 
         const userData: Omit<UserType, 'id'> = {
           email: normalizedEmail,
@@ -1121,9 +1092,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         let newUser: UserType;
         
         try {
-          logInfo('💾 Attempting to save user to Firebase...');
+          logInfo('💾 Attempting to save user to Supabase...');
           newUser = await userService.create(userData);
-          logInfo('✅ New user registered and saved to Firebase:', normalizedEmail);
+          logInfo('✅ New user registered and saved to Supabase:', normalizedEmail);
           
           // CRITICAL FIX: Add retry logic and better error handling
           let verifyUser = await userService.findByEmail(normalizedEmail);
@@ -1164,14 +1135,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             newUser = verifyUser;
           }
         } catch (error) {
-          logError('❌ Error saving user to Firebase:', error);
+          logError('❌ Error saving user to Supabase:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           
-          // CRITICAL FIX: Check for specific Firebase errors
+          // CRITICAL FIX: Check for specific Supabase errors
           if (errorMessage.includes('permission-denied') || errorMessage.includes('PERMISSION_DENIED')) {
             return res.status(500).json({ 
               success: false, 
-              reason: 'Database permission error. Please check Firebase security rules.' 
+              reason: 'Database permission error. Please check Supabase RLS policies.' 
             });
           }
           
@@ -1209,7 +1180,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           refreshToken
         });
       } catch (saveError) {
-        logError('❌ Error saving user to Firebase:', saveError);
+        logError('❌ Error saving user to Supabase:', saveError);
         const errorMessage = saveError instanceof Error ? saveError.message : 'Unknown error';
         
         // Check for duplicate key error (email already exists)
@@ -1232,12 +1203,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
     // OAUTH LOGIN
     if (action === 'oauth-login') {
-      // REMOVED: firebaseUid requirement - not used in Firebase Realtime Database
+      // REMOVED: firebaseUid requirement - not used in Supabase
       if (!email || !name || !role) {
         return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
       }
 
-      // Sanitize OAuth data (removed firebaseUid - not used in Firebase Realtime Database)
+      // Sanitize OAuth data (removed firebaseUid - not used in Supabase)
       const sanitizedData = await sanitizeObject({ email, name, role, authProvider, avatarUrl });
       const mobile = req.body.mobile || '';
       const location = req.body.location || '';
@@ -1271,7 +1242,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           mobile: mobile,
           location: location,
           role: sanitizedData.role,
-          // REMOVED: firebaseUid - not used in Firebase Realtime Database
+          // REMOVED: firebaseUid - not used in Supabase
           authProvider: sanitizedData.authProvider,
           avatarUrl: sanitizedData.avatarUrl,
           status: 'active' as const,
@@ -1282,9 +1253,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           createdAt: new Date().toISOString()
         };
         
-        logInfo('💾 Saving OAuth user to Firebase...');
+        logInfo('💾 Saving OAuth user to Supabase...');
         user = await userService.create(userData);
-        logInfo('✅ OAuth user saved to Firebase:', normalizedEmail);
+        logInfo('✅ OAuth user saved to Supabase:', normalizedEmail);
         
         // CRITICAL FIX: Add retry logic for OAuth user verification
         let verifyUser = await userService.findByEmail(normalizedEmail);
@@ -1741,11 +1712,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             const normalizedEmail = email.toLowerCase().trim();
             const newPlanExpiryDate = updateFields.planExpiryDate || null;
             
-            // Find all published vehicles for this seller
-            const allVehicles = await vehicleService.findAll();
-            const sellerVehicles = allVehicles.filter(v => 
-              v.sellerEmail?.toLowerCase().trim() === normalizedEmail && v.status === 'published'
-            );
+            // PERFORMANCE FIX: Use findBySellerEmail instead of fetching all vehicles
+            // This uses the idx_vehicles_seller_email index for fast lookup
+            const allSellerVehicles = await vehicleService.findBySellerEmail(normalizedEmail);
+            const sellerVehicles = allSellerVehicles.filter(v => v.status === 'published');
             
             if (sellerVehicles.length > 0) {
               const now = new Date();
@@ -2157,8 +2127,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       if (action === 'city-stats' && req.query.city) {
         // Sanitize city input
         const sanitizedCity = await sanitizeString(String(req.query.city));
-        const allVehicles = await vehicleService.findAll();
-        const cityVehicles = allVehicles.filter(v => v.city === sanitizedCity && v.status === 'published');
+        // PERFORMANCE FIX: Use database-level filtering instead of fetching all vehicles
+        const cityVehicles = await vehicleService.findByCityAndStatus(sanitizedCity, 'published');
         const stats = {
           totalVehicles: cityVehicles.length,
           averagePrice: cityVehicles.reduce((sum, v) => sum + (v.price || 0), 0) / (cityVehicles.length || 1),
@@ -2203,14 +2173,23 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         }
         
         try {
-          const allVehicles = await vehicleService.findAll();
+          // PERFORMANCE FIX: Use COUNT queries for status breakdown instead of fetching all
+          const [publishedCount, unpublishedCount, soldCount] = await Promise.all([
+            vehicleService.countByStatus('published'),
+            vehicleService.countByStatus('unpublished'),
+            vehicleService.countByStatus('sold')
+          ]);
+          const totalCount = publishedCount + unpublishedCount + soldCount;
           const statusCounts = {
-            published: allVehicles.filter(v => v.status === 'published').length,
-            unpublished: allVehicles.filter(v => v.status === 'unpublished').length,
-            sold: allVehicles.filter(v => v.status === 'sold').length,
-            total: allVehicles.length
+            published: publishedCount,
+            unpublished: unpublishedCount,
+            sold: soldCount,
+            total: totalCount
           };
           console.log(`🔍 ADMIN: Vehicle status breakdown:`, statusCounts);
+          
+          // Fetch all vehicles for admin view (admin endpoints need full data)
+          const allVehicles = await vehicleService.findAll();
           console.log(`📊 ADMIN: Returning ${allVehicles.length} total vehicles (all statuses)`);
           
           // Sort by createdAt descending
@@ -2241,14 +2220,23 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         if (!adminAuth) {
           return;
         }
-        const allVehicles = await vehicleService.findAll();
+        // PERFORMANCE FIX: Use COUNT queries for status breakdown instead of fetching all first
+        const [publishedCount, unpublishedCount, soldCount] = await Promise.all([
+          vehicleService.countByStatus('published'),
+          vehicleService.countByStatus('unpublished'),
+          vehicleService.countByStatus('sold')
+        ]);
+        const totalCount = publishedCount + unpublishedCount + soldCount;
         const statusCounts = {
-          published: allVehicles.filter(v => v.status === 'published').length,
-          unpublished: allVehicles.filter(v => v.status === 'unpublished').length,
-          sold: allVehicles.filter(v => v.status === 'sold').length,
-          total: allVehicles.length
+          published: publishedCount,
+          unpublished: unpublishedCount,
+          sold: soldCount,
+          total: totalCount
         };
         console.log(`🔍 DEBUG: Vehicle status breakdown:`, statusCounts);
+        
+        // Fetch all vehicles for debug view (debug endpoints need full data)
+        const allVehicles = await vehicleService.findAll();
         return res.status(200).json({
           total: allVehicles.length,
           statusCounts,
@@ -2263,9 +2251,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const cached = vehicleCache.get(cacheKey);
       
       // PAGINATION SUPPORT: Parse pagination parameters early
-      // OLX-STYLE: Default to 30 vehicles per page (OLX loads 20-30 initially for instant display)
+      // Default to pagination (50 per page) for better performance
       const page = parseInt(String(req.query.page || '1'), 10) || 1;
-      const limit = parseInt(String(req.query.limit || '30'), 10) || 30; // Default 30 (OLX-style), 0 means no limit (return all)
+      const limit = parseInt(String(req.query.limit || '50'), 10) || 50; // Default 50, 0 means no limit (return all)
       const skipExpiryCheck = req.query.skipExpiryCheck === 'true'; // Skip expensive expiry checks for fast initial load
       
       let vehicles: VehicleType[];
@@ -2342,19 +2330,25 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           if (vehicles.length === 0) {
             console.warn('⚠️ No published vehicles found in database. Checking all vehicles...');
             try {
-              const allVehicles = await vehicleService.findAll();
+              // PERFORMANCE FIX: Use COUNT queries instead of fetching all vehicles
+              const [publishedCount, unpublishedCount, soldCount] = await Promise.all([
+                vehicleService.countByStatus('published'),
+                vehicleService.countByStatus('unpublished'),
+                vehicleService.countByStatus('sold')
+              ]);
+              const totalCount = publishedCount + unpublishedCount + soldCount;
               const statusBreakdown = {
-                published: allVehicles.filter(v => v.status === 'published').length,
-                unpublished: allVehicles.filter(v => v.status === 'unpublished').length,
-                sold: allVehicles.filter(v => v.status === 'sold').length,
-                total: allVehicles.length
+                published: publishedCount,
+                unpublished: unpublishedCount,
+                sold: soldCount,
+                total: totalCount
               };
               console.warn('⚠️ Vehicle status breakdown:', statusBreakdown);
               
               // If there are vehicles but none published, log a warning
-              if (allVehicles.length > 0 && statusBreakdown.published === 0) {
+              if (totalCount > 0 && statusBreakdown.published === 0) {
                 console.warn('⚠️ Database has vehicles but none are published. Consider publishing some vehicles.');
-              } else if (allVehicles.length === 0) {
+              } else if (totalCount === 0) {
                 console.warn('⚠️ Database is empty. No vehicles found at all.');
               }
             } catch (diagError) {
@@ -2587,27 +2581,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // Use the total count we fetched earlier (or from cache)
       const finalTotalCount = totalVehiclesCount || normalizedVehicles.length;
-      
-      // OLX-STYLE OPTIMIZATION: Add HTTP cache headers for CDN/edge caching
-      // Generate ETag for conditional requests (reduces bandwidth)
-      const responseData = limit > 0 
-        ? { vehicles: normalizedVehicles, pagination: { page, limit, total: finalTotalCount, pages: Math.ceil(finalTotalCount / limit), hasMore: page < Math.ceil(finalTotalCount / limit) } }
-        : normalizedVehicles;
-      const etag = createHash('md5').update(JSON.stringify(responseData)).digest('hex');
-      
-      // Set cache headers (OLX-style: aggressive caching with stale-while-revalidate)
-      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
-      res.setHeader('ETag', `"${etag}"`);
-      res.setHeader('Vary', 'Accept-Encoding');
-      res.setHeader('X-Total-Count', String(finalTotalCount));
-      res.setHeader('X-Page', String(page));
-      res.setHeader('X-Per-Page', String(limit));
-      
-      // Check If-None-Match header for 304 Not Modified (saves bandwidth)
-      const clientETag = req.headers['if-none-match'];
-      if (clientETag === `"${etag}"`) {
-        return res.status(304).end();
-      }
       
       // Return paginated response with metadata if pagination was requested
       if (limit > 0) {

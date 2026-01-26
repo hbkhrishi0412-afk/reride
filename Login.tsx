@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, User } from './types';
-import { login, register } from './services/userService';
-import { signInWithGoogle, syncWithBackend } from './services/authService';
+import { signInWithEmail, signUpWithEmail, syncWithBackend } from './services/supabase-auth-service';
+import { signInWithGoogle } from './services/authService';
 import OTPLogin from './components/OTPLogin';
 import PasswordInput from './components/PasswordInput';
 import AuthLayout from './components/AuthLayout';
@@ -37,29 +37,48 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
     setIsLoading(true);
 
     try {
-        let result: { success: boolean, user?: User, reason?: string };
-
         if (mode === 'login') {
             if (!email || !password) throw new Error('Please enter both email and password.');
             
-            // SECURITY: Removed hardcoded credentials - all authentication must go through proper API
+            // Authenticate with Supabase
+            const supabaseResult = await signInWithEmail(email, password);
             
-            result = await login({ email, password, role: 'seller' });
-        } else {
-            if (!name || !mobile || !email || !password) throw new Error('Please fill in all fields to register.');
-            result = await register({ name, email, password, mobile, role: 'seller' });
-        }
-
-        if (result.success && result.user) {
-            if (mode === 'login') {
+            if (!supabaseResult.success || !supabaseResult.user) {
+                throw new Error(supabaseResult.reason || 'Invalid credentials.');
+            }
+            
+            // Sync with backend to get full user profile
+            const backendResult = await syncWithBackend(supabaseResult.user, 'seller', 'email');
+            
+            if (backendResult.success && backendResult.user) {
                 if (rememberMe) localStorage.setItem('rememberedSellerEmail', email);
                 else localStorage.removeItem('rememberedSellerEmail');
-                onLogin(result.user);
+                onLogin(backendResult.user);
             } else {
-                onRegister(result.user);
+                throw new Error(backendResult.reason || 'Failed to sync with backend.');
             }
         } else {
-            throw new Error(result.reason || 'An unknown error occurred.');
+            if (!name || !mobile || !email || !password) throw new Error('Please fill in all fields to register.');
+            
+            // Register with Supabase
+            const supabaseResult = await signUpWithEmail(email, password, {
+                name,
+                mobile,
+                role: 'seller'
+            });
+            
+            if (!supabaseResult.success || !supabaseResult.user) {
+                throw new Error(supabaseResult.reason || 'Failed to create account.');
+            }
+            
+            // Sync with backend to create user profile
+            const backendResult = await syncWithBackend(supabaseResult.user, 'seller', 'email');
+            
+            if (backendResult.success && backendResult.user) {
+                onRegister(backendResult.user);
+            } else {
+                throw new Error(backendResult.reason || 'Failed to sync with backend.');
+            }
         }
     } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to authenticate.');

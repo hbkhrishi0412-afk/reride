@@ -89,7 +89,7 @@ export function createError(
  */
 export function createErrorResponse(
   error: StandardError,
-  statusCode: number = 500
+  _statusCode: number = 500
 ): { success: false; error: string; code: number; message?: string; details?: Record<string, unknown> } {
   return {
     success: false,

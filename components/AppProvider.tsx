@@ -13,7 +13,6 @@ import { getAuthHeaders } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
-import { logInfo, logWarn, logError } from '../utils/logger';
 
 interface VehicleUpdateOptions {
   successMessage?: string;
@@ -918,7 +917,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Store view and previous view in history state for back button support
       // Also store selectedVehicle ID if we're on DETAIL view
-      const historyState: { view?: View; city?: string; previousView?: View; selectedVehicleId?: number; timestamp?: number } = {
+      const historyState: any = {
         view: view,
         previousView: currentView,
         timestamp: Date.now()
@@ -1019,7 +1018,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else if (currentPath === '/login') {
           initialView = View.LOGIN_PORTAL;
         }
-        const initialState: { view?: View; city?: string; previousView?: View; timestamp?: number } = { 
+        const initialState: any = { 
           view: initialView, 
           previousView: View.HOME, 
           timestamp: Date.now() 
@@ -1132,6 +1131,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Load initial data with instant cache display and background refresh
   useEffect(() => {
     let isMounted = true;
+    let hasLoadedFreshData = false; // Track if we've already loaded fresh data
     
     const loadInitialData = async () => {
       try {
@@ -1194,11 +1194,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ]);
         };
         
-        // Load vehicles and users in parallel with OLX-style timeout (3 seconds for initial 30 vehicles)
+        // Load vehicles and users in parallel with aggressive timeout for instant response
         Promise.all([
           loadWithTimeout(
             dataService.getVehicles(isAdmin).catch(() => []),
-            3000, // OLX-style: 3 seconds for initial 30 vehicles (faster than loading all)
+            2000, // Aggressive 2-second timeout for instant response
             []
           ),
           loadWithTimeout(
@@ -1674,9 +1674,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const newVehicleData = JSON.parse(e.newValue);
           setVehicleData(newVehicleData);
-          logInfo('✅ Vehicle data synced from another tab');
+          console.log('✅ Vehicle data synced from another tab');
         } catch (error) {
-          logError('Failed to parse vehicle data from storage event:', error);
+          console.error('Failed to parse vehicle data from storage event:', error);
         }
       }
     };
@@ -1685,7 +1685,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handleVehicleDataUpdate = (e: CustomEvent) => {
       if (e.detail && e.detail.vehicleData) {
         setVehicleData(e.detail.vehicleData);
-        logInfo('✅ Vehicle data synced from same tab');
+        console.log('✅ Vehicle data synced from same tab');
       }
     };
 
@@ -1698,11 +1698,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .then((freshData) => {
           if (freshData) {
             setVehicleData(freshData);
-            logInfo('✅ Vehicle data refreshed from API');
+            console.log('✅ Vehicle data refreshed from API');
           }
         })
         .catch((error) => {
-          logWarn('Failed to refresh vehicle data:', error);
+          console.warn('Failed to refresh vehicle data:', error);
         });
     }, 5 * 60 * 1000); // 5 minutes
 
@@ -1747,13 +1747,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const wsUrl = `${wsProtocol}//${wsHost}`;
     
     // Use Socket.io client for real-time updates
-    let socket: ReturnType<typeof import('socket.io-client').io> | null = null;
+    let socket: any = null;
     
     (async () => {
       try {
         // Dynamically import socket.io-client
-        const socketIoClient = await import('socket.io-client');
-        const io = socketIoClient.default || (socketIoClient as { io: typeof socketIoClient.default }).io;
+        // @ts-ignore - socket.io-client types may not be available
+        const socketIoClient: any = await import('socket.io-client');
+        const io = socketIoClient.default || socketIoClient.io;
         
         // CRITICAL FIX: Add timeout and better error handling for socket.io connection
         socket = io(wsUrl, {
@@ -1774,7 +1775,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // CRITICAL FIX: Improve error handling - don't spam console with errors
         let connectionErrorLogged = false;
-        socket.on('connect_error', (_error: Error) => {
+        socket.on('connect_error', (_error: any) => {
           // CRITICAL FIX: Only log error once to prevent console spam
           // Error parameter is prefixed with _ to indicate it's intentionally unused
           if (!connectionErrorLogged) {
@@ -1797,14 +1798,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.warn('⚠️ WebSocket reconnection failed. Real-time updates will not be available until server is restarted.');
           }
           // CRITICAL FIX: Disable further reconnection attempts to prevent spam
-          // Disconnect instead of using private reconnect method
-          if (socket) {
-            socket.disconnect();
-          }
+          socket.io.reconnect(false);
         });
         
         // Listen for new messages from other users
-        socket.on('conversation:new-message', (data: { conversationId: string; message: ChatMessage; conversation: Conversation }) => {
+        socket.on('conversation:new-message', (data: { conversationId: string; message: any; conversation: any }) => {
           if (process.env.NODE_ENV === 'development') {
             console.log('🔧 Received real-time message:', data);
           }
@@ -1859,7 +1857,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
         
-        socket.on('error', (error: Error) => {
+        socket.on('error', (error: any) => {
           // CRITICAL FIX: Only log in development to prevent console spam
           if (process.env.NODE_ENV === 'development') {
             console.warn('⚠️ WebSocket error (non-critical):', error?.message || error);
@@ -1881,7 +1879,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentUser, activeChat?.id]);
 
   // Sync activeChat when conversations change
-  // BUT only if activeChat is already set (don't auto-open closed chats)
   useEffect(() => {
     if (activeChat) {
       const updatedConversation = conversations.find(conv => conv.id === activeChat.id);
@@ -1894,16 +1891,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedConversation.isReadByCustomer !== activeChat.isReadByCustomer;
         
         if (hasChanges) {
-          // Only update if chat is still active (not closed)
           setActiveChat(updatedConversation);
-        }
-      } else {
-        // Conversation no longer exists, close the chat
-        setActiveChat(null);
-        try {
-          localStorage.removeItem('reRideActiveChat');
-        } catch (e) {
-          // Silently fail
         }
       }
     }
@@ -2156,7 +2144,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { updateUser: updateUserService } = await import('../services/userService');
         
         // Ensure verificationStatus is properly structured for API
-        const apiUpdateData: Partial<User> = { email, ...details };
+        const apiUpdateData: any = { email, ...details };
         
         // If verificationStatus is being updated, ensure it's properly formatted
         if (details.verificationStatus) {
@@ -2174,12 +2162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           apiUpdateData.govtIdVerified = details.govtIdVerified;
         }
         
-        // Ensure email is present before calling service
-        if (!email) {
-          throw new Error('Email is required for user update');
-        }
-        
-        await updateUserService({ ...apiUpdateData, email } as Partial<User> & { email: string });
+        await updateUserService(apiUpdateData);
         
         // CRITICAL: Refresh users list from API after successful update to ensure sync
         try {
@@ -2403,20 +2386,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
 
           const responseText = await response.text();
-          let result: { 
-            success: boolean; 
-            reason?: string; 
-            user?: User;
-            error?: string;
-            alreadyFeatured?: boolean;
-            vehicle?: Vehicle;
-            remainingCredits?: number;
-          } = { success: false };
+          let result: any = {};
           if (responseText) {
             try {
-              result = JSON.parse(responseText) as typeof result;
+              result = JSON.parse(responseText);
             } catch (parseError) {
-              logWarn('⚠️ Failed to parse feature response JSON:', parseError);
+              console.warn('⚠️ Failed to parse feature response JSON:', parseError);
             }
           }
 
@@ -2435,11 +2410,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           if (result?.success && result.vehicle) {
-            const updatedVehicle = result.vehicle;
-            setVehicles(prev => {
-              if (!Array.isArray(prev)) return [];
-              return prev.map(v => (v && v.id === vehicleId ? updatedVehicle : v)).filter((v): v is Vehicle => v !== undefined);
-            });
+            setVehicles(prev =>
+              Array.isArray(prev) ? prev.map(v => (v && v.id === vehicleId ? result.vehicle : v)) : []
+            );
 
             const sellerEmail = result.vehicle?.sellerEmail;
             if (typeof result.remainingCredits === 'number' && sellerEmail) {
