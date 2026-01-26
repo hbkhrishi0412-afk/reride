@@ -7,7 +7,6 @@ interface PerformanceMonitorProps {
 
 const PerformanceMonitor: React.FC<PerformanceMonitorProps> = ({ children, componentName }) => {
   const [renderTime, setRenderTime] = useState<number>(0);
-  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
     const startTime = performance.now();
@@ -26,25 +25,6 @@ const PerformanceMonitor: React.FC<PerformanceMonitorProps> = ({ children, compo
 
     // Use requestAnimationFrame to measure after render
     requestAnimationFrame(measureRender);
-
-    // Monitor visibility for lazy loading
-    if ('IntersectionObserver' in window) {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            setIsVisible(entry.isIntersecting);
-          });
-        },
-        { threshold: 0.1 }
-      );
-
-      const element = document.querySelector(`[data-component="${componentName}"]`);
-      if (element) {
-        observer.observe(element);
-      }
-
-      return () => observer.disconnect();
-    }
   }, [componentName]);
 
   return (

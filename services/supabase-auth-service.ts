@@ -340,6 +340,9 @@ export const syncWithBackend = async (
   authProvider: 'google' | 'phone' | 'email'
 ): Promise<{ success: boolean; user?: User; reason?: string }> => {
   try {
+    // Extract mobile from phone (for phone auth) or user_metadata.mobile (for email auth)
+    const mobile = supabaseUser.phone || supabaseUser.user_metadata?.mobile || '';
+    
     const response = await fetch('/api/main', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -348,7 +351,7 @@ export const syncWithBackend = async (
         firebaseUid: supabaseUser.id, // Use Supabase user ID
         email: supabaseUser.email,
         name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
-        mobile: supabaseUser.phone || '',
+        mobile: mobile,
         avatarUrl: supabaseUser.user_metadata?.avatar_url || '',
         role,
         authProvider
