@@ -2349,10 +2349,12 @@ const AppContent: React.FC = React.memo(() => {
         );
 
       case ViewEnum.DEALER_PROFILES:
+        // Pass sellers if available, but components will fetch directly from API if not provided
+        const sellersFromUsers = users.filter(user => user.role === 'seller');
         if (isMobileApp) {
           return (
             <MobileDealerProfilesPage
-              sellers={users.filter(user => user.role === 'seller')}
+              sellers={sellersFromUsers.length > 0 ? sellersFromUsers : undefined}
               vehicles={vehicles}
               onViewProfile={(sellerEmail) => {
                 const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
@@ -2370,7 +2372,7 @@ const AppContent: React.FC = React.memo(() => {
         }
         return (
           <DealerProfiles 
-            sellers={users.filter(user => user.role === 'seller')} 
+            sellers={sellersFromUsers.length > 0 ? sellersFromUsers : undefined} 
             vehicles={vehicles}
             onViewProfile={(sellerEmail) => {
               setPublicProfile({ email: sellerEmail } as any);

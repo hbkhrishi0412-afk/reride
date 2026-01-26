@@ -80,3 +80,4 @@ Your application is now fully using Supabase instead of Firebase!
 
 
 
+

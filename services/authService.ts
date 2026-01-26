@@ -75,10 +75,21 @@ export const sendOTP = async (phoneNumber: string): Promise<{
       console.error('Send OTP Error:', error);
       
       let errorMessage = 'Failed to send OTP';
-      if (error.message.includes('invalid')) {
-        errorMessage = 'Invalid phone number format. Please enter a valid phone number with country code.';
-      } else if (error.message.includes('too many')) {
+      
+      // Handle specific Supabase phone auth errors
+      if (error.message?.toLowerCase().includes('unsupported phone provider') || 
+          error.message?.toLowerCase().includes('phone provider') ||
+          error.message?.toLowerCase().includes('twilio')) {
+        errorMessage = 'Phone authentication is not configured. Please contact support or configure Twilio in Supabase dashboard.';
+      } else if (error.message?.toLowerCase().includes('invalid') || 
+                 error.message?.toLowerCase().includes('format')) {
+        errorMessage = 'Invalid phone number format. Please enter a valid 10-digit Indian mobile number.';
+      } else if (error.message?.toLowerCase().includes('too many') || 
+                 error.message?.toLowerCase().includes('rate limit')) {
         errorMessage = 'Too many requests. Please wait a moment and try again.';
+      } else if (error.message?.toLowerCase().includes('not enabled') ||
+                 error.message?.toLowerCase().includes('disabled')) {
+        errorMessage = 'Phone authentication is not enabled. Please configure it in Supabase dashboard.';
       } else if (error.message) {
         errorMessage = error.message;
       }

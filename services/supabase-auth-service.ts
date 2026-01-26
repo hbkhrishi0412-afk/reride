@@ -1,5 +1,6 @@
 import { getSupabaseClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
+import { formatSupabaseError } from '../utils/errorUtils.js';
 
 // Google Sign-In with Supabase
 export const signInWithGoogle = async (): Promise<{ 
@@ -21,7 +22,7 @@ export const signInWithGoogle = async (): Promise<{
     if (error) {
       return {
         success: false,
-        reason: error.message || 'Failed to sign in with Google'
+        reason: formatSupabaseError(error.message || 'Failed to sign in with Google')
       };
     }
 
@@ -34,7 +35,7 @@ export const signInWithGoogle = async (): Promise<{
     console.error('Google Sign-In Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to sign in with Google'
+      reason: formatSupabaseError(error.message || 'Failed to sign in with Google')
     };
   }
 };
@@ -60,7 +61,7 @@ export const signInWithEmail = async (
     if (error) {
       return {
         success: false,
-        reason: error.message || 'Invalid email or password'
+        reason: formatSupabaseError(error.message || 'Invalid email or password')
       };
     }
 
@@ -73,7 +74,7 @@ export const signInWithEmail = async (
     console.error('Email Sign-In Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to sign in'
+      reason: formatSupabaseError(error.message || 'Failed to sign in')
     };
   }
 };
@@ -103,7 +104,7 @@ export const signUpWithEmail = async (
     if (error) {
       return {
         success: false,
-        reason: error.message || 'Failed to create account'
+        reason: formatSupabaseError(error.message || 'Failed to create account')
       };
     }
 
@@ -130,7 +131,7 @@ export const signOut = async (): Promise<{ success: boolean; reason?: string }> 
     if (error) {
       return {
         success: false,
-        reason: error.message
+        reason: formatSupabaseError(error.message)
       };
     }
 
@@ -139,7 +140,7 @@ export const signOut = async (): Promise<{ success: boolean; reason?: string }> 
     console.error('Sign Out Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to sign out'
+      reason: formatSupabaseError(error.message || 'Failed to sign out')
     };
   }
 };
@@ -158,7 +159,7 @@ export const getSession = async (): Promise<{
     if (error) {
       return {
         success: false,
-        reason: error.message
+        reason: formatSupabaseError(error.message)
       };
     }
 
@@ -171,7 +172,7 @@ export const getSession = async (): Promise<{
     console.error('Get Session Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to get session'
+      reason: formatSupabaseError(error.message || 'Failed to get session')
     };
   }
 };
@@ -189,7 +190,7 @@ export const getCurrentUser = async (): Promise<{
     if (error) {
       return {
         success: false,
-        reason: error.message
+        reason: formatSupabaseError(error.message)
       };
     }
 
@@ -201,7 +202,7 @@ export const getCurrentUser = async (): Promise<{
     console.error('Get Current User Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to get current user'
+      reason: formatSupabaseError(error.message || 'Failed to get current user')
     };
   }
 };
@@ -219,7 +220,7 @@ export const refreshSession = async (): Promise<{
     if (error) {
       return {
         success: false,
-        reason: error.message
+        reason: formatSupabaseError(error.message)
       };
     }
 
@@ -231,7 +232,7 @@ export const refreshSession = async (): Promise<{
     console.error('Refresh Session Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to refresh session'
+      reason: formatSupabaseError(error.message || 'Failed to refresh session')
     };
   }
 };
@@ -252,7 +253,7 @@ export const resetPassword = async (email: string): Promise<{
     if (error) {
       return {
         success: false,
-        reason: error.message || 'Failed to send password reset email'
+        reason: formatSupabaseError(error.message) || 'Failed to send password reset email'
       };
     }
 
@@ -261,7 +262,7 @@ export const resetPassword = async (email: string): Promise<{
     console.error('Reset Password Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to send password reset email'
+        reason: formatSupabaseError(error.message || 'Failed to send password reset email')
     };
   }
 };
@@ -280,7 +281,7 @@ export const updatePassword = async (newPassword: string): Promise<{
     if (error) {
       return {
         success: false,
-        reason: error.message || 'Failed to update password'
+        reason: formatSupabaseError(error.message) || 'Failed to update password'
       };
     }
 
@@ -289,7 +290,7 @@ export const updatePassword = async (newPassword: string): Promise<{
     console.error('Update Password Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to update password'
+        reason: formatSupabaseError(error.message || 'Failed to update password')
     };
   }
 };
@@ -315,7 +316,7 @@ export const verifyOTP = async (
     if (error) {
       return {
         success: false,
-        reason: error.message || 'Invalid OTP'
+        reason: formatSupabaseError(error.message || 'Invalid OTP')
       };
     }
 
@@ -328,7 +329,7 @@ export const verifyOTP = async (
     console.error('Verify OTP Error:', error);
     return {
       success: false,
-      reason: error.message || 'Failed to verify OTP'
+      reason: formatSupabaseError(error.message || 'Failed to verify OTP')
     };
   }
 };

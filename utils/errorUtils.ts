@@ -234,3 +234,94 @@ export function isTimeoutError(error: unknown): boolean {
   return false;
 }
 
+/**
+ * Formats Supabase error messages for user display
+ * Supabase errors often include technical details like error IDs and codes that should be hidden from users
+ * @param error - Error message string or Error object
+ * @returns User-friendly error message
+ */
+export function formatSupabaseError(error: string | Error | unknown): string {
+  let errorMessage: string;
+  
+  if (error instanceof Error) {
+    errorMessage = error.message;
+  } else if (typeof error === 'string') {
+    errorMessage = error;
+  } else if (error && typeof error === 'object') {
+    // Handle Supabase error objects
+    const errorObj = error as Record<string, any>;
+    if (errorObj.message) {
+      errorMessage = errorObj.message;
+    } else if (errorObj.error) {
+      errorMessage = errorObj.error;
+    } else {
+      errorMessage = String(error);
+    }
+  } else {
+    errorMessage = String(error);
+  }
+  
+  // Check if this is a Supabase-formatted error (contains "Code:" and "ID:" patterns)
+  // Format: "404: NOT_FOUND\nCode: NOT_FOUND\nID: bom1::..."
+  if (errorMessage.includes('Code:') && errorMessage.includes('ID:')) {
+    // Extract the main error message (before "Code:")
+    const mainErrorMatch = errorMessage.match(/^(\d+):\s*(.+?)(?:\n|Code:)/);
+    if (mainErrorMatch) {
+      const statusCode = mainErrorMatch[1];
+      const errorType = mainErrorMatch[2].trim();
+      
+      // Map common Supabase error codes to user-friendly messages
+      if (statusCode === '404' || errorType === 'NOT_FOUND') {
+        return 'The requested resource was not found.';
+      }
+      if (statusCode === '401' || errorType === 'UNAUTHORIZED') {
+        return 'Your session has expired. Please log in again.';
+      }
+      if (statusCode === '403' || errorType === 'FORBIDDEN') {
+        return 'You do not have permission to perform this action.';
+      }
+      if (statusCode === '409' || errorType === 'CONFLICT') {
+        return 'This resource already exists.';
+      }
+      if (statusCode === '422' || errorType === 'UNPROCESSABLE') {
+        return 'Invalid data provided. Please check your input.';
+      }
+      if (statusCode === '500' || errorType === 'INTERNAL_ERROR') {
+        return 'A server error occurred. Please try again later.';
+      }
+      if (statusCode === '503' || errorType === 'UNAVAILABLE') {
+        return 'Service temporarily unavailable. Please try again later.';
+      }
+      
+      // Return a generic message based on the error type
+      return `An error occurred: ${errorType}`;
+    }
+    
+    // If we can't parse it, return a generic message
+    return 'An error occurred. Please try again.';
+  }
+  
+  // Check for common Supabase error patterns
+  if (errorMessage.includes('PGRST116')) {
+    return 'The requested resource was not found.';
+  }
+  if (errorMessage.includes('23505') || errorMessage.includes('duplicate') || errorMessage.includes('unique')) {
+    return 'This resource already exists.';
+  }
+  if (errorMessage.includes('23503') || errorMessage.includes('foreign key')) {
+    return 'Cannot perform this action due to related data constraints.';
+  }
+  if (errorMessage.includes('permission denied') || errorMessage.includes('PERMISSION_DENIED')) {
+    return 'You do not have permission to perform this action.';
+  }
+  if (errorMessage.includes('JWT') || errorMessage.includes('token') || errorMessage.includes('expired')) {
+    return 'Your session has expired. Please log in again.';
+  }
+  if (errorMessage.includes('connection') || errorMessage.includes('network') || errorMessage.includes('ECONNREFUSED')) {
+    return 'Unable to connect to the server. Please check your internet connection.';
+  }
+  
+  // Return the original message if it doesn't match Supabase patterns
+  return errorMessage;
+}
+

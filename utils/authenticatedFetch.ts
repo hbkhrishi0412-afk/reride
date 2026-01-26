@@ -4,6 +4,7 @@
  */
 
 import { logInfo, logWarn, logError } from './logger';
+import { formatSupabaseError } from './errorUtils';
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean; // Skip authentication for public endpoints
@@ -470,7 +471,7 @@ export const handleApiResponse = async <T = any>(
         return {
           success: false,
           error: errorData.error || `HTTP ${response.status}`,
-          reason: errorData.reason || errorData.message || errorData.error || response.statusText,
+          reason: formatSupabaseError(errorData.reason || errorData.message || errorData.error || response.statusText),
         };
       } catch {
         // If JSON parsing fails, return status text
@@ -487,7 +488,7 @@ export const handleApiResponse = async <T = any>(
     return {
       success: false,
       error: `HTTP ${response.status}`,
-      reason: errorText || response.statusText,
+      reason: formatSupabaseError(errorText || response.statusText),
     };
   }
 
