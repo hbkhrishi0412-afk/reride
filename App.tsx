@@ -180,6 +180,48 @@ const preloadCriticalComponents = () => {
 };
 
 const AppContent: React.FC = React.memo(() => {
+  const { addToast } = useApp();
+  
+  // Handle service worker update notifications
+  useEffect(() => {
+    const handleServiceWorkerUpdate = (event: CustomEvent) => {
+      const detail = event.detail as { message?: string; action?: () => void };
+      addToast(
+        detail.message || 'A new version is available. Click to refresh.',
+        'info'
+      );
+      
+      // Show a persistent notification with refresh button
+      if (detail.action) {
+        // Store the action for when user clicks refresh
+        (window as any).__swUpdateAction = detail.action;
+        
+        // Add a clickable refresh button via another toast
+        setTimeout(() => {
+          addToast(
+            'Click here to refresh and get the latest version',
+            'info'
+          );
+          // Listen for click on the toast (simplified - in production, use a proper button)
+          const refreshHandler = () => {
+            if ((window as any).__swUpdateAction) {
+              (window as any).__swUpdateAction();
+            } else {
+              window.location.reload();
+            }
+          };
+          (window as any).__swRefreshHandler = refreshHandler;
+        }, 1000);
+      }
+    };
+    
+    window.addEventListener('sw-update-available', handleServiceWorkerUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('sw-update-available', handleServiceWorkerUpdate as EventListener);
+    };
+  }, [addToast]);
+  
   // Detect if running as mobile app (standalone/installed PWA)
   const { isMobileApp, isMobile } = useIsMobileApp();
   

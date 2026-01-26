@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -308,9 +309,23 @@ export default defineConfig({
           });
           // CRITICAL FIX: Handle connection issues
           proxy.on('close', (res, socket, head) => {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'vite.config.ts:304',message:'Vite proxy connection closed',data:{hasRes:!!res},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'bug-4'})}).catch(()=>{});
-            // #endregion
+            // Debug logging (only in development with DEBUG_ENDPOINT configured)
+            if (process.env.NODE_ENV !== 'production' && process.env.DEBUG_ENDPOINT) {
+              try {
+                fetch(process.env.DEBUG_ENDPOINT, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    location: 'vite.config.ts:304',
+                    message: 'Vite proxy connection closed',
+                    data: { hasRes: !!res },
+                    timestamp: Date.now(),
+                  })
+                }).catch(() => {});
+              } catch {
+                // Silently fail if debug endpoint is unavailable
+              }
+            }
             if (process.env.NODE_ENV === 'development') {
               console.warn('⚠️ Proxy connection closed');
             }

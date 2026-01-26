@@ -85,3 +85,4 @@ After migration, verify in Supabase Dashboard:
 - The `flagged_at` column in conversations stores when a conversation was flagged (if applicable)
 
 
+

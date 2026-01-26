@@ -245,3 +245,4 @@ Edit `vercel.json` or `_headers`:
 - [Vercel Caching Guide](https://vercel.com/docs/concepts/edge-network/caching)
 - [Image Optimization Best Practices](https://web.dev/fast/#optimize-your-images)
 
+

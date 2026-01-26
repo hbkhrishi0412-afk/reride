@@ -117,16 +117,16 @@ export const validatePassword = async (password: string, hash: string): Promise<
       }
     } else {
       // Hash is NOT a bcrypt hash (likely plain text)
-      // Use plain text comparison for backward compatibility
-      const normalizedPassword = password.trim();
-      const normalizedHash = hash.trim();
-      
-      // Only log warning in non-production environments to avoid log noise
+      // SECURITY FIX: No longer support plain text passwords
+      // If password is stored as plain text, it needs to be rehashed on next login
+      // Return false to force password rehashing through the login flow
       if (process.env.NODE_ENV !== 'production') {
-        console.warn('⚠️ Password stored as plain text in database. Please update to hashed password for security.');
+        console.warn('⚠️ Password stored as plain text in database. User must reset password or rehash on login.');
       }
       
-      return constantTimeCompare(normalizedPassword, normalizedHash);
+      // Return false to indicate authentication failure
+      // The API will handle rehashing if password matches in plain text
+      return false;
     }
   } catch (error) {
     // Log the error but return false to treat it as an authentication failure

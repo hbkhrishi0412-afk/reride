@@ -80,3 +80,4 @@ Or use the provided script:
 - `scripts/add-password-column-to-users.sql` - SQL script to add password column
 
 
+

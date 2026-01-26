@@ -39,6 +39,7 @@ type ServiceProvider = {
         price?: number;
         description?: string;
         etaMinutes?: number;
+        active?: boolean;
     }>;
 };
 
@@ -127,11 +128,8 @@ const ServiceCart: React.FC<Props> = ({
     useEffect(() => {
         const fetchProviderServices = async () => {
             try {
-                // Fetch providers with their categories
-                const [servicesResp, providersResp] = await Promise.all([
-                    fetch('/api/provider-services?scope=public'),
-                    fetch('/api/service-providers?scope=all').catch(() => null),
-                ]);
+                // Fetch provider services
+                const servicesResp = await fetch('/api/provider-services?scope=public');
                 
                 if (!servicesResp.ok) return;
                 const servicesData = await servicesResp.json();
@@ -148,16 +146,6 @@ const ServiceCart: React.FC<Props> = ({
                     });
                 });
                 setProviderServices(grouped);
-                
-                // Update providers with categories if available
-                if (providersResp && providersResp.ok) {
-                    const providersData = await providersResp.json();
-                    const providersWithCategories = serviceProviders.map(p => {
-                        const providerData = providersData.find((pd: any) => pd.id === p.id || pd.uid === p.id);
-                        return providerData ? { ...p, serviceCategories: providerData.serviceCategories || [] } : p;
-                    });
-                    // Note: This would require updating the serviceProviders prop, but we'll use it in filtering
-                }
                 
                 // Build service packages from actual provider services
                 const serviceTypeMap = new Map<string, { price?: number; description?: string; etaMinutes?: number; count: number }>();
@@ -321,7 +309,6 @@ const ServiceCart: React.FC<Props> = ({
         return { subtotal, discount, tax, total };
     }, [items, selectedCoupon, coupons, availableServicePackages]);
 
-    const selectedServiceIds = useMemo(() => items.map(i => i.serviceId), [items]);
 
     // Map service package IDs to categories
     const SERVICE_PACKAGE_TO_CATEGORY: Record<string, string> = {
@@ -462,18 +449,19 @@ const ServiceCart: React.FC<Props> = ({
             return;
         }
         
+        // Use the first provider as the primary providerId
+        const primaryProviderId = providersToNotify[0];
+        
         const payload = {
             items,
             addressId: selectedAddress,
             address: addresses.find(a => a.id === selectedAddress),
             slotId: selectedSlot,
             couponCode: selectedCoupon,
-            candidateProviderIds: providersToNotify,
+            providerId: primaryProviderId,
             total: totals.total,
             note,
             carDetails,
-            servicePackages: availableServicePackages,
-            serviceTypes: selectedServiceTypes, // Include service types for better matching
         };
         await onSubmitRequest?.(payload);
     };

@@ -105,3 +105,4 @@ After setting up your credentials, you can:
 For more information, visit: https://supabase.com/docs
 
 
+

@@ -38,7 +38,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   onToggleWishlist,
   wishlist,
   comparisonList,
-  onViewSellerProfile,
+  onViewSellerProfile: _onViewSellerProfile,
   recommendations,
   allVehicles,
   onNavigate,
@@ -380,6 +380,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               [VehicleCategory.THREE_WHEELER]: 'from-yellow-500 to-orange-600',
               [VehicleCategory.COMMERCIAL]: 'from-purple-500 to-violet-600',
               [VehicleCategory.FARM]: 'from-green-500 to-emerald-600',
+              [VehicleCategory.CONSTRUCTION]: 'from-gray-500 to-slate-600',
             };
             
             const gradient = categoryGradients[category.id] || 'from-gray-500 to-gray-600';

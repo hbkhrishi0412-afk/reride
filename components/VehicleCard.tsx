@@ -30,7 +30,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   // Validate onSelect prop on mount
   useEffect(() => {
     if (!onSelect) {
-      console.error('❌ VehicleCard: onSelect prop is missing!', vehicle.id);
+      logError('❌ VehicleCard: onSelect prop is missing!', vehicle.id);
     }
   }, [onSelect, vehicle.id]);
   
@@ -62,14 +62,14 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
       return;
     }
     
-    // Log the click for debugging
-    console.log('🚗 VehicleCard clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
-    console.log('🚗 Click target:', target.tagName, target.className);
-    console.log('🚗 onSelect function exists:', typeof onSelect === 'function');
+    // Log the click for debugging (development only)
+    logInfo('🚗 VehicleCard clicked for vehicle:', vehicle.id, vehicle.make, vehicle.model);
+    logInfo('🚗 Click target:', target.tagName, target.className);
+    logInfo('🚗 onSelect function exists:', typeof onSelect === 'function');
     
     // Validate onSelect exists
     if (!onSelect) {
-      console.error('❌ VehicleCard: onSelect prop is not defined!', {
+      logError('❌ VehicleCard: onSelect prop is not defined!', {
         vehicleId: vehicle.id,
         hasOnSelect: !!onSelect,
         onSelectType: typeof onSelect
@@ -79,11 +79,11 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
     
     // Call onSelect
     try {
-      console.log('🚗 Calling onSelect with vehicle:', vehicle.id);
+      logInfo('🚗 Calling onSelect with vehicle:', vehicle.id);
       onSelect(vehicle);
-      console.log('🚗 onSelect called successfully');
+      logInfo('🚗 onSelect called successfully');
     } catch (error) {
-      console.error('❌ Error in VehicleCard handleCardClick:', error);
+      logError('❌ Error in VehicleCard handleCardClick:', error);
     }
   };
 
@@ -150,12 +150,15 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
               className="h-4 w-4 text-white" 
               viewBox="0 0 20 20" 
               fill="currentColor"
+              aria-hidden="true"
+              role="img"
             >
               <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
             </svg>
             <span 
               className="text-white font-bold"
               style={{ fontSize: '12px', letterSpacing: '0.5px' }}
+              aria-label="Featured vehicle badge"
             >
               Featured
             </span>
@@ -182,6 +185,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
               fill="none" 
               viewBox="0 0 24 24" 
               stroke="currentColor"
+              aria-hidden="true"
+              role="img"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
             </svg>
@@ -204,6 +209,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
               fill={isInWishlist ? 'currentColor' : 'none'}
               stroke="currentColor"
               strokeWidth={2}
+              aria-hidden="true"
+              role="img"
             >
               <path 
                 fillRule="evenodd" 
@@ -252,7 +259,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             fontFamily: "'Poppins', sans-serif"
           }}
         >
-          By: <button 
+          By:           <button 
             type="button"
             onClick={handleSellerClick}
             className="font-semibold hover:underline focus:outline-none transition-colors cursor-pointer"
@@ -260,6 +267,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
               color: '#FF7F47',
               fontFamily: "'Poppins', sans-serif"
             }}
+            aria-label={`View seller profile for ${vehicle.sellerName || 'seller'}`}
           >
             {vehicle.sellerName || 'Seller'}
           </button>
@@ -297,6 +305,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
                 style={{ color: '#2196F3', width: '16px', height: '16px' }} 
                 viewBox="0 0 20 20" 
                 fill="currentColor"
+                aria-hidden="true"
+                role="img"
               >
                 <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" />
               </svg>
@@ -316,6 +326,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
                 style={{ color: '#2196F3', width: '16px', height: '16px' }} 
                 viewBox="0 0 20 20" 
                 fill="currentColor"
+                aria-hidden="true"
+                role="img"
               >
                 <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
               </svg>
@@ -338,6 +350,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
                 style={{ color: '#2196F3', width: '16px', height: '16px' }} 
                 viewBox="0 0 20 20" 
                 fill="currentColor"
+                aria-hidden="true"
+                role="img"
               >
                 <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
               </svg>
@@ -358,6 +372,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
                   style={{ color: '#2196F3', width: '16px', height: '16px' }} 
                   viewBox="0 0 20 20" 
                   fill="currentColor"
+                  aria-hidden="true"
+                  role="img"
                 >
                   <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
                 </svg>
