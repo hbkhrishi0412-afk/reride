@@ -1,92 +1,92 @@
 /**
- * Safe logging utility that gates console statements in production
- * Prevents information leakage and performance issues
+ * Centralized Logging Utility
+ * Provides environment-aware logging that is automatically removed in production builds
+ * SECURITY: All logs are sanitized to prevent secret exposure
  */
 
-const isDevelopment = process.env.NODE_ENV !== 'production';
-
-/**
- * Log info messages (only in development)
- */
-export const logInfo = (...args: any[]): void => {
-  if (isDevelopment) {
-    console.log(...args);
-  }
-};
+import { sanitizeErrorForLogging, sanitizeObject } from './secretSanitizer.js';
 
 /**
- * Log warning messages (only in development, unless critical)
+ * Sanitizes log arguments to prevent secret exposure
  */
-export const logWarn = (...args: any[]): void => {
-  if (isDevelopment) {
-    console.warn(...args);
-  }
-};
-
-/**
- * Log error messages (always logged, but sanitized in production)
- */
-export const logError = (...args: any[]): void => {
-  // Process arguments to extract error information properly
-  const processedArgs = args.map(arg => {
+function sanitizeLogArgs(args: unknown[]): unknown[] {
+  return args.map(arg => {
     if (arg instanceof Error) {
-      // Extract Error properties explicitly and sanitize sensitive fields
-      const errorObj: Record<string, any> = {
-        name: arg.name,
-        message: arg.message,
-        stack: arg.stack,
-      };
-      
-      // Extract custom properties from Error object
-      Object.getOwnPropertyNames(arg).forEach(key => {
-        if (key !== 'name' && key !== 'message' && key !== 'stack') {
-          try {
-            errorObj[key] = (arg as any)[key];
-          } catch {
-            // Skip non-enumerable or problematic properties
-          }
-        }
-      });
-      
-      // Sanitize sensitive fields from Error object
-      delete errorObj.password;
-      delete errorObj.token;
-      delete errorObj.secret;
-      delete errorObj.apiKey;
-      
-      return errorObj;
+      return sanitizeErrorForLogging(arg);
+    }
+    if (typeof arg === 'string') {
+      return sanitizeObject(arg);
     }
     if (typeof arg === 'object' && arg !== null) {
-      // Remove sensitive fields
-      const sanitized = { ...arg };
-      delete (sanitized as any).password;
-      delete (sanitized as any).token;
-      delete (sanitized as any).secret;
-      delete (sanitized as any).apiKey;
-      return sanitized;
+      return sanitizeObject(arg);
     }
     return arg;
   });
-
-  if (isDevelopment) {
-    console.error(...processedArgs);
-  } else {
-    // In production, log errors but sanitize sensitive data
-    console.error(...processedArgs);
-  }
-};
+}
 
 /**
- * Log security events (always logged, but use proper logging service in production)
+ * Logs information (only in development)
  */
-export const logSecurity = (message: string, data?: any): void => {
-  if (isDevelopment) {
-    console.log(`[SECURITY] ${message}`, data || '');
-  } else {
-    // In production, use proper logging service (Sentry, CloudWatch, etc.)
-    // For now, log to console but consider implementing structured logging
-    console.log(`[SECURITY] ${message}`, data ? JSON.stringify(data) : '');
-    // TODO: Replace with proper logging service
-    // Example: Sentry.captureMessage(message, { level: 'info', extra: data });
+export function logInfo(...args: unknown[]): void {
+  if (process.env.NODE_ENV !== 'production') {
+    const sanitized = sanitizeLogArgs(args);
+    console.log(...sanitized);
   }
-};
+}
+
+/**
+ * Logs warning messages (only in development)
+ * @param args - Arguments to log (same as console.warn)
+ * @example
+ * logWarn('Deprecated API used:', apiName);
+ */
+export function logWarn(...args: unknown[]): void {
+  if (process.env.NODE_ENV !== 'production') {
+    const sanitized = sanitizeLogArgs(args);
+    console.warn(...sanitized);
+  }
+}
+
+/**
+ * Logs errors (always logged, but can be filtered in production)
+ * SECURITY: Secrets are automatically sanitized before logging
+ */
+export function logError(...args: unknown[]): void {
+  // Sanitize all error arguments to prevent secret exposure
+  const sanitized = sanitizeLogArgs(args);
+  console.error(...sanitized);
+  
+  // In production, send to error tracking service (e.g., Sentry, LogRocket)
+  if (process.env.NODE_ENV === 'production') {
+    // TODO: Integrate with error tracking service
+    // Example: if (window.Sentry) window.Sentry.captureException(args[0]);
+  }
+}
+
+/**
+ * Logs debug information (only in development)
+ * @param args - Arguments to log (same as console.debug)
+ * @example
+ * logDebug('Component state:', state);
+ */
+export function logDebug(...args: unknown[]): void {
+  if (process.env.NODE_ENV !== 'production') {
+    const sanitized = sanitizeLogArgs(args);
+    console.debug(...sanitized);
+  }
+}
+
+/**
+ * Logs security-related events (always logged)
+ * SECURITY: Secrets are automatically sanitized before logging
+ */
+export function logSecurity(...args: unknown[]): void {
+  // Security events should always be logged, but sanitized
+  const sanitized = sanitizeLogArgs(args);
+  console.warn('[SECURITY]', ...sanitized);
+  
+  // In production, send to security monitoring service
+  if (process.env.NODE_ENV === 'production') {
+    // TODO: Integrate with security monitoring service
+  }
+}

@@ -42,3 +42,4 @@ CREATE INDEX IF NOT EXISTS idx_service_requests_provider_id ON service_requests(
 CREATE INDEX IF NOT EXISTS idx_service_requests_status ON service_requests(status);
 
 
+

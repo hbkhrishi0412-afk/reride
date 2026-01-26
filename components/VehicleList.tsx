@@ -11,6 +11,9 @@ import VehicleTile from './VehicleTile.js';
 import VehicleTileSkeleton from './VehicleTileSkeleton.js';
 import { saveSearch } from '../services/buyerEngagementService.js';
 import { getVehicleData } from '../services/vehicleDataService.js';
+import { logInfo, logError } from '../utils/logger.js';
+import type { VehicleData } from '../types.js';
+import type { VehicleMake, VehicleModel } from './vehicleData.js';
 // Lazy load location data when needed
 
 interface VehicleListProps {
@@ -74,25 +77,6 @@ const MAX_PRICE = 5000000;
 const MIN_MILEAGE = 0;
 const MAX_MILEAGE = 200000;
 
-const Pagination: React.FC<{ currentPage: number; totalPages: number; onPageChange: (page: number) => void; }> = ({ currentPage, totalPages, onPageChange }) => {
-  if (totalPages <= 1) return null;
-
-  const pageNumbers = [];
-  for (let i = 1; i <= totalPages; i++) {
-    pageNumbers.push(i);
-  }
-
-  return (
-    <nav className="flex justify-center items-center space-x-2 mt-8 mb-8">
-      <button onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 rounded-md bg-white dark:bg-brand-gray-700 disabled:opacity-50">Prev</button>
-      {pageNumbers.map(number => (
-        <button key={number} onClick={() => onPageChange(number)} className={`px-4 py-2 rounded-md ${currentPage === number ? 'text-white' : 'bg-white dark:bg-brand-gray-700'}`} style={currentPage === number ? { background: '#FF6B35' } : undefined}>{number}</button>
-      ))}
-      <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 rounded-md bg-white dark:bg-brand-gray-700 disabled:opacity-50">Next</button>
-    </nav>
-  );
-};
-
 const VehicleList: React.FC<VehicleListProps> = React.memo(({ 
   vehicles, 
   onSelectVehicle, 
@@ -119,12 +103,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [showSuggestions, setShowSuggestions] = useState(false);
   
   // Vehicle data for filters
-  const [vehicleData, setVehicleData] = useState<any>(null);
+  const [vehicleData, setVehicleData] = useState<VehicleData | null>(null);
   const [isLoadingVehicleData, setIsLoadingVehicleData] = useState(true);
   
-  // Lazy load location and fuel data
+  // Lazy load location data
   const [indianStates, setIndianStates] = useState<Array<{name: string, code: string}>>([]);
-  const [fuelTypes, setFuelTypes] = useState<string[]>([]);
 
   // Load vehicle data for filters with caching
   useEffect(() => {
@@ -152,11 +135,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           timestamp: Date.now()
         }));
         
-        if (process.env.NODE_ENV === 'development') {
-          console.log('✅ Vehicle data loaded for filters:', data);
-        }
+        // Logging handled by logger utility
       } catch (error) {
-        console.error('❌ Failed to load vehicle data for filters:', error);
+        // Error logging handled by logger utility
       } finally {
         setIsLoadingVehicleData(false);
       }
@@ -255,14 +236,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         });
         
         if (categoryKey && vehicleData[categoryKey]) {
-          vehicleData[categoryKey].forEach((make: any) => {
+          vehicleData[categoryKey].forEach((make: VehicleMake) => {
             makesFromDb.add(make.name);
           });
         }
       } else {
         // No category filter - show all makes from all categories
-        Object.values(vehicleData).forEach((categoryData: any) => {
-          categoryData.forEach((make: any) => {
+        Object.values(vehicleData).forEach((categoryData: VehicleMake[]) => {
+          categoryData.forEach((make: VehicleMake) => {
             makesFromDb.add(make.name);
           });
         });
@@ -297,14 +278,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         });
         
         if (categoryKey && vehicleData[categoryKey]) {
-          vehicleData[categoryKey].forEach((make: any) => {
+          vehicleData[categoryKey].forEach((make: VehicleMake) => {
             makesFromDb.add(make.name);
           });
         }
       } else {
         // No category filter - show all makes from all categories
-        Object.values(vehicleData).forEach((categoryData: any) => {
-          categoryData.forEach((make: any) => {
+        Object.values(vehicleData).forEach((categoryData: VehicleMake[]) => {
+          categoryData.forEach((make: VehicleMake) => {
             makesFromDb.add(make.name);
           });
         });
@@ -341,7 +322,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         if (categoryKey && vehicleData[categoryKey]) {
           vehicleData[categoryKey].forEach((make: any) => {
             if (make.name === makeFilter) {
-              make.models.forEach((model: any) => {
+              make.models.forEach((model: VehicleModel) => {
                 modelsFromDb.add(model.name);
               });
             }
@@ -352,7 +333,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         Object.values(vehicleData).forEach((categoryData: any) => {
           categoryData.forEach((make: any) => {
             if (make.name === makeFilter) {
-              make.models.forEach((model: any) => {
+              make.models.forEach((model: VehicleModel) => {
                 modelsFromDb.add(model.name);
               });
             }
@@ -392,7 +373,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           if (categoryKey && vehicleData[categoryKey]) {
             vehicleData[categoryKey].forEach((make: any) => {
               if (make.name === tempFilters.makeFilter) {
-                make.models.forEach((model: any) => {
+                make.models.forEach((model: VehicleModel) => {
                   modelsFromDb.add(model.name);
                 });
               }
@@ -403,7 +384,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           Object.values(vehicleData).forEach((categoryData: any) => {
             categoryData.forEach((make: any) => {
               if (make.name === tempFilters.makeFilter) {
-                make.models.forEach((model: any) => {
+                make.models.forEach((model: VehicleModel) => {
                   modelsFromDb.add(model.name);
                 });
               }
@@ -645,10 +626,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         const { loadLocationData: loadLoc } = await import('../utils/dataLoaders');
         const locationData = await loadLoc();
         const { INDIAN_STATES } = await locationData;
-        const { FUEL_TYPES } = await import('../constants');
         
         setIndianStates(INDIAN_STATES);
-        setFuelTypes(FUEL_TYPES);
         
         // Set initial state filter based on user location (but don't count it as user-set)
         if (userLocation) {
@@ -663,10 +642,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to load location data:', error);
+          logError('Failed to load location data:', error);
         }
-        // Fallback to basic data
-        setFuelTypes(['Petrol', 'Diesel', 'Electric', 'CNG', 'Hybrid']);
       }
     };
     loadLocationData();
@@ -697,7 +674,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           const stateCode = getStateCodeForCity(selectedCity, CITIES_BY_STATE);
           if (stateCode && stateCode !== stateFilter) {
             if (process.env.NODE_ENV === 'development') {
-              console.log('🔵 VehicleList: Updating state filter to', stateCode, 'for city', selectedCity);
+              logInfo('🔵 VehicleList: Updating state filter to', stateCode, 'for city', selectedCity);
             }
             setStateFilter(stateCode);
             setIsStateFilterUserSet(true); // Mark as user-set since it came from city selection
@@ -709,7 +686,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       // We'll clear it if it was user-set (likely came from city selection)
       if (isStateFilterUserSet && stateFilter) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('🔵 VehicleList: Clearing state filter because city was cleared');
+          logInfo('🔵 VehicleList: Clearing state filter because city was cleared');
         }
         setStateFilter('');
         setIsStateFilterUserSet(false);
@@ -731,7 +708,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           if (cityStateCode !== stateFilter) {
             // City doesn't match the selected state, clear city
             if (process.env.NODE_ENV === 'development') {
-              console.log('🔵 VehicleList: Clearing city because state filter changed to', stateFilter);
+              logInfo('🔵 VehicleList: Clearing city because state filter changed to', stateFilter);
             }
             onCityChange('');
           }
@@ -874,7 +851,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         }
       });
     } catch (error) {
-      console.error('Error applying filters:', error);
+      logError('Error applying filters:', error);
       // Still close the modal even if there's an error
       setIsFilterModalOpen(false);
     }
@@ -979,7 +956,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       alert('Search saved successfully!');
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
-        console.error('Error saving search:', error);
+        logError('Error saving search:', error);
       }
       alert('Failed to save search. Please try again.');
     }
@@ -1064,7 +1041,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
     // Debug: Log filter results (only in development)
     if (process.env.NODE_ENV === 'development') {
-      console.log('Filter Results:', {
+      logInfo('Filter Results:', {
         totalVehicles: sourceVehicles.length,
         filteredCount: filtered.length,
         activeFilters: {

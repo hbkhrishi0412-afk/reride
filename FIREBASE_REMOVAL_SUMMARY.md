@@ -79,3 +79,4 @@ The `env.example` file still contains Firebase configuration. Update it to only 
 Your application is now fully using Supabase instead of Firebase!
 
 
+

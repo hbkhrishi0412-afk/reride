@@ -3,6 +3,8 @@
  * Handles JWT tokens, token refresh, and session cookies
  */
 
+import { logInfo, logWarn, logError } from './logger';
+
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean; // Skip authentication for public endpoints
   retryOn401?: boolean; // Retry request after token refresh (default: true)
@@ -42,7 +44,7 @@ export const getAuthHeaders = (): HeadersInit => {
       headers['Authorization'] = `Bearer ${token}`;
     }
   } catch (error) {
-    console.warn('Failed to get auth token:', error);
+    logWarn('Failed to get auth token:', error);
   }
 
   return headers;
@@ -69,7 +71,7 @@ const refreshToken = async (): Promise<string | null> => {
     try {
       const refreshTokenValue = localStorage.getItem('reRideRefreshToken');
       if (!refreshTokenValue) {
-        console.warn('⚠️ No refresh token available');
+        logWarn('⚠️ No refresh token available');
         refreshTokenKnownInvalid = true;
         // Clear all tokens to prevent inconsistent state with stale access tokens
         clearAuthTokens();
@@ -86,7 +88,7 @@ const refreshToken = async (): Promise<string | null> => {
       if (response.status === 401 || response.status === 400) {
         // Refresh token expired or invalid - mark as invalid and clear all tokens
         refreshTokenKnownInvalid = true;
-        console.warn('⚠️ Refresh token expired or invalid. Please log in again.');
+        logWarn('⚠️ Refresh token expired or invalid. Please log in again.');
         clearAuthTokens();
         return null;
       }
@@ -95,13 +97,13 @@ const refreshToken = async (): Promise<string | null> => {
         // Handle different error status codes appropriately
         if (response.status === 500 || response.status === 502 || response.status === 503) {
           // Server errors - don't mark as invalid, might be temporary
-          console.warn(`⚠️ Token refresh server error (${response.status}). This may be temporary.`);
+          logWarn(`⚠️ Token refresh server error (${response.status}). This may be temporary.`);
         } else if (response.status === 429) {
           // Rate limiting - don't mark as invalid, just wait
-          console.warn('⚠️ Token refresh rate limited. Please try again later.');
+          logWarn('⚠️ Token refresh rate limited. Please try again later.');
         } else {
           // Other errors (like 403, 404, etc.)
-          console.warn(`⚠️ Token refresh request failed with status ${response.status}`);
+          logWarn(`⚠️ Token refresh request failed with status ${response.status}`);
         }
         // Don't mark as invalid on non-401/400 errors - they might be temporary
         return null;
@@ -116,23 +118,37 @@ const refreshToken = async (): Promise<string | null> => {
         }
         // Reset invalid flag on successful refresh
         refreshTokenKnownInvalid = false;
-        console.log('✅ Token refreshed successfully');
+        logInfo('✅ Token refreshed successfully');
         return result.accessToken;
       }
 
-      console.warn('⚠️ Token refresh response missing access token');
+      logWarn('⚠️ Token refresh response missing access token');
       return null;
     } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authenticatedFetch.ts:110',message:'Token refresh exception',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-4'})}).catch(()=>{});
-      // #endregion
+      // Debug logging (only in development with DEBUG_ENDPOINT configured)
+      if (process.env.NODE_ENV !== 'production' && process.env.DEBUG_ENDPOINT) {
+        try {
+          fetch(process.env.DEBUG_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'authenticatedFetch.ts:110',
+              message: 'Token refresh exception',
+              data: { error: error instanceof Error ? error.message : String(error) },
+              timestamp: Date.now(),
+            })
+          }).catch(() => {});
+        } catch {
+          // Silently fail if debug endpoint is unavailable
+        }
+      }
       // CRITICAL FIX: Don't log as error for network issues - might be temporary
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
         // Network error - might be temporary, don't mark token as invalid
-        console.warn('⚠️ Token refresh network error (may be temporary):', errorMessage);
+        logWarn('⚠️ Token refresh network error (may be temporary):', errorMessage);
       } else {
-        console.error('❌ Token refresh failed:', error);
+        logError('❌ Token refresh failed:', error);
       }
       return null;
     } finally {
@@ -182,7 +198,7 @@ const clearAuthTokens = (resetInvalidFlag: boolean = false) => {
     isRefreshing = false;
     refreshPromise = null;
   } catch (error) {
-    console.warn('Failed to clear tokens:', error);
+    logWarn('Failed to clear tokens:', error);
   }
 };
 
@@ -240,14 +256,14 @@ export const authenticatedFetch = async (
     // Only if refresh token is not known to be invalid
     if (!skipAuth && retryOn401 && !isTokenLikelyValid() && !refreshTokenKnownInvalid) {
       try {
-        console.log('🔄 Token appears expired, proactively refreshing...');
+        logInfo('🔄 Token appears expired, proactively refreshing...');
         const newToken = await refreshToken();
         if (newToken) {
-          console.log('✅ Token refreshed proactively');
+          logInfo('✅ Token refreshed proactively');
         }
       } catch (refreshError) {
         // Silently handle token refresh errors - don't block the main request
-        console.warn('⚠️ Proactive token refresh failed:', refreshError);
+        logWarn('⚠️ Proactive token refresh failed:', refreshError);
       }
     }
 
@@ -274,7 +290,7 @@ export const authenticatedFetch = async (
       // Network error, CORS error, or other fetch failures
       // Return a Response-like object that indicates failure
       // This prevents the error from propagating to ErrorBoundary
-      console.warn('⚠️ Fetch error in authenticatedFetch:', fetchError);
+      logWarn('⚠️ Fetch error in authenticatedFetch:', fetchError);
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -293,18 +309,46 @@ export const authenticatedFetch = async (
     // Skip refresh attempt if refresh token is known to be invalid
       if (response.status === 401 && retryOn401 && !skipAuth && !refreshTokenKnownInvalid) {
       try {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authenticatedFetch.ts:269',message:'401 received - attempting token refresh',data:{url,retryOn401,skipAuth,refreshTokenKnownInvalid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-4'})}).catch(()=>{});
-        // #endregion
-        console.log('🔄 401 received, attempting token refresh...');
+        // Debug logging (only in development with DEBUG_ENDPOINT configured)
+        if (process.env.NODE_ENV !== 'production' && process.env.DEBUG_ENDPOINT) {
+          try {
+            fetch(process.env.DEBUG_ENDPOINT, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'authenticatedFetch.ts:269',
+                message: '401 received - attempting token refresh',
+                data: { url, retryOn401, skipAuth, refreshTokenKnownInvalid },
+                timestamp: Date.now(),
+              })
+            }).catch(() => {});
+          } catch {
+            // Silently fail if debug endpoint is unavailable
+          }
+        }
+        logInfo('🔄 401 received, attempting token refresh...');
         
         const newToken = await refreshToken();
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authenticatedFetch.ts:273',message:'Token refresh result',data:{hasNewToken:!!newToken,refreshTokenKnownInvalid},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-4'})}).catch(()=>{});
-        // #endregion
+        // Debug logging (only in development with DEBUG_ENDPOINT configured)
+        if (process.env.NODE_ENV !== 'production' && process.env.DEBUG_ENDPOINT) {
+          try {
+            fetch(process.env.DEBUG_ENDPOINT, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'authenticatedFetch.ts:273',
+                message: 'Token refresh result',
+                data: { hasNewToken: !!newToken, refreshTokenKnownInvalid },
+                timestamp: Date.now(),
+              })
+            }).catch(() => {});
+          } catch {
+            // Silently fail if debug endpoint is unavailable
+          }
+        }
         
         if (newToken) {
-          console.log('✅ Token refreshed, retrying request...');
+          logInfo('✅ Token refreshed, retrying request...');
           // Retry with new token - wrap in try-catch
           try {
             response = await fetch(url, {
@@ -317,13 +361,13 @@ export const authenticatedFetch = async (
             });
           } catch (retryError) {
             // Network error on retry - return original 401 response
-            console.warn('⚠️ Network error on retry after token refresh:', retryError);
+            logWarn('⚠️ Network error on retry after token refresh:', retryError);
             return response; // Return original 401 response
           }
           
           // CRITICAL FIX: If retry still returns 401, check if it's clearly an auth issue
           if (response.status === 401) {
-            console.warn('⚠️ Request still returns 401 after token refresh');
+            logWarn('⚠️ Request still returns 401 after token refresh');
             // Only clear tokens if it's clearly an auth issue, not a permission issue
             try {
               // CRITICAL FIX: Check if body has been consumed before cloning
@@ -337,21 +381,35 @@ export const authenticatedFetch = async (
                 // Body already consumed, check status code only
                 // Be conservative - only clear if we're certain it's an auth issue
                 // For now, don't clear tokens if we can't read the error message
-                console.warn('⚠️ Response body already consumed, cannot check error message');
+                logWarn('⚠️ Response body already consumed, cannot check error message');
               }
             } catch (error) {
               // If we can't read the error, be conservative and don't clear tokens
-              console.warn('⚠️ Could not read error response:', error);
+              logWarn('⚠️ Could not read error response:', error);
             }
             // Don't redirect immediately - let the caller handle the error first
             // The redirect will happen when the error is shown to the user
           }
         } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authenticatedFetch.ts:319',message:'Token refresh failed',data:{refreshTokenKnownInvalid,url},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'hypothesis-4'})}).catch(()=>{});
-          // #endregion
+          // Debug logging (only in development with DEBUG_ENDPOINT configured)
+          if (process.env.NODE_ENV !== 'production' && process.env.DEBUG_ENDPOINT) {
+            try {
+              fetch(process.env.DEBUG_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  location: 'authenticatedFetch.ts:319',
+                  message: 'Token refresh failed',
+                  data: { refreshTokenKnownInvalid, url },
+                  timestamp: Date.now(),
+                })
+              }).catch(() => {});
+            } catch {
+              // Silently fail if debug endpoint is unavailable
+            }
+          }
           // CRITICAL FIX: Don't clear tokens immediately - might be temporary network issue
-          console.warn('⚠️ Token refresh failed, but not clearing tokens yet');
+          logWarn('⚠️ Token refresh failed, but not clearing tokens yet');
           // Only mark as invalid if we're certain it's an auth issue
           if (refreshTokenKnownInvalid) {
             clearAuthTokens();
@@ -359,7 +417,7 @@ export const authenticatedFetch = async (
         }
       } catch (refreshError) {
         // Error during token refresh - return original 401 response
-        console.warn('⚠️ Error during token refresh:', refreshError);
+        logWarn('⚠️ Error during token refresh:', refreshError);
         return response; // Return original 401 response
       }
     } else if (response.status === 401 && refreshTokenKnownInvalid) {
@@ -372,7 +430,7 @@ export const authenticatedFetch = async (
   } catch (error) {
     // Catch any unexpected errors and return a safe Response object
     // This prevents errors from propagating to ErrorBoundary
-    console.error('❌ Unexpected error in authenticatedFetch:', error);
+    logError('❌ Unexpected error in authenticatedFetch:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 

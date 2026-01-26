@@ -28,22 +28,25 @@ try {
   // Try to initialize Supabase admin client to check availability
   getSupabaseAdminClient();
   USE_SUPABASE = true;
-} catch (error) {
-  // Don't crash the function if Supabase initialization fails at module load
-  // We'll handle this gracefully in each handler by returning 503 errors
-  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-  console.warn('⚠️ Supabase initialization failed at module load (function will still work, but Supabase operations will return 503):', errorMessage);
-  USE_SUPABASE = false;
-}
+  } catch (error) {
+    // Don't crash the function if Supabase initialization fails at module load
+    // We'll handle this gracefully in each handler by returning 503 errors
+    // SECURITY: Sanitize error message to prevent secret exposure
+    const { sanitizeError } = await import('../utils/secretSanitizer.js');
+    const errorMessage = sanitizeError(error);
+    logWarn('⚠️ Supabase initialization failed at module load (function will still work, but Supabase operations will return 503):', errorMessage);
+    USE_SUPABASE = false;
+  }
 
 // Get Supabase status with detailed error information
+// SECURITY: Error messages are sanitized to prevent secret exposure
 function getSupabaseErrorMessage(): string {
   try {
     getSupabaseAdminClient();
     return '';
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return `Supabase database is not available: ${errorMessage}. Please check your SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY configuration.`;
+    // SECURITY: Sanitize error message - don't expose actual keys or connection strings
+    return 'Supabase database is not available. Please check your SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY configuration.';
   }
 }
 
@@ -67,6 +70,8 @@ import {
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
+import { createError, createErrorResponse, ErrorCode, getHttpStatusFromErrorCode } from '../utils/errorUtils.js';
+import { sanitizeError } from '../utils/secretSanitizer.js';
 
 // Type for normalized user (without password)
 interface NormalizedUser extends Omit<UserType, 'password'> {
@@ -492,11 +497,10 @@ async function mainHandler(
         if (process.env.NODE_ENV !== 'production') {
           logWarn(`⚠️ Rate limit exceeded for ${rateLimitIdentifier} on ${pathname}`);
         }
-        return res.status(429).json({
-          success: false,
-          reason: 'Too many requests. Please try again later.',
+        const error = createError('Too many requests. Please try again later.', ErrorCode.RATE_LIMIT_EXCEEDED, {
           retryAfter: Math.ceil(config.RATE_LIMIT.WINDOW_MS / 1000)
         });
+        return res.status(getHttpStatusFromErrorCode(error.code)).json(createErrorResponse(error));
       }
       
       res.setHeader('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
@@ -732,7 +736,8 @@ async function mainHandler(
       });
     }
     
-    const message = error instanceof Error ? error.message : 'An unexpected server error occurred.';
+    // SECURITY: Sanitize error message to prevent secret exposure
+    const message = sanitizeError(error);
     return res.status(500).json({ success: false, reason: message, error: message });
   }
 }

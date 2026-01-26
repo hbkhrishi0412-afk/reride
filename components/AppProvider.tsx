@@ -13,7 +13,7 @@ import { getAuthHeaders } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
-import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
+import { logInfo, logWarn, logError } from '../utils/logger';
 
 interface VehicleUpdateOptions {
   successMessage?: string;
@@ -918,7 +918,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Store view and previous view in history state for back button support
       // Also store selectedVehicle ID if we're on DETAIL view
-      const historyState: any = {
+      const historyState: { view?: View; city?: string; previousView?: View; selectedVehicleId?: number; timestamp?: number } = {
         view: view,
         previousView: currentView,
         timestamp: Date.now()
@@ -1019,7 +1019,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else if (currentPath === '/login') {
           initialView = View.LOGIN_PORTAL;
         }
-        const initialState: any = { 
+        const initialState: { view?: View; city?: string; previousView?: View; timestamp?: number } = { 
           view: initialView, 
           previousView: View.HOME, 
           timestamp: Date.now() 
@@ -1132,7 +1132,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Load initial data with instant cache display and background refresh
   useEffect(() => {
     let isMounted = true;
-    let hasLoadedFreshData = false; // Track if we've already loaded fresh data
     
     const loadInitialData = async () => {
       try {
@@ -1675,9 +1674,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const newVehicleData = JSON.parse(e.newValue);
           setVehicleData(newVehicleData);
-          console.log('✅ Vehicle data synced from another tab');
+          logInfo('✅ Vehicle data synced from another tab');
         } catch (error) {
-          console.error('Failed to parse vehicle data from storage event:', error);
+          logError('Failed to parse vehicle data from storage event:', error);
         }
       }
     };
@@ -1686,7 +1685,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handleVehicleDataUpdate = (e: CustomEvent) => {
       if (e.detail && e.detail.vehicleData) {
         setVehicleData(e.detail.vehicleData);
-        console.log('✅ Vehicle data synced from same tab');
+        logInfo('✅ Vehicle data synced from same tab');
       }
     };
 
@@ -1699,11 +1698,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .then((freshData) => {
           if (freshData) {
             setVehicleData(freshData);
-            console.log('✅ Vehicle data refreshed from API');
+            logInfo('✅ Vehicle data refreshed from API');
           }
         })
         .catch((error) => {
-          console.warn('Failed to refresh vehicle data:', error);
+          logWarn('Failed to refresh vehicle data:', error);
         });
     }, 5 * 60 * 1000); // 5 minutes
 
@@ -1748,14 +1747,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const wsUrl = `${wsProtocol}//${wsHost}`;
     
     // Use Socket.io client for real-time updates
-    let socket: any = null;
+    let socket: ReturnType<typeof import('socket.io-client').io> | null = null;
     
     (async () => {
       try {
         // Dynamically import socket.io-client
-        // @ts-ignore - socket.io-client types may not be available
-        const socketIoClient: any = await import('socket.io-client');
-        const io = socketIoClient.default || socketIoClient.io;
+        const socketIoClient = await import('socket.io-client');
+        const io = socketIoClient.default || (socketIoClient as { io: typeof socketIoClient.default }).io;
         
         // CRITICAL FIX: Add timeout and better error handling for socket.io connection
         socket = io(wsUrl, {
@@ -1776,7 +1774,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // CRITICAL FIX: Improve error handling - don't spam console with errors
         let connectionErrorLogged = false;
-        socket.on('connect_error', (_error: any) => {
+        socket.on('connect_error', (_error: Error) => {
           // CRITICAL FIX: Only log error once to prevent console spam
           // Error parameter is prefixed with _ to indicate it's intentionally unused
           if (!connectionErrorLogged) {
@@ -1799,11 +1797,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.warn('⚠️ WebSocket reconnection failed. Real-time updates will not be available until server is restarted.');
           }
           // CRITICAL FIX: Disable further reconnection attempts to prevent spam
-          socket.io.reconnect(false);
+          // Disconnect instead of using private reconnect method
+          if (socket) {
+            socket.disconnect();
+          }
         });
         
         // Listen for new messages from other users
-        socket.on('conversation:new-message', (data: { conversationId: string; message: any; conversation: any }) => {
+        socket.on('conversation:new-message', (data: { conversationId: string; message: ChatMessage; conversation: Conversation }) => {
           if (process.env.NODE_ENV === 'development') {
             console.log('🔧 Received real-time message:', data);
           }
@@ -1858,7 +1859,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
         
-        socket.on('error', (error: any) => {
+        socket.on('error', (error: Error) => {
           // CRITICAL FIX: Only log in development to prevent console spam
           if (process.env.NODE_ENV === 'development') {
             console.warn('⚠️ WebSocket error (non-critical):', error?.message || error);
@@ -2155,7 +2156,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { updateUser: updateUserService } = await import('../services/userService');
         
         // Ensure verificationStatus is properly structured for API
-        const apiUpdateData: any = { email, ...details };
+        const apiUpdateData: Partial<User> = { email, ...details };
         
         // If verificationStatus is being updated, ensure it's properly formatted
         if (details.verificationStatus) {
@@ -2173,7 +2174,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           apiUpdateData.govtIdVerified = details.govtIdVerified;
         }
         
-        await updateUserService(apiUpdateData);
+        // Ensure email is present before calling service
+        if (!email) {
+          throw new Error('Email is required for user update');
+        }
+        
+        await updateUserService({ ...apiUpdateData, email } as Partial<User> & { email: string });
         
         // CRITICAL: Refresh users list from API after successful update to ensure sync
         try {
@@ -2397,12 +2403,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
 
           const responseText = await response.text();
-          let result: any = {};
+          let result: { 
+            success: boolean; 
+            reason?: string; 
+            user?: User;
+            error?: string;
+            alreadyFeatured?: boolean;
+            vehicle?: Vehicle;
+            remainingCredits?: number;
+          } = { success: false };
           if (responseText) {
             try {
-              result = JSON.parse(responseText);
+              result = JSON.parse(responseText) as typeof result;
             } catch (parseError) {
-              console.warn('⚠️ Failed to parse feature response JSON:', parseError);
+              logWarn('⚠️ Failed to parse feature response JSON:', parseError);
             }
           }
 
@@ -2421,9 +2435,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           if (result?.success && result.vehicle) {
-            setVehicles(prev =>
-              Array.isArray(prev) ? prev.map(v => (v && v.id === vehicleId ? result.vehicle : v)) : []
-            );
+            const updatedVehicle = result.vehicle;
+            setVehicles(prev => {
+              if (!Array.isArray(prev)) return [];
+              return prev.map(v => (v && v.id === vehicleId ? updatedVehicle : v)).filter((v): v is Vehicle => v !== undefined);
+            });
 
             const sellerEmail = result.vehicle?.sellerEmail;
             if (typeof result.remainingCredits === 'number' && sellerEmail) {
