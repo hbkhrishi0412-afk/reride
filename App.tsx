@@ -2051,6 +2051,7 @@ const AppContent: React.FC = React.memo(() => {
               currentUser={currentUser}
               vehicles={vehicles}
               conversations={conversations}
+              isLoading={isLoading}
               onCreateUser={onCreateUser}
               onAdminUpdateUser={onAdminUpdateUser}
               onToggleUserStatus={onToggleUserStatus}
@@ -2844,6 +2845,7 @@ const AppContent: React.FC = React.memo(() => {
             currentUser={currentUser}
             vehicles={vehicles}
             conversations={conversations}
+            isLoading={isLoading}
             onAdminUpdateUser={onAdminUpdateUser}
             onToggleUserStatus={onToggleUserStatus}
             onDeleteUser={deleteUser}

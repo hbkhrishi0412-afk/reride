@@ -599,14 +599,26 @@ class DataService {
         return [];
       }
 
+      console.log('📊 getUsers: Making API request to /api/users...');
       const users = await this.makeApiRequest<User[]>('/users');
+      
       // Validate response is an array
       if (!Array.isArray(users)) {
+        console.error('❌ getUsers: Invalid response format - expected array, got:', typeof users, users);
         throw new Error('Invalid response format: expected array');
       }
+      
+      console.log(`✅ getUsers: Successfully fetched ${users.length} users from API`);
+      
+      if (users.length === 0) {
+        console.warn('⚠️ getUsers: API returned 0 users. This might indicate:');
+        console.warn('   1. No users exist in the database');
+        console.warn('   2. Authentication/authorization issue');
+        console.warn('   3. Database connection problem');
+      }
+      
       // Cache the API data locally for offline use (use production cache key)
       this.setLocalStorageData('reRideUsers_prod', users);
-      console.log(`✅ Successfully fetched ${users.length} users from API`);
       return users;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
