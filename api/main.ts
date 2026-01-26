@@ -927,20 +927,47 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
       
       // Verify password using bcrypt
-      const isPasswordValid = await validatePassword(sanitizedData.password, user.password);
+      let isPasswordValid = await validatePassword(sanitizedData.password, user.password);
+      
+      // CRITICAL FIX: Handle plain text passwords (migration from old system)
+      // If password validation fails and the stored password is not a bcrypt hash,
+      // check if it's a plain text password that matches, then rehash it
+      if (!isPasswordValid && user.password && user.password.trim() && !user.password.startsWith('$2')) {
+        // Password is stored as plain text - check if it matches
+        if (user.password.trim() === sanitizedData.password.trim()) {
+          logInfo('🔄 Plain text password detected - rehashing and updating user:', normalizedEmail);
+          
+          try {
+            // Rehash the password and update the user
+            const hashedPassword = await hashPassword(sanitizedData.password);
+            await supabaseUserService.update(normalizedEmail, {
+              password: hashedPassword,
+              updatedAt: new Date().toISOString()
+            });
+            
+            // Update the user object with the hashed password
+            user.password = hashedPassword;
+            
+            // Password is now valid (we just verified it matches)
+            isPasswordValid = true;
+            
+            logInfo('✅ Password rehashed successfully for user:', normalizedEmail);
+          } catch (rehashError) {
+            logError('❌ Failed to rehash password:', rehashError);
+            // Continue to return invalid credentials error below
+          }
+        }
+      }
+      
       if (!isPasswordValid) {
         // SECURITY: Log minimal details - don't expose password hash prefixes
         if (process.env.NODE_ENV !== 'production') {
           logWarn('⚠️ Password validation failed:', {
             email: normalizedEmail,
             hasPassword: !!user.password,
-            authProvider: user.authProvider
+            authProvider: user.authProvider,
+            passwordIsHashed: user.password?.startsWith('$2') || false
           });
-        }
-        
-        // CRITICAL FIX: Check if user just registered (password might not be hashed yet)
-        if (user.authProvider === 'email' && !user.password?.startsWith('$2')) {
-          logWarn('⚠️ User password is not hashed - this should not happen for email auth');
         }
         
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });

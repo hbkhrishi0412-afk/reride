@@ -103,7 +103,9 @@ export const validatePassword = async (password: string, hash: string): Promise<
     
     // CRITICAL FIX: Check if hash is a bcrypt hash BEFORE trying bcrypt.compare
     // This prevents errors when comparing plain text passwords
-    const isBcryptHash = hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
+    // Bcrypt hashes start with $2 followed by a version letter: a, b, x, or y
+    // Format: $2[abxy]$[cost]$[salt+hash]
+    const isBcryptHash = /^\$2[abxy]\$/.test(hash);
     
     if (isBcryptHash) {
       // Hash is a bcrypt hash, use bcrypt.compare
