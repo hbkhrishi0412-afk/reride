@@ -65,6 +65,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/main.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

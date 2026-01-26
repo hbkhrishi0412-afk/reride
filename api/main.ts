@@ -599,7 +599,7 @@ async function mainHandler(
         // For other vehicle endpoints, let the error propagate to outer catch
         throw error;
       }
-    } else if (pathname.includes('/admin') || pathname.endsWith('/admin')) {
+    } else if ((pathname.includes('/api/admin') || pathname === '/api/admin' || pathname.endsWith('/api/admin')) && !pathname.includes('/admin/login')) {
       return await handleAdmin(req, res, handlerOptions);
     } else if (pathname.includes('/db-health') || pathname.endsWith('/db-health')) {
       return await handleHealth(req, res);
