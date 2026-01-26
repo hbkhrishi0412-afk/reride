@@ -213,17 +213,44 @@ export const supabaseUserService = {
 
   // Get all users
   async findAll(): Promise<User[]> {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
-    const { data, error } = await supabase
-      .from('users')
-      .select('*');
-    
-    if (error) {
-      throw new Error(`Failed to fetch users: ${error.message}`);
+    try {
+      const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+      
+      if (isServerSide) {
+        console.log('📊 findAll: Using Supabase Admin Client (server-side)');
+      } else {
+        console.log('📊 findAll: Using Supabase Client (client-side)');
+      }
+      
+      const { data, error } = await supabase
+        .from('users')
+        .select('*');
+      
+      if (error) {
+        console.error('❌ Supabase findAll error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        throw new Error(`Failed to fetch users from Supabase: ${error.message} (Code: ${error.code || 'unknown'})`);
+      }
+      
+      if (!data) {
+        console.warn('⚠️ Supabase findAll returned null/undefined data');
+        return [];
+      }
+      
+      console.log(`✅ Supabase findAll: Retrieved ${data.length} raw rows from database`);
+      
+      const users = data.map(supabaseRowToUser);
+      console.log(`✅ Supabase findAll: Converted ${users.length} rows to User objects`);
+      
+      return users;
+    } catch (error) {
+      console.error('❌ findAll: Exception caught:', error);
+      throw error;
     }
-    
-    return (data || []).map(supabaseRowToUser);
   },
 
   // Update user

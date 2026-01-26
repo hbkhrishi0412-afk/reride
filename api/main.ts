@@ -1683,9 +1683,34 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     }
     
     try {
-      logInfo('📊 Fetching all users from database...');
+      logInfo('📊 GET /api/users: Admin request - Fetching all users from Supabase...');
+      logInfo('📊 Admin user details:', { 
+        email: authUser.email, 
+        role: authUser.role, 
+        id: authUser.id 
+      });
+      
+      // Check Supabase availability
+      if (!USE_SUPABASE) {
+        const errorMsg = getSupabaseErrorMessage();
+        logError('❌ Supabase not available for user fetch:', errorMsg);
+        return res.status(503).json({
+          success: false,
+          reason: errorMsg,
+          users: []
+        });
+      }
+      
       const users = await userService.findAll();
-      logInfo(`✅ Fetched ${users.length} users from database`);
+      logInfo(`✅ Fetched ${users.length} raw users from Supabase database`);
+      
+      if (users.length === 0) {
+        logWarn('⚠️ Supabase returned 0 users. This might indicate:');
+        logWarn('   1. No users exist in the database');
+        logWarn('   2. RLS (Row Level Security) policies are blocking access');
+        logWarn('   3. Database connection issue');
+        logWarn('   4. Table name mismatch (expected: "users")');
+      }
       
       // SECURITY FIX: Normalize all users to remove passwords
       const normalizedUsers = users.map(user => {
@@ -1696,31 +1721,50 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             id: user.id, 
             hasId: !!user.id, 
             hasEmail: !!user.email,
-            hasRole: !!user.role 
+            hasRole: !!user.role,
+            roleValue: user.role
           });
         }
         return normalized;
       }).filter((u): u is NormalizedUser => u !== null);
       
-      logInfo(`✅ Returning ${normalizedUsers.length} normalized users (${users.length - normalizedUsers.length} filtered out)`);
+      const filteredCount = users.length - normalizedUsers.length;
+      if (filteredCount > 0) {
+        logWarn(`⚠️ ${filteredCount} users were filtered out during normalization`);
+      }
+      
+      logInfo(`✅ Returning ${normalizedUsers.length} normalized users to admin panel`);
       return res.status(200).json(normalizedUsers);
     } catch (error) {
-      logError('❌ Error fetching users:', error);
+      logError('❌ Error fetching users from Supabase:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logError('❌ Error details:', { message: errorMessage, stack: error instanceof Error ? error.stack : undefined });
+      const errorStack = error instanceof Error ? error.stack : undefined;
       
-      // Always return fallback instead of 500 to prevent crashes
-      try {
-        const fallbackUsers = await getFallbackUsers();
-        res.setHeader('X-Data-Fallback', 'true');
-        logWarn('⚠️ Using fallback users due to error');
-        return res.status(200).json(fallbackUsers);
-      } catch (fallbackError) {
-        // Even fallback failed, return empty array instead of 500
-        logError('❌ Fallback users also failed:', fallbackError);
-        res.setHeader('X-Data-Fallback', 'true');
-        return res.status(200).json([]);
+      logError('❌ Error details:', { 
+        message: errorMessage, 
+        stack: errorStack,
+        errorType: error instanceof Error ? error.constructor.name : typeof error
+      });
+      
+      // Return error details in development, but still return empty array to prevent crashes
+      const isDevelopment = process.env.NODE_ENV !== 'production';
+      if (isDevelopment) {
+        return res.status(500).json({
+          success: false,
+          reason: `Failed to fetch users: ${errorMessage}`,
+          error: errorMessage,
+          users: [],
+          debug: {
+            stack: errorStack,
+            supabaseAvailable: USE_SUPABASE
+          }
+        });
       }
+      
+      // In production, return empty array gracefully but log the error
+      res.setHeader('X-Data-Fallback', 'true');
+      res.setHeader('X-Error', 'true');
+      return res.status(200).json([]);
     }
   }
 

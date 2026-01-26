@@ -132,6 +132,7 @@ interface AdminPanelProps {
     currentUser: User;
     vehicles: Vehicle[];
     conversations: Conversation[];
+    isLoading?: boolean;
     onCreateUser?: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
     onToggleUserStatus: (email: string) => void;
     onDeleteUser: (email: string) => void;
@@ -919,7 +920,7 @@ const PlanEditModal: React.FC<{
 // --- Main AdminPanel Component ---
 const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const {
-        users, currentUser, vehicles, conversations, onToggleUserStatus, onDeleteUser,
+        users, currentUser, vehicles, conversations, isLoading = false, onToggleUserStatus, onDeleteUser,
         onAdminUpdateUser, onUpdateUserPlan, onUpdateVehicle, onDeleteVehicle, onToggleVehicleStatus,
         onToggleVehicleFeature,
         onResolveFlag, platformSettings, onUpdateSettings, onSendBroadcast,
@@ -1104,7 +1105,49 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const renderContent = () => {
         switch (activeView) {
             case 'analytics':
-    return (
+                // Show loading skeleton if data is still loading
+                // Only show loading if explicitly loading OR if we have no data AND no cache (first load)
+                const hasNoData = users.length === 0 && vehicles.length === 0;
+                const hasCache = typeof window !== 'undefined' && 
+                    (localStorage.getItem('reRideVehicles_prod') || localStorage.getItem('reRideUsers_prod'));
+                if (isLoading || (hasNoData && !hasCache)) {
+                    return (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                {[1, 2, 3, 4].map((i) => (
+                                    <div key={i} className="bg-white p-6 rounded-lg shadow-md animate-pulse">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="h-6 bg-gray-200 rounded w-24"></div>
+                                            <div className="w-8 h-8 bg-gray-200 rounded"></div>
+                                        </div>
+                                        <div className="h-8 bg-gray-200 rounded w-20"></div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="bg-white p-6 rounded-lg shadow-md animate-pulse">
+                                    <div className="h-6 bg-gray-200 rounded w-40 mb-4"></div>
+                                    <div className="h-64 bg-gray-200 rounded"></div>
+                                </div>
+                                <div className="bg-white p-6 rounded-lg shadow-md animate-pulse">
+                                    <div className="h-6 bg-gray-200 rounded w-32 mb-4"></div>
+                                    <div className="space-y-4">
+                                        <div className="h-4 bg-gray-200 rounded"></div>
+                                        <div className="h-4 bg-gray-200 rounded"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-center py-8">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <span className="text-gray-600">Loading admin data...</span>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+                
+                return (
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             <StatCard title="Total Users" value={analytics.totalUsers} icon={<span className="text-2xl">👥</span>} />
