@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { User, Vehicle } from '../types';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { isUserVerified } from './VerifiedBadge';
 import VerifiedBadge from './VerifiedBadge';
+import { getSellers } from '../services/userService';
 
 interface MobileDealerProfilesPageProps {
-  sellers: User[];
+  sellers?: User[]; // Made optional - will fetch if not provided
   vehicles?: Vehicle[];
   onViewProfile: (sellerEmail: string) => void;
 }
@@ -18,11 +19,45 @@ interface MobileDealerProfilesPageProps {
  * - Quick stats display
  */
 export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> = ({
-  sellers,
+  sellers: propSellers,
   vehicles = [],
   onViewProfile
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [sellers, setSellers] = useState<User[]>(propSellers || []);
+  const [isLoadingSellers, setIsLoadingSellers] = useState(!propSellers || propSellers.length === 0);
+
+  // Fetch sellers directly from API if not provided or empty
+  useEffect(() => {
+    // Only fetch if sellers weren't provided or if provided array is empty
+    if (!propSellers || propSellers.length === 0) {
+      const fetchSellers = async () => {
+        setIsLoadingSellers(true);
+        try {
+          console.log('🔍 MobileDealerProfilesPage: Fetching sellers from API...');
+          const fetchedSellers = await getSellers();
+          console.log(`✅ MobileDealerProfilesPage: Fetched ${fetchedSellers.length} sellers from API`);
+          
+          // Filter to ensure only sellers with role='seller' are included
+          const validSellers = fetchedSellers.filter(seller => seller.role === 'seller');
+          console.log(`✅ MobileDealerProfilesPage: ${validSellers.length} valid sellers after filtering`);
+          
+          setSellers(validSellers);
+        } catch (error) {
+          console.error('❌ MobileDealerProfilesPage: Error fetching sellers:', error);
+          setSellers([]);
+        } finally {
+          setIsLoadingSellers(false);
+        }
+      };
+      
+      fetchSellers();
+    } else {
+      // Use provided sellers
+      setSellers(propSellers);
+      setIsLoadingSellers(false);
+    }
+  }, [propSellers]);
 
   const filteredSellers = useMemo(() => {
     if (!searchQuery.trim()) return sellers;
@@ -64,9 +99,16 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
 
       {/* Dealer List */}
       <div className="px-4 py-4">
-        {filteredSellers.length === 0 ? (
+        {isLoadingSellers ? (
           <div className="text-center py-12">
-            <p className="text-gray-600">No dealers found</p>
+            <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading dealers...</p>
+          </div>
+        ) : filteredSellers.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-600">
+              {searchQuery ? 'No dealers found matching your search' : 'No dealers available'}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -133,6 +175,7 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
 };
 
 export default MobileDealerProfilesPage;
+
 
 
 

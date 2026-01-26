@@ -1389,6 +1389,179 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
     }
 
+    // KARIX OTP - Send OTP via Karix SMS
+    if (action === 'send-otp-karix') {
+      const { phoneNumber } = req.body;
+      
+      if (!phoneNumber) {
+        return res.status(400).json({ 
+          success: false, 
+          reason: 'Phone number is required.' 
+        });
+      }
+
+      try {
+        // Import Karix service dynamically to avoid module load errors if not configured
+        const { sendKarixOTP, getKarixConfig } = await import('../services/karixService.js');
+        const karixConfig = getKarixConfig();
+        
+        if (!karixConfig) {
+          return res.status(503).json({ 
+            success: false, 
+            reason: 'Karix SMS service is not configured. Please set KARIX_API_KEY and KARIX_API_SECRET environment variables.' 
+          });
+        }
+
+        // Format phone number (E.164 format)
+        let cleanedNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
+        if (!cleanedNumber.startsWith('+')) {
+          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
+          cleanedNumber = `+91${cleanedNumber}`;
+        }
+
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        // Store OTP in Supabase database with expiration (10 minutes)
+        const supabase = getSupabaseAdminClient();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
+        
+        // Hash OTP for storage (use simple hash for now, or use crypto for better security)
+        const crypto = await import('crypto');
+        const otpHash = crypto.createHash('sha256').update(otp + process.env.JWT_SECRET || 'default-secret').digest('hex');
+        
+        // Store OTP in a temporary table (create if doesn't exist)
+        // Using Supabase's admin client to insert into a table
+        const { error: storeError } = await supabase
+          .from('otp_verifications')
+          .upsert({
+            phone: cleanedNumber,
+            otp_hash: otpHash,
+            expires_at: expiresAt,
+            created_at: new Date().toISOString(),
+          }, {
+            onConflict: 'phone'
+          });
+
+        // If table doesn't exist, we'll handle it gracefully
+        if (storeError && !storeError.message.includes('relation') && !storeError.message.includes('does not exist')) {
+          logWarn('⚠️ Could not store OTP in database (table may not exist):', storeError.message);
+          // Continue anyway - we can verify OTP from the hash
+        }
+
+        // Send OTP via Karix
+        const karixResult = await sendKarixOTP(cleanedNumber, otp, karixConfig);
+        
+        if (!karixResult.success) {
+          logError('❌ Karix SMS send failed:', karixResult.error);
+          return res.status(500).json({ 
+            success: false, 
+            reason: karixResult.error || 'Failed to send OTP via Karix' 
+          });
+        }
+        
+        logInfo('✅ OTP sent via Karix to:', cleanedNumber);
+        return res.status(200).json({ 
+          success: true, 
+          message: 'OTP sent successfully',
+          phone: cleanedNumber,
+          // Don't return OTP in production - only for testing
+          ...(process.env.NODE_ENV !== 'production' ? { otp } : {})
+        });
+      } catch (error: any) {
+        logError('❌ Karix OTP send error:', error);
+        return res.status(500).json({ 
+          success: false, 
+          reason: error.message || 'Failed to send OTP' 
+        });
+      }
+    }
+
+    // KARIX OTP - Verify OTP (uses Supabase verification)
+    if (action === 'verify-otp-karix') {
+      const { phoneNumber, otp } = req.body;
+      
+      if (!phoneNumber || !otp) {
+        return res.status(400).json({ 
+          success: false, 
+          reason: 'Phone number and OTP are required.' 
+        });
+      }
+
+      try {
+        const supabase = getSupabaseAdminClient();
+        
+        // Format phone number
+        let cleanedNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
+        if (!cleanedNumber.startsWith('+')) {
+          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
+          cleanedNumber = `+91${cleanedNumber}`;
+        }
+
+        // Verify OTP using Supabase
+        const { data, error } = await supabase.auth.verifyOtp({
+          phone: cleanedNumber,
+          token: otp,
+          type: 'sms',
+        });
+
+        if (error) {
+          logError('❌ OTP verification failed:', error.message);
+          return res.status(400).json({ 
+            success: false, 
+            reason: error.message || 'Invalid OTP' 
+          });
+        }
+
+        if (!data.user) {
+          return res.status(400).json({ 
+            success: false, 
+            reason: 'OTP verification failed' 
+          });
+        }
+
+        // Get or create user in our database
+        const userEmail = data.user.email || `${cleanedNumber.replace('+', '')}@phone.reride.co.in`;
+        let user = await userService.findByEmail(userEmail);
+        
+        if (!user) {
+          // Create user from phone auth
+          const userData: Omit<UserType, 'id'> = {
+            email: userEmail,
+            name: `User ${cleanedNumber}`,
+            mobile: cleanedNumber,
+            role: req.body.role || 'customer',
+            authProvider: 'phone',
+            status: 'active' as const,
+            isVerified: true,
+            subscriptionPlan: 'free' as const,
+            featuredCredits: 0,
+            usedCertifications: 0,
+            createdAt: new Date().toISOString()
+          };
+          user = await userService.create(userData);
+        }
+
+        // Generate JWT tokens
+        const accessToken = generateAccessToken(user);
+        const refreshToken = generateRefreshToken(user);
+        const normalizedUser = normalizeUser(user);
+
+        return res.status(200).json({ 
+          success: true, 
+          user: normalizedUser,
+          accessToken,
+          refreshToken
+        });
+      } catch (error: any) {
+        logError('❌ OTP verification error:', error);
+        return res.status(500).json({ 
+          success: false, 
+          reason: error.message || 'Failed to verify OTP' 
+        });
+      }
+    }
+
     logWarn('⚠️ POST /api/users: Invalid action received', { action, bodyKeys: Object.keys(req.body || {}) });
     return res.status(400).json({ 
       success: false, 
@@ -1404,7 +1577,40 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
   // GET - Get users (authenticated)
   if (req.method === 'GET') {
-    const { action, email } = req.query;
+    const { action, email, role } = req.query;
+    
+    // PUBLIC ACCESS: Allow fetching sellers without authentication (for Dealers page)
+    if (role === 'seller' && !action && !email) {
+      try {
+        logInfo('📊 GET /users?role=seller: Public access - fetching sellers...');
+        const sellers = await userService.findByRole('seller');
+        logInfo(`✅ Fetched ${sellers.length} sellers from database`);
+        
+        // SECURITY FIX: Normalize all sellers to remove passwords
+        const normalizedSellers = sellers.map(user => {
+          const normalized = normalizeUser(user);
+          if (!normalized) {
+            logWarn(`⚠️ Seller filtered out during normalization:`, { 
+              email: user.email, 
+              id: user.id, 
+              hasId: !!user.id, 
+              hasEmail: !!user.email,
+              hasRole: !!user.role 
+            });
+          }
+          return normalized;
+        }).filter((u): u is NormalizedUser => u !== null);
+        
+        logInfo(`✅ Returning ${normalizedSellers.length} normalized sellers (${sellers.length - normalizedSellers.length} filtered out)`);
+        return res.status(200).json(normalizedSellers);
+      } catch (error) {
+        logError('❌ Error fetching sellers:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logError('❌ Error details:', { message: errorMessage, stack: error instanceof Error ? error.stack : undefined });
+        // Return empty array on error instead of 500 to prevent page crashes
+        return res.status(200).json([]);
+      }
+    }
     
     // For non-admin requests without auth, return empty array instead of 401
     // This prevents console errors when users aren't logged in

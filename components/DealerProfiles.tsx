@@ -1,12 +1,13 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { User, Vehicle } from '../types.js';
 import StarRating from './StarRating.js';
 import BadgeDisplay from './BadgeDisplay.js';
 import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
 import { isUserVerified } from './VerifiedBadge.js';
+import { getSellers } from '../services/userService.js';
 
 interface DealerProfilesProps {
-  sellers: User[];
+  sellers?: User[]; // Made optional - will fetch if not provided
   vehicles?: Vehicle[];
   onViewProfile: (sellerEmail: string) => void;
 }
@@ -152,12 +153,54 @@ const DealerCard: React.FC<{
   );
 };
 
-const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, vehicles = [], onViewProfile }) => {
+const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, vehicles = [], onViewProfile }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('name');
   const [showFilters, setShowFilters] = useState(false);
   const [verifiedFilter, setVerifiedFilter] = useState<boolean | null>(null);
+  const [sellers, setSellers] = useState<User[]>(propSellers || []);
+  const [isLoadingSellers, setIsLoadingSellers] = useState(!propSellers || propSellers.length === 0);
+  const [sellerLoadError, setSellerLoadError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch sellers directly from API if not provided or empty
+  useEffect(() => {
+    // Only fetch if sellers weren't provided or if provided array is empty
+    if (!propSellers || propSellers.length === 0) {
+      const fetchSellers = async () => {
+        setIsLoadingSellers(true);
+        setSellerLoadError(null);
+        try {
+          console.log('🔍 DealerProfiles: Fetching sellers from API...');
+          const fetchedSellers = await getSellers();
+          console.log(`✅ DealerProfiles: Fetched ${fetchedSellers.length} sellers from API`);
+          
+          // Filter to ensure only sellers with role='seller' are included
+          const validSellers = fetchedSellers.filter(seller => seller.role === 'seller');
+          console.log(`✅ DealerProfiles: ${validSellers.length} valid sellers after filtering`);
+          
+          setSellers(validSellers);
+          
+          if (validSellers.length === 0) {
+            console.warn('⚠️ DealerProfiles: No sellers found in database. Check admin panel to verify sellers are registered with role="seller"');
+            setSellerLoadError('No sellers found. Please check back later.');
+          }
+        } catch (error) {
+          console.error('❌ DealerProfiles: Error fetching sellers:', error);
+          setSellerLoadError('Failed to load sellers. Please try refreshing the page.');
+          setSellers([]);
+        } finally {
+          setIsLoadingSellers(false);
+        }
+      };
+      
+      fetchSellers();
+    } else {
+      // Use provided sellers
+      setSellers(propSellers);
+      setIsLoadingSellers(false);
+    }
+  }, [propSellers]);
 
   // Filter and sort dealers
   const filteredAndSortedSellers = useMemo(() => {
@@ -358,8 +401,62 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, vehicles = [],
         </div>
       )}
 
+      {/* Loading State */}
+      {isLoadingSellers && (
+        <div className="col-span-full text-center py-20">
+          <div className="max-w-md mx-auto">
+            <div className="bg-blue-100 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Loading Dealers...</h3>
+            <p className="text-gray-600">Please wait while we fetch dealer information</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {!isLoadingSellers && sellerLoadError && (
+        <div className="col-span-full text-center py-20">
+          <div className="max-w-md mx-auto">
+            <div className="bg-red-100 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+              <svg className="w-12 h-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Error Loading Dealers</h3>
+            <p className="text-gray-600 mb-6">{sellerLoadError}</p>
+            <button
+              onClick={() => {
+                setSellerLoadError(null);
+                setIsLoadingSellers(true);
+                // Trigger re-fetch
+                const fetchSellers = async () => {
+                  try {
+                    const fetchedSellers = await getSellers();
+                    const validSellers = fetchedSellers.filter(seller => seller.role === 'seller');
+                    setSellers(validSellers);
+                    if (validSellers.length === 0) {
+                      setSellerLoadError('No sellers found. Please check back later.');
+                    }
+                  } catch (error) {
+                    setSellerLoadError('Failed to load sellers. Please try refreshing the page.');
+                    setSellers([]);
+                  } finally {
+                    setIsLoadingSellers(false);
+                  }
+                };
+                fetchSellers();
+              }}
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Dealer Grid */}
-      {filteredAndSortedSellers.length > 0 ? (
+      {!isLoadingSellers && !sellerLoadError && filteredAndSortedSellers.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-5">
           {filteredAndSortedSellers.map((seller, index) => (
             <DealerCard 
@@ -371,7 +468,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers, vehicles = [],
             />
           ))}
         </div>
-      ) : (
+      ) : !isLoadingSellers && !sellerLoadError && (
         <div className="col-span-full text-center py-20">
           <div className="max-w-md mx-auto">
             <div className="bg-gray-100 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">

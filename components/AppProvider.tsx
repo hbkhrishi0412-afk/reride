@@ -13,6 +13,7 @@ import { getAuthHeaders } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
+import { formatSupabaseError } from '../utils/errorUtils';
 
 interface VehicleUpdateOptions {
   successMessage?: string;
@@ -3503,8 +3504,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             } else {
               console.warn('⚠️ Failed to update profile in Supabase:', errorMsg);
-              // Show the actual error message
-              const displayError = errorMsg.replace(/^\d+:\s*/, ''); // Remove status code prefix
+              // Format Supabase error for user display
+              const displayError = formatSupabaseError(errorMsg);
               if (updates.password) {
                 addToast(`Password update failed: ${displayError}`, 'error');
               } else {

@@ -167,3 +167,4 @@ export function getRecentLogs(count: number = 50): LogEntry[] {
   return logBuffer.slice(-count);
 }
 
+

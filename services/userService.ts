@@ -476,15 +476,19 @@ const registerLocal = async (credentials: any): Promise<{ success: boolean, user
 
 // --- Production (API) Functions ---
 
-const getUsersApi = async (): Promise<User[]> => {
+const getUsersApi = async (role?: 'seller' | 'customer' | 'admin'): Promise<User[]> => {
   // Use authenticatedFetch for production API calls
   try {
     const { authenticatedFetch } = await import('../utils/authenticatedFetch');
-    const response = await authenticatedFetch('/api/users');
+    // If role is specified, fetch users by role (public access for sellers)
+    const url = role ? `/api/users?role=${role}` : '/api/users';
+    const response = await authenticatedFetch(url);
     return handleResponse(response);
   } catch (error) {
     // If authenticatedFetch fails, try regular fetch (for development)
-    const response = await fetch('/api/users', {
+    // For sellers, use regular fetch since it's public access
+    const url = role ? `/api/users?role=${role}` : '/api/users';
+    const response = await fetch(url, {
       headers: getAuthHeader()
     });
     return handleResponse(response);
@@ -667,30 +671,34 @@ const isDevelopment = (() => {
 
 // --- Exported Environment-Aware Service Functions ---
 
-export const getUsers = async (): Promise<User[]> => {
+export const getUsers = async (role?: 'seller' | 'customer' | 'admin'): Promise<User[]> => {
   try {
-    console.log('getUsers: Starting, isDevelopment:', isDevelopment);
+    console.log('getUsers: Starting, isDevelopment:', isDevelopment, 'role:', role);
     // Always try API first for production, with fallback to local
     if (!isDevelopment) {
       try {
         console.log('getUsers: Trying API...');
-        const result = await getUsersApi();
-        console.log('getUsers: API success, loaded', result.length, 'users');
-        // Cache production data (not mock data)
-        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        const result = await getUsersApi(role);
+        console.log('getUsers: API success, loaded', result.length, role ? `${role}s` : 'users');
+        // Cache production data (not mock data) - only cache if fetching all users
+        if (!role && typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
           localStorage.setItem('reRideUsers_prod', JSON.stringify(result));
         }
         return result;
       } catch (error) {
         console.error('❌ getUsers: Production API failed:', error);
-        // In production, try to use cached API data (not mock data)
-        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        // In production, try to use cached API data (not mock data) - only if fetching all users
+        if (!role && typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
           try {
             const cachedUsersJson = localStorage.getItem('reRideUsers_prod');
             if (cachedUsersJson) {
               const cachedUsers = JSON.parse(cachedUsersJson);
               if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
                 console.warn('⚠️ getUsers: Using cached production data due to API failure');
+                // If role filter requested, filter cached data
+                if (role) {
+                  return cachedUsers.filter((u: User) => u.role === role);
+                }
                 return cachedUsers;
               }
             }
@@ -705,7 +713,12 @@ export const getUsers = async (): Promise<User[]> => {
     } else {
       // Development mode - use local storage
       console.log('getUsers: Development mode, using local storage');
-      return await getUsersLocal();
+      const users = await getUsersLocal();
+      // If role filter requested, filter local data
+      if (role) {
+        return users.filter(u => u.role === role);
+      }
+      return users;
     }
   } catch (error) {
     console.error('getUsers: Critical error:', error);
@@ -714,8 +727,17 @@ export const getUsers = async (): Promise<User[]> => {
       return [];
     }
     // Last resort fallback only in development
-    return FALLBACK_USERS;
+    const fallback = FALLBACK_USERS;
+    if (role) {
+      return fallback.filter(u => u.role === role);
+    }
+    return fallback;
   }
+};
+
+// Convenience function to fetch sellers only (public access)
+export const getSellers = async (): Promise<User[]> => {
+  return getUsers('seller');
 };
 export const updateUser = async (userData: Partial<User> & { email: string }): Promise<User> => {
   // Always try API first for production, with fallback to local
