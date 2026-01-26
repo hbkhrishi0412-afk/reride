@@ -4,7 +4,7 @@
  * SECURITY: All logs are sanitized to prevent secret exposure
  */
 
-import { sanitizeErrorForLogging, sanitizeObject } from './secretSanitizer.js';
+import { sanitizeError, sanitizeObject } from './secretSanitizer.js';
 
 /**
  * Sanitizes log arguments to prevent secret exposure
@@ -12,7 +12,7 @@ import { sanitizeErrorForLogging, sanitizeObject } from './secretSanitizer.js';
 function sanitizeLogArgs(args: unknown[]): unknown[] {
   return args.map(arg => {
     if (arg instanceof Error) {
-      return sanitizeErrorForLogging(arg);
+      return sanitizeError(arg);
     }
     if (typeof arg === 'string') {
       return sanitizeObject(arg);

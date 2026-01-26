@@ -180,80 +180,10 @@ const preloadCriticalComponents = () => {
 };
 
 const AppContent: React.FC = React.memo(() => {
-  const { addToast } = useApp();
-  
-  // Handle service worker update notifications
-  useEffect(() => {
-    const handleServiceWorkerUpdate = (event: CustomEvent) => {
-      const detail = event.detail as { message?: string; action?: () => void };
-      addToast(
-        detail.message || 'A new version is available. Click to refresh.',
-        'info'
-      );
-      
-      // Show a persistent notification with refresh button
-      if (detail.action) {
-        // Store the action for when user clicks refresh
-        (window as any).__swUpdateAction = detail.action;
-        
-        // Add a clickable refresh button via another toast
-        setTimeout(() => {
-          addToast(
-            'Click here to refresh and get the latest version',
-            'info'
-          );
-          // Listen for click on the toast (simplified - in production, use a proper button)
-          const refreshHandler = () => {
-            if ((window as any).__swUpdateAction) {
-              (window as any).__swUpdateAction();
-            } else {
-              window.location.reload();
-            }
-          };
-          (window as any).__swRefreshHandler = refreshHandler;
-        }, 1000);
-      }
-    };
-    
-    window.addEventListener('sw-update-available', handleServiceWorkerUpdate as EventListener);
-    
-    return () => {
-      window.removeEventListener('sw-update-available', handleServiceWorkerUpdate as EventListener);
-    };
-  }, [addToast]);
-  
   // Detect if running as mobile app (standalone/installed PWA)
   const { isMobileApp, isMobile } = useIsMobileApp();
   
-  // Preload critical components after initial render
-  React.useEffect(() => {
-    preloadCriticalComponents();
-  }, []);
-  
-  // Fix viewport zoom on mount and route changes - applies to ALL pages
-  React.useEffect(() => {
-    // Reset zoom on mount
-    resetViewportZoom();
-    
-    // Reset zoom after route changes
-    const handleRouteChange = () => {
-      setTimeout(() => resetViewportZoom(), 100);
-    };
-    
-    // Listen for navigation events
-    window.addEventListener('popstate', handleRouteChange);
-    
-    // Reset zoom periodically to catch any issues
-    const zoomCheckInterval = setInterval(() => {
-      resetViewportZoom();
-    }, 5000);
-    
-    return () => {
-      window.removeEventListener('popstate', handleRouteChange);
-      clearInterval(zoomCheckInterval);
-    };
-  }, []);
-  
+  // Get all app context values in a single hook call
   const { 
     currentView, 
     setCurrentView,
@@ -340,6 +270,76 @@ const AppContent: React.FC = React.memo(() => {
     onCertificationApproval,
     onOfferResponse,
   } = useApp();
+  
+  // Handle service worker update notifications
+  useEffect(() => {
+    const handleServiceWorkerUpdate = (event: CustomEvent) => {
+      const detail = event.detail as { message?: string; action?: () => void };
+      addToast(
+        detail.message || 'A new version is available. Click to refresh.',
+        'info'
+      );
+      
+      // Show a persistent notification with refresh button
+      if (detail.action) {
+        // Store the action for when user clicks refresh
+        (window as any).__swUpdateAction = detail.action;
+        
+        // Add a clickable refresh button via another toast
+        setTimeout(() => {
+          addToast(
+            'Click here to refresh and get the latest version',
+            'info'
+          );
+          // Listen for click on the toast (simplified - in production, use a proper button)
+          const refreshHandler = () => {
+            if ((window as any).__swUpdateAction) {
+              (window as any).__swUpdateAction();
+            } else {
+              window.location.reload();
+            }
+          };
+          (window as any).__swRefreshHandler = refreshHandler;
+        }, 1000);
+      }
+    };
+    
+    window.addEventListener('sw-update-available', handleServiceWorkerUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('sw-update-available', handleServiceWorkerUpdate as EventListener);
+    };
+  }, [addToast]);
+  
+  // Preload critical components after initial render
+  React.useEffect(() => {
+    preloadCriticalComponents();
+  }, []);
+  
+  // Fix viewport zoom on mount and route changes - applies to ALL pages
+  React.useEffect(() => {
+    // Reset zoom on mount
+    resetViewportZoom();
+    
+    // Reset zoom after route changes
+    const handleRouteChange = () => {
+      setTimeout(() => resetViewportZoom(), 100);
+    };
+    
+    // Listen for navigation events
+    window.addEventListener('popstate', handleRouteChange);
+    
+    // Reset zoom periodically to catch any issues
+    const zoomCheckInterval = setInterval(() => {
+      resetViewportZoom();
+    }, 5000);
+    
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      clearInterval(zoomCheckInterval);
+    };
+  }, []);
+  
   const [serviceProvider, setServiceProvider] = React.useState<any>(null);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = React.useState(false);
 
@@ -363,10 +363,7 @@ const AppContent: React.FC = React.memo(() => {
   // Simple handler for service cart submissions (wire to real API as needed)
   const handleServiceRequestSubmit = React.useCallback(async (payload: any) => {
     try {
-      const auth = getAuth();
-      const token = await auth.currentUser?.getIdToken().catch(() => null);
-
-      if (!token) {
+      if (!currentUser) {
         addToast('Please log in to submit a service request.', 'error');
         return;
       }
