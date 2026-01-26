@@ -273,36 +273,102 @@ export const supabaseUserService = {
       throw new Error(`User not found: ${normalizedEmail}`);
     }
     
-    const row = userToSupabaseRow(updates);
+    // CRITICAL FIX: Only convert fields that are actually in the updates object
+    // This prevents undefined fields from being converted to empty strings and clearing existing data
+    const row: any = {};
     
-    // Remove id from updates to avoid conflicts
-    delete row.id;
+    // Map of User fields to Supabase column names
+    const fieldMapping: Record<string, string> = {
+      email: 'email',
+      name: 'name',
+      mobile: 'mobile',
+      password: 'password',
+      role: 'role',
+      status: 'status',
+      avatarUrl: 'avatar_url',
+      isVerified: 'is_verified',
+      dealershipName: 'dealership_name',
+      bio: 'bio',
+      logoUrl: 'logo_url',
+      subscriptionPlan: 'subscription_plan',
+      featuredCredits: 'featured_credits',
+      usedCertifications: 'used_certifications',
+      phoneVerified: 'phone_verified',
+      emailVerified: 'email_verified',
+      govtIdVerified: 'govt_id_verified',
+      trustScore: 'trust_score',
+      location: 'location',
+      firebaseUid: 'firebase_uid',
+      authProvider: 'auth_provider',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+    };
     
-    // CRITICAL: Only include password field if it's actually being updated
-    // If password is not in updates, remove it from row to avoid clearing existing password
-    if (!('password' in updates)) {
-      delete row.password;
-    }
+    // Only include fields that are actually in the updates
+    Object.keys(updates).forEach(key => {
+      if (key === 'id') return; // Skip id field
+      
+      const value = updates[key as keyof User];
+      if (value === undefined) return; // Skip undefined values
+      
+      const columnName = fieldMapping[key];
+      if (columnName) {
+        // Handle special cases
+        if (key === 'email' && typeof value === 'string') {
+          row[columnName] = value.toLowerCase().trim();
+        } else if (key === 'password') {
+          row[columnName] = value;
+        } else {
+          row[columnName] = value;
+        }
+      }
+    });
+    
+    // Handle metadata fields separately
+    const metadataFields = [
+      'averageRating', 'ratingCount', 'badges', 'responseTime', 'responseRate',
+      'joinedDate', 'lastActiveAt', 'activeListings', 'soldListings', 'totalViews',
+      'reportedCount', 'isBanned', 'alternatePhone', 'preferredContactHours',
+      'showEmailPublicly', 'partnerBanks', 'verificationStatus', 'aadharCard',
+      'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade'
+    ];
+    
+    const metadata: any = {};
+    let hasMetadataUpdates = false;
+    
+    metadataFields.forEach(field => {
+      if (field in updates && updates[field as keyof User] !== undefined) {
+        metadata[field] = updates[field as keyof User];
+        hasMetadataUpdates = true;
+      }
+    });
     
     // CRITICAL: Merge metadata instead of replacing it
     // This preserves existing metadata fields when updating partnerBanks or other metadata fields
-    if (row.metadata && existingUser?.metadata) {
-      // Merge new metadata with existing metadata
-      row.metadata = {
-        ...(existingUser.metadata || {}),
-        ...(row.metadata || {})
-      };
-    } else if (row.metadata && !existingUser?.metadata) {
-      // New metadata, no existing metadata - use as is
-      // row.metadata is already set
-    } else if (!row.metadata && existingUser?.metadata) {
-      // No new metadata, but existing metadata exists - preserve it
-      row.metadata = existingUser.metadata;
+    if (hasMetadataUpdates) {
+      if (existingUser?.metadata) {
+        // Merge new metadata with existing metadata
+        row.metadata = {
+          ...(existingUser.metadata || {}),
+          ...metadata
+        };
+      } else {
+        // New metadata, no existing metadata - use as is
+        row.metadata = metadata;
+      }
     }
     
     // Only include metadata if it has values
     if (row.metadata && Object.keys(row.metadata).length === 0) {
       delete row.metadata;
+    }
+    
+    // Always update updated_at timestamp
+    row.updated_at = new Date().toISOString();
+    
+    // If no fields to update (after filtering), throw an error
+    if (Object.keys(row).length === 0) {
+      throw new Error('No valid fields to update');
     }
     
     // Update by the correct identifier (ID or email)
@@ -341,27 +407,101 @@ export const supabaseUserService = {
       throw new Error(`Failed to fetch existing user: ${fetchError.message}`);
     }
     
-    const row = userToSupabaseRow(updates);
+    // CRITICAL FIX: Only convert fields that are actually in the updates object
+    // This prevents undefined fields from being converted to empty strings and clearing existing data
+    const row: any = {};
     
-    // Remove id from updates
-    delete row.id;
+    // Map of User fields to Supabase column names
+    const fieldMapping: Record<string, string> = {
+      email: 'email',
+      name: 'name',
+      mobile: 'mobile',
+      password: 'password',
+      role: 'role',
+      status: 'status',
+      avatarUrl: 'avatar_url',
+      isVerified: 'is_verified',
+      dealershipName: 'dealership_name',
+      bio: 'bio',
+      logoUrl: 'logo_url',
+      subscriptionPlan: 'subscription_plan',
+      featuredCredits: 'featured_credits',
+      usedCertifications: 'used_certifications',
+      phoneVerified: 'phone_verified',
+      emailVerified: 'email_verified',
+      govtIdVerified: 'govt_id_verified',
+      trustScore: 'trust_score',
+      location: 'location',
+      firebaseUid: 'firebase_uid',
+      authProvider: 'auth_provider',
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+    };
+    
+    // Only include fields that are actually in the updates
+    Object.keys(updates).forEach(key => {
+      if (key === 'id') return; // Skip id field
+      
+      const value = updates[key as keyof User];
+      if (value === undefined) return; // Skip undefined values
+      
+      const columnName = fieldMapping[key];
+      if (columnName) {
+        // Handle special cases
+        if (key === 'email' && typeof value === 'string') {
+          row[columnName] = value.toLowerCase().trim();
+        } else if (key === 'password') {
+          row[columnName] = value;
+        } else {
+          row[columnName] = value;
+        }
+      }
+    });
+    
+    // Handle metadata fields separately
+    const metadataFields = [
+      'averageRating', 'ratingCount', 'badges', 'responseTime', 'responseRate',
+      'joinedDate', 'lastActiveAt', 'activeListings', 'soldListings', 'totalViews',
+      'reportedCount', 'isBanned', 'alternatePhone', 'preferredContactHours',
+      'showEmailPublicly', 'partnerBanks', 'verificationStatus', 'aadharCard',
+      'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade'
+    ];
+    
+    const metadata: any = {};
+    let hasMetadataUpdates = false;
+    
+    metadataFields.forEach(field => {
+      if (field in updates && updates[field as keyof User] !== undefined) {
+        metadata[field] = updates[field as keyof User];
+        hasMetadataUpdates = true;
+      }
+    });
     
     // CRITICAL: Merge metadata instead of replacing it
-    if (row.metadata && existingUser?.metadata) {
-      row.metadata = {
-        ...(existingUser.metadata || {}),
-        ...(row.metadata || {})
-      };
-    } else if (row.metadata && !existingUser?.metadata) {
-      // New metadata, no existing - use as is
-    } else if (!row.metadata && existingUser?.metadata) {
-      // No new metadata, preserve existing
-      row.metadata = existingUser.metadata;
+    if (hasMetadataUpdates) {
+      if (existingUser?.metadata) {
+        // Merge new metadata with existing metadata
+        row.metadata = {
+          ...(existingUser.metadata || {}),
+          ...metadata
+        };
+      } else {
+        // New metadata, no existing - use as is
+        row.metadata = metadata;
+      }
     }
     
     // Only include metadata if it has values
     if (row.metadata && Object.keys(row.metadata).length === 0) {
       delete row.metadata;
+    }
+    
+    // Always update updated_at timestamp
+    row.updated_at = new Date().toISOString();
+    
+    // If no fields to update (after filtering), throw an error
+    if (Object.keys(row).length === 0) {
+      throw new Error('No valid fields to update');
     }
     
     const { error } = await supabase
