@@ -277,6 +277,15 @@ CREATE INDEX IF NOT EXISTS idx_plans_price ON plans(price);
 -- Enable RLS (Row Level Security) for plans
 ALTER TABLE plans ENABLE ROW LEVEL SECURITY;
 
+-- Insert default plans if they don't exist (required for foreign key constraint)
+-- These plan IDs must match the CHECK constraint values in users.subscription_plan
+INSERT INTO plans (id, name, price, duration, features) 
+VALUES 
+    ('free', 'Free Plan', 0, 'monthly', ARRAY['Basic listing', 'Limited features']),
+    ('pro', 'Pro Plan', 0, 'monthly', ARRAY['Enhanced listing', 'More features']),
+    ('premium', 'Premium Plan', 0, 'monthly', ARRAY['Premium listing', 'All features'])
+ON CONFLICT (id) DO NOTHING;
+
 -- ============================================================================
 -- 7. SERVICE_PROVIDERS TABLE
 -- ============================================================================
@@ -325,7 +334,205 @@ CREATE INDEX IF NOT EXISTS idx_service_requests_service_type ON service_requests
 ALTER TABLE service_requests ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
--- 9. FUNCTIONS: Auto-update updated_at timestamp
+-- 9. MESSAGES TABLE
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT,
+    sender TEXT,
+    text TEXT,
+    message_type TEXT DEFAULT 'text',
+    payload JSONB,
+    is_read BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add missing columns if they don't exist
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS message_type TEXT DEFAULT 'text';
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
+
+-- Create indexes for messages table
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_is_read ON messages(is_read);
+
+-- Enable RLS (Row Level Security) for messages
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- 10. FOREIGN KEY CONSTRAINTS: Connect tables for schema visualization
+-- ============================================================================
+-- These foreign key constraints establish relationships between tables
+-- which allows schema visualizers to properly display table connections
+
+-- Drop existing foreign key constraints if they exist (to avoid errors on re-run)
+DO $$ 
+BEGIN
+    -- Drop foreign keys if they exist
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS fk_users_subscription_plan;
+    ALTER TABLE conversations DROP CONSTRAINT IF EXISTS fk_conversations_customer_id;
+    ALTER TABLE conversations DROP CONSTRAINT IF EXISTS fk_conversations_seller_id;
+    ALTER TABLE conversations DROP CONSTRAINT IF EXISTS fk_conversations_vehicle_id;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS fk_messages_conversation_id;
+    ALTER TABLE notifications DROP CONSTRAINT IF EXISTS fk_notifications_user_id;
+    ALTER TABLE service_requests DROP CONSTRAINT IF EXISTS fk_service_requests_user_id;
+    ALTER TABLE service_requests DROP CONSTRAINT IF EXISTS fk_service_requests_provider_id;
+    ALTER TABLE vehicles DROP CONSTRAINT IF EXISTS fk_vehicles_seller_email;
+EXCEPTION
+    WHEN undefined_object THEN NULL;
+END $$;
+
+-- Conversations foreign keys
+-- Note: These constraints may fail if existing data violates referential integrity
+-- Clean up orphaned records before running this script if needed
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_conversations_customer_id'
+    ) THEN
+        ALTER TABLE conversations 
+            ADD CONSTRAINT fk_conversations_customer_id 
+            FOREIGN KEY (customer_id) REFERENCES users(id) 
+            ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_conversations_customer_id: %', SQLERRM;
+END $$;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_conversations_seller_id'
+    ) THEN
+        ALTER TABLE conversations 
+            ADD CONSTRAINT fk_conversations_seller_id 
+            FOREIGN KEY (seller_id) REFERENCES users(id) 
+            ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_conversations_seller_id: %', SQLERRM;
+END $$;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_conversations_vehicle_id'
+    ) THEN
+        ALTER TABLE conversations 
+            ADD CONSTRAINT fk_conversations_vehicle_id 
+            FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) 
+            ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_conversations_vehicle_id: %', SQLERRM;
+END $$;
+
+-- Messages foreign key
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_messages_conversation_id'
+    ) THEN
+        ALTER TABLE messages 
+            ADD CONSTRAINT fk_messages_conversation_id 
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id) 
+            ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_messages_conversation_id: %', SQLERRM;
+END $$;
+
+-- Notifications foreign key
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_notifications_user_id'
+    ) THEN
+        ALTER TABLE notifications 
+            ADD CONSTRAINT fk_notifications_user_id 
+            FOREIGN KEY (user_id) REFERENCES users(id) 
+            ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_notifications_user_id: %', SQLERRM;
+END $$;
+
+-- Service requests foreign keys
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_service_requests_user_id'
+    ) THEN
+        ALTER TABLE service_requests 
+            ADD CONSTRAINT fk_service_requests_user_id 
+            FOREIGN KEY (user_id) REFERENCES users(id) 
+            ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_service_requests_user_id: %', SQLERRM;
+END $$;
+
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_service_requests_provider_id'
+    ) THEN
+        ALTER TABLE service_requests 
+            ADD CONSTRAINT fk_service_requests_provider_id 
+            FOREIGN KEY (provider_id) REFERENCES service_providers(id) 
+            ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_service_requests_provider_id: %', SQLERRM;
+END $$;
+
+-- Vehicles foreign key (using email since seller_email references users.email)
+-- Note: This creates a relationship based on email, not id
+-- This may fail if there are vehicles with seller_email values that don't exist in users.email
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_vehicles_seller_email'
+    ) THEN
+        ALTER TABLE vehicles 
+            ADD CONSTRAINT fk_vehicles_seller_email 
+            FOREIGN KEY (seller_email) REFERENCES users(email) 
+            ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_vehicles_seller_email: %. You may need to clean up vehicles with invalid seller_email values first.', SQLERRM;
+END $$;
+
+-- Users to Plans foreign key
+-- Connects users.subscription_plan to plans.id
+-- Note: This requires that plans.id values match subscription_plan values ('free', 'pro', 'premium')
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_users_subscription_plan'
+    ) THEN
+        ALTER TABLE users 
+            ADD CONSTRAINT fk_users_subscription_plan 
+            FOREIGN KEY (subscription_plan) REFERENCES plans(id) 
+            ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+EXCEPTION
+    WHEN others THEN
+        RAISE NOTICE 'Could not add fk_users_subscription_plan: %. Make sure plans table has rows with id values matching subscription_plan values (free, pro, premium).', SQLERRM;
+END $$;
+
+-- ============================================================================
+-- 11. FUNCTIONS: Auto-update updated_at timestamp
 -- ============================================================================
 -- Function to automatically update updated_at column
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -335,6 +542,15 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Drop existing triggers if they exist (to avoid errors on re-run)
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
+DROP TRIGGER IF EXISTS update_vehicles_updated_at ON vehicles;
+DROP TRIGGER IF EXISTS update_conversations_updated_at ON conversations;
+DROP TRIGGER IF EXISTS update_new_cars_updated_at ON new_cars;
+DROP TRIGGER IF EXISTS update_plans_updated_at ON plans;
+DROP TRIGGER IF EXISTS update_service_providers_updated_at ON service_providers;
+DROP TRIGGER IF EXISTS update_service_requests_updated_at ON service_requests;
 
 -- Create triggers for all tables with updated_at column
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
@@ -359,7 +575,7 @@ CREATE TRIGGER update_service_requests_updated_at BEFORE UPDATE ON service_reque
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
--- 10. RLS POLICIES (Optional - Uncomment after testing)
+-- 12. RLS POLICIES (Optional - Uncomment after testing)
 -- ============================================================================
 -- These policies control who can read/write data. Adjust based on your needs.
 
@@ -446,7 +662,7 @@ CREATE TRIGGER update_service_requests_updated_at BEFORE UPDATE ON service_reque
 --   FOR INSERT WITH CHECK (auth.uid()::text = user_id);
 
 -- ============================================================================
--- 11. VERIFICATION: Check that all tables and columns exist
+-- 13. VERIFICATION: Check that all tables and columns exist
 -- ============================================================================
 DO $$
 DECLARE
@@ -458,9 +674,9 @@ BEGIN
     FROM information_schema.tables
     WHERE table_schema = 'public'
     AND table_name IN ('users', 'vehicles', 'conversations', 'notifications', 
-                       'new_cars', 'plans', 'service_providers', 'service_requests');
+                       'new_cars', 'plans', 'service_providers', 'service_requests', 'messages');
     
-    IF table_count < 8 THEN
+    IF table_count < 9 THEN
         missing_items := array_append(missing_items, 'Some tables are missing');
     END IF;
     
@@ -510,11 +726,12 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- 12. COMMENTS: Add documentation to tables
+-- 14. COMMENTS: Add documentation to tables
 -- ============================================================================
 COMMENT ON TABLE users IS 'User accounts for customers, sellers, and admins';
 COMMENT ON TABLE vehicles IS 'Vehicle listings (used cars, bikes, etc.)';
 COMMENT ON TABLE conversations IS 'Chat conversations between customers and sellers';
+COMMENT ON TABLE messages IS 'Individual messages within conversations';
 COMMENT ON TABLE notifications IS 'User notifications';
 COMMENT ON TABLE new_cars IS 'New car listings';
 COMMENT ON TABLE plans IS 'Subscription plans for sellers';
@@ -522,9 +739,18 @@ COMMENT ON TABLE service_providers IS 'Service providers (mechanics, etc.)';
 COMMENT ON TABLE service_requests IS 'Service requests from users to providers';
 
 COMMENT ON COLUMN users.password IS 'Bcrypt hashed password for email/password authentication. NULL for OAuth-only users.';
+COMMENT ON COLUMN users.subscription_plan IS 'Foreign key reference to plans.id (free, pro, premium)';
 COMMENT ON COLUMN vehicles.metadata IS 'Additional vehicle data (certifications, ratings, etc.)';
+COMMENT ON COLUMN vehicles.seller_email IS 'Foreign key reference to users.email';
 COMMENT ON COLUMN conversations.metadata IS 'Chat messages array and additional conversation data';
+COMMENT ON COLUMN conversations.customer_id IS 'Foreign key reference to users table';
+COMMENT ON COLUMN conversations.seller_id IS 'Foreign key reference to users table';
+COMMENT ON COLUMN conversations.vehicle_id IS 'Foreign key reference to vehicles table';
+COMMENT ON COLUMN messages.conversation_id IS 'Foreign key reference to conversations table';
 COMMENT ON COLUMN notifications.metadata IS 'Additional notification data';
+COMMENT ON COLUMN notifications.user_id IS 'Foreign key reference to users table';
+COMMENT ON COLUMN service_requests.user_id IS 'Foreign key reference to users table';
+COMMENT ON COLUMN service_requests.provider_id IS 'Foreign key reference to service_providers table';
 
 -- ============================================================================
 -- Schema Setup Complete!

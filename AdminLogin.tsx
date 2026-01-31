@@ -42,6 +42,12 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onNavigate }) => {
         
         if (err instanceof Error) {
             errorMessage = err.message;
+            // Provide more helpful error messages
+            if (errorMessage.includes('Invalid credentials')) {
+                errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+            } else if (errorMessage.includes('not a registered')) {
+                errorMessage = 'This account does not have admin privileges.';
+            }
         }
         
         setError(errorMessage);
