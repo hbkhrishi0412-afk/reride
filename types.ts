@@ -170,13 +170,14 @@ export interface PlanDetails {
 }
 
 export interface User {
-  id?: string; // MongoDB _id as string
+  id?: string; // Supabase primary key (email-based)
   name: string;
   email: string;
   password?: string; // Optional for API responses, required for registration/login
   mobile: string;
   role: 'seller' | 'customer' | 'admin';
   location: string;
+  address?: string; // Full address (street, city, state, etc.)
   status: 'active' | 'inactive';
   createdAt: string; // ISO String
   updatedAt?: string; // ISO String - when the user was last updated

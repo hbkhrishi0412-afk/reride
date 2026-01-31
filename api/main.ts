@@ -1781,7 +1781,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       });
     }
     try {
-      // Firebase connection is handled automatically
+      // Supabase connection is handled automatically
       const { email, ...updateData } = req.body;
       
       // SECURITY FIX: Authorization Check
@@ -1902,28 +1902,28 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         (updateFields.verificationStatus as any).govtIdVerified = updateFields.govtIdVerified;
       }
 
-      // Build update object for Firebase (no $set/$unset needed)
-      const firebaseUpdates: Record<string, unknown> = {};
+      // Build update object for Supabase
+      const supabaseUpdates: Record<string, unknown> = {};
       
       // Add fields to update
       Object.keys(updateFields).forEach(key => {
-        firebaseUpdates[key] = updateFields[key];
+        supabaseUpdates[key] = updateFields[key];
       });
       
-      // For unset fields, set to null (Firebase will remove them)
+      // For unset fields, set to null (Supabase will handle null values)
       Object.keys(unsetFields).forEach(key => {
-        firebaseUpdates[key] = null;
+        supabaseUpdates[key] = null;
       });
 
       // Only proceed with update if there are fields to update
-      if (Object.keys(firebaseUpdates).length === 0) {
+      if (Object.keys(supabaseUpdates).length === 0) {
         return res.status(400).json({ success: false, reason: 'No fields to update.' });
       }
 
-      logInfo('💾 Updating user in Firebase...', { 
+      logInfo('💾 Updating user in Supabase...', { 
         email, 
         hasPasswordUpdate: !!updateFields.password,
-        updateFields: Object.keys(firebaseUpdates)
+        updateFields: Object.keys(supabaseUpdates)
       });
 
       // Sanitize and normalize email
@@ -1950,10 +1950,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
       logInfo('📝 Found user, applying update operation...');
       
-      // Update user in Firebase
+      // Update user in Supabase
       try {
-        await userService.update(normalizedEmail, firebaseUpdates);
-        logInfo('✅ User update operation completed in Firebase');
+        await userService.update(normalizedEmail, supabaseUpdates);
+        logInfo('✅ User update operation completed in Supabase');
         
         // Fetch updated user
         let updatedUser: UserType | null;
@@ -1980,8 +1980,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
         logInfo('✅ User updated successfully:', updatedUser.email);
 
-        // REMOVED: Firebase Auth profile sync - firebaseUid doesn't exist in Firebase Realtime Database
-        // This code was never executing because existingUser.firebaseUid is always undefined
+        // Note: Supabase handles authentication separately from user data
 
         // SYNC VEHICLE EXPIRY DATES when planExpiryDate is updated
         if (updateFields.planExpiryDate !== undefined || unsetFields.planExpiryDate !== undefined) {
@@ -2133,9 +2132,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(404).json({ success: false, reason: 'User not found.' });
       }
 
-      // Delete user from Firebase
+      // Delete user from Supabase
       await userService.delete(normalizedEmail);
-      logInfo('✅ User deleted successfully from Firebase:', normalizedEmail);
+        logInfo('✅ User deleted successfully from Supabase:', normalizedEmail);
 
       // Verify the user was deleted by querying it
       const verifyUser = await userService.findByEmail(normalizedEmail);
@@ -2186,10 +2185,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
     }
     
-    // Check for Firebase database errors
+    // Check for Supabase database errors
     const isDbError = error instanceof Error && (
-      error.message.includes('Firebase') ||
-      error.message.includes('firebase') ||
+      error.message.includes('Supabase') ||
+      error.message.includes('supabase') ||
       error.message.includes('database') && error.message.includes('unavailable')
     );
     

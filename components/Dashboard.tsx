@@ -1680,6 +1680,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   const [itemsPerPage] = useState(10);
   // Month selector state for analytics
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  // Users state for contact lookup
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   
   // Production error logging helper (must be after hooks)
   const logProductionError = useCallback((error: Error | unknown, context: string) => {
@@ -1859,6 +1861,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
           // Check if component is still mounted after async operation
           if (!isMounted) {
             return;
+          }
+          
+          // Store users in state for use in JSX
+          if (Array.isArray(users)) {
+            setAllUsers(users);
           }
           
           if (Array.isArray(users) && seller?.email) {
@@ -3195,7 +3202,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   currentUserRole="seller"
                   otherUserName={selectedConv.customerName}
                   callTargetPhone={(() => {
-                    const contact = users?.find?.(u => u && u.email && u.email.toLowerCase().trim() === selectedConv.customerId?.toLowerCase().trim());
+                    const contact = allUsers?.find?.((u: User) => u && u.email && u.email.toLowerCase().trim() === selectedConv.customerId?.toLowerCase().trim());
                     return contact?.mobile || (contact as any)?.phone || '';
                   })()}
                   callTargetName={selectedConv.customerName}
@@ -3445,7 +3452,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             currentUserRole="seller"
             otherUserName={selectedConv.customerName}
             callTargetPhone={(() => {
-              const contact = users?.find?.(u => u && u.email && u.email.toLowerCase().trim() === selectedConv.customerId?.toLowerCase().trim());
+              const contact = allUsers?.find?.((u: User) => u && u.email && u.email.toLowerCase().trim() === selectedConv.customerId?.toLowerCase().trim());
               return contact?.mobile || (contact as any)?.phone || '';
             })()}
             callTargetName={selectedConv.customerName}

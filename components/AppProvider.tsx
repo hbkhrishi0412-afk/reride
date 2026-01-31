@@ -1132,7 +1132,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Load initial data with instant cache display and background refresh
   useEffect(() => {
     let isMounted = true;
-    let hasLoadedFreshData = false; // Track if we've already loaded fresh data
     
     const loadInitialData = async () => {
       try {
@@ -1159,12 +1158,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // STEP 2: Load cached users IMMEDIATELY
         try {
-          const cachedUsersJson = localStorage.getItem('reRideUsers_prod');
+          const cachedUsersJson = localStorage.getItem('reRideUsers_prod') || localStorage.getItem('reRideUsers');
           if (cachedUsersJson) {
             const cachedUsers = JSON.parse(cachedUsersJson);
             if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
               setUsers(cachedUsers);
+              console.log(`✅ Instantly loaded ${cachedUsers.length} cached users`);
+            } else {
+              console.warn('⚠️ Cached users data exists but is empty or invalid');
             }
+          } else {
+            console.log('ℹ️ No cached users found in localStorage');
           }
         } catch (cacheError) {
           console.warn('Failed to load cached users:', cacheError);
@@ -1300,9 +1304,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   });
                 }
               } else {
-                // Production mode: just set empty array
-                setUsers([]);
-                console.log('ℹ️ API returned empty users array (production mode)');
+                // Production mode: check for cached data before setting empty
+                const currentUsersJson = localStorage.getItem('reRideUsers_prod') || localStorage.getItem('reRideUsers');
+                if (currentUsersJson) {
+                  try {
+                    const currentUsers = JSON.parse(currentUsersJson);
+                    if (Array.isArray(currentUsers) && currentUsers.length > 0) {
+                      console.log(`✅ Using ${currentUsers.length} cached users (API returned empty in production)`);
+                      setUsers(currentUsers);
+                    } else {
+                      console.log('ℹ️ API returned empty users array and cache is also empty (production mode)');
+                      setUsers([]);
+                    }
+                  } catch (parseError) {
+                    console.warn('Failed to parse cached users in production:', parseError);
+                    setUsers([]);
+                  }
+                } else {
+                  console.log('ℹ️ API returned empty users array and no cache available (production mode)');
+                  setUsers([]);
+                }
               }
             }
           }
@@ -2763,7 +2784,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           throw new Error('Failed to update vehicle data in Supabase');
         }
         
-        // MongoDB update succeeded - NOW update local state
+        // Supabase update succeeded - NOW update local state
         setVehicleData(newData);
         
         // Log audit entry for vehicle data update
@@ -3328,7 +3349,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               } else {
                 addToast('Profile update failed: Server error. Please try again.', 'error');
               }
-              // Don't update localStorage - MongoDB update failed
+              // Don't update localStorage - Supabase update failed
               throw new Error('Server error. Please try again.');
             }
             
@@ -3406,7 +3427,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
           
-          // Also update the localStorage users array after MongoDB success
+          // Also update the localStorage users array after Supabase success
           try {
             const { updateUser: updateUserService } = await import('../services/userService');
             await updateUserService({ email, ...safeUpdates });
@@ -3513,7 +3534,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }
           } else {
-            console.warn('⚠️ Failed to update profile in MongoDB - unknown error type');
+            console.warn('⚠️ Failed to update profile in Supabase - unknown error type');
             if (updates.password) {
               addToast('Password update failed. Please try again or check server logs.', 'error');
             } else {

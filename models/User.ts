@@ -24,6 +24,14 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: false // Not required for Google OAuth users
   },
+  location: {
+    type: String,
+    required: false
+  },
+  address: {
+    type: String,
+    required: false // Full address (street, city, state, etc.)
+  },
   firebaseUid: {
     type: String,
     unique: true,

@@ -1328,6 +1328,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             <SortableHeader title="Name" sortKey="name" sortConfig={sortConfig} requestSort={requestSort} />
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Email</th>
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Mobile</th>
+                                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Address</th>
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Role</th>
                                             <SortableHeader title="Status" sortKey="status" sortConfig={sortConfig} requestSort={requestSort} />
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Member Since</th>
@@ -1361,6 +1362,11 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                 </td>
                                                 <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600">{user.email}</td>
                                                 <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-600">{user.mobile || 'N/A'}</td>
+                                                <td className="px-3 py-2.5 text-xs text-gray-600 max-w-xs">
+                                                    <div className="truncate" title={user.address || user.location || 'N/A'}>
+                                                        {user.address || user.location || 'N/A'}
+                                                    </div>
+                                                </td>
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
                                                     <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
                                                         user.role === 'admin' ? 'bg-purple-100 text-purple-700' :
@@ -2810,7 +2816,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     planExpiryDate: updateData.planExpiryDate
                                 });
                                 
-                                // Update via onAdminUpdateUser which updates both local state and MongoDB
+                                // Update via onAdminUpdateUser which updates both local state and Supabase
                                 await onAdminUpdateUser(editingExpiryUser.email, updateData);
                                 
                                 // Close modal

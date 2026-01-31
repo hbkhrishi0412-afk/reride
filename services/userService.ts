@@ -229,7 +229,7 @@ export const getUsersLocal = async (): Promise<User[]> => {
                     if (criticalUser) {
                         // Fix corrupted or incorrectly stored passwords
                         const storedPassword = (u.password || '').trim();
-                        const expectedPassword = criticalUser.password.trim();
+                        const expectedPassword = (criticalUser.password || '').trim();
                         
                         // Check if password needs to be fixed:
                         // 1. Password is hashed (starts with $2) - should be plain text in development
@@ -540,7 +540,7 @@ const deleteUserApi = async (email: string): Promise<{ success: boolean, email: 
     return result.data!;
 };
 
-const authApi = async (body: any, retryCount = 0): Promise<any> => {
+const authApi = async (body: any): Promise<any> => {
     // Create a unique key for request deduplication based on action and credentials
     const requestKey = body.action === 'login' 
         ? `auth-${body.action}-${body.email}-${body.role || ''}`

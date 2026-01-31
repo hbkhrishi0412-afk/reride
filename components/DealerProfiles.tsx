@@ -1,209 +1,334 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import type { User, Vehicle } from '../types.js';
-import StarRating from './StarRating.js';
-import BadgeDisplay from './BadgeDisplay.js';
-import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
-import { isUserVerified } from './VerifiedBadge.js';
 import { getSellers } from '../services/userService.js';
+import { getCityCoordinates } from '../services/locationService.js';
+import { CITY_COORDINATES } from '../constants/location.js';
+
+// Fix for default marker icons in Leaflet
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 interface DealerProfilesProps {
-  sellers?: User[]; // Made optional - will fetch if not provided
+  sellers?: User[];
   vehicles?: Vehicle[];
   onViewProfile: (sellerEmail: string) => void;
 }
 
-type SortOption = 'name' | 'rating' | 'reviews' | 'followers' | 'newest';
+type CompanyType = 'all' | 'car-service' | 'showroom';
 
-const DealerCard: React.FC<{ 
-  seller: User; 
-  vehicles?: Vehicle[];
-  onViewProfile: (sellerEmail: string) => void;
-  index: number;
-}> = ({ seller, vehicles = [], onViewProfile, index }) => {
-  const followersCount = getFollowersCount(seller.email);
-  const followingCount = getFollowingCount(seller.email);
-  const isVerified = isUserVerified(seller);
-  const rating = seller.averageRating || 0;
-  const reviewCount = seller.ratingCount || 0;
+interface CompanyLocation {
+  lat: number;
+  lng: number;
+}
+
+// Component to handle map bounds updates
+const MapBoundsUpdater: React.FC<{ bounds: L.LatLngBounds | null }> = ({ bounds }) => {
+  const map = useMap();
   
-  // Calculate vehicle count for this seller
-  const vehicleCount = useMemo(() => {
-    if (!vehicles || vehicles.length === 0) return 0;
-    const normalizedSellerEmail = seller.email?.toLowerCase().trim() || '';
-    return vehicles.filter(v => 
-      v.sellerEmail?.toLowerCase().trim() === normalizedSellerEmail && 
-      v.status === 'published'
-    ).length;
-  }, [vehicles, seller.email]);
+  useEffect(() => {
+    if (bounds && bounds.isValid()) {
+      try {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+      } catch (error) {
+        console.warn('Error fitting map bounds:', error);
+      }
+    }
+  }, [bounds, map]);
+  
+  return null;
+};
+
+// Component to center map on selected dealer
+const MapCenterUpdater: React.FC<{ center: [number, number] | null; zoom?: number }> = ({ center, zoom = 13 }) => {
+  const map = useMap();
+  
+  useEffect(() => {
+    if (center) {
+      map.setView(center, zoom, {
+        animate: true,
+        duration: 0.5
+      });
+    }
+  }, [center, zoom, map]);
+  
+  return null;
+};
+
+// Company Card Component matching the image design
+const CompanyCard: React.FC<{
+  seller: User;
+  onViewProfile: (sellerEmail: string) => void;
+  onSelect?: (sellerEmail: string, coords: CompanyLocation | null) => void;
+  onCall?: (phone: string) => void;
+  isRecommended?: boolean;
+  coords?: CompanyLocation | null;
+  isSelected?: boolean;
+}> = ({ seller, onViewProfile, onSelect, onCall, isRecommended = false, coords = null, isSelected = false }) => {
+  // Determine company type - default to 'showroom' if not specified
+  const companyType = (seller.badges?.some(b => b.type === 'top_seller') ? 'showroom' : 'car-service') as 'showroom' | 'car-service';
+  
+  // Determine status based on current time (Indian Standard Time)
+  const getStatus = () => {
+    const now = new Date();
+    const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const day = istTime.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const hour = istTime.getHours();
+    
+    // Assume business hours: Monday-Saturday, 8:30 AM - 8:00 PM
+    const isWeekend = day === 0 || day === 6; // Sunday or Saturday
+    const isBusinessHours = hour >= 8 && hour < 20;
+    
+    const isOpen = !isWeekend && isBusinessHours;
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const statusText = isOpen ? 'Open' : 'Closed';
+    const statusTime = `${dayNames[day]} at ${hour.toString().padStart(2, '0')}:${istTime.getMinutes().toString().padStart(2, '0')}`;
+    
+    return { isOpen, statusText, statusTime };
+  };
+  
+  const { isOpen, statusText, statusTime } = getStatus();
+  
+  // Get address - prefer address field, fallback to location
+  const address = seller.address || seller.location || 'Address not available';
+  
+  // Languages - default to Hindi and English for Indian dealers
+  const languages = ['Hindi', 'English'];
+  
+  const handleCall = () => {
+    if (seller.mobile && onCall) {
+      onCall(seller.mobile);
+    } else {
+      window.location.href = `tel:${seller.mobile || ''}`;
+    }
+  };
+
+  const handleDealerNameClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onSelect && coords) {
+      onSelect(seller.email, coords);
+    }
+  };
 
   return (
-    <div
+    <div 
+      className={`bg-white border-b border-gray-200 p-4 hover:bg-gray-50 transition-colors cursor-pointer ${isSelected ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''}`}
       onClick={() => onViewProfile(seller.email)}
-      className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border border-gray-100 hover:border-blue-200 hover:-translate-y-5 cursor-pointer animate-stagger-fade-in"
-      style={{
-        animationDelay: `${index * 50}ms`,
-      }}
     >
-      {/* Gradient Background Overlay on Hover */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/0 via-purple-50/0 to-orange-50/0 group-hover:from-blue-50/50 group-hover:via-purple-50/30 group-hover:to-orange-50/50 transition-all duration-500"></div>
-      
-      {/* Verified Ribbon */}
-      {isVerified && (
-        <div className="absolute top-0 right-0 z-10">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-bold px-4 py-1.5 rounded-bl-lg shadow-lg flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <span>Verified</span>
-          </div>
-        </div>
-      )}
-
-      <div className="relative p-4 flex flex-col items-center text-center">
-        {/* Profile Picture with Enhanced Border */}
-        <div className="relative mb-0.5">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-orange-500 rounded-full blur-md opacity-0 group-hover:opacity-30 transition-opacity duration-500"></div>
+      <div className="flex gap-4">
+        {/* Company Logo */}
+        <div className="flex-shrink-0">
           <img
-            src={seller.logoUrl || `https://i.pravatar.cc/120?u=${seller.email}`}
-            alt={`${seller.dealershipName || seller.name}'s logo`}
-            className="relative w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg group-hover:scale-110 transition-transform duration-500"
+            src={seller.logoUrl || `https://i.pravatar.cc/80?u=${seller.email}`}
+            alt={seller.dealershipName || seller.name}
+            className="w-16 h-16 rounded object-cover border border-gray-200"
           />
-          {isVerified && (
-            <div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-1.5 shadow-lg">
-              <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </div>
+        
+        {/* Company Details */}
+        <div className="flex-1 min-w-0">
+          {/* Company Name - Clickable to show on map */}
+          <h3 
+            className="text-blue-600 font-semibold text-base mb-1 hover:underline cursor-pointer"
+            onClick={handleDealerNameClick}
+            title="Click to show location on map"
+          >
+            {seller.dealershipName || seller.name}
+          </h3>
+          
+          {/* Company Type */}
+          <p className="text-sm text-gray-600 mb-2">{companyType === 'showroom' ? 'Showroom' : 'Car Service'}</p>
+          
+          {/* Status */}
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`w-2 h-2 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}></span>
+            <span className="text-sm text-gray-600">
+              {statusText} {statusTime}
+            </span>
+          </div>
+          
+          {/* Address */}
+          <p className="text-sm text-gray-600 mb-2">
+            {address === 'Address not available' ? (
+              <span className="text-gray-400 italic">{address}</span>
+            ) : (
+              address
+            )}
+          </p>
+          
+          {/* Languages */}
+          <p className="text-sm text-gray-600 mb-3">{languages.join(', ')}</p>
+          
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCall();
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
               </svg>
-            </div>
-          )}
-        </div>
-
-        {/* Dealer Name */}
-        <h3 className="font-extrabold text-lg text-gray-900 mb-1 flex items-center justify-center gap-2 line-clamp-1">
-          {seller.dealershipName || seller.name}
-        </h3>
-
-        {/* Badges */}
-        {seller.badges && seller.badges.length > 0 && (
-          <div className="mb-2 flex flex-wrap justify-center gap-1.5">
-            <BadgeDisplay badges={seller.badges || []} />
-          </div>
-        )}
-
-        {/* Rating */}
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <StarRating rating={rating} readOnly size="sm" />
-          <span className="text-sm font-semibold text-gray-700">{rating > 0 ? rating.toFixed(1) : 'N/A'}</span>
-          <span className="text-xs text-gray-500">({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})</span>
-        </div>
-
-        {/* Vehicle Count - Compact Display */}
-        <div className="w-full mb-2.5 px-2 py-1.5 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-100 group-hover:from-green-100 group-hover:to-emerald-100 transition-all duration-300">
-          <div className="flex items-center justify-center gap-2">
-            <div className="p-1 bg-green-500 rounded-md shadow-sm">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
-              </svg>
-            </div>
-            <div className="flex flex-col items-start">
-              <span className="text-lg font-bold text-gray-900 leading-none">{vehicleCount}</span>
-              <span className="text-[10px] font-medium text-gray-600 uppercase tracking-wide mt-0.5">
-                {vehicleCount === 1 ? 'Vehicle Listed' : 'Vehicles Listed'}
-              </span>
-            </div>
+              Call now
+            </button>
+            {isRecommended && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewProfile(seller.email);
+                }}
+                className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 text-sm font-medium px-4 py-2 rounded flex items-center gap-2 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.834a1 1 0 001.364.97l5-.108a1 1 0 00.636-.97v-5.834a1 1 0 00-.636-.97l-5-.108a1 1 0 00-1.364.97zM16 6v9a1 1 0 01-1 1h-2.5a1 1 0 01-1-1V6a1 1 0 011-1H15a1 1 0 011 1z" />
+                </svg>
+                Autoboom recommends
+              </button>
+            )}
           </div>
         </div>
-
-        {/* Social Stats */}
-        <div className="flex items-center justify-center gap-3 mb-3 text-xs">
-          <div className="flex items-center gap-1 text-gray-600">
-            <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            <span className="font-semibold text-gray-700">{followersCount}</span>
-            <span className="text-gray-500">Followers</span>
-          </div>
-          <div className="w-px h-3 bg-gray-300"></div>
-          <div className="flex items-center gap-1 text-gray-600">
-            <svg className="w-3.5 h-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-            <span className="font-semibold text-gray-700">{followingCount}</span>
-            <span className="text-gray-500">Following</span>
-          </div>
-        </div>
-
-        {/* Bio */}
-        <p className="text-sm text-gray-600 mb-2 flex-grow line-clamp-2 min-h-[2.5rem]">
-          {seller.bio || 'No description available'}
-        </p>
-
-        {/* CTA Button */}
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewProfile(seller.email);
-          }}
-          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-2 px-6 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95"
-        >
-          View Profile & Listings
-        </button>
       </div>
     </div>
   );
 };
 
-const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, vehicles = [], onViewProfile }) => {
+const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, onViewProfile }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('name');
-  const [showFilters, setShowFilters] = useState(false);
-  const [verifiedFilter, setVerifiedFilter] = useState<boolean | null>(null);
+  const [companyTypeFilter, setCompanyTypeFilter] = useState<CompanyType>('all');
   const [sellers, setSellers] = useState<User[]>(propSellers || []);
   const [isLoadingSellers, setIsLoadingSellers] = useState(!propSellers || propSellers.length === 0);
   const [sellerLoadError, setSellerLoadError] = useState<string | null>(null);
+  const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]); // Default to India center
+  const [selectedDealerCenter, setSelectedDealerCenter] = useState<[number, number] | null>(null);
+  const [selectedDealerEmail, setSelectedDealerEmail] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch sellers directly from API if not provided or empty
+  // Fetch sellers
   useEffect(() => {
-    // Only fetch if sellers weren't provided or if provided array is empty
     if (!propSellers || propSellers.length === 0) {
       const fetchSellers = async () => {
         setIsLoadingSellers(true);
         setSellerLoadError(null);
         try {
-          console.log('🔍 DealerProfiles: Fetching sellers from API...');
           const fetchedSellers = await getSellers();
-          console.log(`✅ DealerProfiles: Fetched ${fetchedSellers.length} sellers from API`);
-          
-          // Filter to ensure only sellers with role='seller' are included
           const validSellers = fetchedSellers.filter(seller => seller.role === 'seller');
-          console.log(`✅ DealerProfiles: ${validSellers.length} valid sellers after filtering`);
-          
           setSellers(validSellers);
           
           if (validSellers.length === 0) {
-            console.warn('⚠️ DealerProfiles: No sellers found in database. Check admin panel to verify sellers are registered with role="seller"');
             setSellerLoadError('No sellers found. Please check back later.');
           }
         } catch (error) {
-          console.error('❌ DealerProfiles: Error fetching sellers:', error);
+          console.error('Error fetching sellers:', error);
           setSellerLoadError('Failed to load sellers. Please try refreshing the page.');
           setSellers([]);
         } finally {
           setIsLoadingSellers(false);
         }
       };
-      
       fetchSellers();
     } else {
-      // Use provided sellers
       setSellers(propSellers);
       setIsLoadingSellers(false);
     }
   }, [propSellers]);
 
-  // Filter and sort dealers
-  const filteredAndSortedSellers = useMemo(() => {
+  // State for sellers with coordinates
+  const [sellersWithCoords, setSellersWithCoords] = useState<Array<{ seller: User; coords: CompanyLocation | null }>>([]);
+
+  // Get coordinates for sellers
+  useEffect(() => {
+    const fetchCoords = async () => {
+      const sellersWithLocations = await Promise.all(
+        sellers.map(async (seller) => {
+          // Parse location - handle various formats like "Mumbai, Maharashtra" or just "Mumbai"
+          let city = seller.location?.trim() || '';
+          
+          // Extract city name (first part before comma, or the whole string)
+          if (city.includes(',')) {
+            city = city.split(',')[0].trim();
+          }
+          
+          // Handle common city name variations
+          const cityVariations: Record<string, string> = {
+            'delhi': 'New Delhi',
+            'bangalore': 'Bengaluru',
+            'bengaluru': 'Bengaluru',
+            'calcutta': 'Kolkata',
+            'madras': 'Chennai',
+            'bombay': 'Mumbai',
+          };
+          
+          const normalizedCity = cityVariations[city.toLowerCase()] || city;
+          
+          // Try to match city name (case-insensitive)
+          let coords: CompanyLocation | null = null;
+          
+          // First try exact match
+          if (normalizedCity && CITY_COORDINATES[normalizedCity]) {
+            coords = CITY_COORDINATES[normalizedCity];
+          } else if (city) {
+            // Try case-insensitive match
+            const cityKey = Object.keys(CITY_COORDINATES).find(
+              key => key.toLowerCase() === city.toLowerCase() || key.toLowerCase() === normalizedCity.toLowerCase()
+            );
+            if (cityKey) {
+              coords = CITY_COORDINATES[cityKey];
+            } else {
+              // Try to fetch coordinates from constants.ts
+              const fetchedCoords = await getCityCoordinates(city);
+              if (fetchedCoords) {
+                coords = fetchedCoords;
+              }
+            }
+          }
+          
+          return {
+            seller,
+            coords,
+          };
+        })
+      );
+      
+      setSellersWithCoords(sellersWithLocations);
+      
+      // Update map bounds
+      const validCoords = sellersWithLocations
+        .filter(item => item.coords !== null)
+        .map(item => item.coords!);
+      
+      if (validCoords.length > 0) {
+        const bounds = L.latLngBounds(validCoords.map(c => [c.lat, c.lng]));
+        setMapBounds(bounds);
+        
+        // Set center to center of bounds or first coordinate
+        const centerLat = validCoords.reduce((sum, c) => sum + c.lat, 0) / validCoords.length;
+        const centerLng = validCoords.reduce((sum, c) => sum + c.lng, 0) / validCoords.length;
+        setMapCenter([centerLat, centerLng]);
+      } else {
+        // If no valid coordinates, use India center
+        setMapCenter([20.5937, 78.9629]);
+      }
+    };
+    
+    if (sellers.length > 0) {
+      fetchCoords();
+    } else {
+      // Reset to India center if no sellers
+      setMapCenter([20.5937, 78.9629]);
+    }
+  }, [sellers]);
+
+  // Filter sellers
+  const filteredSellers = useMemo(() => {
     let filtered = sellers;
 
     // Apply search filter
@@ -211,293 +336,279 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, v
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(seller => {
         const name = (seller.dealershipName || seller.name || '').toLowerCase();
-        const bio = (seller.bio || '').toLowerCase();
-        const email = (seller.email || '').toLowerCase();
-        return name.includes(query) || bio.includes(query) || email.includes(query);
+        const location = (seller.location || '').toLowerCase();
+        return name.includes(query) || location.includes(query);
       });
     }
 
-    // Apply verified filter
-    if (verifiedFilter !== null) {
+    // Apply company type filter
+    if (companyTypeFilter !== 'all') {
       filtered = filtered.filter(seller => {
-        const isVerified = isUserVerified(seller);
-        return verifiedFilter ? isVerified : !isVerified;
+        const isShowroom = seller.badges?.some(b => b.type === 'top_seller');
+        if (companyTypeFilter === 'showroom') {
+          return isShowroom;
+        } else {
+          return !isShowroom;
+        }
       });
     }
 
-    // Apply sorting
-    const sorted = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case 'name':
-          return (a.dealershipName || a.name || '').localeCompare(b.dealershipName || b.name || '');
-        case 'rating':
-          return (b.averageRating || 0) - (a.averageRating || 0);
-        case 'reviews':
-          return (b.ratingCount || 0) - (a.ratingCount || 0);
-        case 'followers':
-          return getFollowersCount(b.email) - getFollowersCount(a.email);
-        case 'newest':
-          return (new Date(b.createdAt || 0).getTime()) - (new Date(a.createdAt || 0).getTime());
-        default:
-          return 0;
-      }
-    });
+    return filtered;
+  }, [sellers, searchQuery, companyTypeFilter]);
 
-    return sorted;
-  }, [sellers, searchQuery, sortBy, verifiedFilter]);
+  // Get filtered sellers with coordinates
+  const filteredSellersWithCoords = useMemo(() => {
+    return sellersWithCoords.filter(item => 
+      filteredSellers.some(s => s.email === item.seller.email)
+    );
+  }, [sellersWithCoords, filteredSellers]);
+
+  const handleCall = (phone: string) => {
+    window.location.href = `tel:${phone}`;
+  };
+
+  // Handle dealer selection - center map on selected dealer
+  const handleDealerSelect = (sellerEmail: string, coords: CompanyLocation | null) => {
+    if (coords) {
+      setSelectedDealerEmail(sellerEmail);
+      setSelectedDealerCenter([coords.lat, coords.lng]);
+    }
+  };
 
   return (
-    <div className="dealers container mx-auto py-2 animate-fade-in min-h-screen">
-      {/* Header Section with Gradient */}
-      <div className="relative mb-3 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-orange-500 p-3 md:p-4 text-white">
-        <div className="absolute inset-0 bg-black/10"></div>
-        <div className="relative z-10">
-          <div className="flex items-center gap-2">
-            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-1.5">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-extrabold mb-0">
-                Certified Dealer Profiles
-              </h1>
-              <p className="text-blue-100 text-sm md:text-base">
-                Connect with trusted automotive dealers
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Search and Filter Bar */}
-      <div className="bg-white rounded-xl shadow-md p-2.5 mb-2 border border-gray-100">
-        <div className="flex flex-col md:flex-row gap-3">
-          {/* Search Input */}
-          <div className="flex-1 relative">
-            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search dealers by name, description..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  // Trigger search on Enter key
-                  e.currentTarget.blur();
-                }
-              }}
-              className="w-full pl-10 pr-12 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-            />
-            <button
-              onClick={() => {
-                // Trigger search action - blur the specific search input
-                searchInputRef.current?.blur();
-              }}
-              className="absolute right-1.5 top-1/2 transform -translate-y-1/2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white p-2 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 shadow-sm hover:shadow-md"
-              aria-label="Search"
-              title="Search"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Sort Dropdown */}
-          <div className="relative">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer transition-all font-medium"
-            >
-              <option value="name">Sort by Name</option>
-              <option value="rating">Sort by Rating</option>
-              <option value="reviews">Sort by Reviews</option>
-              <option value="followers">Sort by Followers</option>
-              <option value="newest">Sort by Newest</option>
-            </select>
-            <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
-
-          {/* Filter Toggle Button */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
-              verifiedFilter !== null
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-            </svg>
-            Filters
-            {verifiedFilter !== null && (
-              <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">
-                1
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Filter Options */}
-        {showFilters && (
-          <div className="mt-3 pt-3 border-t border-gray-200 animate-fade-in">
-            <div className="flex flex-wrap gap-3">
-              <label className="flex items-center gap-2 cursor-pointer group">
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* Main Content Area - Split Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar */}
+        <div className="w-1/3 border-r border-gray-300 flex flex-col overflow-hidden bg-white">
+          {/* Sidebar Header */}
+          <div className="p-4 border-b border-gray-300">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">
+              Automotive companies in selected region
+            </h1>
+            
+            {/* Search Bar */}
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1 relative">
+                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
                 <input
-                  type="checkbox"
-                  checked={verifiedFilter === true}
-                  onChange={(e) => setVerifiedFilter(e.target.checked ? true : null)}
-                  className="w-5 h-5 text-blue-600 bg-white border-2 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer checked:bg-blue-600 checked:border-blue-600 transition-colors"
-                  style={{
-                    accentColor: '#2563EB'
-                  }}
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search by name"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-                <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">Verified Only</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={verifiedFilter === false}
-                  onChange={(e) => setVerifiedFilter(e.target.checked ? false : null)}
-                  className="w-5 h-5 text-blue-600 bg-white border-2 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer checked:bg-blue-600 checked:border-blue-600 transition-colors"
-                  style={{
-                    accentColor: '#2563EB'
-                  }}
-                />
-                <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">Unverified Only</span>
-              </label>
-              {verifiedFilter !== null && (
-                <button
-                  onClick={() => setVerifiedFilter(null)}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium ml-auto"
-                >
-                  Clear Filters
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Results Count */}
-      {filteredAndSortedSellers.length > 0 && (
-        <div className="mt-8 mb-1.5 text-gray-600 text-sm">
-          Showing <span className="font-bold text-gray-900">{filteredAndSortedSellers.length}</span> dealer{filteredAndSortedSellers.length !== 1 ? 's' : ''}
-          {searchQuery && (
-            <span> for &quot;<span className="font-semibold">{searchQuery}</span>&quot;</span>
-          )}
-        </div>
-      )}
-
-      {/* Loading State */}
-      {isLoadingSellers && (
-        <div className="col-span-full text-center py-20">
-          <div className="max-w-md mx-auto">
-            <div className="bg-blue-100 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">Loading Dealers...</h3>
-            <p className="text-gray-600">Please wait while we fetch dealer information</p>
-          </div>
-        </div>
-      )}
-
-      {/* Error State */}
-      {!isLoadingSellers && sellerLoadError && (
-        <div className="col-span-full text-center py-20">
-          <div className="max-w-md mx-auto">
-            <div className="bg-red-100 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-              <svg className="w-12 h-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">Error Loading Dealers</h3>
-            <p className="text-gray-600 mb-6">{sellerLoadError}</p>
-            <button
-              onClick={() => {
-                setSellerLoadError(null);
-                setIsLoadingSellers(true);
-                // Trigger re-fetch
-                const fetchSellers = async () => {
-                  try {
-                    const fetchedSellers = await getSellers();
-                    const validSellers = fetchedSellers.filter(seller => seller.role === 'seller');
-                    setSellers(validSellers);
-                    if (validSellers.length === 0) {
-                      setSellerLoadError('No sellers found. Please check back later.');
-                    }
-                  } catch (error) {
-                    setSellerLoadError('Failed to load sellers. Please try refreshing the page.');
-                    setSellers([]);
-                  } finally {
-                    setIsLoadingSellers(false);
-                  }
-                };
-                fetchSellers();
-              }}
-              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-            >
-              Retry
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Dealer Grid */}
-      {!isLoadingSellers && !sellerLoadError && filteredAndSortedSellers.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-5">
-          {filteredAndSortedSellers.map((seller, index) => (
-            <DealerCard 
-              key={seller.email} 
-              seller={seller} 
-              vehicles={vehicles}
-              onViewProfile={onViewProfile}
-              index={index}
-            />
-          ))}
-        </div>
-      ) : !isLoadingSellers && !sellerLoadError && (
-        <div className="col-span-full text-center py-20">
-          <div className="max-w-md mx-auto">
-            <div className="bg-gray-100 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-              <svg className="w-12 h-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">
-              {searchQuery ? 'No dealers found' : 'No dealers available'}
-            </h3>
-            <p className="text-gray-600 mb-6">
-              {searchQuery
-                ? `We couldn't find any dealers matching "${searchQuery}". Try adjusting your search.`
-                : 'There are no certified dealers available at the moment. Please check back later.'}
-            </p>
-            {searchQuery && (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setVerifiedFilter(null);
-                }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-              >
-                Clear Search
+              </div>
+              <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Parameters
               </button>
+            </div>
+            
+            {/* Filter Options */}
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="companyType"
+                  value="all"
+                  checked={companyTypeFilter === 'all'}
+                  onChange={(e) => setCompanyTypeFilter(e.target.value as CompanyType)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm font-medium text-gray-700">All</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="companyType"
+                  value="car-service"
+                  checked={companyTypeFilter === 'car-service'}
+                  onChange={(e) => setCompanyTypeFilter(e.target.value as CompanyType)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm font-medium text-gray-700">Car Service</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="companyType"
+                  value="showroom"
+                  checked={companyTypeFilter === 'showroom'}
+                  onChange={(e) => setCompanyTypeFilter(e.target.value as CompanyType)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="text-sm font-medium text-gray-700">Showroom</span>
+              </label>
+              <button className="text-sm text-blue-600 hover:text-blue-700 font-medium ml-auto">
+                More
+              </button>
+            </div>
+          </div>
+          
+          {/* Company List */}
+          <div className="flex-1 overflow-y-auto">
+            {isLoadingSellers ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading companies...</p>
+                </div>
+              </div>
+            ) : sellerLoadError ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center p-4">
+                  <p className="text-red-600 mb-4">{sellerLoadError}</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : filteredSellers.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center p-4">
+                  <p className="text-gray-600">
+                    {searchQuery ? 'No companies found matching your search' : 'No companies available'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              filteredSellers.map((seller, index) => {
+                const sellerWithCoords = sellersWithCoords.find(item => item.seller.email === seller.email);
+                return (
+                  <CompanyCard
+                    key={seller.email}
+                    seller={seller}
+                    onViewProfile={onViewProfile}
+                    onSelect={handleDealerSelect}
+                    onCall={handleCall}
+                    isRecommended={index === 0} // First company is recommended
+                    coords={sellerWithCoords?.coords || null}
+                    isSelected={selectedDealerEmail === seller.email}
+                  />
+                );
+              })
             )}
           </div>
         </div>
-      )}
+        
+        {/* Right Map Section */}
+        <div className="flex-1 relative">
+          {/* Map Search */}
+          <div className="absolute top-4 left-4 z-[1000] w-64">
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="City or district"
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+          
+          {/* Map */}
+          <MapContainer
+            center={mapCenter}
+            zoom={mapBounds ? undefined : 5}
+            style={{ height: '100%', width: '100%' }}
+            scrollWheelZoom={true}
+            key={`map-${mapCenter[0]}-${mapCenter[1]}`}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <MapBoundsUpdater bounds={mapBounds} />
+            <MapCenterUpdater center={selectedDealerCenter} />
+            {/* Markers for each company */}
+            {filteredSellersWithCoords
+              .filter(item => item.coords !== null)
+              .map((item) => {
+                const isSelected = selectedDealerEmail === item.seller.email;
+                // Create custom icon for selected marker (red) vs default (blue)
+                const customIcon = isSelected 
+                  ? L.divIcon({
+                      className: 'custom-marker-selected',
+                      html: `<div style="
+                        width: 30px;
+                        height: 30px;
+                        background-color: #ef4444;
+                        border: 3px solid white;
+                        border-radius: 50% 50% 50% 0;
+                        transform: rotate(-45deg);
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                      "></div>`,
+                      iconSize: [30, 30],
+                      iconAnchor: [15, 30],
+                      popupAnchor: [0, -30]
+                    })
+                  : L.divIcon({
+                      className: 'custom-marker',
+                      html: `<div style="
+                        width: 25px;
+                        height: 25px;
+                        background-color: #2563eb;
+                        border: 2px solid white;
+                        border-radius: 50% 50% 50% 0;
+                        transform: rotate(-45deg);
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                      "></div>`,
+                      iconSize: [25, 25],
+                      iconAnchor: [12, 25],
+                      popupAnchor: [0, -25]
+                    });
+                
+                return (
+                  <Marker
+                    key={item.seller.email}
+                    position={[item.coords!.lat, item.coords!.lng]}
+                    icon={customIcon}
+                    eventHandlers={{
+                      click: () => {
+                        setSelectedDealerEmail(item.seller.email);
+                        setSelectedDealerCenter([item.coords!.lat, item.coords!.lng]);
+                        onViewProfile(item.seller.email);
+                      },
+                    }}
+                  >
+                    <Popup>
+                      <div className="p-2">
+                        <h3 className="font-semibold text-blue-600 mb-1">
+                          {item.seller.dealershipName || item.seller.name}
+                        </h3>
+                        <p className="text-sm text-gray-600">{item.seller.location}</p>
+                        <button
+                          onClick={() => {
+                            setSelectedDealerEmail(item.seller.email);
+                            setSelectedDealerCenter([item.coords!.lat, item.coords!.lng]);
+                            onViewProfile(item.seller.email);
+                          }}
+                          className="mt-2 text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          View Profile
+                        </button>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
+          </MapContainer>
+        </div>
+      </div>
     </div>
   );
 };

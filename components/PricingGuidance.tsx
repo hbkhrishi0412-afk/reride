@@ -52,7 +52,7 @@ const PricingGuidance: React.FC<PricingGuidanceProps> = ({ vehicleDetails, allVe
                 {isLoading ? (
                     <><div className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-current"></div><span>Analyzing...</span></>
                 ) : (
-                    <>✨ Get AI Price Suggestion</>
+                    <>✨ Get AI Price</>
                 )}
             </button>
             {error && <div className="mt-2 p-3 bg-reride-orange-light dark:bg-reride-orange/20 text-reride-orange dark:text-reride-orange rounded-lg">{error}</div>}
