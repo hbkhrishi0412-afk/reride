@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import type { Vehicle, User } from '../types';
 import { MobileVehicleCard } from './MobileVehicleCard';
 import { View as ViewEnum } from '../types';
@@ -35,20 +35,30 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [swipedId, setSwipedId] = useState<number | null>(null);
+  const touchStartX = useRef<number>(0);
+  const touchEndX = useRef<number>(0);
 
   const wishlistVehicles = useMemo(() => {
     return vehicles.filter(v => wishlist.includes(v.id));
   }, [vehicles, wishlist]);
 
   const handleSwipeStart = (e: React.TouchEvent, vehicleId: number) => {
-    const touch = e.touches[0];
-    // Store initial touch position
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleSwipeMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
   };
 
   const handleSwipeEnd = (vehicleId: number) => {
-    if (swipedId === vehicleId) {
-      // Remove from wishlist
-      onToggleWishlist(vehicleId);
+    const distance = touchStartX.current - touchEndX.current;
+    const minSwipeDistance = 100;
+
+    if (Math.abs(distance) > minSwipeDistance) {
+      if (distance > 0) {
+        // Swipe left - remove from wishlist
+        onToggleWishlist(vehicleId);
+      }
       setSwipedId(null);
     }
   };
@@ -228,34 +238,3 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
 };
 
 export default MobileWishlist;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

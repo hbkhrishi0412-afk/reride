@@ -47,6 +47,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const [searchQuery, setSearchQuery] = useState('');
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
+  const touchStartData = useRef<Map<number, { x: number; y: number; time: number }>>(new Map());
 
   const publishedVehicles = useMemo(
     () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published'),
@@ -236,13 +237,58 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             className="flex overflow-x-auto snap-x snap-mandatory gap-4 -mx-4 px-4"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
           >
-            {displayedFeaturedVehicles.map((vehicle) => (
-              <div
-                key={vehicle.id}
-                className="flex-shrink-0 w-[calc(100%-2rem)] snap-center"
-                onClick={() => onSelectVehicle(vehicle)}
-              >
-                <div className="bg-white rounded-2xl shadow-xl overflow-hidden active:scale-[0.98] transition-all duration-300 hover:shadow-2xl border border-gray-100">
+            {displayedFeaturedVehicles.map((vehicle) => {
+              const handleTouchStart = (e: React.TouchEvent) => {
+                touchStartData.current.set(vehicle.id, {
+                  x: e.touches[0].clientX,
+                  y: e.touches[0].clientY,
+                  time: Date.now()
+                });
+              };
+              
+              const handleTouchEnd = (e: React.TouchEvent) => {
+                const touchStart = touchStartData.current.get(vehicle.id);
+                if (!touchStart) return;
+                
+                const touchEnd = {
+                  x: e.changedTouches[0].clientX,
+                  y: e.changedTouches[0].clientY,
+                  time: Date.now()
+                };
+                
+                const deltaX = Math.abs(touchEnd.x - touchStart.x);
+                const deltaY = Math.abs(touchEnd.y - touchStart.y);
+                const deltaTime = touchEnd.time - touchStart.time;
+                
+                // If it's a tap (small movement, short time) and not a scroll
+                if (deltaX < 10 && deltaY < 10 && deltaTime < 300) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (onSelectVehicle) {
+                    onSelectVehicle(vehicle);
+                  }
+                }
+                
+                touchStartData.current.delete(vehicle.id);
+              };
+              
+              const handleClick = (e: React.MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (onSelectVehicle) {
+                  onSelectVehicle(vehicle);
+                }
+              };
+              
+              return (
+                <div
+                  key={vehicle.id}
+                  className="flex-shrink-0 w-[calc(100%-2rem)] snap-center cursor-pointer"
+                  onClick={handleClick}
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={handleTouchEnd}
+                >
+                  <div className="bg-white rounded-2xl shadow-xl overflow-hidden active:scale-[0.98] transition-all duration-300 hover:shadow-2xl border border-gray-100 cursor-pointer">
                   <div className="relative h-52 overflow-hidden">
                     <img
                       src={optimizeImageUrl(getFirstValidImage(vehicle.images), 800, 85)}
@@ -315,7 +361,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
 
           {/* Carousel Indicators */}

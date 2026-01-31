@@ -12,6 +12,8 @@ interface MobileHeaderProps {
   onBack?: () => void;
   rightAction?: React.ReactNode;
   currentView?: ViewEnum;
+  showMenu?: boolean;
+  onToggleMenu?: () => void;
 }
 
 /**
@@ -26,9 +28,13 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   showBack = false,
   onBack,
   rightAction,
-  currentView
+  currentView,
+  showMenu: showMenuProp,
+  onToggleMenu
 }) => {
-  const [showMenu, setShowMenu] = useState(false);
+  const [internalShowMenu, setInternalShowMenu] = useState(false);
+  const showMenu = showMenuProp !== undefined ? showMenuProp : internalShowMenu;
+  const setShowMenu = onToggleMenu || setInternalShowMenu;
   
   // Check if current view should have transparent header
   const isGradientView = currentView && (
@@ -74,6 +80,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
               <button
                 onClick={() => setShowMenu(!showMenu)}
                 className="p-2 -ml-2 rounded-full active:scale-95 native-transition"
+                aria-label="Toggle menu"
                 style={{ 
                   minWidth: '44px', 
                   minHeight: '44px',
@@ -165,10 +172,13 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
       {showMenu && (
         <>
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40"
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 animate-fade-in"
             onClick={() => setShowMenu(false)}
           />
-          <div className="fixed top-0 left-0 bottom-0 w-72 bg-white z-50 shadow-xl transform transition-transform" data-testid="mobile-drawer">
+          <div 
+            className="fixed top-0 left-0 bottom-0 w-72 bg-white z-50 shadow-xl animate-slide-in-left" 
+            data-testid="mobile-drawer"
+          >
             <div className="h-full flex flex-col">
               {/* Menu Header */}
               <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-orange-500 to-orange-600">

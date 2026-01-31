@@ -100,6 +100,10 @@ export default defineConfig({
             if (id.includes('framer-motion')) {
               return 'framer-motion';
             }
+            // Split leaflet and react-leaflet into their own chunk (map library)
+            if (id.includes('leaflet') || id.includes('react-leaflet')) {
+              return 'leaflet';
+            }
             // Group smaller utility libraries together
             if (id.includes('bcryptjs') || id.includes('validator') || id.includes('dompurify')) {
               return 'utils-vendor';
@@ -335,7 +339,7 @@ export default defineConfig({
   },
   // Optimize dependencies
   optimizeDeps: {
-    include: ['react', 'react-dom', 'framer-motion', 'socket.io-client'],
+    include: ['react', 'react-dom', 'framer-motion', 'socket.io-client', 'leaflet', 'react-leaflet'],
     // Exclude heavy dependencies from pre-bundling
     exclude: ['@google/genai', 'mongodb', 'mongoose'],
     // Force optimization of specific packages

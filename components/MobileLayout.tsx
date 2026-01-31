@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import MobileHeader from './MobileHeader';
 import MobileBottomNav from './MobileBottomNav';
 import type { User } from '../types';
@@ -41,6 +41,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   wishlistCount = 0,
   inboxCount = 0
 }) => {
+  const [showMenu, setShowMenu] = useState(false);
   const headerHeight = showHeader ? 56 : 0;
   const bottomNavHeight = showBottomNav ? 70 : 0; // Updated to match refined premium nav height
   
@@ -91,6 +92,9 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           showBack={showBack}
           onBack={onBack}
           rightAction={headerActions}
+          currentView={currentView}
+          showMenu={showMenu}
+          onToggleMenu={() => setShowMenu(!showMenu)}
         />
       )}
       
@@ -111,6 +115,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           currentUser={currentUser}
           wishlistCount={wishlistCount}
           inboxCount={inboxCount}
+          onToggleMenu={() => setShowMenu(!showMenu)}
         />
       )}
     </div>

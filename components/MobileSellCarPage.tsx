@@ -17,7 +17,7 @@ interface MobileSellCarPageProps {
  */
 export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [_sellerType, setSellerType] = useState<'individual' | 'dealer'>('individual');
+  const [sellerType, setSellerType] = useState<'individual' | 'dealer'>('individual');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [carDetails, setCarDetails] = useState({
     registration: '',

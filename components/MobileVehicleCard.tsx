@@ -42,7 +42,9 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   }, [onToggleCompare, vehicle.id]);
 
   const handleSelect = useCallback(() => {
-    onSelect(vehicle);
+    if (onSelect) {
+      onSelect(vehicle);
+    }
   }, [onSelect, vehicle]);
 
   const formattedPrice = useMemo(() => {
