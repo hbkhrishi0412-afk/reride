@@ -136,7 +136,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   }, [safeVehicle.price]);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="w-full bg-gray-50 pb-6">
       {/* Image Gallery Header */}
       <div className="relative w-full" style={{ height: '50vh', minHeight: '300px' }}>
         <img
@@ -153,7 +153,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
       </div>
 
       {/* Content - Below Images with no overlap */}
-      <div className="px-4 relative z-10 space-y-4 pb-4 mt-4">
+      <div className="px-4 relative z-10 space-y-4 pb-6">
         {/* Vehicle Details Card */}
         <div className="bg-white rounded-2xl pt-6 pb-4 px-4 shadow-sm">
           <div className="flex items-start justify-between mb-3">

@@ -71,11 +71,3 @@ export default OfflineIndicator;
 
 
 
-
-
-
-
-
-
-
-

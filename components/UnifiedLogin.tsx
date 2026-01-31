@@ -317,7 +317,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                           : (roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles')}
                       </option>
                     ))}
-                    <option value="service_provider">Service Provider</option>
                   </select>
                 </div>
               )}

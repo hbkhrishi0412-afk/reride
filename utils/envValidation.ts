@@ -123,8 +123,19 @@ export function validateEnvironmentVariables(): void {
       '❌ Critical environment variables are missing or invalid:',
       ...result.errors.map(error => `   - ${error}`),
       '',
-      'Please check your .env.local file and ensure all required variables are set.',
-      'See env.example for reference.',
+      'Please check your environment configuration:',
+      '  • For local development: Check .env.local file',
+      '  • For production (Vercel): Check Environment Variables in Vercel dashboard',
+      '  • For production (other): Ensure all VITE_SUPABASE_* and SUPABASE_* variables are set',
+      '',
+      'See env.example for reference on required variables.',
+      '',
+      'Required variables:',
+      '  • VITE_SUPABASE_URL (client-side)',
+      '  • VITE_SUPABASE_ANON_KEY (client-side)',
+      '  • SUPABASE_URL (server-side)',
+      '  • SUPABASE_ANON_KEY (server-side)',
+      '  • SUPABASE_SERVICE_ROLE_KEY (server-side, for admin operations)',
     ].join('\n');
 
     throw new Error(errorMessage);
