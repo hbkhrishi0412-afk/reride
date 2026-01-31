@@ -21,7 +21,8 @@ const initialFormState: Omit<User, 'status' | 'createdAt'> = {
     password: '',
     mobile: '',
     role: 'customer',
-    location: ''
+    location: '',
+    address: ''
 };
 
 // Create User Modal
@@ -108,6 +109,21 @@ const CreateUserModal: React.FC<{
                                     <option value="customer">Customer</option>
                                     <option value="seller">Seller</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Location (City)</label>
+                                <input type="text" name="location" value={formData.location} onChange={handleChange} placeholder="e.g., Mumbai, Delhi" className="mt-1 block w-full p-2 border rounded-md" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Full Address</label>
+                                <textarea
+                                    name="address"
+                                    value={formData.address || ''}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                                    placeholder="e.g., 123 Main Street, Andheri, Mumbai, Maharashtra 400053"
+                                    rows={3}
+                                    className="mt-1 block w-full p-2 border rounded-md resize-none"
+                                />
                             </div>
                             {error && <p className="text-sm text-reride-orange">{error}</p>}
                         </div>

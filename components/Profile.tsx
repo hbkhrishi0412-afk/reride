@@ -447,7 +447,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
         logoUrl: formData.logoUrl,
       };
 
-      // Always include aadharCard data to ensure MongoDB saves it
+      // Always include aadharCard data to ensure Supabase saves it
       const existingAadhar = currentUser.aadharCard;
       profileData.aadharCard = {
         number: formData.aadharNumber || '',
@@ -460,7 +460,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
           : existingAadhar?.uploadedAt,
       };
 
-      // Always include panCard data to ensure MongoDB saves it
+      // Always include panCard data to ensure Supabase saves it
       const existingPAN = currentUser.panCard;
       profileData.panCard = {
         number: formData.panNumber || '',

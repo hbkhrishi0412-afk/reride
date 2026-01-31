@@ -3,6 +3,7 @@ import type { Vehicle } from '../types.js';
 import StarRating from './StarRating.js';
 import { getFirstValidImage } from '../utils/imageUtils.js';
 import LazyImage from './LazyImage.js';
+import { logInfo, logError } from '../utils/logger.js';
 
 interface VehicleCardProps {
   vehicle: Vehicle;

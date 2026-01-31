@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
     govt_id_verified BOOLEAN DEFAULT false,
     trust_score INTEGER CHECK (trust_score >= 0 AND trust_score <= 100),
     location TEXT,
+    address TEXT,
     firebase_uid TEXT,
     auth_provider TEXT DEFAULT 'email' CHECK (auth_provider IN ('email', 'google', 'phone')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -41,6 +42,9 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- Add password column if it doesn't exist (for existing tables)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;
+
+-- Add address column if it doesn't exist (for existing tables)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
 
 -- Create indexes for users table
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);

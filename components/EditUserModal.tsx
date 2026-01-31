@@ -13,6 +13,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
         name: '',
         mobile: '',
         role: 'customer' as User['role'],
+        location: '',
+        address: '',
     });
     const [showPasswordReset, setShowPasswordReset] = useState(false);
     const [newPassword, setNewPassword] = useState('');
@@ -26,6 +28,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                 name: user.name,
                 mobile: user.mobile,
                 role: user.role,
+                location: user.location || '',
+                address: user.address || '',
             });
         }
     }, [user]);
@@ -138,6 +142,32 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                     <option value="admin">Admin</option>
                                 </select>
                             </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                    Location (City)
+                                </label>
+                                <input
+                                    type="text"
+                                    name="location"
+                                    value={formData.location}
+                                    onChange={handleChange}
+                                    placeholder="e.g., Mumbai, Delhi"
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm"
+                                />
+                            </div>
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+                                    Full Address
+                                </label>
+                                <textarea
+                                    name="address"
+                                    value={formData.address}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                                    placeholder="e.g., 123 Main Street, Andheri, Mumbai, Maharashtra 400053"
+                                    rows={3}
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 transition shadow-sm resize-none"
+                                />
+                            </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-semibold tracking-wide text-gray-500 uppercase">
                                     Email (Read Only)
@@ -175,6 +205,21 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                     <option value="seller">Seller</option>
                                     <option value="admin">Admin</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Location (City)</label>
+                                <input type="text" name="location" value={formData.location} onChange={handleChange} placeholder="e.g., Mumbai, Delhi" className="mt-1 block w-full p-2 border rounded-md" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Full Address</label>
+                                <textarea
+                                    name="address"
+                                    value={formData.address}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                                    placeholder="e.g., 123 Main Street, Andheri, Mumbai, Maharashtra 400053"
+                                    rows={3}
+                                    className="mt-1 block w-full p-2 border rounded-md resize-none"
+                                />
                             </div>
                         </div>
                         
