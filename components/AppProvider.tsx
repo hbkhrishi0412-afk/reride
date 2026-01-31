@@ -1523,6 +1523,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // For admin users, load all vehicles (including unpublished/sold)
         const isAdmin = currentUser?.role === 'admin';
         
+        // For admin users, ensure we fetch users (critical for admin panel)
+        if (isAdmin) {
+          console.log('📊 AppProvider: Admin user detected - fetching users for admin panel...');
+        }
+        
         // Load vehicles and users in PARALLEL for faster loading (no sequential delays)
         // Use Promise.allSettled to ensure both complete even if one fails
         const [vehiclesResult, usersResult] = await Promise.allSettled([
@@ -1547,9 +1552,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Update users if fetch succeeded
         if (usersResult.status === 'fulfilled' && Array.isArray(usersResult.value)) {
+          console.log(`✅ AppProvider: Setting ${usersResult.value.length} users in state`);
           setUsers(usersResult.value);
+          // For admin users, log if we got 0 users (might indicate an issue)
+          if (currentUser?.role === 'admin' && usersResult.value.length === 0) {
+            console.warn('⚠️ AppProvider: Admin user fetched 0 users. This might indicate:');
+            console.warn('   1. No users exist in the database');
+            console.warn('   2. Authentication/authorization issue');
+            console.warn('   3. API returned empty array');
+          }
         } else if (usersResult.status === 'rejected') {
-          console.warn('Failed to sync users:', usersResult.reason);
+          console.error('❌ AppProvider: Failed to sync users:', usersResult.reason);
+          // For admin users, try to use cached data as fallback
+          if (currentUser?.role === 'admin') {
+            const cachedUsers = localStorage.getItem('reRideUsers_prod');
+            if (cachedUsers) {
+              try {
+                const parsed = JSON.parse(cachedUsers);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  console.warn('⚠️ Using cached users data due to API failure');
+                  setUsers(parsed);
+                }
+              } catch (e) {
+                console.error('Failed to parse cached users:', e);
+              }
+            }
+          }
         }
       } catch (error) {
         console.error('AppProvider: Failed to sync latest data after authentication:', error);

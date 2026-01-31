@@ -948,6 +948,63 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const [showImportModal, setShowImportModal] = useState(false);
     const [showImportUsersModal, setShowImportUsersModal] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const hasFetchedUsersRef = useRef(false);
+    
+    // Fetch users when AdminPanel mounts if they're empty (for admin users)
+    useEffect(() => {
+        // Only fetch if:
+        // 1. Current user is admin
+        // 2. Users array is empty
+        // 3. We haven't already tried to fetch
+        // 4. Not currently loading
+        if (
+            currentUser?.role === 'admin' &&
+            (!users || users.length === 0) &&
+            !hasFetchedUsersRef.current &&
+            !isLoading &&
+            !isRefreshing
+        ) {
+            hasFetchedUsersRef.current = true;
+            console.log('📊 AdminPanel: Users array is empty, fetching users...');
+            
+            const fetchUsers = async () => {
+                try {
+                    const { dataService } = await import('../services/dataService');
+                    const usersData = await dataService.getUsers();
+                    console.log(`✅ AdminPanel: Fetched ${usersData.length} users`);
+                    
+                    if (usersData.length === 0) {
+                        console.warn('⚠️ AdminPanel: API returned 0 users. This might indicate:');
+                        console.warn('   1. No users exist in the database');
+                        console.warn('   2. Authentication/authorization issue - check if admin token is valid');
+                        console.warn('   3. Database connection problem');
+                        console.warn('   4. RLS policies blocking access');
+                        hasFetchedUsersRef.current = false; // Allow retry
+                        return;
+                    }
+                    
+                    // Update localStorage cache
+                    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+                        localStorage.setItem('reRideUsers_prod', JSON.stringify(usersData));
+                        // Trigger storage event to notify AppProvider
+                        window.dispatchEvent(new Event('storage'));
+                    }
+                    
+                    // Reload page to ensure AppProvider picks up the new data
+                    // This is necessary because AdminPanel receives users as props from AppProvider
+                    console.log('🔄 AdminPanel: Reloading page to sync user data...');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 500);
+                } catch (error) {
+                    console.error('❌ AdminPanel: Failed to fetch users:', error);
+                    hasFetchedUsersRef.current = false; // Allow retry on next mount
+                }
+            };
+            
+            fetchUsers();
+        }
+    }, [currentUser?.role, users, isLoading, isRefreshing]);
     
     // Helper function to handle loading states
     const handleActionWithLoading = async (actionKey: string, action: () => void | Promise<void>) => {

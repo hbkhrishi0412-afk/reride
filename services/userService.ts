@@ -372,6 +372,53 @@ const loginLocal = async (
     
     if (!user) {
         console.log('❌ loginLocal: User not found', { email: normalizedEmail, availableEmails: users.map(u => u.email) });
+        
+        // If admin user doesn't exist, try to add it from FALLBACK_USERS
+        if (normalizedEmail === 'admin@test.com' && role === 'admin') {
+            console.log('🔧 loginLocal: Admin user not found, attempting to add from fallback...');
+            try {
+                const adminFallback = FALLBACK_USERS.find(u => u.email.toLowerCase() === 'admin@test.com' && u.role === 'admin');
+                if (adminFallback) {
+                    const updatedUsers = [...users, adminFallback];
+                    localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
+                    console.log('✅ loginLocal: Admin user added from fallback, retrying login...');
+                    // Retry with the updated users list
+                    const retryUser = updatedUsers.find(u => (u.email || '').trim().toLowerCase() === normalizedEmail);
+                    if (retryUser) {
+                        // Validate password
+                        const storedPassword = (retryUser.password || '').trim();
+                        const isPasswordValid = storedPassword === normalizedPassword;
+                        
+                        if (!isPasswordValid) {
+                            console.log('❌ loginLocal: Password mismatch after adding admin user');
+                            return { success: false, reason: 'Invalid credentials.' };
+                        }
+                        
+                        // Check role if required
+                        if (!skipRoleCheck && role && retryUser.role !== role) {
+                            return { 
+                                success: false, 
+                                reason: `User is not a registered ${role}.`,
+                                detectedRole: retryUser.role 
+                            };
+                        }
+                        
+                        // Check status
+                        if (retryUser.status === 'inactive') {
+                            return { success: false, reason: 'Your account has been deactivated.' };
+                        }
+                        
+                        // Success - return user without password
+                        const { password: _, ...userWithoutPassword } = retryUser;
+                        console.log('✅ loginLocal: Login successful after adding admin user', { email: retryUser.email, role: retryUser.role });
+                        return { success: true, user: userWithoutPassword };
+                    }
+                }
+            } catch (addError) {
+                console.warn('⚠️ loginLocal: Failed to add admin user from fallback:', addError);
+            }
+        }
+        
         return { success: false, reason: 'Invalid credentials.' };
     }
     
@@ -415,6 +462,44 @@ const loginLocal = async (
     if (!isPasswordValid) {
         console.log('❌ loginLocal: Password mismatch');
         console.warn('💡 TIP: If you recently updated the password, clear localStorage cache: localStorage.removeItem("reRideUsers")');
+        
+        // SPECIAL FIX: If password is hashed but we're in development mode, try to fix it
+        if (storedPassword.startsWith('$2') && normalizedEmail === 'admin@test.com') {
+            console.log('🔧 loginLocal: Admin password is hashed in dev mode, attempting to reset to plain text...');
+            try {
+                const adminFallback = FALLBACK_USERS.find(u => u.email.toLowerCase() === 'admin@test.com' && u.role === 'admin');
+                if (adminFallback && adminFallback.password === normalizedPassword) {
+                    // Update the user with plain text password
+                    const updatedUsers = users.map(u => 
+                        (u.email || '').trim().toLowerCase() === normalizedEmail 
+                            ? { ...u, password: normalizedPassword }
+                            : u
+                    );
+                    localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
+                    console.log('✅ loginLocal: Admin password reset to plain text, retrying...');
+                    // Retry password check
+                    const updatedUser = updatedUsers.find(u => (u.email || '').trim().toLowerCase() === normalizedEmail);
+                    if (updatedUser && (updatedUser.password || '').trim() === normalizedPassword) {
+                        // Password now matches, continue with role and status checks
+                        if (!skipRoleCheck && role && updatedUser.role !== role) {
+                            return { 
+                                success: false, 
+                                reason: `User is not a registered ${role}.`,
+                                detectedRole: updatedUser.role 
+                            };
+                        }
+                        if (updatedUser.status === 'inactive') {
+                            return { success: false, reason: 'Your account has been deactivated.' };
+                        }
+                        const { password: _, ...userWithoutPassword } = updatedUser;
+                        console.log('✅ loginLocal: Login successful after password reset', { email: updatedUser.email, role: updatedUser.role });
+                        return { success: true, user: userWithoutPassword };
+                    }
+                }
+            } catch (resetError) {
+                console.warn('⚠️ loginLocal: Failed to reset password:', resetError);
+            }
+        }
         
         // CRITICAL FIX: Clear localStorage cache when password validation fails
         // This might be stale cache from before password was updated
@@ -868,7 +953,10 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
   } else {
     // Development mode - use local storage directly
     console.log('💻 Development mode - using local storage directly');
-    return await loginLocal({ ...credentials, skipRoleCheck: true });
+    // Only skip role check if role is not specified
+    // If role is specified (e.g., 'admin'), we should validate it
+    const skipRoleCheck = !credentials.role;
+    return await loginLocal({ ...credentials, skipRoleCheck });
   }
 };
 export const register = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
