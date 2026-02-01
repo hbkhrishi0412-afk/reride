@@ -45,18 +45,37 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// Initialize viewport zoom fix immediately on app load - applies to ALL pages
-initializeViewportZoom();
-
-// Inject critical CSS for above-the-fold content (prevents render-blocking)
-injectCriticalCSS();
-
+// CRITICAL: Mount React FIRST, then initialize non-critical features
+// This ensures React mounts immediately and UI can render
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
 const root = ReactDOM.createRoot(rootElement);
+
+// Defer non-critical initialization to after React mounts
+// Use requestIdleCallback or setTimeout to avoid blocking React mount
+if (typeof window !== 'undefined') {
+  const scheduleInit = (callback: () => void) => {
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(callback, { timeout: 100 });
+    } else {
+      setTimeout(callback, 0);
+    }
+  };
+  
+  scheduleInit(() => {
+    // Initialize viewport zoom fix - non-blocking
+    initializeViewportZoom();
+    // Inject critical CSS - non-blocking
+    injectCriticalCSS();
+  });
+} else {
+  // Fallback if window is not available (shouldn't happen in browser)
+  initializeViewportZoom();
+  injectCriticalCSS();
+}
 
 // Disable StrictMode in development for faster loading
 // StrictMode causes intentional double-renders which slows down initial load

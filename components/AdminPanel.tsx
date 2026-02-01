@@ -923,8 +923,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         users, currentUser, vehicles, conversations, isLoading = false, onToggleUserStatus, onDeleteUser,
         onAdminUpdateUser, onUpdateUserPlan, onUpdateVehicle, onDeleteVehicle, onToggleVehicleStatus,
         onToggleVehicleFeature,
-        onResolveFlag, platformSettings, onUpdateSettings, onSendBroadcast,
-        auditLog, onExportUsers, onImportUsers, onExportVehicles, onImportVehicles, onNavigate, onLogout, vehicleData, onUpdateVehicleData,
+        onResolveFlag, platformSettings: _platformSettings, onUpdateSettings: _onUpdateSettings, onSendBroadcast: _onSendBroadcast,
+        auditLog, onExportUsers, onImportUsers, onExportVehicles, onImportVehicles, onNavigate: _onNavigate, onLogout, vehicleData, onUpdateVehicleData,
         supportTickets, onUpdateSupportTicket, faqItems, onAddFaq, onUpdateFaq, onDeleteFaq,
         onCertificationApproval
     } = props;
@@ -2929,7 +2929,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 
                                 // Update user with dates via API
                                 const { updateUser } = await import('../services/userService');
-                                await updateUser(assigningUser.email, {
+                                await updateUser({
+                                    email: assigningUser.email,
                                     subscriptionPlan: assigningPlan,
                                     planActivatedDate: activatedDate,
                                     planExpiryDate: expiryDate || undefined
@@ -3260,29 +3261,6 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 </span>
             )}
             </button>
-    );
-
-    const AppNavItem: React.FC<{ view: View; label: string; count?: number }> = ({ view, label, count }) => (
-        <button
-            onClick={() => {
-                // Use the navigate function passed from props
-                if (props.onNavigate) {
-                    props.onNavigate(view);
-                } else {
-                    // Fallback to event system
-                    const event = new CustomEvent('navigate', { detail: { view } });
-                    window.dispatchEvent(event);
-                }
-            }}
-            className="w-full flex items-center justify-between px-4 py-3 text-left rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-        >
-            <span>{label}</span>
-            {count !== undefined && count > 0 && (
-                <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded-full">
-                    {count}
-                </span>
-            )}
-        </button>
     );
 
     return (

@@ -100,8 +100,14 @@ export default defineConfig({
             if (id.includes('framer-motion')) {
               return 'framer-motion';
             }
-            // Split leaflet and react-leaflet into their own chunk (map library)
-            if (id.includes('leaflet') || id.includes('react-leaflet')) {
+            // CRITICAL FIX: react-leaflet must be in vendor chunk with React
+            // because it depends on React.createContext. Only base leaflet goes to separate chunk.
+            if (id.includes('react-leaflet')) {
+              // Put react-leaflet in vendor chunk so React is available when it loads
+              return 'vendor';
+            }
+            // Split base leaflet library into its own chunk (map library, no React dependency)
+            if (id.includes('leaflet') && !id.includes('react-leaflet')) {
               return 'leaflet';
             }
             // Group smaller utility libraries together
