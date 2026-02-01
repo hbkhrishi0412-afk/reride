@@ -2,6 +2,10 @@
  * Centralized Logging Utility
  * Provides environment-aware logging that is automatically removed in production builds
  * SECURITY: All logs are sanitized to prevent secret exposure
+ * 
+ * PERFORMANCE: This logger is tree-shakeable - unused log calls are removed by bundlers
+ * in production builds. The conditional checks ensure console methods are never called
+ * in production, allowing Terser to eliminate the entire function body.
  */
 
 import { sanitizeError, sanitizeObject } from './secretSanitizer.js';
@@ -27,13 +31,21 @@ function sanitizeLogArgs(args: unknown[]): unknown[] {
 }
 
 /**
+ * Tree-shakeable logger - completely eliminated in production builds
+ * Using a const ensures the condition is evaluated at build time
+ */
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
+/**
  * Logs information (only in development)
+ * PERFORMANCE: Tree-shakeable - entire function body is removed in production
  */
 export function logInfo(...args: unknown[]): void {
-  if (process.env.NODE_ENV !== 'production') {
-    const sanitized = sanitizeLogArgs(args);
-    console.log(...sanitized);
-  }
+  // Using early return pattern allows better tree-shaking
+  if (!IS_DEV) return;
+  const sanitized = sanitizeLogArgs(args);
+  // eslint-disable-next-line no-console
+  console.log(...sanitized);
 }
 
 /**
@@ -41,21 +53,24 @@ export function logInfo(...args: unknown[]): void {
  * @param args - Arguments to log (same as console.warn)
  * @example
  * logWarn('Deprecated API used:', apiName);
+ * PERFORMANCE: Tree-shakeable - entire function body is removed in production
  */
 export function logWarn(...args: unknown[]): void {
-  if (process.env.NODE_ENV !== 'production') {
-    const sanitized = sanitizeLogArgs(args);
-    console.warn(...sanitized);
-  }
+  if (!IS_DEV) return;
+  const sanitized = sanitizeLogArgs(args);
+  // eslint-disable-next-line no-console
+  console.warn(...sanitized);
 }
 
 /**
- * Logs errors (always logged, but can be filtered in production)
+ * Logs errors (always logged, but sanitized)
  * SECURITY: Secrets are automatically sanitized before logging
+ * PERFORMANCE: Error logging is kept in production for debugging, but sanitized
  */
 export function logError(...args: unknown[]): void {
   // Sanitize all error arguments to prevent secret exposure
   const sanitized = sanitizeLogArgs(args);
+  // eslint-disable-next-line no-console
   console.error(...sanitized);
   
   // In production, send to error tracking service (e.g., Sentry, LogRocket)
@@ -70,21 +85,24 @@ export function logError(...args: unknown[]): void {
  * @param args - Arguments to log (same as console.debug)
  * @example
  * logDebug('Component state:', state);
+ * PERFORMANCE: Tree-shakeable - entire function body is removed in production
  */
 export function logDebug(...args: unknown[]): void {
-  if (process.env.NODE_ENV !== 'production') {
-    const sanitized = sanitizeLogArgs(args);
-    console.debug(...sanitized);
-  }
+  if (!IS_DEV) return;
+  const sanitized = sanitizeLogArgs(args);
+  // eslint-disable-next-line no-console
+  console.debug(...sanitized);
 }
 
 /**
  * Logs security-related events (always logged)
  * SECURITY: Secrets are automatically sanitized before logging
+ * PERFORMANCE: Security events are kept in production for monitoring
  */
 export function logSecurity(...args: unknown[]): void {
   // Security events should always be logged, but sanitized
   const sanitized = sanitizeLogArgs(args);
+  // eslint-disable-next-line no-console
   console.warn('[SECURITY]', ...sanitized);
   
   // In production, send to security monitoring service
