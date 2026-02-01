@@ -15,6 +15,7 @@ import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
+import { deduplicateRequest } from '../utils/requestDeduplication';
 
 // PERFORMANCE: Helper function for user-friendly error messages
 // Improves UX by converting technical errors to actionable messages
@@ -1181,10 +1182,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         let hasCachedData = false;
         
-        // STEP 1: Load cached vehicles IMMEDIATELY (synchronous, instant)
+        // PERFORMANCE: Batch localStorage reads for better performance
+        // STEP 1: Load all cached data IMMEDIATELY (synchronous, instant)
         const cacheKey = 'reRideVehicles_prod';
         try {
+          // Batch read all localStorage items at once
           const cachedVehiclesJson = localStorage.getItem(cacheKey);
+          const cachedUsersJson = localStorage.getItem('reRideUsers_prod') || localStorage.getItem('reRideUsers');
+          
+          // Parse vehicles cache
           if (cachedVehiclesJson) {
             const cachedVehicles = JSON.parse(cachedVehiclesJson);
             if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
@@ -1196,13 +1202,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               logInfo(`✅ Instantly loaded ${cachedVehicles.length} cached vehicles`);
             }
           }
-        } catch (cacheError) {
-          logWarn('Failed to load cached vehicles:', cacheError);
-        }
-        
-        // STEP 2: Load cached users IMMEDIATELY
-        try {
-          const cachedUsersJson = localStorage.getItem('reRideUsers_prod') || localStorage.getItem('reRideUsers');
+          
+          // Parse users cache
           if (cachedUsersJson) {
             const cachedUsers = JSON.parse(cachedUsersJson);
             if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
@@ -1214,19 +1215,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } else {
             logDebug('ℹ️ No cached users found in localStorage');
           }
-        } catch (cacheError) {
-          logWarn('Failed to load cached users:', cacheError);
-        }
-        
-        // STEP 2.5: Load cached conversations IMMEDIATELY (for admin panel)
-        try {
+          
+          // Load cached conversations (for admin panel)
           const cachedConversations = getConversations();
           if (cachedConversations && cachedConversations.length > 0 && isMounted) {
             setConversations(cachedConversations);
             logInfo(`✅ Instantly loaded ${cachedConversations.length} cached conversations`);
           }
         } catch (cacheError) {
-          logWarn('Failed to load cached conversations:', cacheError);
+          logWarn('Failed to load cached data:', cacheError);
         }
         
         // STEP 3: Fetch fresh data from API in background (non-blocking)
@@ -1254,15 +1251,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ]);
         };
         
+        // PERFORMANCE: Use request deduplication to prevent duplicate API calls
         // Load vehicles and users in parallel with aggressive timeout for instant response
         Promise.all([
           loadWithTimeout(
-            dataService.getVehicles(isAdmin).catch(() => []),
+            deduplicateRequest(
+              `vehicles-${isAdmin ? 'admin' : 'user'}`,
+              () => dataService.getVehicles(isAdmin).catch(() => [])
+            ),
             2000, // Aggressive 2-second timeout for instant response
             []
           ),
           loadWithTimeout(
-            dataService.getUsers().catch(() => []),
+            deduplicateRequest(
+              'users',
+              () => dataService.getUsers().catch(() => [])
+            ),
             2000, // Aggressive 2-second timeout
             []
           )
@@ -1395,29 +1399,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
         
-        // STEP 4: Load non-critical data in parallel (no sequential delays)
-        Promise.all([
-          // FAQs
-          (async () => {
-            try {
-              const { fetchFaqsFromSupabase } = await import('../services/faqService');
-              const faqsData = await fetchFaqsFromSupabase().catch(() => []);
-              if (isMounted) setFaqItems(faqsData);
-            } catch (error) {
-              const localFaqs = getFaqs();
-              if (isMounted) setFaqItems(localFaqs || []);
-            }
-          })(),
+        // STEP 4: Defer non-critical data loading until after initial render
+        // Use requestIdleCallback or setTimeout to avoid blocking initial render
+        const scheduleNonCriticalLoad = (callback: () => void) => {
+          if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            (window as any).requestIdleCallback(callback, { timeout: 3000 });
+          } else {
+            setTimeout(callback, 100); // Small delay to let initial render complete
+          }
+        };
+
+        scheduleNonCriticalLoad(() => {
+          if (!isMounted) return;
           
-          // Vehicle data
-          (async () => {
-            try {
-              const vehicleDataData = await dataService.getVehicleData().catch(() => null);
-              if (isMounted && vehicleDataData) setVehicleData(vehicleDataData);
-            } catch (error) {
-              console.warn('Failed to load vehicle data:', error);
-            }
-          })(),
+          // Load non-critical data in parallel (deferred)
+          Promise.all([
+            // FAQs
+            (async () => {
+              try {
+                const { fetchFaqsFromSupabase } = await import('../services/faqService');
+                const faqsData = await deduplicateRequest(
+                  'faqs',
+                  () => fetchFaqsFromSupabase().catch(() => [])
+                );
+                if (isMounted) setFaqItems(faqsData);
+              } catch (error) {
+                const localFaqs = getFaqs();
+                if (isMounted) setFaqItems(localFaqs || []);
+              }
+            })(),
+            
+            // Vehicle data
+            (async () => {
+              try {
+                const vehicleDataData = await deduplicateRequest(
+                  'vehicle-data',
+                  () => dataService.getVehicleData().catch(() => null)
+                );
+                if (isMounted && vehicleDataData) setVehicleData(vehicleDataData);
+              } catch (error) {
+                console.warn('Failed to load vehicle data:', error);
+              }
+            })(),
           
           // Conversations - load cached first, then refresh in background
           (async () => {
@@ -1449,11 +1472,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 // Use timeout to prevent blocking - max 3 seconds
                 const conversationPromise = (async () => {
                   const { getConversationsFromMongoDB } = await import('../services/conversationService');
-                  return userRole === 'seller' 
-                    ? await getConversationsFromMongoDB(undefined, userEmail)
-                    : userRole === 'customer'
-                    ? await getConversationsFromMongoDB(userEmail)
-                    : await getConversationsFromMongoDB();
+                  const conversationKey = `conversations-${userRole}-${userEmail || 'all'}`;
+                  return await deduplicateRequest(
+                    conversationKey,
+                    () => userRole === 'seller' 
+                      ? getConversationsFromMongoDB(undefined, userEmail)
+                      : userRole === 'customer'
+                      ? getConversationsFromMongoDB(userEmail)
+                      : getConversationsFromMongoDB()
+                  );
                 })();
                 
                 const timeoutPromise = new Promise<{ success: boolean; data?: Conversation[] }>((resolve) => {
@@ -1500,7 +1527,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               
               if (userEmail) {
                 const { getNotificationsFromMongoDB } = await import('../services/notificationService');
-                const result = await getNotificationsFromMongoDB(userEmail);
+                const result = await deduplicateRequest(
+                  `notifications-${userEmail}`,
+                  () => getNotificationsFromMongoDB(userEmail)
+                );
                 if (isMounted && result.success && result.data) {
                   setNotifications(result.data);
                   try {
@@ -1522,8 +1552,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }
           })()
-        ]).catch(error => {
-          console.warn('Background data loading failed:', error);
+          ]).catch(error => {
+            console.warn('Background data loading failed:', error);
+          });
         });
         
       } catch (error) {

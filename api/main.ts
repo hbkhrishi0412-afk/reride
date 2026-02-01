@@ -1531,6 +1531,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             name: `User ${cleanedNumber}`,
             mobile: cleanedNumber,
             role: req.body.role || 'customer',
+            location: '', // Required field, can be updated later
             authProvider: 'phone',
             status: 'active' as const,
             isVerified: true,
@@ -1687,7 +1688,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       logInfo('📊 Admin user details:', { 
         email: authUser.email, 
         role: authUser.role, 
-        id: authUser.id 
+        id: authUser.userId 
       });
       
       // Check Supabase availability
