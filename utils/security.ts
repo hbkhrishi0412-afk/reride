@@ -56,43 +56,6 @@ export const hashPassword = async (password: string): Promise<string> => {
   }
 };
 
-/**
- * Constant-time string comparison to prevent timing attacks
- * Uses crypto.timingSafeEqual for secure comparison
- * Never falls back to timing-unsafe comparison - fails securely if crypto operations fail
- */
-const constantTimeCompare = (a: string, b: string): boolean => {
-  try {
-    // Convert strings to buffers for timing-safe comparison
-    const bufferA = Buffer.from(a, 'utf8');
-    const bufferB = Buffer.from(b, 'utf8');
-    
-    // If lengths differ, pad the shorter buffer to match the longer one
-    // This ensures we always perform a full comparison operation
-    // to maintain constant-time behavior
-    if (bufferA.length !== bufferB.length) {
-      const maxLength = Math.max(bufferA.length, bufferB.length);
-      const paddedA = Buffer.alloc(maxLength, 0);
-      const paddedB = Buffer.alloc(maxLength, 0);
-      bufferA.copy(paddedA);
-      bufferB.copy(paddedB);
-      // Perform comparison with padded buffers to maintain constant time
-      // Result will be false since lengths differ, but timing is preserved
-      // Use void to explicitly discard result while preventing optimization
-      void crypto.timingSafeEqual(paddedA, paddedB);
-      return false;
-    }
-    
-    return crypto.timingSafeEqual(bufferA, bufferB);
-  } catch (error) {
-    // Fail securely: never degrade to timing-unsafe comparison
-    // If crypto.timingSafeEqual fails, it indicates a serious system error
-    // Log the error and throw to prevent silent security degradation
-    console.error('CRITICAL: Timing-safe comparison failed:', error);
-    throw new Error('Password comparison failed due to system error. Authentication aborted for security.');
-  }
-};
-
 export const validatePassword = async (password: string, hash: string): Promise<boolean> => {
   try {
     // Add check for missing hash

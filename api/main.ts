@@ -1166,10 +1166,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           
           // CRITICAL FIX: Check for specific Supabase errors
-          if (errorMessage.includes('permission-denied') || errorMessage.includes('PERMISSION_DENIED')) {
+          if (errorMessage.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+            logError('❌ CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing in production environment!');
             return res.status(500).json({ 
               success: false, 
-              reason: 'Database permission error. Please check Supabase RLS policies.' 
+              reason: 'Server configuration error: SUPABASE_SERVICE_ROLE_KEY is not set. ' +
+                      'Please configure this environment variable in your production deployment (Vercel). ' +
+                      'This is required for user registration to work.',
+              error: process.env.NODE_ENV !== 'production' ? errorMessage : undefined
+            });
+          }
+          
+          if (errorMessage.includes('permission-denied') || errorMessage.includes('PERMISSION_DENIED') || 
+              errorMessage.includes('row-level security') || errorMessage.includes('RLS Policy')) {
+            logError('❌ RLS Policy Error - User creation blocked by Row Level Security');
+            return res.status(500).json({ 
+              success: false, 
+              reason: 'Database permission error: Row Level Security (RLS) is blocking user creation. ' +
+                      'Either add an INSERT policy for the users table or ensure SUPABASE_SERVICE_ROLE_KEY is configured.',
+              error: process.env.NODE_ENV !== 'production' ? errorMessage : undefined
             });
           }
           
@@ -1177,6 +1192,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             return res.status(400).json({ 
               success: false, 
               reason: 'User with this email already exists.' 
+            });
+          }
+          
+          // Log full error details in non-production for debugging
+          if (process.env.NODE_ENV !== 'production') {
+            logError('❌ Full error details:', {
+              message: errorMessage,
+              stack: error instanceof Error ? error.stack : undefined,
+              error: error
             });
           }
           
