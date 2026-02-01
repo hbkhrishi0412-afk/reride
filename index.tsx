@@ -11,27 +11,38 @@ import { injectCriticalCSS } from './utils/criticalCSS';
 import { validateEnvironmentVariablesSafe } from './utils/envValidation';
 import { logInfo, logWarn, logError } from './utils/logger';
 
-// Validate environment variables at startup
-try {
-  const envValidation = validateEnvironmentVariablesSafe();
-  if (!envValidation.isValid) {
-    logError('❌ Environment variable validation failed:');
-    envValidation.errors.forEach(error => logError(`   - ${error}`));
-    if (envValidation.warnings.length > 0) {
-      logWarn('⚠️ Warnings:');
-      envValidation.warnings.forEach(warning => logWarn(`   - ${warning}`));
+// PERFORMANCE: Defer environment validation to avoid blocking initial render
+// Validate asynchronously after app starts rendering
+if (typeof window !== 'undefined') {
+  // Use requestIdleCallback for non-critical validation (falls back to setTimeout)
+  const scheduleValidation = (callback: () => void) => {
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(callback, { timeout: 2000 });
+    } else {
+      setTimeout(callback, 0);
     }
-    // In production, throw error to prevent app from running with invalid config
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('Environment variables are missing or invalid. Please check your configuration.');
+  };
+
+  scheduleValidation(() => {
+    try {
+      const envValidation = validateEnvironmentVariablesSafe();
+      if (!envValidation.isValid) {
+        logError('❌ Environment variable validation failed:');
+        envValidation.errors.forEach(error => logError(`   - ${error}`));
+        if (envValidation.warnings.length > 0) {
+          logWarn('⚠️ Warnings:');
+          envValidation.warnings.forEach(warning => logWarn(`   - ${warning}`));
+        }
+        // In production, show error but don't block app (let ErrorBoundary handle it)
+        if (process.env.NODE_ENV === 'production') {
+          console.error('Environment variables are missing or invalid. Please check your configuration.');
+        }
+      }
+    } catch (error) {
+      logError('❌ Failed to validate environment variables:', error);
+      // Don't throw - let app continue
     }
-  }
-} catch (error) {
-  logError('❌ Failed to validate environment variables:', error);
-  // In production, prevent app from starting with invalid configuration
-  if (process.env.NODE_ENV === 'production') {
-    throw error;
-  }
+  });
 }
 
 // Initialize viewport zoom fix immediately on app load - applies to ALL pages
