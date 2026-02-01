@@ -103,7 +103,23 @@ export const supabaseUserService = {
       email: normalizedEmail,
     };
     
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    let supabase;
+    try {
+      supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    } catch (clientError: any) {
+      // CRITICAL: Catch service role key errors and provide helpful message
+      if (clientError.message && clientError.message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+        console.error('❌ CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing in production!');
+        console.error('   This is required for user registration. Set it in Vercel environment variables.');
+        throw new Error(
+          'SUPABASE_SERVICE_ROLE_KEY is not configured. ' +
+          'Please set SUPABASE_SERVICE_ROLE_KEY in your production environment variables (Vercel). ' +
+          'This key is required for server-side database operations.'
+        );
+      }
+      throw clientError;
+    }
+    
     const row = userToSupabaseRow({ ...userToSave, id: emailKey });
     
     const { data, error } = await supabase
@@ -113,7 +129,37 @@ export const supabaseUserService = {
       .single();
     
     if (error) {
-      throw new Error(`Failed to create user: ${error.message}`);
+      // Enhanced error messages for common issues
+      let errorMessage = error.message;
+      
+      // Check for RLS policy errors
+      if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('new row violates row-level security')) {
+        errorMessage = `RLS Policy Error: ${error.message}. ` +
+          'The users table may have Row Level Security enabled without an INSERT policy. ' +
+          'Either add an INSERT policy or ensure SUPABASE_SERVICE_ROLE_KEY is set to bypass RLS.';
+      }
+      
+      // Check for duplicate key errors
+      if (error.code === '23505' || error.message.includes('duplicate key')) {
+        errorMessage = `User with email ${normalizedEmail} already exists.`;
+      }
+      
+      // Check for foreign key or constraint errors
+      if (error.code === '23503' || error.message.includes('violates foreign key constraint')) {
+        errorMessage = `Database constraint error: ${error.message}. Please check your database schema.`;
+      }
+      
+      console.error('❌ Supabase INSERT error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        email: normalizedEmail,
+        isServerSide,
+        hasServiceRole: isServerSide && !!process.env.SUPABASE_SERVICE_ROLE_KEY
+      });
+      
+      throw new Error(`Failed to create user: ${errorMessage}`);
     }
     
     return supabaseRowToUser(data);
