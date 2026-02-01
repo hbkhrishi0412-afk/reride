@@ -892,24 +892,24 @@ const ServiceCart: React.FC<Props> = ({
                                                     </div>
                                                     
                                                     {/* Quantity Controls & Actions */}
-                                                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                                                         {/* Mobile: Stack vertically, Desktop: Side by side */}
-                                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                                             {/* Quantity Section */}
                                                             <div className="flex-1">
-                                                                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 sm:mb-1.5 sm:text-xs sm:uppercase sm:tracking-wide">Quantity</label>
-                                                                <div className="flex items-center gap-0 bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-300 dark:border-gray-600 shadow-sm w-fit">
+                                                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">Quantity</label>
+                                                                <div className="flex items-center gap-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm w-fit">
                                                                     <button
                                                                         onClick={() => updateQuantity(item.serviceId, -1)}
-                                                                        className="h-12 w-12 sm:h-11 sm:w-11 rounded-l-xl flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-2xl sm:text-xl border-r border-gray-300 dark:border-gray-600 touch-manipulation"
+                                                                        className="h-9 w-9 rounded-l-lg flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-lg border-r border-gray-300 dark:border-gray-600 touch-manipulation"
                                                                         aria-label="Decrease quantity"
                                                                     >−</button>
-                                                                    <span className="h-12 w-14 sm:h-11 sm:w-12 flex items-center justify-center text-xl sm:text-xl font-black text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border-x border-gray-300 dark:border-gray-600">
+                                                                    <span className="h-9 w-10 flex items-center justify-center text-base font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border-x border-gray-300 dark:border-gray-600">
                                                                         {item.quantity}
                                                                     </span>
                                                                     <button
                                                                         onClick={() => updateQuantity(item.serviceId, 1)}
-                                                                        className="h-12 w-12 sm:h-11 sm:w-11 rounded-r-xl flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-2xl sm:text-xl border-l border-gray-300 dark:border-gray-600 touch-manipulation"
+                                                                        className="h-9 w-9 rounded-r-lg flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-lg border-l border-gray-300 dark:border-gray-600 touch-manipulation"
                                                                         aria-label="Increase quantity"
                                                                     >+</button>
                                                                 </div>
@@ -917,16 +917,16 @@ const ServiceCart: React.FC<Props> = ({
                                                             
                                                             {/* Remove Button */}
                                                             <div className="flex flex-col sm:items-end">
-                                                                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 sm:mb-1.5 sm:text-xs sm:uppercase sm:tracking-wide sm:opacity-0">Action</label>
+                                                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide sm:opacity-0 sm:h-0">Action</label>
                                                                 <button
                                                                     onClick={() => removeService(item.serviceId)}
-                                                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 sm:px-5 sm:py-2.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 active:bg-red-100 dark:active:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-300 font-bold rounded-xl transition-all border-2 border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 shadow-sm hover:shadow-md touch-manipulation min-h-[48px] sm:min-h-0"
+                                                                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 active:bg-red-100 dark:active:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-300 font-semibold rounded-lg transition-all border border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 shadow-sm hover:shadow touch-manipulation min-h-[36px] sm:min-h-0"
                                                                     aria-label="Remove package"
                                                                 >
-                                                                    <svg className="w-5 h-5 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                                                     </svg>
-                                                                    <span className="text-base sm:text-sm">Remove</span>
+                                                                    <span className="text-sm">Remove</span>
                                                                 </button>
                                                             </div>
                                                         </div>

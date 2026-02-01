@@ -61,6 +61,71 @@ const MapCenterUpdater: React.FC<{ center: [number, number] | null; zoom?: numbe
   return null;
 };
 
+// Component to handle map clicks and find nearest dealer
+const MapClickHandler: React.FC<{
+  sellersWithCoords: Array<{ seller: User; coords: CompanyLocation | null }>;
+  onDealerSelect: (sellerEmail: string, coords: CompanyLocation) => void;
+}> = ({ sellersWithCoords, onDealerSelect }) => {
+  const map = useMap();
+  
+  useEffect(() => {
+    const handleMapClick = (e: L.LeafletMouseEvent) => {
+      // Don't process if clicking on a marker (markers handle their own clicks)
+      const target = e.originalEvent?.target as HTMLElement;
+      if (target?.closest('.leaflet-marker-icon')) {
+        return;
+      }
+      
+      const clickedLat = e.latlng.lat;
+      const clickedLng = e.latlng.lng;
+      
+      // Only proceed if we have dealers with coordinates
+      const dealersWithCoords = sellersWithCoords.filter(item => item.coords !== null);
+      if (dealersWithCoords.length === 0) {
+        return;
+      }
+      
+      // Find the nearest dealer to the clicked location
+      let nearestDealer: { seller: User; coords: CompanyLocation } | null = null;
+      let minDistance = Infinity;
+      
+      for (const item of dealersWithCoords) {
+        if (item.coords) {
+          // Calculate distance using Haversine formula
+          const R = 6371; // Earth's radius in km
+          const dLat = (clickedLat - item.coords.lat) * Math.PI / 180;
+          const dLng = (clickedLng - item.coords.lng) * Math.PI / 180;
+          const a = 
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(item.coords.lat * Math.PI / 180) * Math.cos(clickedLat * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const distance = R * c;
+          
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestDealer = { seller: item.seller, coords: item.coords };
+          }
+        }
+      }
+      
+      // Always show the nearest dealer's details when clicking on the map
+      if (nearestDealer !== null) {
+        const dealer = nearestDealer;
+        onDealerSelect(dealer.seller.email, dealer.coords);
+      }
+    };
+    
+    map.on('click', handleMapClick);
+    
+    return () => {
+      map.off('click', handleMapClick);
+    };
+  }, [map, sellersWithCoords, onDealerSelect]);
+  
+  return null;
+};
+
 // Company Card Component matching the image design
 const CompanyCard: React.FC<{
   seller: User;
@@ -73,6 +138,10 @@ const CompanyCard: React.FC<{
 }> = ({ seller, onViewProfile, onSelect, onCall, isRecommended = false, coords = null, isSelected = false }) => {
   // Determine company type - default to 'showroom' if not specified
   const companyType = (seller.badges?.some(b => b.type === 'top_seller') ? 'showroom' : 'car-service') as 'showroom' | 'car-service';
+  
+  // Check if seller has pro or premium plan - show yellow button for pro/premium plan sellers
+  const hasProPlan = seller.subscriptionPlan === 'pro' || seller.subscriptionPlan === 'premium';
+  const shouldShowRecommendButton = isRecommended || hasProPlan;
   
   // Determine status based on current time (Indian Standard Time)
   const getStatus = () => {
@@ -179,7 +248,7 @@ const CompanyCard: React.FC<{
               </svg>
               Call now
             </button>
-            {isRecommended && (
+            {shouldShowRecommendButton && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -187,10 +256,22 @@ const CompanyCard: React.FC<{
                 }}
                 className="bg-yellow-400 hover:bg-yellow-500 text-gray-900 text-sm font-medium px-4 py-2 rounded flex items-center gap-2 transition-colors"
               >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.834a1 1 0 001.364.97l5-.108a1 1 0 00.636-.97v-5.834a1 1 0 00-.636-.97l-5-.108a1 1 0 00-1.364.97zM16 6v9a1 1 0 01-1 1h-2.5a1 1 0 01-1-1V6a1 1 0 011-1H15a1 1 0 011 1z" />
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  {/* Motorcycle/Scooter Icon - Side View with filled design */}
+                  {/* Front wheel */}
+                  <circle cx="6" cy="19" r="3"/>
+                  {/* Rear wheel */}
+                  <circle cx="18" cy="19" r="3"/>
+                  {/* Vehicle body/frame */}
+                  <path d="M6 16 Q9 12 12 11 Q15 12 18 16 Z"/>
+                  {/* Seat */}
+                  <ellipse cx="12" cy="11.5" rx="4" ry="2"/>
+                  {/* Handlebars - left */}
+                  <rect x="8" y="9" width="1.5" height="3" rx="0.75" transform="rotate(-45 8.75 10.5)"/>
+                  {/* Handlebars - right */}
+                  <rect x="14.5" y="9" width="1.5" height="3" rx="0.75" transform="rotate(45 15.25 10.5)"/>
                 </svg>
-                Autoboom recommends
+                Reride Recommends
               </button>
             )}
           </div>
@@ -375,6 +456,13 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
     }
   };
 
+  // Handle map click - find nearest dealer and display details
+  const handleMapClickDealerSelect = (sellerEmail: string, coords: CompanyLocation) => {
+    setSelectedDealerEmail(sellerEmail);
+    setSelectedDealerCenter([coords.lat, coords.lng]);
+    onViewProfile(sellerEmail);
+  };
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Main Content Area - Split Layout */}
@@ -384,7 +472,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
           {/* Sidebar Header */}
           <div className="p-4 border-b border-gray-300">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">
-              Automotive companies in selected region
+              Dealers in Selected Region
             </h1>
             
             {/* Search Bar */}
@@ -534,6 +622,10 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
             />
             <MapBoundsUpdater bounds={mapBounds} />
             <MapCenterUpdater center={selectedDealerCenter} />
+            <MapClickHandler 
+              sellersWithCoords={filteredSellersWithCoords}
+              onDealerSelect={handleMapClickDealerSelect}
+            />
             {/* Markers for each company */}
             {filteredSellersWithCoords
               .filter(item => item.coords !== null)

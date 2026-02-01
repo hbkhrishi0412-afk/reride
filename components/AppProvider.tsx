@@ -1174,6 +1174,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []); // Removed addToast dependency
 
+  // CRITICAL FIX: Set loading to false immediately on mount to allow UI to render
+  // Data will load in background and update the UI when ready
+  useEffect(() => {
+    // Set loading to false immediately so UI can render
+    // This prevents the app from being stuck in loading state
+    setIsLoading(false);
+  }, []); // Run once on mount
+
   // Load initial data with instant cache display and background refresh
   useEffect(() => {
     let isMounted = true;
@@ -1253,13 +1261,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // PERFORMANCE: Use request deduplication to prevent duplicate API calls
         // Load vehicles and users in parallel with aggressive timeout for instant response
+        // CRITICAL: Don't block UI - load data in background, UI already rendered
         Promise.all([
           loadWithTimeout(
             deduplicateRequest(
               `vehicles-${isAdmin ? 'admin' : 'user'}`,
               () => dataService.getVehicles(isAdmin).catch(() => [])
             ),
-            2000, // Aggressive 2-second timeout for instant response
+            3000, // Increased to 3 seconds for slower networks, but still fast
             []
           ),
           loadWithTimeout(
@@ -1267,7 +1276,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               'users',
               () => dataService.getUsers().catch(() => [])
             ),
-            2000, // Aggressive 2-second timeout
+            3000, // Increased to 3 seconds for slower networks
             []
           )
         ]).then(([vehiclesData, usersData]) => {
