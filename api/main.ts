@@ -1726,6 +1726,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         });
       }
       
+      // CRITICAL: Check if SUPABASE_SERVICE_ROLE_KEY is configured
+      // This is required for admin operations to bypass RLS
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY || 
+          process.env.SUPABASE_SERVICE_ROLE_KEY.trim() === '' ||
+          process.env.SUPABASE_SERVICE_ROLE_KEY.includes('your_supabase_service_role_key')) {
+        const errorMsg = 'SUPABASE_SERVICE_ROLE_KEY is not configured. ' +
+                        'This is required for fetching users in the admin panel. ' +
+                        'Set SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables (Production). ' +
+                        'Get the key from Supabase Dashboard → Settings → API → service_role key.';
+        logError('❌ CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing for user fetch:', errorMsg);
+        return res.status(503).json({
+          success: false,
+          reason: errorMsg,
+          users: [],
+          diagnostic: 'Service role key is required to bypass RLS policies and fetch users'
+        });
+      }
+      
+      logInfo('✅ SUPABASE_SERVICE_ROLE_KEY is configured, proceeding with user fetch...');
       const users = await userService.findAll();
       logInfo(`✅ Fetched ${users.length} raw users from Supabase database`);
       
@@ -1764,6 +1783,23 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       logError('❌ Error fetching users from Supabase:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
+      
+      // Check for service role key errors specifically
+      if (errorMessage.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+        const errorMsg = 'SUPABASE_SERVICE_ROLE_KEY is not configured or invalid. ' +
+                        'This is required for fetching users in the admin panel. ' +
+                        'Set SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables (Production). ' +
+                        'Get the key from Supabase Dashboard → Settings → API → service_role key. ' +
+                        'After setting, redeploy your application.';
+        logError('❌ CRITICAL: Service role key error:', errorMsg);
+        return res.status(503).json({
+          success: false,
+          reason: errorMsg,
+          users: [],
+          diagnostic: 'Service role key is required to bypass RLS policies and fetch users',
+          error: process.env.NODE_ENV !== 'production' ? errorMessage : undefined
+        });
+      }
       
       logError('❌ Error details:', { 
         message: errorMessage, 
