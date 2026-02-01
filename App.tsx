@@ -27,7 +27,86 @@ import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
+import { logWarn, logInfo, logError, logDebug } from './utils/logger';
 // Firebase removed - using Supabase
+
+// PERFORMANCE: Proper typing improves tree-shaking and prevents runtime errors
+interface ServiceProvider {
+  id: string;
+  name: string;
+  city: string;
+  state?: string;
+  district?: string;
+  distanceKm?: number;
+  serviceCategories?: string[];
+  services?: Array<{
+    serviceType: string;
+    price?: number;
+    description?: string;
+    etaMinutes?: number;
+    active?: boolean;
+  }>;
+}
+
+interface ServiceRequestPayload {
+  providerId?: string | null;
+  candidateProviderIds?: string[];
+  title: string;
+  serviceType?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  vehicle?: string;
+  city?: string;
+  addressLine?: string;
+  pincode?: string;
+  status?: 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  scheduledAt?: string;
+  notes?: string;
+  carDetails?: string | { make?: string; model?: string; city?: string };
+  items?: Array<{
+    serviceId: string;
+    quantity?: number;
+  }>;
+  servicePackages?: Array<{
+    id: string;
+    name: string;
+  }>;
+  serviceTypes?: string[];
+  address?: {
+    line1?: string;
+    city?: string;
+    pincode?: string;
+  };
+  note?: string;
+}
+
+interface ProviderResponse {
+  id?: string;
+  uid?: string;
+  email?: string;
+  name?: string;
+  city?: string;
+  location?: string;
+  state?: string;
+  district?: string;
+  serviceCategories?: string[];
+}
+
+interface ApiResponse<T = unknown> {
+  success?: boolean;
+  data?: T;
+  error?: string;
+  reason?: string;
+  vehicle?: Vehicle;
+  remainingCredits?: number;
+}
+
+// Window extension for service worker properties
+interface WindowWithSW extends Window {
+  __swUpdateAction?: () => void;
+  __swRefreshHandler?: () => void;
+}
 
 // Simple loading component
 const LoadingSpinner: React.FC = () => (
@@ -283,7 +362,7 @@ const AppContent: React.FC = React.memo(() => {
       // Show a persistent notification with refresh button
       if (detail.action) {
         // Store the action for when user clicks refresh
-        (window as any).__swUpdateAction = detail.action;
+        (window as WindowWithSW).__swUpdateAction = detail.action;
         
         // Add a clickable refresh button via another toast
         setTimeout(() => {
@@ -293,13 +372,14 @@ const AppContent: React.FC = React.memo(() => {
           );
           // Listen for click on the toast (simplified - in production, use a proper button)
           const refreshHandler = () => {
-            if ((window as any).__swUpdateAction) {
-              (window as any).__swUpdateAction();
+            const win = window as WindowWithSW;
+            if (win.__swUpdateAction) {
+              win.__swUpdateAction();
             } else {
               window.location.reload();
             }
           };
-          (window as any).__swRefreshHandler = refreshHandler;
+          (window as WindowWithSW).__swRefreshHandler = refreshHandler;
         }, 1000);
       }
     };
@@ -340,7 +420,7 @@ const AppContent: React.FC = React.memo(() => {
     };
   }, []);
   
-  const [serviceProvider, setServiceProvider] = React.useState<any>(null);
+  const [serviceProvider, setServiceProvider] = React.useState<ServiceProvider | null>(null);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = React.useState(false);
 
   // Helper function to properly close chat and clear localStorage
@@ -361,7 +441,7 @@ const AppContent: React.FC = React.memo(() => {
   }, [setActiveChat]);
 
   // Simple handler for service cart submissions (wire to real API as needed)
-  const handleServiceRequestSubmit = React.useCallback(async (payload: any) => {
+  const handleServiceRequestSubmit = React.useCallback(async (payload: ServiceRequestPayload) => {
     try {
       if (!currentUser) {
         addToast('Please log in to submit a service request.', 'error');
@@ -370,18 +450,18 @@ const AppContent: React.FC = React.memo(() => {
 
       const firstItem = payload.items?.[0];
       const serviceName =
-        payload.servicePackages?.find?.((s: any) => s.id === firstItem?.serviceId)?.name ||
+        payload.servicePackages?.find(s => s.id === firstItem?.serviceId)?.name ||
         payload.serviceTypes?.[0] ||
         firstItem?.serviceId ||
         'General service';
       const vehicleDesc = payload.carDetails
-        ? `${payload.carDetails.make || ''} ${payload.carDetails.model || ''}`.trim()
+        ? `${(payload.carDetails as { make?: string; model?: string }).make || ''} ${(payload.carDetails as { make?: string; model?: string }).model || ''}`.trim()
         : '';
-      const city = payload.address?.city || payload.carDetails?.city || selectedCity || '';
+      const city = payload.address?.city || (payload.carDetails as { city?: string })?.city || selectedCity || '';
 
       // Map all selected services
-      const services = payload.items?.map((it: any) => {
-        const svcMeta = payload.servicePackages?.find?.((s: any) => s.id === it.serviceId);
+      const services = payload.items?.map(it => {
+        const svcMeta = payload.servicePackages?.find(s => s.id === it.serviceId);
         return {
           id: it.serviceId,
           name: svcMeta?.name || it.serviceId,
@@ -493,22 +573,22 @@ const AppContent: React.FC = React.memo(() => {
       try {
         const providersResp = await fetch('/api/service-providers?scope=all');
         if (providersResp.ok) {
-          const providers = await providersResp.json();
-          const base = providers.map((p: any) => ({
-            id: p.id || p.uid || p.email,
+          const providers = await providersResp.json() as ProviderResponse[];
+          const base = providers.map((p): ServiceProvider => ({
+            id: p.id || p.uid || p.email || '',
             name: p.name || 'Unknown',
             city: p.city || p.location || 'Unknown',
             state: p.state,
             district: p.district,
             serviceCategories: p.serviceCategories || [],
-          })).filter((p: any) => p.id && p.name);
+          })).filter((p): p is ServiceProvider => !!p.id && !!p.name);
           
           const userCity = selectedCity || userLocation || currentUser?.location || '';
           const cityCoords = userCity ? await getCityCoordinates(userCity) : null;
           const baseCoords = userCoords || cityCoords;
 
           const enriched = await Promise.all(
-            base.map(async (p: any) => {
+            base.map(async (p): Promise<ServiceProvider> => {
               const providerCoords = p.city ? await getCityCoordinates(p.city) : null;
               const distanceKm =
                 baseCoords && providerCoords ? calculateDistance(baseCoords, providerCoords) : undefined;
@@ -1455,12 +1535,12 @@ const AppContent: React.FC = React.memo(() => {
                       });
 
                       const responseText = await response.text();
-                      let result: any = {};
+                      let result: ApiResponse<Vehicle> = {};
                       if (responseText) {
                         try {
-                          result = JSON.parse(responseText);
+                          result = JSON.parse(responseText) as ApiResponse<Vehicle>;
                         } catch (parseError) {
-                          console.warn('⚠️ Failed to parse feature response JSON:', parseError);
+                          logWarn('⚠️ Failed to parse feature response JSON:', parseError);
                           result = {};
                         }
                       }
@@ -1729,12 +1809,12 @@ const AppContent: React.FC = React.memo(() => {
                   });
 
                   const responseText = await response.text();
-                  let result: any = {};
+                  let result: ApiResponse<Vehicle> = {};
                   if (responseText) {
                     try {
-                      result = JSON.parse(responseText);
+                      result = JSON.parse(responseText) as ApiResponse<Vehicle>;
                     } catch (parseError) {
-                      console.warn('⚠️ Failed to parse feature response JSON:', parseError);
+                      logWarn('⚠️ Failed to parse feature response JSON:', parseError);
                       result = {};
                     }
                   }
@@ -1819,12 +1899,12 @@ const AppContent: React.FC = React.memo(() => {
                   });
 
                   const responseText = await response.text();
-                  let result: any = {};
+                  let result: ApiResponse = {};
                   if (responseText) {
                     try {
-                      result = JSON.parse(responseText);
+                      result = JSON.parse(responseText) as ApiResponse;
                     } catch (parseError) {
-                      console.warn('⚠️ Failed to parse certification response JSON:', parseError);
+                      logWarn('⚠️ Failed to parse certification response JSON:', parseError);
                     }
                   }
 
@@ -2364,7 +2444,8 @@ const AppContent: React.FC = React.memo(() => {
                   setPublicProfile(seller);
                   navigate(ViewEnum.SELLER_PROFILE);
                 } else {
-                  setPublicProfile({ email: sellerEmail } as any);
+                  // Create minimal user object with just email for profile lookup
+                  setPublicProfile({ email: sellerEmail, name: '', mobile: '', role: 'seller', location: '', status: 'active', createdAt: new Date().toISOString() } as User);
                   navigate(ViewEnum.SELLER_PROFILE);
                 }
               }}
@@ -2376,7 +2457,8 @@ const AppContent: React.FC = React.memo(() => {
             sellers={sellersFromUsers.length > 0 ? sellersFromUsers : undefined} 
             vehicles={vehicles}
             onViewProfile={(sellerEmail) => {
-              setPublicProfile({ email: sellerEmail } as any);
+              // Create minimal user object with just email for profile lookup
+              setPublicProfile({ email: sellerEmail, name: '', mobile: '', role: 'seller', location: '', status: 'active', createdAt: new Date().toISOString() } as User);
               navigate(ViewEnum.SELLER_PROFILE);
             }} 
           />
@@ -2675,7 +2757,7 @@ const AppContent: React.FC = React.memo(() => {
     sendMessage, setActiveChat, setConversations, setForgotPasswordRole
   ]);
 
-  const handleNotificationClick = React.useCallback((notification: any) => {
+  const handleNotificationClick = React.useCallback((notification: Notification) => {
     if (process.env.NODE_ENV === 'development') {
       console.log('Notification clicked:', notification);
     }

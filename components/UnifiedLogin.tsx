@@ -25,7 +25,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   onRegister, 
   onNavigate, 
   onForgotPassword,
-  allowedRoles = ['customer', 'seller', 'admin'],
+  allowedRoles = ['customer', 'seller', 'service_provider'],
   forcedRole,
   hideRolePicker
 }) => {
@@ -310,13 +310,35 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     className={mobileFormInputClass}
                     required
                   >
-                    {allowedRoles.map((role) => (
-                      <option key={role} value={role}>
-                        {isLogin 
-                          ? roleConfig[role].title 
-                          : (roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles')}
-                      </option>
-                    ))}
+                    {allowedRoles.map((role) => {
+                      let displayText = '';
+                      if (isLogin) {
+                        displayText = roleConfig[role].title;
+                      } else {
+                        // Map roles to display text for registration
+                        switch (role) {
+                          case 'customer':
+                            displayText = 'Buy vehicles';
+                            break;
+                          case 'seller':
+                            displayText = 'Sell vehicles';
+                            break;
+                          case 'service_provider':
+                            displayText = 'Provide services';
+                            break;
+                          case 'admin':
+                            displayText = 'Admin';
+                            break;
+                          default:
+                            displayText = roleConfig[role].title;
+                        }
+                      }
+                      return (
+                        <option key={role} value={role}>
+                          {displayText}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               )}
@@ -591,13 +613,35 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   className={selectInputClass}
                   required
                 >
-                  {allowedRoles.map((role) => (
-                    <option key={role} value={role}>
-                      {isLogin 
-                        ? roleConfig[role].title 
-                        : (roleConfig[role].title === 'Customer' ? 'Buy vehicles' : 'Sell vehicles')}
-                    </option>
-                  ))}
+                  {allowedRoles.map((role) => {
+                    let displayText = '';
+                    if (isLogin) {
+                      displayText = roleConfig[role].title;
+                    } else {
+                      // Map roles to display text for registration
+                      switch (role) {
+                        case 'customer':
+                          displayText = 'Buy vehicles';
+                          break;
+                        case 'seller':
+                          displayText = 'Sell vehicles';
+                          break;
+                        case 'service_provider':
+                          displayText = 'Provide services';
+                          break;
+                        case 'admin':
+                          displayText = 'Admin';
+                          break;
+                        default:
+                          displayText = roleConfig[role].title;
+                      }
+                    }
+                    return (
+                      <option key={role} value={role}>
+                        {displayText}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}

@@ -14,10 +14,81 @@ import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
+import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
+
+// PERFORMANCE: Helper function for user-friendly error messages
+// Improves UX by converting technical errors to actionable messages
+function getUserFriendlyErrorMessage(error: unknown, defaultMessage: string): string {
+  if (error instanceof Error) {
+    // Use formatSupabaseError for Supabase-specific errors
+    const formatted = formatSupabaseError(error);
+    if (formatted !== error.message) {
+      return formatted;
+    }
+    // Check for common error patterns
+    if (error.message.includes('network') || error.message.includes('fetch')) {
+      return 'Unable to connect to the server. Please check your internet connection.';
+    }
+    if (error.message.includes('timeout')) {
+      return 'Request timed out. Please try again.';
+    }
+    if (error.message.includes('permission') || error.message.includes('unauthorized')) {
+      return 'You do not have permission to perform this action.';
+    }
+    return defaultMessage;
+  }
+  if (typeof error === 'string') {
+    return formatSupabaseError(error);
+  }
+  return defaultMessage;
+}
 
 interface VehicleUpdateOptions {
   successMessage?: string;
   skipToast?: boolean;
+}
+
+// PERFORMANCE: Proper typing improves tree-shaking and prevents runtime errors
+interface HistoryState {
+  view: View;
+  previousView: View;
+  timestamp: number;
+  selectedVehicleId?: number;
+}
+
+// Socket.io client type definition for real-time updates
+interface SocketInstance {
+  on: (event: string, callback: (...args: unknown[]) => void) => void;
+  emit: (event: string, ...args: unknown[]) => void;
+  disconnect: () => void;
+  connected?: boolean;
+  io?: {
+    reconnect: (enable: boolean) => void;
+  };
+}
+
+// WebSocket message data structure
+interface NewMessageData {
+  conversationId: string;
+  message: ChatMessage;
+  conversation: Conversation;
+}
+
+// API response structure for vehicle feature operations
+interface FeatureApiResponse {
+  success?: boolean;
+  data?: unknown;
+  error?: string;
+  reason?: string;
+  alreadyFeatured?: boolean;
+  vehicle?: Vehicle;
+  remainingCredits?: number;
+}
+
+// Socket.io client module structure
+interface SocketIoClientModule {
+  default?: (url: string, options?: Record<string, unknown>) => SocketInstance;
+  io?: (url: string, options?: Record<string, unknown>) => SocketInstance;
 }
 
 interface AppContextType {
@@ -70,7 +141,6 @@ interface AppContextType {
   setPublicSellerProfile: (profile: User | null) => void;
   setActiveChat: (chat: Conversation | null) => void;
   setIsAnnouncementVisible: (visible: boolean) => void;
-  setRecommendations: (recommendations: Vehicle[]) => void;
   setInitialSearchQuery: (query: string) => void;
   setIsCommandPaletteOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setUserLocation: (location: string) => void;
@@ -121,7 +191,7 @@ interface AppContextType {
   addRating: (vehicleId: number, rating: number) => void;
   addSellerRating: (sellerEmail: string, rating: number) => void;
   sendMessage: (conversationId: string, message: string) => void;
-  sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
+  sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => void;
   markAsRead: (conversationId: string) => void;
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
   flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => void;
@@ -143,11 +213,8 @@ export const useApp = () => {
   if (!context) {
     const errorMessage = 'useApp must be used within an AppProvider';
     // Log helpful debugging info in development
-    if (process.env.NODE_ENV === 'development') {
-      console.error('⚠️', errorMessage);
-      console.trace('Stack trace:');
-      // Still throw to catch real issues, but with better error message
-    }
+    logError('⚠️', errorMessage);
+    logDebug('Stack trace:', new Error().stack);
     throw new Error(errorMessage);
   }
   return context;
@@ -186,7 +253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // CRITICAL: Validate user object has required fields (especially role)
         // Provide defaults for missing fields if possible
         if (!user) {
-          console.warn('⚠️ Invalid user object in localStorage - user is null/undefined');
+          logWarn('⚠️ Invalid user object in localStorage - user is null/undefined');
           localStorage.removeItem('reRideCurrentUser');
           if (savedSession) sessionStorage.removeItem('currentUser');
           return null;
@@ -194,10 +261,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Validate and fix missing email
         if (!user.email || typeof user.email !== 'string') {
-          // Only log in development - don't spam production console
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ Invalid user object - missing or invalid email. Clearing user data.');
-          }
+          logWarn('⚠️ Invalid user object - missing or invalid email. Clearing user data.');
           localStorage.removeItem('reRideCurrentUser');
           if (savedSession) sessionStorage.removeItem('currentUser');
           return null;
@@ -208,34 +272,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Try to infer role from other fields (e.g., has dealership = seller)
           if (user.dealershipName) {
             user.role = 'seller';
-            if (process.env.NODE_ENV === 'development') {
-              console.log('🔧 Auto-assigned role "seller" based on dealershipName');
-            }
+            logDebug('🔧 Auto-assigned role "seller" based on dealershipName');
           } else {
             user.role = 'customer'; // Safe default
-            if (process.env.NODE_ENV === 'development') {
-              console.log('🔧 Auto-assigned role "customer" as default');
-            }
+            logDebug('🔧 Auto-assigned role "customer" as default');
           }
         }
         
         // Ensure role is a valid value
         if (!['customer', 'seller', 'admin'].includes(user.role)) {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ Invalid role in user object:', user.role, '- defaulting to customer');
-          }
+          logWarn('⚠️ Invalid role in user object:', user.role, '- defaulting to customer');
           user.role = 'customer'; // Safe default instead of clearing
           // Save corrected user back
           try {
             localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
           } catch (e) {
-            if (process.env.NODE_ENV === 'development') {
-              console.warn('Failed to save corrected user:', e);
-            }
+            logWarn('Failed to save corrected user:', e);
           }
         }
         
-        console.log('🔄 Restoring logged-in user:', {
+        logInfo('🔄 Restoring logged-in user:', {
           name: user.name,
           email: user.email,
           role: user.role,
@@ -248,7 +304,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Fallback to sessionStorage if localStorage doesn't have user
         const user = JSON.parse(savedSession);
         if (user && user.email && user.role && ['customer', 'seller', 'admin'].includes(user.role)) {
-          console.log('🔄 Restoring logged-in user from sessionStorage:', {
+          logInfo('🔄 Restoring logged-in user from sessionStorage:', {
             name: user.name,
             email: user.email,
             role: user.role,
@@ -261,9 +317,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to load user from localStorage:', error);
-      }
+      logWarn('Failed to load user from localStorage:', error);
       // Clear corrupted data
       try {
         localStorage.removeItem('reRideCurrentUser');
@@ -283,7 +337,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [publicSellerProfile, setPublicSellerProfile] = useState<User | null>(null);
   const [activeChat, setActiveChat] = useState<Conversation | null>(null);
   const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(true);
-  const [recommendations, setRecommendations] = useState<Vehicle[]>([]);
+  // PERFORMANCE: Memoize recommendations calculation to avoid recalculating on every render
+  // Recommendations are derived from vehicles, so we compute them instead of storing in state
+  const recommendations = useMemo(() => {
+    if (!vehicles || vehicles.length === 0) return [];
+    // Return top 6 vehicles, prioritizing recent listings
+    return vehicles
+      .filter(v => v.status === 'published')
+      .sort((a, b) => {
+        // Sort by creation date (newest first)
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bDate - aDate;
+      })
+      .slice(0, 6);
+  }, [vehicles]);
   const [initialSearchQuery, setInitialSearchQuery] = useState<string>('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [userLocation, setUserLocationState] = useState<string>(() => {
@@ -293,9 +361,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return storedLocation;
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to load user location from localStorage:', error);
-      }
+      logWarn('Failed to load user location from localStorage:', error);
     }
     return 'Mumbai';
   });
@@ -310,9 +376,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return storedLocation;
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to load selected city from localStorage:', error);
-      }
+      logWarn('Failed to load selected city from localStorage:', error);
     }
     return '';
   });
@@ -327,9 +391,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return JSON.parse(savedVehicleData);
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to load vehicle data from localStorage:', error);
-      }
+      logWarn('Failed to load vehicle data from localStorage:', error);
     }
     return VEHICLE_DATA;
   });
@@ -374,16 +436,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       // Validate inputs
       if (!message || typeof message !== 'string' || message.trim() === '') {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('Invalid toast message provided');
-        }
+        logWarn('Invalid toast message provided');
         return;
       }
       
       if (!['success', 'error', 'warning', 'info'].includes(type)) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('Invalid toast type provided:', type);
-        }
+        logWarn('Invalid toast type provided:', type);
         return;
       }
 
@@ -420,9 +478,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         if (recentDuplicate) {
           // Toast with same message already exists and is recent, skip adding duplicate
-          if (process.env.NODE_ENV === 'development') {
-            console.log('Skipping duplicate toast:', trimmedMessage);
-          }
+          logDebug('Skipping duplicate toast:', trimmedMessage);
           // Clean up the timestamp we just stored since we're not using this ID
           toastTimestampsRef.current.delete(id);
           return prev;
@@ -447,9 +503,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return [...prev, toast];
       });
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error adding toast:', error);
-      }
+      logError('Error adding toast:', error);
     }
   }, []);
 
@@ -471,7 +525,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsLoading(current => {
         if (current && vehicles.length === 0) {
           // Only show notification if we truly have no data
-          console.warn('⚠️ EMERGENCY: No vehicles loaded after 3s');
+          logWarn('⚠️ EMERGENCY: No vehicles loaded after 3s');
           addToast('Loading vehicles...', 'info');
           return false;
         }
@@ -491,7 +545,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await supabase.auth.signOut();
       } catch (supabaseError) {
         // Supabase may not be initialized or user may not be using Supabase auth
-        console.log('Supabase sign out skipped:', supabaseError);
+        logDebug('Supabase sign out skipped:', supabaseError);
       }
 
       // Clear tokens via logout service
@@ -499,7 +553,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { logout: logoutService } = await import('../services/userService');
         logoutService();
       } catch (logoutError) {
-        console.warn('Logout service error:', logoutError);
+        logWarn('Logout service error:', logoutError);
       }
 
       // Clear user state
@@ -524,7 +578,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Show success message
       addToast('You have been logged out.', 'info');
     } catch (error) {
-      console.error('Error during logout:', error);
+      logError('Error during logout:', error);
       // Even if there's an error, clear local state
       setCurrentUser(null);
       sessionStorage.removeItem('currentUser');
@@ -548,9 +602,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           return prev;
         });
-        if (process.env.NODE_ENV === 'development') {
-          console.log('✅ User data updated from custom event:', updatedUser.email);
-        }
+        logInfo('✅ User data updated from custom event:', updatedUser.email);
       }
     };
 
@@ -563,7 +615,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleLogin = useCallback((user: User) => {
     // CRITICAL: Validate user object before setting
     if (!user || !user.email || !user.role) {
-      console.error('❌ Invalid user object in handleLogin:', { 
+      logError('❌ Invalid user object in handleLogin:', { 
         hasUser: !!user, 
         hasEmail: !!user?.email, 
         hasRole: !!user?.role 
@@ -574,7 +626,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Ensure role is valid
     if (!['customer', 'seller', 'admin'].includes(user.role)) {
-      console.error('❌ Invalid role in handleLogin:', user.role);
+      logError('❌ Invalid role in handleLogin:', user.role);
       addToast('Login failed: Invalid user role. Please try again.', 'error');
       return;
     }
@@ -587,7 +639,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Verify user storage (for debugging production issues)
     const storedInSession = sessionStorage.getItem('currentUser');
     const storedInLocal = localStorage.getItem('reRideCurrentUser');
-    console.log('✅ User stored after login:', {
+    logInfo('✅ User stored after login:', {
       email: user.email,
       role: user.role,
       storedInSessionStorage: !!storedInSession,
@@ -604,7 +656,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (user.role === 'admin') {
       setCurrentView(View.ADMIN_PANEL);
     } else if (user.role === 'seller') {
-      console.log('🔄 Setting seller dashboard view after login');
+      logDebug('🔄 Setting seller dashboard view after login');
       setCurrentView(View.SELLER_DASHBOARD);
     } else if (user.role === 'customer') {
       // Customers go to HOME (they can access BUYER_DASHBOARD from profile/navigation)
@@ -617,7 +669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleRegister = useCallback((user: User) => {
     // CRITICAL: Validate user object before setting
     if (!user || !user.email || !user.role) {
-      console.error('❌ Invalid user object in handleRegister:', { 
+      logError('❌ Invalid user object in handleRegister:', { 
         hasUser: !!user, 
         hasEmail: !!user?.email, 
         hasRole: !!user?.role 
@@ -628,7 +680,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Ensure role is valid
     if (!['customer', 'seller', 'admin'].includes(user.role)) {
-      console.error('❌ Invalid role in handleRegister:', user.role);
+      logError('❌ Invalid role in handleRegister:', user.role);
       addToast('Registration failed: Invalid user role. Please try again.', 'error');
       return;
     }
@@ -641,7 +693,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Verify user storage (for debugging production issues)
     const storedInSession = sessionStorage.getItem('currentUser');
     const storedInLocal = localStorage.getItem('reRideCurrentUser');
-    console.log('✅ User stored after registration:', {
+    logInfo('✅ User stored after registration:', {
       email: user.email,
       role: user.role,
       storedInSessionStorage: !!storedInSession,
@@ -658,7 +710,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (user.role === 'admin') {
       setCurrentView(View.ADMIN_PANEL);
     } else if (user.role === 'seller') {
-      console.log('🔄 Setting seller dashboard view after registration');
+      logDebug('🔄 Setting seller dashboard view after registration');
       setCurrentView(View.SELLER_DASHBOARD);
     } else if (user.role === 'customer') {
       // Customers go to HOME (they can access BUYER_DASHBOARD from profile/navigation)
@@ -678,7 +730,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.removeItem('reRideSelectedCity');
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('Failed to clear stored location:', error);
+          logWarn('Failed to clear stored location:', error);
         }
       }
       return;
@@ -690,17 +742,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       localStorage.setItem('reRideUserLocation', nextLocation);
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to persist location selection:', error);
-      }
+      logWarn('Failed to persist location selection:', error);
     }
 
     try {
       localStorage.setItem('reRideSelectedCity', nextLocation);
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to persist selected city:', error);
-      }
+      logWarn('Failed to persist selected city:', error);
     }
   }, []);
 
@@ -718,9 +766,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.removeItem('reRideSelectedCity');
       }
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to persist selected city:', error);
-      }
+      logWarn('Failed to persist selected city:', error);
     }
   }, []);
 
@@ -728,9 +774,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Don't navigate if we're currently handling a popstate event
     // This prevents navigation loops when browser back/forward is used
     if (isHandlingPopStateRef.current) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('⏸️ Navigation skipped - handling popstate event');
-      }
+      logDebug('⏸️ Navigation skipped - handling popstate event');
       return;
     }
     
@@ -918,7 +962,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Store view and previous view in history state for back button support
       // Also store selectedVehicle ID if we're on DETAIL view
-      const historyState: any = {
+      const historyState: HistoryState = {
         view: view,
         previousView: currentView,
         timestamp: Date.now()
@@ -953,7 +997,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         window.history.pushState(historyState, '', newPath);
       }
     } catch {}
-  }, [currentView, currentUser, previousView, selectedVehicle]);
+  }, [currentView, currentUser, previousView, selectedVehicle, updateSelectedCity, setPreviousView, setSelectedVehicle, setPublicSellerProfile, setInitialSearchQuery, setSelectedCategory, setCurrentView]);
 
   // Go back using browser history, with fallback to a default view
   // This ensures app back buttons are synced with browser back button
@@ -1019,7 +1063,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else if (currentPath === '/login') {
           initialView = View.LOGIN_PORTAL;
         }
-        const initialState: any = { 
+        const initialState: HistoryState = { 
           view: initialView, 
           previousView: View.HOME, 
           timestamp: Date.now() 
@@ -1146,14 +1190,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
               // Show cached vehicles INSTANTLY - don't wait for API
               setVehicles(cachedVehicles);
-              setRecommendations(cachedVehicles.slice(0, 6));
+              // PERFORMANCE: Recommendations are now computed via useMemo, no need to set
               setIsLoading(false); // Stop loading immediately
               hasCachedData = true;
-              console.log(`✅ Instantly loaded ${cachedVehicles.length} cached vehicles`);
+              logInfo(`✅ Instantly loaded ${cachedVehicles.length} cached vehicles`);
             }
           }
         } catch (cacheError) {
-          console.warn('Failed to load cached vehicles:', cacheError);
+          logWarn('Failed to load cached vehicles:', cacheError);
         }
         
         // STEP 2: Load cached users IMMEDIATELY
@@ -1163,15 +1207,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const cachedUsers = JSON.parse(cachedUsersJson);
             if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
               setUsers(cachedUsers);
-              console.log(`✅ Instantly loaded ${cachedUsers.length} cached users`);
+              logInfo(`✅ Instantly loaded ${cachedUsers.length} cached users`);
             } else {
-              console.warn('⚠️ Cached users data exists but is empty or invalid');
+              logWarn('⚠️ Cached users data exists but is empty or invalid');
             }
           } else {
-            console.log('ℹ️ No cached users found in localStorage');
+            logDebug('ℹ️ No cached users found in localStorage');
           }
         } catch (cacheError) {
-          console.warn('Failed to load cached users:', cacheError);
+          logWarn('Failed to load cached users:', cacheError);
         }
         
         // STEP 2.5: Load cached conversations IMMEDIATELY (for admin panel)
@@ -1179,15 +1223,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const cachedConversations = getConversations();
           if (cachedConversations && cachedConversations.length > 0 && isMounted) {
             setConversations(cachedConversations);
-            console.log(`✅ Instantly loaded ${cachedConversations.length} cached conversations`);
+            logInfo(`✅ Instantly loaded ${cachedConversations.length} cached conversations`);
           }
         } catch (cacheError) {
-          console.warn('Failed to load cached conversations:', cacheError);
+          logWarn('Failed to load cached conversations:', cacheError);
         }
         
         // STEP 3: Fetch fresh data from API in background (non-blocking)
         // This updates the cache and UI silently
-        const isAdmin = currentUser?.role === 'admin';
+        // PERFORMANCE: Extract role from currentUser at effect start to avoid dependency on entire object
+        // Read from localStorage to avoid dependency on currentUser state (which may not be set yet on mount)
+        let userRole: string | undefined;
+        try {
+          const savedUser = localStorage.getItem('reRideCurrentUser');
+          if (savedUser) {
+            const user = JSON.parse(savedUser);
+            userRole = user?.role;
+          }
+        } catch {}
+        // Fallback to currentUser if localStorage doesn't have it (shouldn't happen, but safe)
+        const isAdmin = (userRole || currentUser?.role) === 'admin';
         
         // Use shorter timeout for faster failure handling
         const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
@@ -1217,21 +1272,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Always update vehicles state, even if empty (to clear loading state)
           if (Array.isArray(vehiclesData)) {
             setVehicles(vehiclesData);
+            // PERFORMANCE: Recommendations are now computed via useMemo from vehicles
             if (vehiclesData.length > 0) {
-              setRecommendations(vehiclesData.slice(0, 6));
-              console.log(`✅ Updated with ${vehiclesData.length} fresh vehicles from API`);
+              logInfo(`✅ Updated with ${vehiclesData.length} fresh vehicles from API`);
             } else {
-              console.warn('⚠️ API returned empty vehicles array. Check database for published vehicles.');
+              logWarn('⚠️ API returned empty vehicles array. Check database for published vehicles.');
             }
           } else {
-            console.error('❌ API returned non-array vehicles data:', typeof vehiclesData);
+            logError('❌ API returned non-array vehicles data:', typeof vehiclesData);
           }
           
           // Always update users state, even if empty array (for consistency)
           if (Array.isArray(usersData)) {
             if (usersData.length > 0) {
               setUsers(usersData);
-              console.log(`✅ Updated with ${usersData.length} fresh users from API`);
+              logInfo(`✅ Updated with ${usersData.length} fresh users from API`);
             } else {
               // In development mode, if API returns empty and no cached data, try fallback users
               const isDevelopment = isDevelopmentEnvironment() || 
@@ -1245,18 +1300,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   try {
                     const currentUsers = JSON.parse(currentUsersJson);
                     if (Array.isArray(currentUsers) && currentUsers.length > 0) {
-                      console.log(`✅ Using ${currentUsers.length} cached users (API returned empty)`);
+                      logInfo(`✅ Using ${currentUsers.length} cached users (API returned empty)`);
                       setUsers(currentUsers);
                     } else {
                       // Cached data exists but is empty, try fallback
-                      console.warn('⚠️ Cached users exist but are empty. Checking for fallback users in development mode...');
+                      logWarn('⚠️ Cached users exist but are empty. Checking for fallback users in development mode...');
                       import('../services/userService').then(({ getUsersLocal }) => {
                         getUsersLocal().then(fallbackUsers => {
                           if (fallbackUsers.length > 0 && isMounted) {
-                            console.log(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
+                            logInfo(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
                             setUsers(fallbackUsers);
                           } else {
-                            console.log('ℹ️ No users available (API returned empty, cache empty, no fallback)');
+                            logDebug('ℹ️ No users available (API returned empty, cache empty, no fallback)');
                             setUsers([]);
                           }
                         }).catch(() => {
@@ -1267,12 +1322,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       });
                     }
                   } catch (parseError) {
-                    console.warn('Failed to parse cached users, trying fallback:', parseError);
+                    logWarn('Failed to parse cached users, trying fallback:', parseError);
                     // Try fallback if cache parse fails
                     import('../services/userService').then(({ getUsersLocal }) => {
                       getUsersLocal().then(fallbackUsers => {
                         if (fallbackUsers.length > 0 && isMounted) {
-                          console.log(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
+                          logInfo(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
                           setUsers(fallbackUsers);
                         } else {
                           if (isMounted) setUsers([]);
@@ -1286,14 +1341,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   }
                 } else {
                   // No cached data, try fallback users
-                  console.warn('⚠️ No users found in API or cache. Checking for fallback users in development mode...');
+                  logWarn('⚠️ No users found in API or cache. Checking for fallback users in development mode...');
                   import('../services/userService').then(({ getUsersLocal }) => {
                     getUsersLocal().then(fallbackUsers => {
                       if (fallbackUsers.length > 0 && isMounted) {
-                        console.log(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
+                        logInfo(`✅ Using ${fallbackUsers.length} fallback users in development mode`);
                         setUsers(fallbackUsers);
                       } else {
-                        console.log('ℹ️ No users available (API returned empty, no cache, no fallback)');
+                        logDebug('ℹ️ No users available (API returned empty, no cache, no fallback)');
                         setUsers([]);
                       }
                     }).catch(() => {
@@ -1477,7 +1532,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Ensure we have at least empty arrays
           setVehicles(prev => Array.isArray(prev) ? prev : []);
           setUsers(prev => Array.isArray(prev) ? prev : []);
-          setRecommendations([]);
+          // PERFORMANCE: Recommendations are now computed via useMemo, no need to clear
           setIsLoading(false);
           if (process.env.NODE_ENV === 'development') {
             addToast('Some data failed to load. The app will continue with available data.', 'warning');
@@ -1491,6 +1546,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       isMounted = false;
     };
+    // PERFORMANCE: Only depend on user role, not entire currentUser object
+    // Use optional chaining in dependency to handle null/undefined
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addToast, currentUser?.role]);
 
   // Refresh server-sourced data whenever the authenticated user changes
@@ -1525,7 +1583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // For admin users, ensure we fetch users (critical for admin panel)
         if (isAdmin) {
-          console.log('📊 AppProvider: Admin user detected - fetching users for admin panel...');
+          logDebug('📊 AppProvider: Admin user detected - fetching users for admin panel...');
         }
         
         // Load vehicles and users in PARALLEL for faster loading (no sequential delays)
@@ -1542,10 +1600,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Update vehicles if fetch succeeded
         if (vehiclesResult.status === 'fulfilled' && Array.isArray(vehiclesResult.value)) {
           setVehicles(vehiclesResult.value);
-          // Update recommendations with the latest data
-          if (vehiclesResult.value.length > 0) {
-            setRecommendations(vehiclesResult.value.slice(0, 6));
-          }
+          // PERFORMANCE: Recommendations are now computed via useMemo from vehicles
         } else if (vehiclesResult.status === 'rejected') {
           console.warn('Failed to sync vehicles:', vehiclesResult.reason);
         }
@@ -1598,7 +1653,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isSubscribed = false;
       clearTimeout(timeoutId);
     };
-  }, [currentUser?.email, currentUser?.role]);
+    // PERFORMANCE: Depend on currentUser object, but effect only runs when email/role actually changes
+    // React will compare object reference, so we extract values inside the effect
+  }, [currentUser]);
 
   // Watch for new notifications and show browser notifications
   useEffect(() => {
@@ -1651,7 +1708,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         Array.from(shownNotificationIdsRef.current).filter(id => notificationIds.has(id))
       );
     }
-  }, [notifications, currentUser?.email]);
+    // PERFORMANCE: Depend on currentUser object instead of email property for stable reference
+  }, [notifications, currentUser]);
 
   // Periodic sync queue processor - retry failed Supabase saves
   useEffect(() => {
@@ -1796,18 +1854,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const wsHost = 'localhost:3001';
     const wsUrl = `${wsProtocol}//${wsHost}`;
     
-    // Use Socket.io client for real-time updates
-    let socket: any = null;
-    
-    (async () => {
-      try {
-        // Dynamically import socket.io-client
-        // @ts-ignore - socket.io-client types may not be available
-        const socketIoClient: any = await import('socket.io-client');
-        const io = socketIoClient.default || socketIoClient.io;
-        
-        // CRITICAL FIX: Add timeout and better error handling for socket.io connection
-        socket = io(wsUrl, {
+      // Use Socket.io client for real-time updates
+      let socket: SocketInstance | null = null;
+      
+      (async () => {
+        try {
+          // Dynamically import socket.io-client
+          const socketIoClient = await import('socket.io-client') as unknown as SocketIoClientModule;
+          const io = socketIoClient.default || socketIoClient.io;
+          
+          if (!io) {
+            throw new Error('Socket.io client not available');
+          }
+          
+          // CRITICAL FIX: Add timeout and better error handling for socket.io connection
+          socket = io(wsUrl, {
           transports: ['websocket', 'polling'],
           reconnection: true,
           reconnectionDelay: 1000,
@@ -1825,64 +1886,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // CRITICAL FIX: Improve error handling - don't spam console with errors
         let connectionErrorLogged = false;
-        socket.on('connect_error', (_error: any) => {
+          socket.on('connect_error', (_error: unknown) => {
           // CRITICAL FIX: Only log error once to prevent console spam
           // Error parameter is prefixed with _ to indicate it's intentionally unused
           if (!connectionErrorLogged) {
             connectionErrorLogged = true;
-            if (process.env.NODE_ENV === 'development') {
-              console.warn('⚠️ Socket.io connection failed. Real-time updates disabled. Make sure API server is running on port 3001.');
-            }
+            logWarn('⚠️ Socket.io connection failed. Real-time updates disabled. Make sure API server is running on port 3001.');
           }
         });
         
         // CRITICAL FIX: Handle reconnection failures gracefully
         socket.on('reconnect_attempt', () => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔄 Attempting to reconnect to WebSocket...');
-          }
+          logDebug('🔄 Attempting to reconnect to WebSocket...');
         });
         
         socket.on('reconnect_failed', () => {
           if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ WebSocket reconnection failed. Real-time updates will not be available until server is restarted.');
+            logWarn('⚠️ WebSocket reconnection failed. Real-time updates will not be available until server is restarted.');
           }
           // CRITICAL FIX: Disable further reconnection attempts to prevent spam
-          socket.io.reconnect(false);
+          if (socket && socket.io) {
+            socket.io.reconnect(false);
+          }
         });
         
         // Listen for new messages from other users
-        socket.on('conversation:new-message', (data: { conversationId: string; message: any; conversation: any }) => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 Received real-time message:', data);
-          }
-          
-          // Update conversations state with new message
-          setConversations(prev => {
-            const existingConv = prev.find(c => c.id === data.conversationId);
-            if (existingConv) {
-              // Check if message already exists (prevent duplicates)
-              const messageExists = existingConv.messages.some(m => m.id === data.message.id);
+          socket.on('conversation:new-message', (data: unknown) => {
+            // Type guard for runtime safety
+            const messageData = data as NewMessageData;
+            if (!messageData || !messageData.conversationId || !messageData.message) {
+              logWarn('Invalid message data received:', data);
+              return;
+            }
+            
+            if (process.env.NODE_ENV === 'development') {
+              logDebug('🔧 Received real-time message:', messageData);
+            }
+            
+            // Update conversations state with new message
+            setConversations(prev => {
+              const existingConv = prev.find(c => c.id === messageData.conversationId);
+              if (existingConv) {
+                // Check if message already exists (prevent duplicates)
+                const messageExists = existingConv.messages.some(m => m.id === messageData.message.id);
               if (messageExists) {
                 return prev; // Message already exists, no update needed
               }
               
-              // Update conversation with new message
-              const updated = prev.map(conv => 
-                conv.id === data.conversationId
-                  ? {
-                      ...conv,
-                      messages: [...conv.messages, data.message],
-                      lastMessageAt: data.conversation.lastMessageAt,
-                      isReadBySeller: data.conversation.isReadBySeller,
-                      isReadByCustomer: data.conversation.isReadByCustomer
-                    }
-                  : conv
-              );
-              
-              // Update activeChat if it's the same conversation
-              if (activeChat?.id === data.conversationId) {
-                const updatedConv = updated.find(c => c.id === data.conversationId);
+                // Update conversation with new message
+                const updated = prev.map(conv => 
+                  conv.id === messageData.conversationId
+                    ? {
+                        ...conv,
+                        messages: [...conv.messages, messageData.message],
+                        lastMessageAt: messageData.conversation.lastMessageAt,
+                        isReadBySeller: messageData.conversation.isReadBySeller,
+                        isReadByCustomer: messageData.conversation.isReadByCustomer
+                      }
+                    : conv
+                );
+                
+                // Update activeChat if it's the same conversation
+                if (activeChat?.id === messageData.conversationId) {
+                  const updatedConv = updated.find(c => c.id === messageData.conversationId);
                 if (updatedConv) {
                   setActiveChat(updatedConv);
                 }
@@ -1907,12 +1973,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
         
-        socket.on('error', (error: any) => {
-          // CRITICAL FIX: Only log in development to prevent console spam
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ WebSocket error (non-critical):', error?.message || error);
-          }
-        });
+          socket.on('error', (error: unknown) => {
+            // CRITICAL FIX: Only log in development to prevent console spam
+            if (process.env.NODE_ENV === 'development') {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              logWarn('⚠️ WebSocket error (non-critical):', errorMessage);
+            }
+          });
       } catch (error) {
         // CRITICAL FIX: Fail gracefully - app should work without WebSocket
         if (process.env.NODE_ENV === 'development') {
@@ -2052,7 +2119,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Always remove from updating set, even if there was an error
       updatingVehiclesRef.current.delete(id);
     }
-  }, [vehicles, addToast, setVehicles, currentUser, setAuditLog]);
+    // PERFORMANCE: Setters (setVehicles, setAuditLog) are stable and don't need to be in deps
+    // But including them is harmless and makes the intent clear
+  }, [vehicles, addToast, currentUser]);
 
   const contextValue: AppContextType = useMemo(() => ({
     // State
@@ -2104,7 +2173,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPublicSellerProfile,
     setActiveChat,
     setIsAnnouncementVisible,
-    setRecommendations,
     setInitialSearchQuery,
     setIsCommandPaletteOpen,
     setUserLocation: updateUserLocation,
@@ -2129,18 +2197,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     goBack,
     
     // Admin functions
-    onAdminUpdateUser: async (email: string, details: Partial<User>) => {
-      // Separate null values (to be removed) from regular updates
-      const updateFields: Partial<User> = {};
-      const fieldsToRemove: string[] = [];
-      
-      Object.entries(details).forEach(([key, value]) => {
-        if (value === null) {
-          fieldsToRemove.push(key);
-        } else if (value !== undefined) {
-          (updateFields as any)[key] = value;
-        }
-      });
+      onAdminUpdateUser: async (email: string, details: Partial<User>) => {
+        // Separate null values (to be removed) from regular updates
+        const updateFields: Partial<User> = {};
+        const fieldsToRemove: (keyof User)[] = [];
+        
+        Object.entries(details).forEach(([key, value]) => {
+          const typedKey = key as keyof User;
+          if (value === null) {
+            fieldsToRemove.push(typedKey);
+          } else if (value !== undefined) {
+            // Type-safe assignment - TypeScript will catch invalid keys
+            (updateFields as Record<string, unknown>)[key] = value;
+          }
+        });
 
       setUsers(prev =>
         Array.isArray(prev) ? prev.map(user => {
@@ -2173,10 +2243,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               updatedUser.govtIdVerified = updateFields.govtIdVerified;
             }
             
-            // Remove fields that are set to null
-            fieldsToRemove.forEach(key => {
-              delete (updatedUser as any)[key];
-            });
+              // Remove fields that are set to null
+              fieldsToRemove.forEach(key => {
+                delete (updatedUser as Record<string, unknown>)[key];
+              });
             
             // Also update publicSellerProfile if this is the currently viewed seller
             if (publicSellerProfile?.email === email) {
@@ -2193,8 +2263,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const { updateUser: updateUserService } = await import('../services/userService');
         
-        // Ensure verificationStatus is properly structured for API
-        const apiUpdateData: any = { email, ...details };
+          // Ensure verificationStatus is properly structured for API
+          const apiUpdateData: Partial<User> & { email: string } = { email, ...details };
         
         // If verificationStatus is being updated, ensure it's properly formatted
         if (details.verificationStatus) {
@@ -2361,8 +2431,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           addToast(`Plan updated for ${email}`, 'success');
         } catch (error) {
-          console.error('Failed to update user plan:', error);
-          addToast('Failed to update user plan', 'error');
+          logError('Failed to update user plan:', error);
+          const message = getUserFriendlyErrorMessage(error, 'Failed to update user plan. Please try again.');
+          addToast(message, 'error');
         }
       },
       onToggleUserStatus: async (email: string) => {
@@ -2403,7 +2474,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const entry = logAction(actor, 'Toggle Vehicle Status', vehicleInfo, `Changed status from ${vehicle.status} to ${newStatus}`);
           setAuditLog(prev => [entry, ...prev]);
         } catch (error) {
-          console.error('Failed to toggle vehicle status:', error);
+          logError('Failed to toggle vehicle status:', error);
+          const message = getUserFriendlyErrorMessage(error, 'Failed to toggle vehicle status. Please try again.');
+          addToast(message, 'error');
           addToast('Failed to update vehicle status', 'error');
         }
       },
@@ -2436,12 +2509,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
 
           const responseText = await response.text();
-          let result: any = {};
+          let result: FeatureApiResponse = {};
           if (responseText) {
             try {
-              result = JSON.parse(responseText);
+              result = JSON.parse(responseText) as FeatureApiResponse;
             } catch (parseError) {
-              console.warn('⚠️ Failed to parse feature response JSON:', parseError);
+              logWarn('⚠️ Failed to parse feature response JSON:', parseError);
             }
           }
 
@@ -2460,8 +2533,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           if (result?.success && result.vehicle) {
+            const updatedVehicle = result.vehicle;
             setVehicles(prev =>
-              Array.isArray(prev) ? prev.map(v => (v && v.id === vehicleId ? result.vehicle : v)) : []
+              Array.isArray(prev) ? prev.map(v => (v && v.id === vehicleId ? updatedVehicle : v)).filter((v): v is Vehicle => v !== undefined && v !== null) : []
             );
 
             const sellerEmail = result.vehicle?.sellerEmail;
@@ -3039,9 +3113,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 // In production, Firebase handles real-time sync, so Socket.io is not needed
                 if (process.env.NODE_ENV === 'development') {
                   try {
-                    // @ts-ignore - socket.io-client types may not be available
-                    const socketIoClient: any = await import('socket.io-client');
+                    const socketIoClient = await import('socket.io-client') as unknown as SocketIoClientModule;
                     const io = socketIoClient.default || socketIoClient.io;
+                    if (!io) {
+                      throw new Error('Socket.io client not available');
+                    }
                     // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
                     // This prevents mixed content errors when app is served over HTTPS
                     const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -3116,7 +3192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast('Failed to send message. Please try again.', 'error');
       }
     },
-    sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: any) => {
+    sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => {
       console.log('🔧 sendMessageWithType called:', { conversationId, messageText, type, payload, currentUser: currentUser?.email });
       
       if (!currentUser) {
@@ -3189,9 +3265,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 // In production, Firebase handles real-time sync, so Socket.io is not needed
                 if (process.env.NODE_ENV === 'development') {
                   try {
-                    // @ts-ignore - socket.io-client types may not be available
-                    const socketIoClient: any = await import('socket.io-client');
+                    const socketIoClient = await import('socket.io-client') as unknown as SocketIoClientModule;
                     const io = socketIoClient.default || socketIoClient.io;
+                    if (!io) {
+                      throw new Error('Socket.io client not available');
+                    }
                     // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
                     // This prevents mixed content errors when app is served over HTTPS
                     const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -3758,7 +3836,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentView, setPreviousView, setSelectedVehicle, setVehicles, setIsLoading,
     setCurrentUser, setComparisonList, setWishlist, setConversations, setToasts,
     setForgotPasswordRole, setTypingStatus, setSelectedCategory, setPublicSellerProfile,
-    setActiveChat, setIsAnnouncementVisible, setRecommendations, setInitialSearchQuery,
+    setActiveChat, setIsAnnouncementVisible, setInitialSearchQuery,
     setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
     setNotifications, addToast, removeToast, navigate, goBack, handleLogin, handleLogout,

@@ -19,23 +19,25 @@ export const SECURITY_CONFIG = {
 
   // JWT Configuration
   JWT: {
-    // Lazy getter prevents hard crashes at module load while still warning in prod
+    // SECURITY: JWT_SECRET must be set in production - no fallback allowed
+    // In development, a default is provided for convenience
     get SECRET() {
       const secret = process.env.JWT_SECRET;
       if (!secret) {
         const isProd = process.env.NODE_ENV === 'production';
         if (isProd) {
-          if (!(SECURITY_CONFIG.JWT as any)._warned) {
-            console.warn('⚠️ JWT_SECRET not set in production. Using fallback. Please set JWT_SECRET.');
-            (SECURITY_CONFIG.JWT as any)._warned = true;
-          }
-          return 'fallback-secret-please-set-jwt-secret';
+          // SECURITY FIX: Throw error instead of using fallback in production
+          throw new Error(
+            'JWT_SECRET is required in production but is not set. ' +
+            'Please configure JWT_SECRET in your environment variables. ' +
+            'This is a security requirement and the application cannot start without it.'
+          );
         }
+        // Development fallback - safe because it's only used in dev
         return 'dev-only-secret-not-for-production';
       }
       return secret;
     },
-    _warned: false as boolean,
     // Token expiration times
     // Access tokens: shorter-lived for security (compromised tokens expire faster)
     // Refresh tokens: longer-lived for better UX (users don't need to re-login frequently)

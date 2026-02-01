@@ -182,4 +182,3 @@ export const MobileSupportPage: React.FC<MobileSupportPageProps> = ({ currentUse
 };
 
 export default MobileSupportPage;
-
