@@ -150,3 +150,51 @@ To prevent this issue in the future:
 - Always use `SUPABASE_SERVICE_ROLE_KEY` for server-side API operations
 - Use `VITE_SUPABASE_ANON_KEY` for client-side operations only
 
+## Why Users Show as Zero in Admin Panel
+
+If users are showing as 0 in the admin panel even after fixing registration:
+
+### Root Cause
+The admin panel fetches users via `/api/users` which calls `userService.findAll()`. This method uses `getSupabaseAdminClient()` which requires `SUPABASE_SERVICE_ROLE_KEY`. If this key is missing or misconfigured:
+
+1. The admin client cannot be created
+2. The query fails or returns 0 users
+3. Even if users exist in the database, they won't be visible
+
+### Solution
+
+1. **Verify `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel:**
+   - Go to Vercel Dashboard → Your Project → Settings → Environment Variables
+   - Ensure `SUPABASE_SERVICE_ROLE_KEY` is set for **Production** environment
+   - The key should be 100+ characters long
+   - Get it from Supabase Dashboard → Settings → API → service_role key
+
+2. **Redeploy after setting the key:**
+   - Environment variables require a redeploy to take effect
+   - Go to Vercel Dashboard → Deployments → Redeploy
+
+3. **Check Vercel Function Logs:**
+   - Look for errors containing "SUPABASE_SERVICE_ROLE_KEY"
+   - Look for "permission denied" or "row-level security" errors
+   - The enhanced error messages will now provide specific guidance
+
+4. **Run Diagnostic Script:**
+   ```bash
+   node scripts/diagnose-production-supabase.js
+   ```
+
+5. **Check SELECT Policies (if needed):**
+   - Run `scripts/check-users-select-policy.sql` in Supabase SQL Editor
+   - This will show if RLS is blocking SELECT access
+   - Service role key should bypass RLS, but verify it's configured correctly
+
+### Enhanced Error Handling
+
+The `findAll()` method now includes:
+- Early detection of missing `SUPABASE_SERVICE_ROLE_KEY`
+- Specific error messages for RLS policy errors
+- Detailed logging to help diagnose issues
+- Warnings when 0 users are returned
+
+Check Vercel function logs for these enhanced error messages to identify the exact issue.
+

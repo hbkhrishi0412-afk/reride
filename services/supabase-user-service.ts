@@ -262,12 +262,45 @@ export const supabaseUserService = {
   // Get all users
   async findAll(): Promise<User[]> {
     try {
-      const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+      let supabase;
       
-      if (isServerSide) {
-        console.log('📊 findAll: Using Supabase Admin Client (server-side)');
-      } else {
-        console.log('📊 findAll: Using Supabase Client (client-side)');
+      // CRITICAL: Catch service role key errors early and provide helpful diagnostics
+      try {
+        supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+        
+        if (isServerSide) {
+          console.log('📊 findAll: Using Supabase Admin Client (server-side)');
+          // Verify service role key is configured
+          if (!process.env.SUPABASE_SERVICE_ROLE_KEY || 
+              process.env.SUPABASE_SERVICE_ROLE_KEY.trim() === '' ||
+              process.env.SUPABASE_SERVICE_ROLE_KEY.includes('your_supabase_service_role_key')) {
+            console.error('❌ CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing or invalid!');
+            console.error('   This will cause RLS policies to block access, resulting in 0 users.');
+            console.error('   Set SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables.');
+            throw new Error(
+              'SUPABASE_SERVICE_ROLE_KEY is required for admin operations. ' +
+              'Set it in your production environment variables (Vercel). ' +
+              'Without it, RLS policies may block access to users, resulting in 0 users being returned.'
+            );
+          } else {
+            console.log('✅ findAll: SUPABASE_SERVICE_ROLE_KEY is configured');
+          }
+        } else {
+          console.log('📊 findAll: Using Supabase Client (client-side)');
+        }
+      } catch (clientError: any) {
+        // CRITICAL: Catch service role key errors and provide helpful message
+        if (clientError.message && clientError.message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+          console.error('❌ CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing in production!');
+          console.error('   This is required for fetching users. Set it in Vercel environment variables.');
+          throw new Error(
+            'SUPABASE_SERVICE_ROLE_KEY is not configured. ' +
+            'Please set SUPABASE_SERVICE_ROLE_KEY in your production environment variables (Vercel). ' +
+            'This key is required for server-side database operations. ' +
+            'Without it, the admin panel will show 0 users even if users exist in the database.'
+          );
+        }
+        throw clientError;
       }
       
       const { data, error } = await supabase
@@ -281,6 +314,15 @@ export const supabaseUserService = {
           hint: error.hint,
           code: error.code
         });
+        
+        // Provide specific guidance for RLS errors
+        if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('row-level security')) {
+          console.error('⚠️ RLS Policy Error: This indicates Row Level Security is blocking access.');
+          console.error('   Even with service role key, if RLS is misconfigured, access can be blocked.');
+          console.error('   Check if RLS is enabled and if there are SELECT policies on the users table.');
+          console.error('   Service role key should bypass RLS, but verify it is set correctly.');
+        }
+        
         throw new Error(`Failed to fetch users from Supabase: ${error.message} (Code: ${error.code || 'unknown'})`);
       }
       
@@ -290,6 +332,14 @@ export const supabaseUserService = {
       }
       
       console.log(`✅ Supabase findAll: Retrieved ${data.length} raw rows from database`);
+      
+      if (data.length === 0 && isServerSide) {
+        console.warn('⚠️ WARNING: Admin client returned 0 users. This might indicate:');
+        console.warn('   1. No users exist in the database (check Supabase dashboard)');
+        console.warn('   2. RLS policies are blocking access (unlikely with service role key)');
+        console.warn('   3. Table name mismatch (expected: "users")');
+        console.warn('   4. Service role key is not being used correctly');
+      }
       
       const users = data.map(supabaseRowToUser);
       console.log(`✅ Supabase findAll: Converted ${users.length} rows to User objects`);
