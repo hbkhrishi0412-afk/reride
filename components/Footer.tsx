@@ -75,10 +75,10 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               <a href="#" onClick={(e) => handleNav(e, View.FAQ)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 FAQ
               </a>
-              <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
+              <a href="#" onClick={(e) => handleNav(e, View.PRIVACY_POLICY)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 Privacy Policy
               </a>
-              <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
+              <a href="#" onClick={(e) => handleNav(e, View.TERMS_OF_SERVICE)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 Terms of Service
               </a>
             </div>

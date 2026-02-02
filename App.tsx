@@ -198,6 +198,10 @@ const MobileNewCarsPage = React.lazy(() => import('./components/MobileNewCarsPag
 const MobilePricingPage = React.lazy(() => import('./components/MobilePricingPage'));
 const MobileSupportPage = React.lazy(() => import('./components/MobileSupportPage'));
 const MobileFAQPage = React.lazy(() => import('./components/MobileFAQPage'));
+const PrivacyPolicyPage = React.lazy(() => import('./components/PrivacyPolicyPage'));
+const MobilePrivacyPolicyPage = React.lazy(() => import('./components/MobilePrivacyPolicyPage'));
+const TermsOfServicePage = React.lazy(() => import('./components/TermsOfServicePage'));
+const MobileTermsOfServicePage = React.lazy(() => import('./components/MobileTermsOfServicePage'));
 const MobileBuyerDashboard = React.lazy(() => import('./components/MobileBuyerDashboard'));
 const MobileRentalPage = React.lazy(() => import('./components/MobileRentalPage'));
 const MobileDealerProfilesPage = React.lazy(() => import('./components/MobileDealerProfilesPage'));
@@ -2576,6 +2580,26 @@ const AppContent: React.FC = React.memo(() => {
           <FAQPage 
             faqItems={faqItems}
           />
+        );
+
+      case ViewEnum.PRIVACY_POLICY:
+        if (isMobileApp) {
+          return (
+            <MobilePrivacyPolicyPage />
+          );
+        }
+        return (
+          <PrivacyPolicyPage />
+        );
+
+      case ViewEnum.TERMS_OF_SERVICE:
+        if (isMobileApp) {
+          return (
+            <MobileTermsOfServicePage />
+          );
+        }
+        return (
+          <TermsOfServicePage />
         );
 
       case ViewEnum.CITY_LANDING:

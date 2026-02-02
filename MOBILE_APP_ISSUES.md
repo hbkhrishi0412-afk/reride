@@ -92,3 +92,5 @@ const handleSwipeStart = (e: React.TouchEvent, vehicleId: number) => {
 
 
 
+
+

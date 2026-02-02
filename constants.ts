@@ -207,17 +207,191 @@ export async function getMockFAQs(): Promise<FAQItem[]> {
 
 // Fallback FAQs for when API is not available
 export const getFallbackFAQs = (): FAQItem[] => [
+    // Selling FAQs
     { 
         id: 1,
         question: "How do I list my car for sale?", 
-        answer: "Navigate to the 'Sell' section, log in or register as a seller, and follow the on-screen instructions to create a new vehicle listing. You'll need details like make, model, year, and photos.", 
+        answer: "Navigate to the 'Sell' section, log in or register as a seller, and follow the on-screen instructions to create a new vehicle listing. You'll need details like make, model, year, mileage, price, photos, and vehicle description. Make sure to provide accurate information to attract genuine buyers.", 
         category: "Selling" 
     },
     { 
         id: 2,
         question: "What is AI Price Suggestion?", 
-        answer: "Our AI Price Suggestion tool analyzes your vehicle's details and compares them with current market listings to recommend a fair and competitive price, helping you sell faster.", 
+        answer: "Our AI Price Suggestion tool analyzes your vehicle's details (make, model, year, mileage, condition, location) and compares them with current market listings to recommend a fair and competitive price. This helps you price your vehicle competitively and sell faster.", 
         category: "Selling" 
+    },
+    {
+        id: 3,
+        question: "How much does it cost to list my vehicle?",
+        answer: "Basic listings are free! We offer free, pro, and premium subscription plans. Free accounts can list vehicles with basic features. Pro and Premium plans offer additional benefits like featured listings, priority placement, and more listing credits. Check our Pricing page for detailed plans.",
+        category: "Selling"
+    },
+    {
+        id: 4,
+        question: "How do I boost my listing visibility?",
+        answer: "You can boost your listing visibility through our premium features: Featured Listings (appears at the top of search results), Homepage Spotlight (featured on homepage), Top Search placement, and Multi-City promotion. These can be purchased individually or as part of subscription plans.",
+        category: "Selling"
+    },
+    {
+        id: 5,
+        question: "Can I edit or delete my listing after posting?",
+        answer: "Yes! You can edit your listing anytime by going to your Seller Dashboard, selecting the listing, and clicking 'Edit'. You can update photos, price, description, and other details. You can also delete listings that are no longer available.",
+        category: "Selling"
+    },
+    {
+        id: 6,
+        question: "What documents do I need to sell my vehicle?",
+        answer: "You'll need: Registration Certificate (RC), Insurance documents, Pollution Under Control (PUC) certificate, Service records (if available), and valid ID proof. Having these documents ready helps build buyer trust and speeds up the sale process.",
+        category: "Selling"
+    },
+    // Buying FAQs
+    {
+        id: 7,
+        question: "How can I contact a seller?",
+        answer: "On any vehicle detail page, you can use the 'Chat with Seller' button to start a direct conversation with the seller. You can also call or WhatsApp the seller if they've enabled these contact methods. All communications are logged for your safety.",
+        category: "Buying"
+    },
+    {
+        id: 8,
+        question: "How do I search for vehicles?",
+        answer: "Use our search bar to enter keywords like make, model, or city. You can also use advanced filters to narrow down by price range, year, mileage, fuel type, transmission, location, and more. Save your searches to get notified when new matching vehicles are listed.",
+        category: "Buying"
+    },
+    {
+        id: 9,
+        question: "Can I compare multiple vehicles?",
+        answer: "Yes! Add vehicles to your comparison list by clicking the 'Compare' button on vehicle cards. You can compare up to 4 vehicles side-by-side on features, specifications, pricing, and seller ratings. This helps you make an informed decision.",
+        category: "Buying"
+    },
+    {
+        id: 10,
+        question: "How do I save vehicles I'm interested in?",
+        answer: "Click the heart icon on any vehicle card or detail page to add it to your Wishlist. You can access your wishlist anytime from your profile menu. This helps you keep track of vehicles you're considering.",
+        category: "Buying"
+    },
+    {
+        id: 11,
+        question: "Is it safe to buy vehicles through ReRide?",
+        answer: "We take safety seriously. All sellers are verified, and we have a reporting system for suspicious listings. We recommend: meeting in person, verifying documents, conducting a test drive, getting a vehicle inspection, and using secure payment methods. Always trust your instincts and report any suspicious activity.",
+        category: "Buying"
+    },
+    {
+        id: 12,
+        question: "Can I request a test drive?",
+        answer: "Yes! On the vehicle detail page, click 'Request Test Drive' to send a request to the seller. The seller will receive a notification and can schedule a convenient time. Always meet in a safe, public location for test drives.",
+        category: "Buying"
+    },
+    // Account & Profile FAQs
+    {
+        id: 13,
+        question: "How do I create an account?",
+        answer: "Click 'Sign Up' or 'Register' on the homepage. You can register with your email and password, or use Google sign-in for faster registration. Choose your account type (Customer, Seller, or Service Provider) and complete your profile with accurate information.",
+        category: "Account & Profile"
+    },
+    {
+        id: 14,
+        question: "How do I verify my account?",
+        answer: "Account verification helps build trust. Go to your Profile settings and verify your email, phone number, and optionally your government ID (Aadhaar, PAN, or Driving License). Verified accounts get a verification badge and are more trusted by other users.",
+        category: "Account & Profile"
+    },
+    {
+        id: 15,
+        question: "I forgot my password. How do I reset it?",
+        answer: "Click 'Forgot Password' on the login page, enter your registered email address, and we'll send you a password reset link. Click the link in the email to create a new password. If you don't receive the email, check your spam folder or contact support.",
+        category: "Account & Profile"
+    },
+    {
+        id: 16,
+        question: "How do I update my profile information?",
+        answer: "Go to your Profile page and click 'Edit Profile'. You can update your name, email, phone number, address, profile picture, and other details. Make sure to keep your information current for better user experience.",
+        category: "Account & Profile"
+    },
+    {
+        id: 17,
+        question: "Can I delete my account?",
+        answer: "Yes, you can delete your account from Profile Settings. This will permanently delete your account, listings, and associated data. Please note that this action cannot be undone. If you have active listings, you may want to remove them first.",
+        category: "Account & Profile"
+    },
+    // Payments & Subscriptions FAQs
+    {
+        id: 18,
+        question: "What payment methods do you accept?",
+        answer: "We accept all major payment methods including credit cards, debit cards, UPI, net banking, and digital wallets. All payments are processed securely through our trusted payment partners. We never store your full payment card details.",
+        category: "Payments & Subscriptions"
+    },
+    {
+        id: 19,
+        question: "How do subscription plans work?",
+        answer: "We offer Free, Pro, and Premium subscription plans. Free plans have basic features. Pro and Premium plans offer more listing credits, featured listings, priority support, and advanced analytics. Plans are billed monthly or annually. You can upgrade, downgrade, or cancel anytime.",
+        category: "Payments & Subscriptions"
+    },
+    {
+        id: 20,
+        question: "Can I get a refund for my subscription?",
+        answer: "Subscription fees are non-refundable for the current billing period. However, you can cancel your subscription at any time, and it will not renew for the next billing cycle. You'll continue to have access to premium features until the end of your current billing period.",
+        category: "Payments & Subscriptions"
+    },
+    {
+        id: 21,
+        question: "Are there any hidden fees?",
+        answer: "No hidden fees! We're transparent about all costs. Basic listings are free. Optional premium features like featured listings and boosts have clear pricing. Subscription plans are clearly displayed with all features listed. Transaction fees (if any) are clearly mentioned before payment.",
+        category: "Payments & Subscriptions"
+    },
+    // Services FAQs
+    {
+        id: 22,
+        question: "What services are available on ReRide?",
+        answer: "We offer various vehicle-related services including car servicing, repairs, insurance, documentation assistance, vehicle inspection, and more. Browse the 'Car Services' section to find service providers in your area. You can book services directly through the platform.",
+        category: "Services"
+    },
+    {
+        id: 23,
+        question: "How do I book a service?",
+        answer: "Go to the 'Car Services' section, search for the service you need, select a service provider, choose your preferred service package, provide your vehicle details and location, and confirm the booking. The service provider will contact you to schedule the service.",
+        category: "Services"
+    },
+    {
+        id: 24,
+        question: "Are service providers verified?",
+        answer: "Yes, all service providers on our platform are verified. We verify their business registration, licenses, and credentials. Service providers with verified badges have completed our verification process. You can also check reviews and ratings from other customers.",
+        category: "Services"
+    },
+    // General FAQs
+    {
+        id: 25,
+        question: "Is my personal information secure?",
+        answer: "Yes, we take data security very seriously. All personal information is encrypted and stored securely using industry-standard security measures. We comply with data protection regulations and never share your details with third parties without your consent. Read our Privacy Policy for more details.",
+        category: "General"
+    },
+    {
+        id: 26,
+        question: "How do I report a problem or suspicious activity?",
+        answer: "You can report issues through the 'Report' button on any listing, user profile, or message. You can also contact our support team via the Support page. We take all reports seriously and investigate promptly. For urgent safety concerns, contact local authorities immediately.",
+        category: "General"
+    },
+    {
+        id: 27,
+        question: "Does ReRide guarantee vehicle quality?",
+        answer: "ReRide is a marketplace platform connecting buyers and sellers. We don't own, sell, or guarantee vehicles. However, we offer vehicle certification services where vehicles are inspected by certified professionals. We also have a review and rating system to help you make informed decisions.",
+        category: "General"
+    },
+    {
+        id: 28,
+        question: "How do I contact customer support?",
+        answer: "You can contact our support team through the 'Support' page on our website or app. Fill out the support form with your query, and we'll respond within 24-48 hours. For urgent issues, you can also email us at support@reride.com or use the live chat feature (when available).",
+        category: "General"
+    },
+    {
+        id: 29,
+        question: "Can I use ReRide on my mobile phone?",
+        answer: "Yes! ReRide is fully optimized for mobile devices. You can access our website on any mobile browser, or download our Progressive Web App (PWA) for a native app-like experience. The mobile app offers all features including browsing, listing, messaging, and more.",
+        category: "General"
+    },
+    {
+        id: 30,
+        question: "What cities does ReRide operate in?",
+        answer: "ReRide operates across India in major cities and towns. You can search for vehicles by city or use location-based services to find vehicles and services near you. We're continuously expanding to more locations. Check our city listings to see available locations.",
+        category: "General"
     }
 ];
 
