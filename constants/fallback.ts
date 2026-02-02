@@ -67,17 +67,81 @@ export const FALLBACK_USERS: User[] = [
 ];
 
 export const FALLBACK_FAQS: FAQItem[] = [
+  // Selling FAQs
   {
     id: 1,
     question: "How do I list my car for sale?",
-    answer: "Navigate to the 'Sell' section, log in or register as a seller, and follow the on-screen instructions to create a new vehicle listing.",
+    answer: "Navigate to the 'Sell' section, log in or register as a seller, and follow the on-screen instructions to create a new vehicle listing. You'll need details like make, model, year, mileage, price, photos, and vehicle description.",
     category: "Selling"
   },
   {
     id: 2,
+    question: "What is AI Price Suggestion?",
+    answer: "Our AI Price Suggestion tool analyzes your vehicle's details and compares them with current market listings to recommend a fair and competitive price, helping you sell faster.",
+    category: "Selling"
+  },
+  {
+    id: 3,
+    question: "How much does it cost to list my vehicle?",
+    answer: "Basic listings are free! We offer free, pro, and premium subscription plans. Free accounts can list vehicles with basic features. Check our Pricing page for detailed plans.",
+    category: "Selling"
+  },
+  // Buying FAQs
+  {
+    id: 4,
     question: "How can I contact a seller?",
-    answer: "On any vehicle detail page, you can use the 'Chat with Seller' button to start a direct conversation with the seller.",
+    answer: "On any vehicle detail page, you can use the 'Chat with Seller' button to start a direct conversation with the seller. You can also call or WhatsApp the seller if they've enabled these contact methods.",
     category: "Buying"
+  },
+  {
+    id: 5,
+    question: "How do I search for vehicles?",
+    answer: "Use our search bar to enter keywords like make, model, or city. You can also use advanced filters to narrow down by price range, year, mileage, fuel type, transmission, location, and more.",
+    category: "Buying"
+  },
+  {
+    id: 6,
+    question: "Can I compare multiple vehicles?",
+    answer: "Yes! Add vehicles to your comparison list by clicking the 'Compare' button on vehicle cards. You can compare up to 4 vehicles side-by-side on features, specifications, pricing, and seller ratings.",
+    category: "Buying"
+  },
+  {
+    id: 7,
+    question: "Is it safe to buy vehicles through ReRide?",
+    answer: "We take safety seriously. All sellers are verified, and we have a reporting system for suspicious listings. We recommend meeting in person, verifying documents, conducting a test drive, and using secure payment methods.",
+    category: "Buying"
+  },
+  // Account FAQs
+  {
+    id: 8,
+    question: "How do I create an account?",
+    answer: "Click 'Sign Up' or 'Register' on the homepage. You can register with your email and password, or use Google sign-in for faster registration. Choose your account type and complete your profile.",
+    category: "Account & Profile"
+  },
+  {
+    id: 9,
+    question: "I forgot my password. How do I reset it?",
+    answer: "Click 'Forgot Password' on the login page, enter your registered email address, and we'll send you a password reset link. Click the link in the email to create a new password.",
+    category: "Account & Profile"
+  },
+  // General FAQs
+  {
+    id: 10,
+    question: "Is my personal information secure?",
+    answer: "Yes, we take data security very seriously. All personal information is encrypted and stored securely. We comply with data protection regulations and never share your details with third parties without your consent.",
+    category: "General"
+  },
+  {
+    id: 11,
+    question: "How do I contact customer support?",
+    answer: "You can contact our support team through the 'Support' page on our website or app. Fill out the support form with your query, and we'll respond within 24-48 hours. You can also email us at support@reride.com.",
+    category: "General"
+  },
+  {
+    id: 12,
+    question: "Can I use ReRide on my mobile phone?",
+    answer: "Yes! ReRide is fully optimized for mobile devices. You can access our website on any mobile browser, or download our Progressive Web App (PWA) for a native app-like experience.",
+    category: "General"
   }
 ];
 
