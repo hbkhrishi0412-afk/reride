@@ -57,6 +57,59 @@ interface HistoryState {
   selectedVehicleId?: number;
 }
 
+// Helper function to map URL paths to views
+function pathToView(path: string): View {
+  const normalizedPath = path.toLowerCase();
+  
+  // Exact matches first
+  if (normalizedPath === '/' || normalizedPath === '') return View.HOME;
+  if (normalizedPath === '/used-cars') return View.USED_CARS;
+  if (normalizedPath === '/new-cars') return View.NEW_CARS;
+  if (normalizedPath === '/car-services') return View.CAR_SERVICES;
+  if (normalizedPath === '/car-services/detail') return View.SERVICE_DETAIL;
+  if (normalizedPath === '/car-services/login') return View.CAR_SERVICE_LOGIN;
+  if (normalizedPath === '/car-services/dashboard') return View.CAR_SERVICE_DASHBOARD;
+  if (normalizedPath === '/car-services/cart') return View.SERVICE_CART;
+  if (normalizedPath === '/rental') return View.RENTAL;
+  if (normalizedPath === '/dealers') return View.DEALER_PROFILES;
+  if (normalizedPath.startsWith('/vehicle/')) {
+    // Extract vehicle ID from path like /vehicle/123
+    return View.DETAIL;
+  }
+  if (normalizedPath === '/vehicle') return View.DETAIL;
+  if (normalizedPath === '/seller/dashboard') return View.SELLER_DASHBOARD;
+  if (normalizedPath === '/admin' || normalizedPath === '/admin/login') return View.ADMIN_LOGIN;
+  if (normalizedPath === '/admin/new-cars') return View.NEW_CARS_ADMIN_LOGIN;
+  if (normalizedPath === '/admin/new-cars/manage') return View.NEW_CARS_ADMIN_PANEL;
+  if (normalizedPath === '/admin/sell-car') return View.SELL_CAR_ADMIN;
+  if (normalizedPath === '/login') return View.LOGIN_PORTAL;
+  if (normalizedPath === '/compare') return View.COMPARISON;
+  if (normalizedPath === '/wishlist') return View.WISHLIST;
+  if (normalizedPath === '/profile') return View.PROFILE;
+  if (normalizedPath === '/forgot-password') return View.FORGOT_PASSWORD;
+  if (normalizedPath === '/inbox') return View.INBOX;
+  if (normalizedPath.startsWith('/seller/')) {
+    // Path like /seller/email@example.com
+    return View.SELLER_PROFILE;
+  }
+  if (normalizedPath === '/seller') return View.SELLER_PROFILE;
+  if (normalizedPath === '/pricing') return View.PRICING;
+  if (normalizedPath === '/support') return View.SUPPORT;
+  if (normalizedPath === '/faq') return View.FAQ;
+  if (normalizedPath === '/privacy-policy') return View.PRIVACY_POLICY;
+  if (normalizedPath === '/terms-of-service') return View.TERMS_OF_SERVICE;
+  if (normalizedPath === '/buyer/dashboard') return View.BUYER_DASHBOARD;
+  if (normalizedPath.startsWith('/city/')) {
+    // Path like /city/mumbai
+    return View.CITY_LANDING;
+  }
+  if (normalizedPath === '/city') return View.CITY_LANDING;
+  if (normalizedPath === '/sell-car') return View.SELL_CAR;
+  
+  // Default fallback
+  return View.HOME;
+}
+
 // Socket.io client type definition for real-time updates
 interface SocketInstance {
   on: (event: string, callback: (...args: unknown[]) => void) => void;
@@ -955,11 +1008,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Update path for friendly URLs and store view in history state
     try {
       let newPath = window.location.pathname;
-      if (view === View.ADMIN_LOGIN) newPath = '/admin/login';
+      
+      // Map all views to their corresponding URL paths
+      if (view === View.HOME) newPath = '/';
+      else if (view === View.USED_CARS) newPath = '/used-cars';
+      else if (view === View.NEW_CARS) newPath = '/new-cars';
+      else if (view === View.CAR_SERVICES) newPath = '/car-services';
+      else if (view === View.SERVICE_DETAIL) newPath = '/car-services/detail';
+      else if (view === View.CAR_SERVICE_LOGIN) newPath = '/car-services/login';
+      else if (view === View.CAR_SERVICE_DASHBOARD) newPath = '/car-services/dashboard';
+      else if (view === View.SERVICE_CART) newPath = '/car-services/cart';
+      else if (view === View.RENTAL) newPath = '/rental';
+      else if (view === View.DEALER_PROFILES) newPath = '/dealers';
+      else if (view === View.DETAIL) {
+        // For detail view, include vehicle ID in URL if available
+        let vehicleForPath = selectedVehicle;
+        if (!vehicleForPath) {
+          try {
+            const storedVehicle = sessionStorage.getItem('selectedVehicle');
+            if (storedVehicle) {
+              vehicleForPath = JSON.parse(storedVehicle);
+            }
+          } catch (error) {
+            // Ignore sessionStorage errors
+          }
+        }
+        if (vehicleForPath && vehicleForPath.id) {
+          newPath = `/vehicle/${vehicleForPath.id}`;
+        } else {
+          newPath = '/vehicle';
+        }
+      }
+      else if (view === View.SELLER_DASHBOARD) newPath = '/seller/dashboard';
+      else if (view === View.ADMIN_PANEL) newPath = '/admin';
+      else if (view === View.ADMIN_LOGIN) newPath = '/admin/login';
       else if (view === View.NEW_CARS_ADMIN_LOGIN) newPath = '/admin/new-cars';
       else if (view === View.NEW_CARS_ADMIN_PANEL) newPath = '/admin/new-cars/manage';
       else if (view === View.LOGIN_PORTAL || view === View.CUSTOMER_LOGIN || view === View.SELLER_LOGIN) newPath = '/login';
-      else if (view === View.HOME) newPath = '/';
+      else if (view === View.COMPARISON) newPath = '/compare';
+      else if (view === View.WISHLIST) newPath = '/wishlist';
+      else if (view === View.PROFILE) newPath = '/profile';
+      else if (view === View.FORGOT_PASSWORD) newPath = '/forgot-password';
+      else if (view === View.INBOX) newPath = '/inbox';
+      else if (view === View.SELLER_PROFILE) {
+        // For seller profile, try to include seller email in URL if available
+        if (publicSellerProfile?.email) {
+          newPath = `/seller/${encodeURIComponent(publicSellerProfile.email)}`;
+        } else {
+          newPath = '/seller';
+        }
+      }
+      else if (view === View.PRICING) newPath = '/pricing';
+      else if (view === View.SUPPORT) newPath = '/support';
+      else if (view === View.FAQ) newPath = '/faq';
+      else if (view === View.PRIVACY_POLICY) newPath = '/privacy-policy';
+      else if (view === View.TERMS_OF_SERVICE) newPath = '/terms-of-service';
+      else if (view === View.BUYER_DASHBOARD) newPath = '/buyer/dashboard';
+      else if (view === View.CITY_LANDING) {
+        // For city landing, include city in URL if available
+        if (params?.city) {
+          newPath = `/city/${encodeURIComponent(params.city.toLowerCase().replace(/\s+/g, '-'))}`;
+        } else {
+          newPath = '/city';
+        }
+      }
+      else if (view === View.SELL_CAR) newPath = '/sell-car';
+      else if (view === View.SELL_CAR_ADMIN) newPath = '/admin/sell-car';
       
       // Store view and previous view in history state for back button support
       // Also store selectedVehicle ID if we're on DETAIL view
@@ -1037,41 +1151,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser, currentView]);
 
-  // Map initial path on first load to views (/login, /admin/login)
+  // Map initial path on first load to views
   useEffect(() => {
     try {
-      const path = window.location.pathname.toLowerCase();
-      if (path === '/admin' || path === '/admin/login') {
-        setCurrentView(View.ADMIN_LOGIN);
-      } else if (path === '/admin/new-cars') {
-        setCurrentView(View.NEW_CARS_ADMIN_LOGIN);
-      } else if (path === '/admin/new-cars/manage') {
-        setCurrentView(View.NEW_CARS_ADMIN_PANEL);
-      } else if (path === '/login') {
-        setCurrentView(View.LOGIN_PORTAL);
-      }
+      const path = window.location.pathname;
+      const initialView = pathToView(path);
+      setCurrentView(initialView);
       
       // Initialize history state with current view (only on first load)
       if (window.history.state === null || !window.history.state.view) {
-        const currentPath = window.location.pathname;
-        let initialView: View = View.HOME;
-        if (currentPath === '/admin' || currentPath === '/admin/login') {
-          initialView = View.ADMIN_LOGIN;
-        } else if (currentPath === '/admin/new-cars') {
-          initialView = View.NEW_CARS_ADMIN_LOGIN;
-        } else if (currentPath === '/admin/new-cars/manage') {
-          initialView = View.NEW_CARS_ADMIN_PANEL;
-        } else if (currentPath === '/login') {
-          initialView = View.LOGIN_PORTAL;
-        }
         const initialState: HistoryState = { 
           view: initialView, 
           previousView: View.HOME, 
           timestamp: Date.now() 
         };
-        // Note: initialView is never View.DETAIL based on current path mappings
-        // If DETAIL view initialization is needed in the future, add the path mapping above
-        window.history.replaceState(initialState, '', currentPath);
+        
+        // If DETAIL view, try to extract vehicle ID from URL
+        if (initialView === View.DETAIL && path.startsWith('/vehicle/')) {
+          const vehicleIdMatch = path.match(/\/vehicle\/(\d+)/);
+          if (vehicleIdMatch) {
+            const vehicleId = parseInt(vehicleIdMatch[1], 10);
+            initialState.selectedVehicleId = vehicleId;
+          }
+        }
+        
+        window.history.replaceState(initialState, '', path);
       }
     } catch {}
   }, [selectedVehicle]);
@@ -1122,16 +1226,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setCurrentView(restoredView);
         } else {
           // Fallback: try to determine view from URL path
-          const path = window.location.pathname.toLowerCase();
-          let fallbackView = View.HOME;
-          if (path === '/admin' || path === '/admin/login') {
-            fallbackView = View.ADMIN_LOGIN;
-          } else if (path === '/admin/new-cars') {
-            fallbackView = View.NEW_CARS_ADMIN_LOGIN;
-          } else if (path === '/admin/new-cars/manage') {
-            fallbackView = View.NEW_CARS_ADMIN_PANEL;
-          } else if (path === '/login') {
-            fallbackView = View.LOGIN_PORTAL;
+          const path = window.location.pathname;
+          const fallbackView = pathToView(path);
+          
+          // If DETAIL view, try to restore vehicle from URL
+          if (fallbackView === View.DETAIL && path.startsWith('/vehicle/')) {
+            const vehicleIdMatch = path.match(/\/vehicle\/(\d+)/);
+            if (vehicleIdMatch) {
+              const vehicleId = parseInt(vehicleIdMatch[1], 10);
+              const vehicleToRestore = Array.isArray(vehicles) ? vehicles.find(v => v.id === vehicleId) : undefined;
+              if (vehicleToRestore) {
+                setSelectedVehicle(vehicleToRestore);
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔙 Restoring vehicle from URL:', vehicleToRestore.id);
+                }
+              }
+            }
           }
           
           if (process.env.NODE_ENV === 'development') {
