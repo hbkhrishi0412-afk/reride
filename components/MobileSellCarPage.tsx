@@ -17,7 +17,6 @@ interface MobileSellCarPageProps {
  */
 export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [sellerType, setSellerType] = useState<'individual' | 'dealer'>('individual');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [carDetails, setCarDetails] = useState({
     registration: '',
@@ -146,10 +145,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
           <div className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">I am a</h2>
             <button
-              onClick={() => {
-                setSellerType('individual');
-                handleNextStep();
-              }}
+              onClick={handleNextStep}
               className="w-full p-6 bg-white rounded-xl border-2 border-gray-200 text-left active:scale-[0.98] transition-transform"
             >
               <div className="flex items-center gap-4">
@@ -165,10 +161,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
               </div>
             </button>
             <button
-              onClick={() => {
-                setSellerType('dealer');
-                handleNextStep();
-              }}
+              onClick={handleNextStep}
               className="w-full p-6 bg-white rounded-xl border-2 border-gray-200 text-left active:scale-[0.98] transition-transform"
             >
               <div className="flex items-center gap-4">

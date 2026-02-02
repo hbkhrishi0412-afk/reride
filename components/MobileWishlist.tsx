@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
 import type { Vehicle, User } from '../types';
-import { MobileVehicleCard } from './MobileVehicleCard';
 import { View as ViewEnum } from '../types';
 
 interface MobileWishlistProps {
@@ -124,6 +123,9 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
               key={vehicle.id}
               className="bg-white p-4 active:bg-gray-50 transition-colors"
               onClick={() => onSelectVehicle(vehicle)}
+              onTouchStart={(e) => handleSwipeStart(e, vehicle.id)}
+              onTouchMove={handleSwipeMove}
+              onTouchEnd={() => handleSwipeEnd(vehicle.id)}
             >
               <div className="flex gap-4">
                 <img
@@ -198,6 +200,9 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
               key={vehicle.id}
               className="bg-white rounded-xl overflow-hidden shadow-sm active:scale-95 transition-transform"
               onClick={() => onSelectVehicle(vehicle)}
+              onTouchStart={(e) => handleSwipeStart(e, vehicle.id)}
+              onTouchMove={handleSwipeMove}
+              onTouchEnd={() => handleSwipeEnd(vehicle.id)}
             >
               <div className="relative">
                 <img
