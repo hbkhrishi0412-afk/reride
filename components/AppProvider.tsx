@@ -4,6 +4,7 @@ import { View, VehicleCategory as CategoryEnum } from '../types';
 import { getConversations, saveConversations } from '../services/chatService';
 import { saveConversationWithSync, addMessageWithSync } from '../services/syncService';
 import { saveNotificationWithSync } from '../services/syncService';
+import { realtimeChatService } from '../services/realtimeChatService';
 import { getSettings } from '../services/settingsService';
 import { getAuditLog, logAction, saveAuditLog } from '../services/auditLogService';
 import { getFaqs, saveFaqs } from '../services/faqService';
@@ -121,12 +122,12 @@ interface SocketInstance {
   };
 }
 
-// WebSocket message data structure
-interface NewMessageData {
-  conversationId: string;
-  message: ChatMessage;
-  conversation: Conversation;
-}
+// WebSocket message data structure (kept for backward compatibility if needed)
+// interface NewMessageData {
+//   conversationId: string;
+//   message: ChatMessage;
+//   conversation: Conversation;
+// }
 
 // API response structure for vehicle feature operations
 interface FeatureApiResponse {
@@ -2017,165 +2018,436 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [auditLog]);
 
-  // Real-time WebSocket listener for conversation updates (end-to-end sync)
-  // NOTE: Socket.io is only used in development. In production, Firebase handles real-time conversations.
-  useEffect(() => {
-    if (!currentUser) return;
-    
-    // Only initialize Socket.io in development mode
-    // In production, Firebase handles conversations, so Socket.io is not needed
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    if (!isDevelopment) {
-      return; // Skip Socket.io initialization in production
+  // Helper function to join all relevant conversation rooms
+  const joinAllConversationRooms = useCallback(() => {
+    if (!currentUser || !realtimeChatService.isConnected()) {
+      return;
     }
     
-    // Connect to WebSocket for real-time updates (development only)
-    // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
-    // This prevents mixed content errors when app is served over HTTPS
-    const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = 'localhost:3001';
-    const wsUrl = `${wsProtocol}//${wsHost}`;
+    const currentUserEmail = currentUser.email;
+    const currentUserRole = currentUser.role as 'customer' | 'seller';
     
-      // Use Socket.io client for real-time updates
-      let socket: SocketInstance | null = null;
+    // Collect all conversation IDs user is part of
+    const conversationIds: string[] = [];
+    conversations.forEach(conv => {
+      if (!conv) return;
+      // Join if user is part of this conversation
+      const isParticipant = 
+        (currentUserRole === 'customer' && conv.customerId?.toLowerCase().trim() === currentUserEmail.toLowerCase().trim()) ||
+        (currentUserRole === 'seller' && conv.sellerId?.toLowerCase().trim() === currentUserEmail.toLowerCase().trim());
       
-      (async () => {
-        try {
-          // Dynamically import socket.io-client
-          const socketIoClient = await import('socket.io-client') as unknown as SocketIoClientModule;
-          const io = socketIoClient.default || socketIoClient.io;
-          
-          if (!io) {
-            throw new Error('Socket.io client not available');
+      if (isParticipant) {
+        conversationIds.push(conv.id);
+      }
+    });
+    
+    // Join all conversations at once
+    if (conversationIds.length > 0) {
+      console.log('🔧 Joining conversation rooms:', { count: conversationIds.length, conversationIds });
+      realtimeChatService.joinAllConversations(conversationIds);
+      if (process.env.NODE_ENV === 'development') {
+        logDebug(`🔧 Auto-subscribed to ${conversationIds.length} conversation(s)`);
+      }
+    }
+  }, [currentUser, conversations]);
+
+  // Real-time Chat Service Integration (end-to-end chat for buyers and sellers)
+  useEffect(() => {
+    if (!currentUser) {
+      realtimeChatService.disconnect();
+      return;
+    }
+
+    const userEmail = currentUser.email;
+    const userRole = currentUser.role as 'customer' | 'seller';
+
+    // Connect to real-time chat service
+    console.log('🔧 AppProvider: Connecting to real-time chat service...', { userEmail, userRole });
+    realtimeChatService.connect(userEmail, userRole).then((connected) => {
+      if (connected) {
+        console.log('✅ Real-time chat service connected successfully');
+      } else {
+        console.error('❌ Failed to connect to real-time chat service');
+        addToast('Real-time chat connection failed. Messages may be delayed.', 'warning');
+      }
+    }).catch((error) => {
+      console.error('❌ Error connecting to real-time chat:', error);
+      addToast('Real-time chat connection error. Please refresh the page.', 'error');
+    });
+
+    // Setup message received callback
+    realtimeChatService.onMessage((conversationId, message, conversationData) => {
+      console.log('📨 AppProvider: Received real-time message:', { 
+        conversationId, 
+        messageId: message.id, 
+        sender: message.sender,
+        hasConversationData: !!conversationData
+      });
+      
+      // Update conversations state with new message
+      setConversations(prev => {
+        const existingConv = prev.find(c => c.id === conversationId);
+        if (existingConv) {
+          // Check if message already exists (prevent duplicates)
+          const messageExists = existingConv.messages.some(m => m.id === message.id);
+          if (messageExists) {
+            console.log('⚠️ Message already exists, skipping duplicate:', message.id);
+            return prev; // Message already exists, no update needed
           }
           
-          // CRITICAL FIX: Add timeout and better error handling for socket.io connection
-          socket = io(wsUrl, {
-          transports: ['websocket', 'polling'],
-          reconnection: true,
-          reconnectionDelay: 1000,
-          reconnectionAttempts: 3, // Reduced from 5 to fail faster
-          timeout: 5000, // 5 second connection timeout
-          // CRITICAL FIX: Disable automatic reconnection after max attempts to prevent spam
-          reconnectionDelayMax: 2000
-        });
-        
-        socket.on('connect', () => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 Connected to WebSocket for real-time conversation updates');
+          // Update conversation with new message
+          const updated = prev.map(conv => 
+            conv.id === conversationId
+              ? {
+                  ...conv,
+                  messages: [...conv.messages, message],
+                  lastMessageAt: message.timestamp,
+                  isReadBySeller: message.sender === 'seller' ? true : conv.isReadBySeller,
+                  isReadByCustomer: message.sender === 'user' ? true : conv.isReadByCustomer
+                }
+              : conv
+          );
+          
+          // Update activeChat if it's the same conversation
+          if (activeChat?.id === conversationId) {
+            const updatedConv = updated.find(c => c.id === conversationId);
+            if (updatedConv) {
+              setActiveChat(updatedConv);
+            }
           }
-        });
-        
-        // CRITICAL FIX: Improve error handling - don't spam console with errors
-        let connectionErrorLogged = false;
-          socket.on('connect_error', (_error: unknown) => {
-          // CRITICAL FIX: Only log error once to prevent console spam
-          // Error parameter is prefixed with _ to indicate it's intentionally unused
-          if (!connectionErrorLogged) {
-            connectionErrorLogged = true;
-            logWarn('⚠️ Socket.io connection failed. Real-time updates disabled. Make sure API server is running on port 3001.');
+          
+          // Save to localStorage
+          try {
+            saveConversations(updated);
+          } catch (error) {
+            console.error('Failed to save conversations to localStorage:', error);
           }
-        });
-        
-        // CRITICAL FIX: Handle reconnection failures gracefully
-        socket.on('reconnect_attempt', () => {
-          logDebug('🔄 Attempting to reconnect to WebSocket...');
-        });
-        
-        socket.on('reconnect_failed', () => {
-          if (process.env.NODE_ENV === 'development') {
-            logWarn('⚠️ WebSocket reconnection failed. Real-time updates will not be available until server is restarted.');
-          }
-          // CRITICAL FIX: Disable further reconnection attempts to prevent spam
-          if (socket && socket.io) {
-            socket.io.reconnect(false);
-          }
-        });
-        
-        // Listen for new messages from other users
-          socket.on('conversation:new-message', (data: unknown) => {
-            // Type guard for runtime safety
-            const messageData = data as NewMessageData;
-            if (!messageData || !messageData.conversationId || !messageData.message) {
-              logWarn('Invalid message data received:', data);
-              return;
+          
+          console.log('✅ Message added to conversation:', { conversationId, messageId: message.id });
+          return updated;
+        } else {
+          // Conversation doesn't exist in state - try to add it using conversationData from WebSocket
+          console.warn('⚠️ Received message for conversation not in state:', {
+            conversationId,
+            messageId: message.id,
+            sender: message.sender,
+            currentConversations: prev.length,
+            hasConversationData: !!conversationData
+          });
+          
+          // If we have conversation data from WebSocket, use it to create the conversation in state
+          if (conversationData && conversationData.id) {
+            // sellerName may be in conversationData but not in Conversation type
+            const sellerName = (conversationData as any).sellerName;
+            const newConversation: Conversation = {
+              id: conversationData.id,
+              customerId: conversationData.customerId || '',
+              customerName: conversationData.customerName || 'Customer',
+              sellerId: conversationData.sellerId || '',
+              vehicleId: conversationData.vehicleId || 0,
+              vehicleName: conversationData.vehicleName || 'Vehicle',
+              vehiclePrice: conversationData.vehiclePrice,
+              messages: [message],
+              lastMessageAt: message.timestamp,
+              isReadBySeller: message.sender === 'seller' ? true : false,
+              isReadByCustomer: message.sender === 'user' ? true : false,
+              isFlagged: false
+            };
+            
+            console.log('✅ Adding conversation to state from WebSocket data:', {
+              conversationId,
+              customerName: newConversation.customerName,
+              sellerName: sellerName || 'N/A',
+              vehicleName: newConversation.vehicleName
+            });
+            
+            // Update activeChat if this is the active conversation
+            if (activeChat?.id === conversationId) {
+              setActiveChat(newConversation);
             }
             
-            if (process.env.NODE_ENV === 'development') {
-              logDebug('🔧 Received real-time message:', messageData);
+            // Save to localStorage
+            try {
+              const updated = [...prev, newConversation];
+              saveConversations(updated);
+            } catch (error) {
+              console.error('Failed to save conversations to localStorage:', error);
             }
             
-            // Update conversations state with new message
-            setConversations(prev => {
-              const existingConv = prev.find(c => c.id === messageData.conversationId);
-              if (existingConv) {
-                // Check if message already exists (prevent duplicates)
-                const messageExists = existingConv.messages.some(m => m.id === messageData.message.id);
-              if (messageExists) {
-                return prev; // Message already exists, no update needed
+            return [...prev, newConversation];
+          }
+          
+          // Fallback: Try to load conversation from database
+          // CRITICAL: For sellers, we need to ensure they see conversations even if not in their initial load
+          console.log('🔄 Attempting to load conversation from database:', conversationId);
+          (async () => {
+            try {
+              const { getConversationsFromSupabase } = await import('../services/conversationService');
+              const { supabaseConversationService } = await import('../services/supabase-conversation-service');
+              const currentUserEmail = currentUser?.email;
+              const currentUserRole = currentUser?.role;
+              
+              if (!currentUserEmail || !currentUserRole) {
+                console.warn('⚠️ Cannot load conversation: missing user info');
+                return;
               }
               
-                // Update conversation with new message
-                const updated = prev.map(conv => 
-                  conv.id === messageData.conversationId
-                    ? {
-                        ...conv,
-                        messages: [...conv.messages, messageData.message],
-                        lastMessageAt: messageData.conversation.lastMessageAt,
-                        isReadBySeller: messageData.conversation.isReadBySeller,
-                        isReadByCustomer: messageData.conversation.isReadByCustomer
-                      }
-                    : conv
-                );
+              // First, try to find the conversation directly by ID (more reliable)
+              let foundConv: Conversation | null = null;
+              try {
+                foundConv = await supabaseConversationService.findById(conversationId);
+                console.log('🔍 Direct conversation lookup result:', { 
+                  found: !!foundConv, 
+                  conversationId,
+                  sellerId: foundConv?.sellerId,
+                  currentUserEmail,
+                  role: currentUserRole
+                });
+              } catch (error) {
+                console.warn('⚠️ Direct lookup failed, trying bulk load:', error);
+              }
+              
+              // If direct lookup failed, try bulk load
+              if (!foundConv) {
+                const result = currentUserRole === 'seller'
+                  ? await getConversationsFromSupabase(undefined, currentUserEmail)
+                  : currentUserRole === 'customer'
+                  ? await getConversationsFromSupabase(currentUserEmail)
+                  : await getConversationsFromSupabase();
                 
-                // Update activeChat if it's the same conversation
-                if (activeChat?.id === messageData.conversationId) {
-                  const updatedConv = updated.find(c => c.id === messageData.conversationId);
-                if (updatedConv) {
-                  setActiveChat(updatedConv);
+                if (result.success && result.data) {
+                  foundConv = result.data.find(c => c.id === conversationId) || null;
                 }
               }
               
-              // Save to localStorage
-              try {
-                saveConversations(updated);
-              } catch (error) {
-                console.error('Failed to save conversations to localStorage:', error);
+              if (foundConv) {
+                // CRITICAL: For sellers, verify this conversation belongs to them
+                if (currentUserRole === 'seller') {
+                  const normalizedSellerEmail = (currentUserEmail || '').toLowerCase().trim();
+                  const normalizedConvSellerId = (foundConv.sellerId || '').toLowerCase().trim();
+                  if (normalizedConvSellerId !== normalizedSellerEmail) {
+                    console.warn('⚠️ Conversation sellerId mismatch:', {
+                      conversationId,
+                      convSellerId: foundConv.sellerId,
+                      currentUserEmail,
+                      normalizedConvSellerId,
+                      normalizedSellerEmail
+                    });
+                    // Still add it - might be a case sensitivity issue
+                  }
+                }
+                
+                // Check if message already exists
+                const messageExists = foundConv.messages.some(m => m.id === message.id);
+                const updatedConv = {
+                  ...foundConv,
+                  messages: messageExists ? foundConv.messages : [...(foundConv.messages || []), message],
+                  lastMessageAt: message.timestamp,
+                  isReadBySeller: message.sender === 'seller' ? true : foundConv.isReadBySeller,
+                  isReadByCustomer: message.sender === 'user' ? true : foundConv.isReadByCustomer
+                };
+                
+                setConversations(prevState => {
+                  // Check if it was added while we were loading
+                  const alreadyExists = prevState.find(c => c.id === conversationId);
+                  if (alreadyExists) {
+                    // Update existing - ensure message is included
+                    const existingConv = prevState.find(c => c.id === conversationId);
+                    const hasMessage = existingConv?.messages.some(m => m.id === message.id);
+                    if (hasMessage) {
+                      console.log('✅ Message already in conversation, skipping update');
+                      return prevState;
+                    }
+                    // Update existing conversation with new message
+                    const updated = prevState.map(conv => 
+                      conv.id === conversationId ? updatedConv : conv
+                    );
+                    try {
+                      saveConversations(updated);
+                    } catch (error) {
+                      console.error('Failed to save conversations to localStorage:', error);
+                    }
+                    return updated;
+                  }
+                  // Add new conversation to seller's inbox
+                  console.log('✅ Adding conversation to seller inbox:', {
+                    conversationId,
+                    sellerId: updatedConv.sellerId,
+                    customerName: updatedConv.customerName,
+                    vehicleName: updatedConv.vehicleName
+                  });
+                  const updated = [...prevState, updatedConv];
+                  try {
+                    saveConversations(updated);
+                  } catch (error) {
+                    console.error('Failed to save conversations to localStorage:', error);
+                  }
+                  return updated;
+                });
+                
+                // Update activeChat if this is the active conversation
+                if (activeChat?.id === conversationId) {
+                  setActiveChat(updatedConv);
+                }
+                
+                console.log('✅ Loaded and added conversation from database:', conversationId);
+              } else {
+                console.error('❌ Conversation not found in database:', {
+                  conversationId,
+                  currentUserEmail,
+                  currentUserRole,
+                  searchedBySeller: currentUserRole === 'seller'
+                });
+                // For sellers, this might mean the conversation wasn't saved properly
+                // or the sellerId doesn't match - log for debugging
               }
-              
-              return updated;
+            } catch (error) {
+              console.error('❌ Failed to load conversation from database:', error);
             }
+          })();
+          
+          // Return previous state for now - will be updated when conversation loads
+          return prev;
+        }
+      });
+    });
+
+    // Setup typing status callback
+    realtimeChatService.onTyping((typingStatus) => {
+      // Update typing status state for UI
+      if (typingStatus.isTyping) {
+        setTypingStatus({
+          conversationId: typingStatus.conversationId,
+          userRole: typingStatus.userRole
+        });
+      } else {
+        // Clear typing status if it matches the current conversation
+        setTypingStatus(prev => 
+          prev?.conversationId === typingStatus.conversationId ? null : prev
+        );
+      }
+    });
+
+    // Setup connection status callback (auto-subscribe on connect)
+    realtimeChatService.onConnection((connected) => {
+      if (process.env.NODE_ENV === 'development') {
+        logDebug(connected ? '✅ Real-time chat connected' : '⚠️ Real-time chat disconnected');
+      }
+      
+      // When connected, automatically join ALL conversation rooms
+      if (connected) {
+        // Add a small delay to ensure socket is fully ready
+        setTimeout(() => {
+          joinAllConversationRooms();
+        }, 500);
+      }
+    });
+
+    // Setup presence callback (track online/offline status)
+    realtimeChatService.onPresence((presence) => {
+      if (process.env.NODE_ENV === 'development') {
+        logDebug(`👤 Presence update: ${presence.userEmail} is ${presence.isOnline ? 'online' : 'offline'}`);
+      }
+      // Update UI with presence status if needed
+    });
+
+    // Setup read receipt callback
+    realtimeChatService.onRead((conversationId, messageId, readBy) => {
+      setConversations(prev => {
+        return prev.map(conv => {
+          if (conv.id === conversationId) {
+            const updatedMessages = conv.messages.map(msg => {
+              if (msg.id === messageId) {
+                return { ...msg, isRead: true };
+              }
+              return msg;
+            });
+            return {
+              ...conv,
+              messages: updatedMessages,
+              isReadBySeller: readBy === 'seller' ? true : conv.isReadBySeller,
+              isReadByCustomer: readBy === 'customer' ? true : conv.isReadByCustomer
+            };
+          }
+          return conv;
+        });
+      });
+    });
+  }, [currentUser, joinAllConversationRooms, activeChat]);
+
+  // Also join rooms when conversations are loaded/updated
+  useEffect(() => {
+    if (realtimeChatService.isConnected() && conversations.length > 0 && currentUser) {
+      // Add a small delay to avoid race conditions
+      const timeoutId = setTimeout(() => {
+        joinAllConversationRooms();
+      }, 1000);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [conversations.length, currentUser?.email, joinAllConversationRooms]);
+
+  // CRITICAL: Periodically refresh conversations for sellers to catch new ones
+  // This ensures sellers see new conversations even if WebSocket delivery fails
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'seller') return;
+    
+    const refreshInterval = setInterval(async () => {
+      if (!currentUser?.email) return;
+      
+      try {
+        const { getConversationsFromSupabase } = await import('../services/conversationService');
+        const result = await getConversationsFromSupabase(undefined, currentUser.email);
+        
+        if (result.success && result.data) {
+          // Only update if we got new conversations or if conversations changed
+          setConversations(prev => {
+            const prevIds = new Set(prev.map(c => c.id));
+            const newIds = new Set(result.data!.map(c => c.id));
+            
+            // Check if there are new conversations or if message counts changed
+            const hasNewConversations = result.data!.some(c => !prevIds.has(c.id));
+            const hasUpdatedMessages = result.data!.some(newConv => {
+              const oldConv = prev.find(c => c.id === newConv.id);
+              return oldConv && oldConv.messages.length !== newConv.messages.length;
+            });
+            
+            if (hasNewConversations || hasUpdatedMessages) {
+              console.log('🔄 Refreshing seller conversations:', {
+                newCount: result.data!.length,
+                hasNew: hasNewConversations,
+                hasUpdated: hasUpdatedMessages
+              });
+              try {
+                saveConversations(result.data!);
+              } catch (error) {
+                console.error('Failed to save refreshed conversations:', error);
+              }
+              return result.data!;
+            }
+            
             return prev;
           });
-        });
-        
-        socket.on('disconnect', () => {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 Disconnected from WebSocket');
-          }
-        });
-        
-          socket.on('error', (error: unknown) => {
-            // CRITICAL FIX: Only log in development to prevent console spam
-            if (process.env.NODE_ENV === 'development') {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              logWarn('⚠️ WebSocket error (non-critical):', errorMessage);
-            }
-          });
-      } catch (error) {
-        // CRITICAL FIX: Fail gracefully - app should work without WebSocket
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('⚠️ Failed to initialize WebSocket for conversations. App will continue without real-time updates.');
         }
+      } catch (error) {
+        console.warn('⚠️ Failed to refresh seller conversations:', error);
       }
-    })();
+    }, 10000); // Refresh every 10 seconds for sellers
     
-    return () => {
-      if (socket) {
-        socket.disconnect();
-      }
-    };
-  }, [currentUser, activeChat?.id]);
+    return () => clearInterval(refreshInterval);
+  }, [currentUser?.email, currentUser?.role]);
+
+  // CRITICAL: Join conversation room when activeChat changes (user opens a chat)
+  // This ensures real-time message delivery works
+  useEffect(() => {
+    if (activeChat && currentUser) {
+      console.log('🔧 Active chat changed, joining conversation room:', activeChat.id);
+      // Always try to join, even if not connected (will queue for when connection is ready)
+      realtimeChatService.joinConversation(activeChat.id).catch(err => {
+        console.warn('⚠️ Failed to join conversation room:', err);
+      });
+    }
+  }, [activeChat?.id, currentUser?.email]); // Join when chat opens or user changes
 
   // Sync activeChat when conversations change
   useEffect(() => {
@@ -3220,7 +3492,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
       addToast('Seller rating added successfully', 'success');
     },
-    sendMessage: (conversationId: string, message: string) => {
+    sendMessage: async (conversationId: string, message: string) => {
       console.log('🔧 sendMessage called:', { conversationId, message, currentUser: currentUser?.email });
       
       if (!currentUser) {
@@ -3230,6 +3502,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
+        // CRITICAL: Ensure we're joined to the conversation room BEFORE sending
+        // This ensures the message is broadcast to other participants
+        console.log('🔧 Ensuring joined to conversation room before sending:', conversationId);
+        await realtimeChatService.joinConversation(conversationId);
+        // Small delay to ensure room join completes on server
+        await new Promise(resolve => setTimeout(resolve, 150));
+
         // Find conversation BEFORE updating state to avoid stale state issues
         const conversation = conversations.find(conv => conv.id === conversationId);
         if (!conversation) {
@@ -3241,16 +3520,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Generate a more unique message ID to prevent collisions
         const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
         
-        const newMessage = {
+        const newMessage: ChatMessage = {
           id: messageId,
           sender: (currentUser.role === 'seller' ? 'seller' : 'user') as 'seller' | 'user',
           text: message,
           timestamp: new Date().toISOString(),
           isRead: false,
-          type: 'text' as const
+          type: 'text'
         };
 
-        // Update conversations and save to localStorage
+        // Update conversations and save to localStorage immediately for instant UI update
         setConversations(prev => {
           const updated = Array.isArray(prev) ? prev.map(conv => 
             conv && conv.id === conversationId ? {
@@ -3269,71 +3548,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.error('Failed to save conversations to localStorage:', error);
           }
           
-          // Save to Supabase with sync queue fallback
+          // Update activeChat immediately for instant UI feedback
           const updatedConversation = updated.find(conv => conv.id === conversationId);
-          if (updatedConversation) {
-            // CRITICAL FIX: Update activeChat with the updated conversation to ensure UI updates immediately
-            // This ensures the ChatWidget receives the updated conversation with the new message
-            if (activeChat?.id === conversationId) {
-              setActiveChat(updatedConversation);
-            }
-            
-            // Save entire conversation to Supabase (with queue fallback)
-            (async () => {
-              const result = await saveConversationWithSync(updatedConversation);
-              if (result.synced) {
-                console.log('✅ Conversation synced to Supabase:', conversationId);
-              } else if (result.queued) {
-                console.log('⏳ Conversation queued for sync (will retry):', conversationId);
-              }
-            })();
-            
-            // Also add message via API with sync queue
-            (async () => {
-              const result = await addMessageWithSync(conversationId, newMessage);
-              if (result.synced) {
-                console.log('✅ Message synced to Supabase:', messageId);
-                
-                // Broadcast message via WebSocket for real-time end-to-end sync (development only)
-                // In production, Firebase handles real-time sync, so Socket.io is not needed
-                if (process.env.NODE_ENV === 'development') {
-                  try {
-                    const socketIoClient = await import('socket.io-client') as unknown as SocketIoClientModule;
-                    const io = socketIoClient.default || socketIoClient.io;
-                    if (!io) {
-                      throw new Error('Socket.io client not available');
-                    }
-                    // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
-                    // This prevents mixed content errors when app is served over HTTPS
-                    const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    const wsUrl = `${wsProtocol}//localhost:3001`;
-                    const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
-                    
-                    socket.emit('conversation:message', {
-                      conversationId,
-                      message: newMessage
-                    });
-                    
-                    // Disconnect after sending
-                    setTimeout(() => socket.disconnect(), 100);
-                  } catch (error) {
-                    console.warn('Failed to broadcast message via WebSocket:', error);
-                  }
-                }
-                // In production, Firebase handles real-time sync automatically
-              } else if (result.queued) {
-                console.log('⏳ Message queued for sync (will retry):', messageId);
-              }
-            })();
+          if (updatedConversation && activeChat?.id === conversationId) {
+            setActiveChat(updatedConversation);
           }
           
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 Updated conversations:', updated);
-          }
           return updated;
         });
 
-        // Create notification for the recipient using the conversation we found
+        // Send message via real-time chat service (handles WebSocket + Supabase sync)
+        const userEmail = currentUser.email;
+        const userRole = currentUser.role as 'customer' | 'seller';
+        
+        console.log('🔧 AppProvider: Sending message via realtimeChatService', { 
+          conversationId, 
+          messageId: newMessage.id, 
+          userEmail, 
+          userRole,
+          isConnected: realtimeChatService.isConnected()
+        });
+        
+        const sendResult = await realtimeChatService.sendMessage(conversationId, newMessage, userEmail, userRole);
+        
+        if (!sendResult.success) {
+          console.error('❌ Failed to send message via real-time service:', sendResult.error);
+          addToast('Failed to send message. Please check your connection.', 'error');
+          // Message is still in local state, so user sees it
+          // It will be synced when connection is restored
+        } else {
+          console.log('✅ Message sent successfully via real-time service');
+        }
+
+        // Save to Supabase with sync queue fallback (backup)
+        const updatedConversation = conversations.find(conv => conv.id === conversationId);
+        if (updatedConversation) {
+          (async () => {
+            const result = await saveConversationWithSync(updatedConversation);
+            if (result.synced) {
+              console.log('✅ Conversation synced to Supabase:', conversationId);
+            } else if (result.queued) {
+              console.log('⏳ Conversation queued for sync (will retry):', conversationId);
+            }
+          })();
+          
+          (async () => {
+            const result = await addMessageWithSync(conversationId, newMessage);
+            if (result.synced) {
+              console.log('✅ Message synced to Supabase:', messageId);
+            } else if (result.queued) {
+              console.log('⏳ Message queued for sync (will retry):', messageId);
+            }
+          })();
+        }
+
+        // Create notification for the recipient
         const recipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
         const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
         
@@ -3360,7 +3629,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.error('Failed to save notifications to localStorage:', error);
           }
           
-          // Save to Supabase with sync queue fallback - wait for completion
+          // Save to Supabase with sync queue fallback
           (async () => {
             const result = await saveNotificationWithSync(newNotification);
             if (result.synced) {
@@ -3377,7 +3646,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast('Failed to send message. Please try again.', 'error');
       }
     },
-    sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => {
+    sendMessageWithType: async (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => {
       console.log('🔧 sendMessageWithType called:', { conversationId, messageText, type, payload, currentUser: currentUser?.email });
       
       if (!currentUser) {
@@ -3387,6 +3656,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
+        // CRITICAL: Ensure we're joined to the conversation room BEFORE sending
+        // This ensures the message is broadcast to other participants
+        console.log('🔧 Ensuring joined to conversation room before sending (withType):', conversationId);
+        await realtimeChatService.joinConversation(conversationId);
+        // Small delay to ensure room join completes on server
+        await new Promise(resolve => setTimeout(resolve, 150));
+
         // Find conversation BEFORE updating state to avoid stale state issues
         const conversation = conversations.find(conv => conv.id === conversationId);
         if (!conversation) {
@@ -3537,16 +3813,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast('Failed to send message. Please try again.', 'error');
       }
     },
-    markAsRead: (conversationId: string) => {
+    markAsRead: async (conversationId: string) => {
+      if (!currentUser) return;
+      
+      const conversation = conversations.find(conv => conv.id === conversationId);
+      if (!conversation) return;
+      
+      // Get unread message IDs
+      const unreadMessageIds = conversation.messages
+        .filter(msg => !msg.isRead)
+        .map(msg => msg.id);
+      
+      if (unreadMessageIds.length === 0) return;
+      
+      const readerRole = currentUser.role as 'customer' | 'seller';
+      
+      // Update local state immediately
       setConversations(prev => Array.isArray(prev) ? prev.map(conv => 
         conv && conv.id === conversationId ? {
           ...conv,
-          messages: Array.isArray(conv.messages) ? conv.messages.map(msg => ({ ...msg, isRead: true })) : []
+          messages: Array.isArray(conv.messages) ? conv.messages.map(msg => ({ ...msg, isRead: true })) : [],
+          isReadBySeller: readerRole === 'seller' ? true : conv.isReadBySeller,
+          isReadByCustomer: readerRole === 'customer' ? true : conv.isReadByCustomer
         } : conv
       ) : []);
+      
+      // Send read receipt via real-time service
+      await realtimeChatService.markAsRead(conversationId, unreadMessageIds, readerRole);
     },
     toggleTyping: (conversationId: string, isTyping: boolean) => {
-      setTypingStatus(isTyping ? { conversationId, userRole: (currentUser?.role === 'seller' ? 'seller' : 'customer') as 'seller' | 'customer' } : null);
+      if (!currentUser) return;
+      
+      const userRole = (currentUser.role === 'seller' ? 'seller' : 'customer') as 'customer' | 'seller';
+      
+      // Update local typing status
+      setTypingStatus(isTyping ? { conversationId, userRole } : null);
+      
+      // Send typing indicator via real-time service
+      realtimeChatService.sendTypingIndicator(conversationId, userRole, isTyping);
     },
     flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => {
       if (type === 'vehicle') {
@@ -4037,3 +4341,4 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 // Add displayName for better debugging and Fast Refresh compatibility
 AppProvider.displayName = 'AppProvider';
+
