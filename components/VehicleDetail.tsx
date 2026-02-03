@@ -9,6 +9,7 @@ import QuickViewModal from './QuickViewModal';
 import VehicleHistory from './VehicleHistory';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
+import { logWarn, logDebug } from '../utils/logger';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -412,7 +413,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ vehicleId })
         });
-        const data = await res.json().catch(() => ({}));
+        const data = await res.json().catch((error) => {
+          logWarn('Failed to parse view count response:', error);
+          return {};
+        });
         // Optimistically update local state if API responded
         if (data && typeof data.views === 'number') {
           try {
@@ -425,14 +429,20 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                 sessionStorage.setItem('selectedVehicle', JSON.stringify(parsed));
               }
             }
-          } catch {}
+          } catch (error) {
+            logDebug('Failed to update selectedVehicle in sessionStorage (non-critical):', error);
+          }
           // Update global vehicles state via context so dashboards reflect the change
           try {
           // Skip toast notification for view count updates (silent background update)
             if (updateVehicle) {
-              updateVehicle(vehicleId, { views: data.views }, { skipToast: true }).catch(() => {});
+              updateVehicle(vehicleId, { views: data.views }, { skipToast: true }).catch((error) => {
+                logWarn('Failed to update vehicle views:', error);
+              });
             }
-          } catch {}
+          } catch (error) {
+            logWarn('Failed to update vehicle views:', error);
+          }
         }
       } catch (_err) {
         // On error, remove from tracked set so it can be retried if needed

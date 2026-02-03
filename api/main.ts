@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomBytes } from 'crypto';
 import { PLAN_DETAILS } from '../constants.js';
 import { planService } from '../services/planService.js';
-import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan } from '../types.js';
+import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../types.js';
 // Supabase services
 import { supabaseUserService } from '../services/supabase-user-service.js';
@@ -1930,37 +1930,38 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       // CRITICAL: Sync verificationStatus with individual verification fields
       // If verificationStatus is being updated, also update individual fields
       if (updateFields.verificationStatus && typeof updateFields.verificationStatus === 'object') {
-        const verificationStatus = updateFields.verificationStatus as any;
+        const verificationStatus = updateFields.verificationStatus as Record<string, unknown>;
         
         // Sync phoneVerified
-        if (verificationStatus.phoneVerified !== undefined) {
+        if (verificationStatus.phoneVerified !== undefined && typeof verificationStatus.phoneVerified === 'boolean') {
           updateFields.phoneVerified = verificationStatus.phoneVerified;
         }
         
         // Sync emailVerified
-        if (verificationStatus.emailVerified !== undefined) {
+        if (verificationStatus.emailVerified !== undefined && typeof verificationStatus.emailVerified === 'boolean') {
           updateFields.emailVerified = verificationStatus.emailVerified;
         }
         
         // Sync govtIdVerified
-        if (verificationStatus.govtIdVerified !== undefined) {
+        if (verificationStatus.govtIdVerified !== undefined && typeof verificationStatus.govtIdVerified === 'boolean') {
           updateFields.govtIdVerified = verificationStatus.govtIdVerified;
         }
       }
       
       // Also sync in reverse: if individual fields are updated, update verificationStatus
       if (!updateFields.verificationStatus) {
-        updateFields.verificationStatus = {};
+        updateFields.verificationStatus = {} as Partial<VerificationStatus>;
       }
       
+      const verificationStatus = updateFields.verificationStatus as Partial<VerificationStatus>;
       if (updateFields.phoneVerified !== undefined) {
-        (updateFields.verificationStatus as any).phoneVerified = updateFields.phoneVerified;
+        verificationStatus.phoneVerified = updateFields.phoneVerified;
       }
       if (updateFields.emailVerified !== undefined) {
-        (updateFields.verificationStatus as any).emailVerified = updateFields.emailVerified;
+        verificationStatus.emailVerified = updateFields.emailVerified;
       }
       if (updateFields.govtIdVerified !== undefined) {
-        (updateFields.verificationStatus as any).govtIdVerified = updateFields.govtIdVerified;
+        verificationStatus.govtIdVerified = updateFields.govtIdVerified;
       }
 
       // Build update object for Supabase

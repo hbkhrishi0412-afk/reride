@@ -63,6 +63,38 @@ export function logWarn(...args: unknown[]): void {
 }
 
 /**
+ * Error tracking service integration
+ * Set this to your error tracking service instance (e.g., Sentry, LogRocket)
+ * Example: window.errorTracker = Sentry;
+ */
+declare global {
+  interface Window {
+    errorTracker?: {
+      captureException?: (error: Error | unknown, context?: Record<string, unknown>) => void;
+      captureMessage?: (message: string, level?: 'error' | 'warning' | 'info') => void;
+    };
+  }
+}
+
+/**
+ * Sends error to error tracking service if available
+ */
+function sendToErrorTracker(error: unknown, context?: Record<string, unknown>): void {
+  if (typeof window !== 'undefined' && window.errorTracker?.captureException) {
+    try {
+      if (error instanceof Error) {
+        window.errorTracker.captureException(error, context);
+      } else {
+        window.errorTracker.captureException(new Error(String(error)), context);
+      }
+    } catch (trackerError) {
+      // Silently fail if error tracker itself has issues
+      console.error('Error tracker failed:', trackerError);
+    }
+  }
+}
+
+/**
  * Logs errors (always logged, but sanitized)
  * SECURITY: Secrets are automatically sanitized before logging
  * PERFORMANCE: Error logging is kept in production for debugging, but sanitized
@@ -75,8 +107,12 @@ export function logError(...args: unknown[]): void {
   
   // In production, send to error tracking service (e.g., Sentry, LogRocket)
   if (process.env.NODE_ENV === 'production') {
-    // TODO: Integrate with error tracking service
-    // Example: if (window.Sentry) window.Sentry.captureException(args[0]);
+    // Send first argument (usually the error) to error tracking service
+    if (args.length > 0) {
+      const error = args[0];
+      const context = args.length > 1 ? { additionalInfo: args.slice(1) } : undefined;
+      sendToErrorTracker(error, context);
+    }
   }
 }
 
@@ -107,6 +143,15 @@ export function logSecurity(...args: unknown[]): void {
   
   // In production, send to security monitoring service
   if (process.env.NODE_ENV === 'production') {
-    // TODO: Integrate with security monitoring service
+    // Send security events to error tracker with security tag
+    if (typeof window !== 'undefined' && window.errorTracker?.captureMessage) {
+      try {
+        const message = args.map(arg => String(arg)).join(' ');
+        window.errorTracker.captureMessage(`[SECURITY] ${message}`, 'warning');
+      } catch (trackerError) {
+        // Silently fail if error tracker itself has issues
+        console.error('Security tracker failed:', trackerError);
+      }
+    }
   }
 }

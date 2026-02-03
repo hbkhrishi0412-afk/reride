@@ -246,3 +246,4 @@ const TermsOfServicePage: React.FC = () => {
 
 export default TermsOfServicePage;
 
+
