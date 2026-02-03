@@ -644,7 +644,7 @@ const AppContent: React.FC = React.memo(() => {
     };
   }, [users, selectedCity, userLocation, currentUser?.location, userCoords]);
 
-  // Persist active chat id so the dock can reopen the last thread (OLX-like behavior)
+  // Persist active chat id so the dock can reopen the last thread
   React.useEffect(() => {
     if (!currentUser) {
       try { localStorage.removeItem('reRideActiveChat'); } catch (error) {
@@ -1198,7 +1198,7 @@ const AppContent: React.FC = React.memo(() => {
                   navigate(ViewEnum.SELLER_PROFILE);
                 }
               }}
-              onStartChat={(vehicle) => {
+              onStartChat={async (vehicle) => {
                 if (process.env.NODE_ENV === 'development') {
                   console.log('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
                 }
@@ -1216,11 +1216,14 @@ const AppContent: React.FC = React.memo(() => {
                 }) : undefined;
                 
                 if (!conversation) {
+                  // CRITICAL: Normalize sellerId to ensure it matches seller's email for filtering
+                  const normalizedSellerId = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
+                  
                   const newConversation = {
                     id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     customerId: currentUser.email,
                     customerName: currentUser.name,
-                    sellerId: vehicle.sellerEmail,
+                    sellerId: normalizedSellerId || vehicle.sellerEmail, // Use normalized, fallback to original
                     vehicleId: vehicle.id,
                     vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
                     vehiclePrice: vehicle.price,
@@ -1232,19 +1235,48 @@ const AppContent: React.FC = React.memo(() => {
                   };
                   
                   if (process.env.NODE_ENV === 'development') {
+                    console.log('🔧 Creating conversation with normalized sellerId:', {
+                      original: vehicle.sellerEmail,
+                      normalized: normalizedSellerId,
+                      vehicleId: vehicle.id
+                    });
+                  }
+                  
+                  if (process.env.NODE_ENV === 'development') {
                     console.log('🔧 Creating new conversation:', newConversation.id);
                   }
                   
+                  // Add to local state immediately
                   setConversations([...conversations, newConversation]);
                   
-                  (async () => {
-                    try {
-                      const { saveConversationToMongoDB } = await import('./services/conversationService');
-                      await saveConversationToMongoDB(newConversation);
-                    } catch (error) {
-                      console.warn('Failed to save conversation to MongoDB:', error);
+                  // Save to Supabase with proper error handling
+                  try {
+                    const { saveConversationToSupabase } = await import('./services/conversationService');
+                    const { saveConversationWithSync } = await import('./services/syncService');
+                    
+                    // Try direct save first
+                    const saveResult = await saveConversationToSupabase(newConversation);
+                    
+                    if (!saveResult.success) {
+                      // Fallback to sync queue if direct save fails
+                      console.warn('⚠️ Direct save failed, using sync queue:', saveResult.error);
+                      await saveConversationWithSync(newConversation);
+                    } else {
+                      console.log('✅ Conversation saved to Supabase:', newConversation.id);
+                      // Update with server response if it has different ID
+                      if (saveResult.data && saveResult.data.id !== newConversation.id) {
+                        setConversations(prev => prev.map(c => 
+                          c.id === newConversation.id ? saveResult.data! : c
+                        ));
+                        conversation = saveResult.data;
+                      }
                     }
-                  })();
+                  } catch (error) {
+                    console.error('❌ Failed to save conversation:', error);
+                    // Still continue - conversation is in local state
+                    const { saveConversationWithSync } = await import('./services/syncService');
+                    await saveConversationWithSync(newConversation);
+                  }
                   
                   conversation = newConversation;
                 } else {
@@ -1257,6 +1289,7 @@ const AppContent: React.FC = React.memo(() => {
                   console.log('🔧 Setting activeChat:', conversation.id);
                 }
                 
+                // Set active chat - this will trigger room joining via useEffect
                 setActiveChat(conversation);
                 addToast('Chat started with seller', 'success');
               }}
@@ -1287,7 +1320,7 @@ const AppContent: React.FC = React.memo(() => {
                 navigate(ViewEnum.SELLER_PROFILE);
               }
             }}
-            onStartChat={(vehicle) => {
+            onStartChat={async (vehicle) => {
               if (!currentUser) {
                 addToast('Please login to start a chat', 'info');
                 navigate(ViewEnum.LOGIN_PORTAL);
@@ -1301,11 +1334,14 @@ const AppContent: React.FC = React.memo(() => {
               }) : undefined;
               
               if (!conversation) {
+                // CRITICAL: Normalize sellerId to ensure it matches seller's email for filtering
+                const normalizedSellerId = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
+                
                 const newConversation = {
                   id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                   customerId: currentUser.email,
                   customerName: currentUser.name,
-                  sellerId: vehicle.sellerEmail,
+                  sellerId: normalizedSellerId || vehicle.sellerEmail, // Use normalized, fallback to original
                   vehicleId: vehicle.id,
                   vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
                   vehiclePrice: vehicle.price,
@@ -1315,20 +1351,63 @@ const AppContent: React.FC = React.memo(() => {
                   isReadByCustomer: true,
                   isFlagged: false
                 };
+                
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔧 Creating conversation with normalized sellerId:', {
+                    original: vehicle.sellerEmail,
+                    normalized: normalizedSellerId,
+                    vehicleId: vehicle.id
+                  });
+                }
+                
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔧 Creating new conversation:', newConversation.id);
+                }
+                
+                // Add to local state immediately
                 setConversations([...conversations, newConversation]);
                 
-                (async () => {
-                  try {
-                    const { saveConversationToMongoDB } = await import('./services/conversationService');
-                    await saveConversationToMongoDB(newConversation);
-                  } catch (error) {
-                    console.warn('Failed to save conversation to MongoDB:', error);
+                // Save to Supabase with proper error handling
+                try {
+                  const { saveConversationToSupabase } = await import('./services/conversationService');
+                  const { saveConversationWithSync } = await import('./services/syncService');
+                  
+                  // Try direct save first
+                  const saveResult = await saveConversationToSupabase(newConversation);
+                  
+                  if (!saveResult.success) {
+                    // Fallback to sync queue if direct save fails
+                    console.warn('⚠️ Direct save failed, using sync queue:', saveResult.error);
+                    await saveConversationWithSync(newConversation);
+                  } else {
+                    console.log('✅ Conversation saved to Supabase:', newConversation.id);
+                    // Update with server response if it has different ID
+                    if (saveResult.data && saveResult.data.id !== newConversation.id) {
+                      setConversations(prev => prev.map(c => 
+                        c.id === newConversation.id ? saveResult.data! : c
+                      ));
+                      conversation = saveResult.data;
+                    }
                   }
-                })();
+                } catch (error) {
+                  console.error('❌ Failed to save conversation:', error);
+                  // Still continue - conversation is in local state
+                  const { saveConversationWithSync } = await import('./services/syncService');
+                  await saveConversationWithSync(newConversation);
+                }
                 
                 conversation = newConversation;
+              } else {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔧 Using existing conversation:', conversation.id);
+                }
               }
               
+              if (process.env.NODE_ENV === 'development') {
+                console.log('🔧 Setting activeChat:', conversation.id);
+              }
+              
+              // Set active chat - this will trigger room joining via useEffect
               setActiveChat(conversation);
               addToast('Chat started with seller', 'success');
             }}
