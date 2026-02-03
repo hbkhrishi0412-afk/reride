@@ -89,13 +89,13 @@
               .then(response => {
                 clearTimeout(timeoutId);
                 if (response.ok) {
-                  // OLX-STYLE: Prefetch first page for instant display
+                  // Prefetch first page for instant display
                   const link1 = document.createElement('link');
                   link1.rel = 'prefetch';
                   link1.href = '/api/vehicles?limit=30&skipExpiryCheck=true';
                   document.head.appendChild(link1);
                   
-                  // Prefetch next page (OLX loads next page in background)
+                  // Prefetch next page (loads next page in background)
                   const link2 = document.createElement('link');
                   link2.rel = 'prefetch';
                   link2.href = '/api/vehicles?limit=30&page=2&skipExpiryCheck=true';

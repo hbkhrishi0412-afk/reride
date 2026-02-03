@@ -474,15 +474,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 )}
               </span>
             </button>
-
-            {/* Service Provider Login entry point */}
-            <button
-              type="button"
-              onClick={() => onNavigate(View.CAR_SERVICE_LOGIN)}
-              className="mt-3 w-full flex justify-center py-3 px-4 border border-blue-200 text-sm font-semibold rounded-xl text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
-            >
-              Service Provider Login
-            </button>
           </form>
 
           {/* Social Login */}

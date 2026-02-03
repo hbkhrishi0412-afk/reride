@@ -5836,10 +5836,30 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
       }
 
-      await conversationService.addMessage(String(conversationId), message);
-      const updatedConversation = await conversationService.findById(String(conversationId));
-
-      return res.status(200).json({ success: true, data: updatedConversation });
+      try {
+        console.log('💾 API: Adding message to conversation:', { conversationId, messageId: message?.id });
+        await conversationService.addMessage(String(conversationId), message);
+        const updatedConversation = await conversationService.findById(String(conversationId));
+        
+        if (!updatedConversation) {
+          console.error('❌ API: Conversation not found after adding message:', conversationId);
+          return res.status(500).json({ success: false, reason: 'Failed to retrieve updated conversation' });
+        }
+        
+        console.log('✅ API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
+        return res.status(200).json({ success: true, data: updatedConversation });
+      } catch (error) {
+        console.error('❌ API: Error adding message:', {
+          conversationId,
+          messageId: message?.id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        return res.status(500).json({ 
+          success: false, 
+          reason: error instanceof Error ? error.message : 'Failed to add message to conversation' 
+        });
+      }
     }
 
     // DELETE - Delete conversation

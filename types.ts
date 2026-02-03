@@ -260,6 +260,8 @@ export interface ChatMessage {
   timestamp: string;
   isRead: boolean;
   type?: 'text' | 'test_drive_request' | 'offer';
+  // Real-time message status tracking
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   payload?: {
     // for test drive
     date?: string;

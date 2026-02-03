@@ -692,7 +692,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         setIsStateFilterUserSet(false);
       }
     }
-  }, [selectedCity]); // Only depend on selectedCity
+  }, [selectedCity, onCityChange, indianStates, stateFilter, isStateFilterUserSet]); // Include all dependencies to avoid stale closures
 
   // Sync state filter changes back to city (clear city when state changes manually)
   const prevStateFilterRef = useRef(stateFilter);
@@ -1097,7 +1097,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             default: return b.year - a.year;
         }
     });
-  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, selectedFeatures, sortOrder, isWishlistMode, wishlist, colorFilter, stateFilter]);
+  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, selectedFeatures, sortOrder, isWishlistMode, wishlist, colorFilter, stateFilter, isStateFilterUserSet]);
   
   const activeFilterCount = useMemo(() => {
     let count = 0;

@@ -305,7 +305,7 @@ export const supabaseVehicleService = {
   },
 
   // Find vehicles by status with optional sorting and pagination
-  // OLX-STYLE: Optimized query using composite index (status, created_at DESC)
+  // Optimized query using composite index (status, created_at DESC)
   // This index dramatically speeds up the most common query pattern
   async findByStatus(
     status: 'published' | 'unpublished' | 'sold',

@@ -3,24 +3,65 @@ import type { ChatMessage, User } from '../types';
 
 interface ReadReceiptIconProps {
   isRead: boolean;
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed'; // Real-time message status
 }
 
-const ReadReceiptIcon: React.FC<ReadReceiptIconProps> = ({ isRead }) => {
-    if (isRead) {
-        // Double check for "Read"
-        return (
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block ml-1" viewBox="0 0 24 24" fill="none" style={{ color: '#1E88E5' }}>
-                <path d="M1.5 12.5L5.5 16.5L11.5 10.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M8.5 12.5L12.5 16.5L22.5 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-        );
+// Real-time message status indicator
+const ReadReceiptIcon: React.FC<ReadReceiptIconProps> = ({ isRead, status }) => {
+    // Priority: status > isRead (for backward compatibility)
+    const messageStatus = status || (isRead ? 'read' : 'sent');
+    
+    switch (messageStatus) {
+        case 'sending':
+            // Clock icon for sending
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block ml-1 text-gray-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            );
+        
+        case 'sent':
+            // Single check (gray) - Sent to server
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block ml-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+            );
+        
+        case 'delivered':
+            // Double check (gray) - Delivered to recipient's device
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block ml-1 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M1.5 12.5L5.5 16.5L11.5 10.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M8.5 12.5L12.5 16.5L22.5 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+            );
+        
+        case 'read':
+            // Double check (blue) - Read by recipient
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block ml-1" viewBox="0 0 24 24" fill="none" style={{ color: '#1E88E5' }}>
+                    <path d="M1.5 12.5L5.5 16.5L11.5 10.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M8.5 12.5L12.5 16.5L22.5 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+            );
+        
+        case 'failed':
+            // X icon for failed
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block ml-1 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            );
+        
+        default:
+            // Fallback to single check
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block ml-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+            );
     }
-    // Single check for "Sent/Delivered"
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block ml-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-        </svg>
-    );
 };
 
 export default ReadReceiptIcon;

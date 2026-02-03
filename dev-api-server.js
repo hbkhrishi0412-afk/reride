@@ -1894,22 +1894,37 @@ let generateBotResponse = null;
 //   }
 // })();
 
-// Setup Socket.io conversation sync if MongoDB models are available
-// NOTE: MongoDB is disabled - Conversation is null because Firebase handles conversations in production.
-// The Socket.io events emitted by POST/DELETE endpoints (conversations:saved, conversations:deleted) 
-// are for CLIENT-SIDE listeners, not for server-side MongoDB synchronization.
-// Clients should listen to these events to update their local state (localStorage/Firebase).
-// To enable MongoDB-based server-side synchronization, uncomment the MongoDB model loading code above (lines 1218-1230).
-if (io && Conversation) {
+// Enhanced Socket.io conversation handler for end-to-end real-time chat
+// Supports: messages, typing indicators, read receipts, conversation rooms
+if (io) {
+  // Track conversation rooms (which users are in which conversations)
+  const conversationRooms = new Map(); // conversationId -> Set of socket IDs
+  
   io.on('connection', (socket) => {
+    const userEmail = socket.handshake.query?.userEmail || socket.handshake.auth?.userEmail;
+    const userRole = socket.handshake.query?.userRole || socket.handshake.auth?.userRole;
+    
+    console.log(`🔌 Client connected: ${socket.id} (${userEmail}, ${userRole})`);
+    console.log(`📡 Total connected clients: ${io.sockets.sockets.size}`);
+    
+    // Handle conversation:message - Send message in a conversation
     socket.on('conversation:message', async (data) => {
       try {
-        await ensureConnection();
+        console.log('📨 Received message from client:', { socketId: socket.id, data: { conversationId: data.conversationId, messageId: data.message?.id } });
         
-        const { conversationId, message } = data;
+        const { conversationId, message, userEmail: senderEmail, userRole: senderRole } = data;
         
-        if (conversationId && message) {
-          // Update conversation in MongoDB
+        if (!conversationId || !message) {
+          console.error('❌ Missing conversationId or message:', { conversationId, hasMessage: !!message });
+          socket.emit('error', { message: 'conversationId and message are required' });
+          return;
+        }
+        
+        console.log('✅ Processing message:', { conversationId, messageId: message.id, sender: message.sender });
+        
+        // If MongoDB is available, save to database
+        if (Conversation) {
+          await ensureConnection();
           const conversation = await Conversation.findOne({ id: conversationId });
           if (conversation) {
             conversation.messages.push(message);
@@ -1925,29 +1940,354 @@ if (io && Conversation) {
             }
             
             await conversation.save();
-            
-            // Broadcast to all connected clients (both customer and seller see the message)
-            io.emit('conversation:new-message', {
-              conversationId,
-              message,
-              conversation: {
-                id: conversation.id,
-                customerId: conversation.customerId,
-                sellerId: conversation.sellerId,
-                messages: conversation.messages,
-                lastMessageAt: conversation.lastMessageAt,
-                isReadBySeller: conversation.isReadBySeller,
-                isReadByCustomer: conversation.isReadByCustomer
+          }
+        }
+        
+        // Get full conversation data for broadcast (so recipients can add it to state if missing)
+        // Try to fetch from Supabase API first, then fallback to MongoDB if available
+        let fullConversationData = null;
+        
+        // Try Supabase API first (primary database)
+        try {
+          const apiUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+          const response = await fetch(`${apiUrl}/api/conversations?conversationId=${conversationId}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              // Forward auth if available
+              ...(senderEmail ? { 'x-user-email': senderEmail } : {}),
+              ...(senderRole ? { 'x-user-role': senderRole } : {})
+            }
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+              const conv = result.data;
+              fullConversationData = {
+                id: conv.id,
+                customerId: conv.customerId || '',
+                customerName: conv.customerName || 'Customer',
+                sellerId: conv.sellerId || '',
+                sellerName: conv.sellerName || 'Seller',
+                vehicleId: conv.vehicleId || 0,
+                vehicleName: conv.vehicleName || 'Vehicle',
+                vehiclePrice: conv.vehiclePrice,
+                lastMessageAt: message.timestamp,
+                isReadBySeller: message.sender === 'seller',
+                isReadByCustomer: message.sender === 'user'
+              };
+              console.log('✅ Fetched conversation data from Supabase API:', conversationId);
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not fetch conversation from Supabase API:', error.message);
+        }
+        
+        // Fallback to MongoDB if Supabase failed and MongoDB is available
+        if (!fullConversationData && Conversation) {
+          try {
+            await ensureConnection();
+            const dbConversation = await Conversation.findOne({ id: conversationId });
+            if (dbConversation) {
+              fullConversationData = {
+                id: dbConversation.id,
+                customerId: dbConversation.customerId,
+                customerName: dbConversation.customerName,
+                sellerId: dbConversation.sellerId,
+                sellerName: dbConversation.sellerName,
+                vehicleId: dbConversation.vehicleId,
+                vehicleName: dbConversation.vehicleName,
+                vehiclePrice: dbConversation.vehiclePrice,
+                lastMessageAt: message.timestamp,
+                isReadBySeller: message.sender === 'seller',
+                isReadByCustomer: message.sender === 'user'
+              };
+              console.log('✅ Fetched conversation data from MongoDB:', conversationId);
+            }
+          } catch (error) {
+            console.warn('⚠️ Could not fetch full conversation data from MongoDB:', error.message);
+          }
+        }
+        
+        // Broadcast to all clients in this conversation room
+        const roomName = `conversation:${conversationId}`;
+        
+        // Always include conversation data, even if minimal
+        const conversationData = fullConversationData || {
+          id: conversationId,
+          lastMessageAt: message.timestamp,
+          isReadBySeller: message.sender === 'seller',
+          isReadByCustomer: message.sender === 'user',
+          // Try to extract from message if available (from sender's context)
+          customerId: message.sender === 'user' ? senderEmail : undefined,
+          sellerId: message.sender === 'seller' ? senderEmail : undefined
+        };
+        
+        const messageData = {
+          conversationId,
+          message,
+          conversation: conversationData
+        };
+        
+        if (!fullConversationData) {
+          console.warn('⚠️ Broadcasting message without full conversation data. Recipients may need to fetch from database.');
+        }
+        
+        // Primary: Broadcast to room (most efficient)
+        const roomClients = io.sockets.adapter.rooms.get(roomName);
+        const roomSize = roomClients ? roomClients.size : 0;
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔧 Broadcasting to room "${roomName}" (${roomSize} clients)`);
+        }
+        
+        io.to(roomName).emit('conversation:new-message', messageData);
+        
+        // Fallback: Also try to get conversation participants and broadcast directly
+        // This ensures delivery even if room joining failed or user hasn't joined yet
+        // Use the conversation data we already fetched (fullConversationData) or try to fetch again
+        let conversation = fullConversationData;
+        
+        // If we don't have conversation data yet, try to fetch it
+        if (!conversation) {
+          // Try Supabase API first
+          try {
+            const apiUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+            const response = await fetch(`${apiUrl}/api/conversations?conversationId=${conversationId}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(senderEmail ? { 'x-user-email': senderEmail } : {}),
+                ...(senderRole ? { 'x-user-role': senderRole } : {})
               }
             });
             
-            if (process.env.NODE_ENV === 'development') {
-              console.log('🔧 Real-time message broadcast:', { conversationId, messageId: message.id });
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.data) {
+                conversation = result.data;
+              }
+            }
+          } catch (error) {
+            // Supabase API failed, try MongoDB fallback
+            if (Conversation) {
+              try {
+                await ensureConnection();
+                conversation = await Conversation.findOne({ id: conversationId });
+              } catch (mongoError) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn('Could not fetch conversation for fallback broadcast:', mongoError.message);
+                }
+              }
             }
           }
         }
+        
+        // Fallback broadcast: If we have conversation data, broadcast to matching users
+        // Otherwise, broadcast to all sockets and let clients filter (less efficient but ensures delivery)
+        if (conversation) {
+          const normalizedCustomerId = (conversation.customerId || '').toLowerCase().trim();
+          const normalizedSellerId = (conversation.sellerId || '').toLowerCase().trim();
+          
+          // Broadcast to all connected sockets that match the recipient
+          let fallbackCount = 0;
+          io.sockets.sockets.forEach((socket) => {
+            const socketUserEmail = (socket.handshake.query?.userEmail || socket.handshake.auth?.userEmail || '').toLowerCase().trim();
+            const socketUserRole = socket.handshake.query?.userRole || socket.handshake.auth?.userRole;
+            
+            // If this socket belongs to the recipient (customer or seller), send them the message
+            const isRecipient = 
+              (message.sender === 'user' && socketUserEmail === normalizedSellerId && socketUserRole === 'seller') ||
+              (message.sender === 'seller' && socketUserEmail === normalizedCustomerId && socketUserRole === 'customer');
+            
+            if (isRecipient) {
+              socket.emit('conversation:new-message', messageData);
+              fallbackCount++;
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`🔧 Fallback broadcast to recipient: ${socketUserEmail} (${socketUserRole})`);
+              }
+            }
+          });
+          
+          if (process.env.NODE_ENV === 'development' && fallbackCount > 0) {
+            console.log(`✅ Fallback delivered to ${fallbackCount} recipient(s)`);
+          }
+        } else {
+          // If we don't have conversation data, broadcast to all sockets
+          // Clients will filter based on conversationId
+          // This is less efficient but ensures delivery
+          console.log('⚠️ Broadcasting to all sockets (conversation data not available)');
+          io.emit('conversation:new-message', messageData);
+          console.log('✅ Broadcasted to all sockets as fallback');
+        }
+        
+        // Emit message status progression (sent → delivered → read)
+        // First, confirm message was sent
+        socket.emit('message:status', {
+          messageId: message.id,
+          conversationId,
+          status: 'sent'
+        });
+        
+        // Then, mark as delivered to recipient's device (if they're online)
+        const roomName = `conversation:${conversationId}`;
+        const roomClients = io.sockets.adapter.rooms.get(roomName);
+        if (roomClients && roomClients.size > 1) {
+          // Recipient is online and in the room - message is delivered
+          setTimeout(() => {
+            io.to(roomName).emit('message:status', {
+              messageId: message.id,
+              conversationId,
+              status: 'delivered'
+            });
+          }, 100);
+        }
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔧 Real-time message broadcast:', { conversationId, messageId: message.id });
+        }
       } catch (error) {
         console.error('Error in conversation:message WebSocket:', error);
+        socket.emit('error', { message: 'Failed to send message' });
+      }
+    });
+    
+    // Handle conversation:typing - Typing indicator
+    socket.on('conversation:typing', (data) => {
+      try {
+        const { conversationId, userRole, isTyping } = data;
+        
+        if (!conversationId || userRole === undefined) {
+          return;
+        }
+        
+        // Broadcast typing status to other users in the conversation
+        const roomName = `conversation:${conversationId}`;
+        socket.to(roomName).emit('conversation:typing', {
+          conversationId,
+          userRole,
+          isTyping
+        });
+      } catch (error) {
+        console.error('Error in conversation:typing WebSocket:', error);
+      }
+    });
+    
+    // Handle conversation:mark-read - Mark messages as read
+    socket.on('conversation:mark-read', (data) => {
+      try {
+        const { conversationId, messageIds, readBy } = data;
+        
+        if (!conversationId || !readBy) {
+          return;
+        }
+        
+        // Broadcast read receipt to other users in the conversation
+        const roomName = `conversation:${conversationId}`;
+        socket.to(roomName).emit('conversation:read', {
+          conversationId,
+          messageIds: messageIds || [],
+          readBy
+        });
+      } catch (error) {
+        console.error('Error in conversation:mark-read WebSocket:', error);
+      }
+    });
+    
+    // Handle conversation:join - Join a conversation room
+    socket.on('conversation:join', (data) => {
+      try {
+        const { conversationId } = data;
+        
+        if (!conversationId) {
+          console.warn('⚠️ conversation:join called without conversationId');
+          return;
+        }
+        
+        const roomName = `conversation:${conversationId}`;
+        socket.join(roomName);
+        
+        // Track room membership
+        if (!conversationRooms.has(conversationId)) {
+          conversationRooms.set(conversationId, new Set());
+        }
+        conversationRooms.get(conversationId).add(socket.id);
+        
+        const roomSize = io.sockets.adapter.rooms.get(roomName)?.size || 0;
+        console.log(`✅ Socket ${socket.id} joined room "${roomName}" (${roomSize} clients)`, {
+          userEmail,
+          userRole,
+          conversationId
+        });
+        
+        // Broadcast user online status to room
+        socket.to(roomName).emit('user:presence', {
+          conversationId,
+          userEmail,
+          userRole,
+          isOnline: true
+        });
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔧 Socket ${socket.id} joined conversation: ${conversationId}`);
+        }
+      } catch (error) {
+        console.error('Error in conversation:join WebSocket:', error);
+      }
+    });
+    
+    // Handle conversation:leave - Leave a conversation room
+    socket.on('conversation:leave', (data) => {
+      try {
+        const { conversationId } = data;
+        
+        if (!conversationId) {
+          return;
+        }
+        
+        const roomName = `conversation:${conversationId}`;
+        socket.leave(roomName);
+        
+        // Remove from room tracking
+        if (conversationRooms.has(conversationId)) {
+          conversationRooms.get(conversationId).delete(socket.id);
+          if (conversationRooms.get(conversationId).size === 0) {
+            conversationRooms.delete(conversationId);
+          }
+        }
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔧 Socket ${socket.id} left conversation: ${conversationId}`);
+        }
+      } catch (error) {
+        console.error('Error in conversation:leave WebSocket:', error);
+      }
+    });
+    
+    // Handle disconnect - Clean up room memberships
+    socket.on('disconnect', () => {
+      console.log(`🔌 Client disconnected: ${socket.id}`);
+      
+      const lastSeen = new Date().toISOString();
+      
+      // Remove socket from all conversation rooms and broadcast offline status
+      for (const [conversationId, socketSet] of conversationRooms.entries()) {
+        const roomName = `conversation:${conversationId}`;
+        socketSet.delete(socket.id);
+        
+        // Broadcast user offline status
+        io.to(roomName).emit('user:presence', {
+          conversationId,
+          userEmail,
+          userRole,
+          isOnline: false,
+          lastSeen
+        });
+        
+        if (socketSet.size === 0) {
+          conversationRooms.delete(conversationId);
+        }
       }
     });
   });
@@ -2107,6 +2447,7 @@ app.get('/api/health', (req, res) => {
 // Start server with WebSocket support
 server.listen(PORT, () => {
   console.log(`🚀 Development API server running on http://localhost:${PORT}`);
+  console.log(`📡 Socket.io server ready for real-time chat`);
   console.log(`📋 Available endpoints:`);
   console.log(`   - GET  /api/plans - Get all plans`);
   console.log(`   - POST /api/plans - Create new plan`);

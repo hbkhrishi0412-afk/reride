@@ -385,17 +385,34 @@ export const supabaseConversationService = {
 
   // Add message to conversation
   async addMessage(conversationId: string, message: ChatMessage): Promise<void> {
+    console.log('💾 Supabase: Adding message to conversation:', { conversationId, messageId: message.id });
+    
     const conversation = await this.findById(conversationId);
     if (!conversation) {
-      throw new Error('Conversation not found');
+      console.error('❌ Supabase: Conversation not found:', conversationId);
+      throw new Error(`Conversation not found: ${conversationId}`);
     }
     
+    console.log('📋 Supabase: Current conversation has', conversation.messages?.length || 0, 'messages');
+    
     const updatedMessages = [...(conversation.messages || []), message];
-    await this.update(conversationId, {
-      messages: updatedMessages,
-      lastMessageAt: message.timestamp,
-      lastMessage: message.text,
-    });
+    console.log('💾 Supabase: Updating conversation with', updatedMessages.length, 'messages');
+    
+    try {
+      await this.update(conversationId, {
+        messages: updatedMessages,
+        lastMessageAt: message.timestamp,
+        lastMessage: message.text,
+      });
+      console.log('✅ Supabase: Message added successfully');
+    } catch (error) {
+      console.error('❌ Supabase: Error updating conversation:', {
+        conversationId,
+        messageId: message.id,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
   },
 };
 
