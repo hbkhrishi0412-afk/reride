@@ -375,7 +375,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Clear corrupted data
       try {
         localStorage.removeItem('reRideCurrentUser');
-      } catch {}
+      } catch (clearError) {
+        logWarn('Failed to clear corrupted user data from localStorage:', clearError);
+      }
     }
     return null;
   });
@@ -1111,7 +1113,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // This ensures browser back/forward buttons work even when views share the same path
         window.history.pushState(historyState, '', newPath);
       }
-    } catch {}
+    } catch (error) {
+      logWarn('Failed to update browser history:', error);
+    }
   }, [currentView, currentUser, previousView, selectedVehicle, updateSelectedCity, setPreviousView, setSelectedVehicle, setPublicSellerProfile, setInitialSearchQuery, setSelectedCategory, setCurrentView]);
 
   // Go back using browser history, with fallback to a default view
@@ -1177,7 +1181,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         window.history.replaceState(initialState, '', path);
       }
-    } catch {}
+    } catch (error) {
+      logDebug('Failed to update browser history state (non-critical):', error);
+    }
   }, [selectedVehicle]);
 
   // Handle browser back/forward button navigation
@@ -1355,7 +1361,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const user = JSON.parse(savedUser);
             userRole = user?.role;
           }
-        } catch {}
+        } catch (error) {
+          logDebug('Failed to read user role from localStorage (non-critical):', error);
+        }
         // Fallback to currentUser if localStorage doesn't have it (shouldn't happen, but safe)
         const isAdmin = (userRole || currentUser?.role) === 'admin';
         
@@ -1376,7 +1384,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           loadWithTimeout(
             deduplicateRequest(
               `vehicles-${isAdmin ? 'admin' : 'user'}`,
-              () => dataService.getVehicles(isAdmin).catch(() => [])
+              () => dataService.getVehicles(isAdmin).catch((error) => {
+                logWarn('Failed to load vehicles:', error);
+                return [];
+              })
             ),
             3000, // Increased to 3 seconds for slower networks, but still fast
             []
@@ -1384,7 +1395,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           loadWithTimeout(
             deduplicateRequest(
               'users',
-              () => dataService.getUsers().catch(() => [])
+              () => dataService.getUsers().catch((error) => {
+                logWarn('Failed to load users:', error);
+                return [];
+              })
             ),
             3000, // Increased to 3 seconds for slower networks
             []
@@ -1437,10 +1451,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                             logDebug('ℹ️ No users available (API returned empty, cache empty, no fallback)');
                             setUsers([]);
                           }
-                        }).catch(() => {
+                        }).catch((error) => {
+                          logWarn('Failed to load fallback users:', error);
                           if (isMounted) setUsers([]);
                         });
-                      }).catch(() => {
+                      }).catch((error) => {
+                        logWarn('Failed to import userService:', error);
                         if (isMounted) setUsers([]);
                       });
                     }
@@ -1455,10 +1471,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         } else {
                           if (isMounted) setUsers([]);
                         }
-                      }).catch(() => {
+                      }).catch((error) => {
+                        logWarn('Failed to load fallback users:', error);
                         if (isMounted) setUsers([]);
                       });
-                    }).catch(() => {
+                    }).catch((error) => {
+                      logWarn('Failed to load fallback users:', error);
                       if (isMounted) setUsers([]);
                     });
                   }
@@ -1474,10 +1492,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         logDebug('ℹ️ No users available (API returned empty, no cache, no fallback)');
                         setUsers([]);
                       }
-                    }).catch(() => {
+                    }).catch((error) => {
+                      logWarn('Failed to load fallback users:', error);
                       if (isMounted) setUsers([]);
                     });
-                  }).catch(() => {
+                  }).catch((error) => {
+                    logWarn('Failed to import userService:', error);
                     if (isMounted) setUsers([]);
                   });
                 }
@@ -1539,7 +1559,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const { fetchFaqsFromSupabase } = await import('../services/faqService');
                 const faqsData = await deduplicateRequest(
                   'faqs',
-                  () => fetchFaqsFromSupabase().catch(() => [])
+                  () => fetchFaqsFromSupabase().catch((error) => {
+                    logWarn('Failed to load FAQs:', error);
+                    return [];
+                  })
                 );
                 if (isMounted) setFaqItems(faqsData);
               } catch (error) {
@@ -1553,7 +1576,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               try {
                 const vehicleDataData = await deduplicateRequest(
                   'vehicle-data',
-                  () => dataService.getVehicleData().catch(() => null)
+                  () => dataService.getVehicleData().catch((error) => {
+                    logWarn('Failed to load vehicle data:', error);
+                    return null;
+                  })
                 );
                 if (isMounted && vehicleDataData) setVehicleData(vehicleDataData);
               } catch (error) {
@@ -1585,7 +1611,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   userEmail = user?.email;
                   userRole = user?.role;
                 }
-              } catch {}
+              } catch (error) {
+                logDebug('Failed to read user data from localStorage (non-critical):', error);
+              }
               
               if (userEmail || userRole) {
                 // Use timeout to prevent blocking - max 3 seconds
@@ -1614,7 +1642,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     // Cache the fresh data
                     try {
                       localStorage.setItem('reRideConversations', JSON.stringify(result.data));
-                    } catch {}
+                    } catch (error) {
+                      logWarn('Failed to cache conversations to localStorage:', error);
+                    }
                   }
                   // If result failed but we already have cached data, keep using cache
                 }
@@ -1642,7 +1672,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   const user = JSON.parse(savedUser);
                   userEmail = user?.email;
                 }
-              } catch {}
+              } catch (error) {
+                logDebug('Failed to read user email from localStorage (non-critical):', error);
+              }
               
               if (userEmail) {
                 const { getNotificationsFromMongoDB } = await import('../services/notificationService');
@@ -2843,7 +2875,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
 
             if (!response.ok) {
-              const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
+              const errorData = await response.json().catch((error) => {
+                logWarn('Failed to parse error response:', error);
+                return { reason: 'Unknown error' };
+              });
               throw new Error(errorData.reason || `Failed to create user: ${response.statusText}`);
             }
 

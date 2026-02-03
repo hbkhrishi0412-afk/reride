@@ -508,7 +508,10 @@ const AppContent: React.FC = React.memo(() => {
       });
 
       if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
+        const data = await resp.json().catch((error) => {
+          logWarn('Failed to parse service request response:', error);
+          return {};
+        });
         const msg = data.error || `Failed to submit request (status ${resp.status})`;
         throw new Error(msg);
       }
@@ -644,7 +647,9 @@ const AppContent: React.FC = React.memo(() => {
   // Persist active chat id so the dock can reopen the last thread (OLX-like behavior)
   React.useEffect(() => {
     if (!currentUser) {
-      try { localStorage.removeItem('reRideActiveChat'); } catch {}
+      try { localStorage.removeItem('reRideActiveChat'); } catch (error) {
+        logDebug('Failed to clear active chat from localStorage (non-critical):', error);
+      }
       return;
     }
     if (activeChat?.id) {
@@ -653,12 +658,16 @@ const AppContent: React.FC = React.memo(() => {
           id: activeChat.id,
           updatedAt: Date.now(),
         }));
-      } catch {}
+      } catch (error) {
+        logWarn('Failed to save active chat to localStorage:', error);
+      }
     } else {
       // Clear localStorage when chat is closed
       try {
         localStorage.removeItem('reRideActiveChat');
-      } catch {}
+      } catch (error) {
+        logDebug('Failed to clear active chat from localStorage (non-critical):', error);
+      }
     }
   }, [activeChat?.id, currentUser?.email]);
 
@@ -3156,16 +3165,17 @@ const AppContent: React.FC = React.memo(() => {
                     return activeChat.customerName;
                   })()}
                   callTargetPhone={(() => {
-                    const isCustomer = (currentUser.role as string) === 'customer';
+                    const isCustomer = currentUser.role === 'customer';
                     const lookupEmail = isCustomer ? activeChat.sellerId : activeChat.customerId;
                     const contact = lookupEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === lookupEmail.toLowerCase().trim()) : undefined;
-                    return contact?.mobile || (contact as any)?.phone || '';
+                    // User interface has 'mobile' field, not 'phone'
+                    return contact?.mobile || '';
                   })()}
                   callTargetName={(() => {
-                    const isCustomer = (currentUser.role as string) === 'customer';
+                    const isCustomer = currentUser.role === 'customer';
                     const lookupEmail = isCustomer ? activeChat.sellerId : activeChat.customerId;
                     const contact = lookupEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === lookupEmail.toLowerCase().trim()) : undefined;
-                    return contact?.name || (contact as any)?.dealershipName || (isCustomer ? 'Seller' : activeChat.customerName);
+                    return contact?.name || contact?.dealershipName || (isCustomer ? 'Seller' : activeChat.customerName);
                   })()}
                   isInlineLaunch={true}
                   onStartCall={(phone) => {

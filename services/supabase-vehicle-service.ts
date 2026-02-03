@@ -1,14 +1,31 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
 import type { Vehicle } from '../types.js';
+import { VehicleCategory } from '../types.js';
 
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
+
+// Helper to validate and convert category string to VehicleCategory enum
+function validateCategory(category: unknown): VehicleCategory {
+  if (typeof category !== 'string') {
+    return VehicleCategory.FOUR_WHEELER; // Default fallback
+  }
+  
+  // Check if category is a valid VehicleCategory enum value
+  const validCategories = Object.values(VehicleCategory);
+  if (validCategories.includes(category as VehicleCategory)) {
+    return category as VehicleCategory;
+  }
+  
+  // Fallback to default if invalid
+  return VehicleCategory.FOUR_WHEELER;
+}
 
 // Helper to convert Supabase row to Vehicle type
 function supabaseRowToVehicle(row: any): Vehicle {
   return {
     id: Number(row.id) || 0,
-    category: row.category as any,
+    category: validateCategory(row.category),
     make: row.make || '',
     model: row.model || '',
     variant: row.variant || undefined,
