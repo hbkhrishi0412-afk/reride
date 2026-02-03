@@ -5,7 +5,7 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-# OLX-STYLE: Cache API responses with optimized TTL (1 min browser, 5 min CDN, 10 min stale-while-revalidate)
+# Cache API responses with optimized TTL (1 min browser, 5 min CDN, 10 min stale-while-revalidate)
 /api/vehicles
   Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=600
   X-Content-Type-Options: nosniff

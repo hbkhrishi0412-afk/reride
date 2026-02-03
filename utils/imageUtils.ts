@@ -171,7 +171,25 @@ export const getSafeImageSrc = (src: string | undefined | null, fallback?: strin
 };
 
 /**
+ * Checks if an image URL is from a known placeholder service that returns random images
+ * @param url - The image URL to check
+ * @returns true if the URL is from a placeholder service
+ */
+const isPlaceholderService = (url: string): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  const lowerUrl = url.toLowerCase();
+  // List of known placeholder services that return random images
+  return lowerUrl.includes('unsplash.com') || 
+         lowerUrl.includes('picsum.photos') || 
+         lowerUrl.includes('placeholder.com') ||
+         lowerUrl.includes('via.placeholder.com') ||
+         lowerUrl.includes('loremflickr.com') ||
+         lowerUrl.includes('source.unsplash.com');
+};
+
+/**
  * Validates an array of image sources and returns only valid ones
+ * Filters out placeholder services that return random images
  * @param images - Array of image sources
  * @returns Array of valid image sources
  */
@@ -181,7 +199,12 @@ export const getValidImages = (images: string[]): string[] => {
   }
   
   const validImages = images
-    .filter(img => img && img.trim() !== '')
+    .filter(img => {
+      if (!img || img.trim() === '') return false;
+      // Filter out placeholder services that return random images
+      if (isPlaceholderService(img)) return false;
+      return true;
+    })
     .map(img => getSafeImageSrc(img));
   
   // Return at least one placeholder if no valid images

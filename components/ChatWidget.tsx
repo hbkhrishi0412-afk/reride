@@ -20,6 +20,7 @@ interface ChatWidgetProps {
   callTargetPhone?: string;
   callTargetName?: string;
   isInlineLaunch?: boolean;
+  otherUserOnline?: boolean; // Online/offline status
 }
 
 const EMOJIS = ['😀', '😂', '👍', '❤️', '🙏', '😊', '🔥', '🎉', '🚗', '🤔', '👋', '👀'];
@@ -35,7 +36,7 @@ const TypingIndicator: React.FC<{ name: string }> = ({ name }) => (
     </div>
 );
 
-export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, currentUserRole, otherUserName, onClose, onSendMessage, typingStatus, onUserTyping, onMarkMessagesAsRead, onFlagContent, onOfferResponse, onMakeOffer, onStartCall, callTargetPhone, callTargetName, isInlineLaunch }) => {
+export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, currentUserRole, otherUserName, onClose, onSendMessage, typingStatus, onUserTyping, onMarkMessagesAsRead, onFlagContent, onOfferResponse, onMakeOffer, onStartCall, callTargetPhone, callTargetName, isInlineLaunch, otherUserOnline }) => {
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(!isInlineLaunch); // Inline launches (CTA click) start opened
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -255,7 +256,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   // Use a very high z-index so chat floats over any page content/banners/footers
   const FLOATING_Z_INDEX = 2147482000; // near max, safely above other overlays
 
-  // Floating chat button - ALWAYS visible (OLX-style dock)
+  // Floating chat button - ALWAYS visible
   const chatButton = (
     <div 
       style={{ 
@@ -351,7 +352,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
         e.stopPropagation();
       }}
     >
-        {/* Header - OLX-like compact bar */}
+        {/* Header - Compact bar */}
         <div 
           className="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-white"
           onClick={(e) => e.stopPropagation()}
@@ -364,7 +365,14 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                     </span>
                 </div>
                 <div className="flex-grow min-w-0">
-                    <h3 className="text-sm font-semibold text-gray-900 truncate">{otherUserName}</h3>
+                    <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-gray-900 truncate">{otherUserName}</h3>
+                        {/* Online/offline indicator */}
+                        {otherUserOnline !== undefined && (
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${otherUserOnline ? 'bg-green-500' : 'bg-gray-400'}`} 
+                                  title={otherUserOnline ? 'Online' : 'Offline'} />
+                        )}
+                    </div>
                     <p className="text-xs text-gray-500 truncate">{conversation.vehicleName}</p>
                 </div>
             </div>
@@ -472,7 +480,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                               </div>
                               <div className="text-[11px] text-gray-400 mt-1 px-1 flex items-center gap-1">
                                   {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                  {msg.sender === senderType && <ReadReceiptIcon isRead={msg.isRead} />}
+                                  {msg.sender === senderType && <ReadReceiptIcon isRead={msg.isRead} status={msg.status} />}
                               </div>
                           </>
                       )}

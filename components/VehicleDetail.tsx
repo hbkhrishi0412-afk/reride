@@ -2,6 +2,8 @@ import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
 import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, getSafeImageSrc } from '../utils/imageUtils';
+
+const DEFAULT_PLACEHOLDER = 'https://via.placeholder.com/800x600?text=Car+Image';
 import StarRating from './StarRating';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
@@ -490,14 +492,14 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
               {/* Offer Banner - Reride Style */}
               <div className="mb-6 bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg p-4 text-white">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl font-bold">🎉 SPECIAL OFFER</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span className="text-sm">8 - 31 DEC</span>
+                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                    <span className="text-lg sm:text-xl font-bold">🎉 SPECIAL OFFER</span>
+                    <span className="text-gray-200">•</span>
+                    <span className="text-xs sm:text-sm whitespace-nowrap">8 - 31 DEC</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <span>LOAN OFFERS ON ALL CARS</span>
-                    <span className="font-bold">ROI STARTING AT 10.5%*</span>
+                  <div className="flex items-center gap-2 text-xs sm:text-sm flex-wrap">
+                    <span className="whitespace-nowrap">LOAN OFFERS ON ALL CARS</span>
+                    <span className="font-bold whitespace-nowrap">ROI STARTING AT 10.5%*</span>
                   </div>
                 </div>
               </div>
@@ -524,8 +526,12 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   alt={`${safeVehicle.make} ${safeVehicle.model} - Image ${currentIndex + 1}`}
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement;
-                                    target.src = 'https://via.placeholder.com/800x600?text=Car+Image';
+                                    // Only set placeholder if not already a placeholder to avoid infinite loops
+                                    if (!target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
+                                      target.src = DEFAULT_PLACEHOLDER;
+                                    }
                                   }}
+                                  loading="lazy"
                                 />
                                 {validImages.length > 1 && (
                                     <>
@@ -643,7 +649,22 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   <KeySpec label="Km Driven" value={typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'} />
                                   <KeySpec label="Transmission" value={safeVehicle.transmission} />
                                   <KeySpec label="Owners" value={safeVehicle.noOfOwners} />
-                                  <KeySpec label="Insurance" value={safeVehicle.insuranceValidity} />
+                                  <KeySpec label="Insurance" value={(() => {
+                                    const insurance = safeVehicle.insuranceValidity;
+                                    if (!insurance || insurance.trim() === '') return 'Not specified';
+                                    // Validate insurance date - if it's a date format, check if it makes sense
+                                    if (insurance.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                      const insuranceDate = new Date(insurance);
+                                      const vehicleYear = safeVehicle.year || safeVehicle.registrationYear;
+                                      // If insurance date is before vehicle year, it's invalid
+                                      if (vehicleYear && insuranceDate.getFullYear() < vehicleYear) {
+                                        return 'Invalid date';
+                                      }
+                                      // Format date nicely
+                                      return insuranceDate.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+                                    }
+                                    return insurance;
+                                  })()} />
                                   <KeySpec label="RTO" value={safeVehicle.rto} />
                                 </div>
                                 {safeVehicle.description && (

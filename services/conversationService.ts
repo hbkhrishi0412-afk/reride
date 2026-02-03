@@ -49,21 +49,44 @@ export async function saveConversationToSupabase(conversation: Conversation): Pr
  */
 export async function addMessageToConversation(conversationId: string, message: any): Promise<{ success: boolean; data?: Conversation; error?: string }> {
   try {
+    console.log('📡 Calling API to save message:', { 
+      url: `${API_BASE_URL}/conversations`, 
+      conversationId, 
+      messageId: message?.id,
+      method: 'PUT'
+    });
+    
     const response = await fetch(`${API_BASE_URL}/conversations`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify({ conversationId, message }),
     });
 
+    console.log('📡 API response status:', response.status, response.statusText);
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      return { success: false, error: errorData.reason || 'Failed to add message' };
+      const errorMessage = errorData.reason || `HTTP ${response.status}: ${response.statusText}`;
+      console.error('❌ API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorMessage,
+        conversationId,
+        messageId: message?.id
+      });
+      return { success: false, error: errorMessage };
     }
 
     const result = await response.json();
+    console.log('✅ API success response:', { conversationId, hasData: !!result.data });
     return { success: true, data: result.data };
   } catch (error) {
-    console.error('Error adding message to conversation:', error);
+    console.error('❌ Network error adding message to conversation:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      errorType: error instanceof TypeError ? 'NetworkError' : 'Unknown',
+      conversationId,
+      messageId: message?.id
+    });
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
