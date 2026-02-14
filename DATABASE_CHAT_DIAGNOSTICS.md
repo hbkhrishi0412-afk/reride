@@ -192,3 +192,5 @@ console.log(conversations.data?.[0]?.messages);
 5. **Review Logs**: Check all three log sources (frontend, API, Supabase)
 
 
+
+

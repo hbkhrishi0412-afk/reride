@@ -87,7 +87,6 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   background: 'rgba(0, 0, 0, 0.04)',
                   transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)'
                 }}
-                aria-label="Menu"
                 data-testid="mobile-menu-button"
               >
                 <svg 

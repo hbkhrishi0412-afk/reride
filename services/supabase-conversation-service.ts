@@ -67,10 +67,14 @@ function supabaseRowToConversation(row: any): Conversation {
 // Helper to convert Conversation type to Supabase row
 // isUpdate: if true, don't set created_at (preserve original), always set updated_at
 function conversationToSupabaseRow(conversation: Partial<Conversation>, isUpdate: boolean = false): any {
+  // CRITICAL: Normalize sellerId and customerId before saving to ensure consistent matching
+  const normalizedSellerId = conversation.sellerId ? conversation.sellerId.toLowerCase().trim() : null;
+  const normalizedCustomerId = conversation.customerId ? conversation.customerId.toLowerCase().trim() : null;
+  
   const row: any = {
     id: conversation.id,
-    customer_id: conversation.customerId || null,
-    seller_id: conversation.sellerId || null,
+    customer_id: normalizedCustomerId,
+    seller_id: normalizedSellerId,
     vehicle_id: conversation.vehicleId?.toString() || null,
     customer_name: conversation.customerName || null,
     seller_name: conversation.sellerName || null,
@@ -315,10 +319,42 @@ export const supabaseConversationService = {
   async findByCustomerId(customerId: string): Promise<Conversation[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
-    const { data, error } = await supabase
+    // CRITICAL: Normalize customerId for case-insensitive matching
+    const normalizedCustomerId = customerId ? customerId.toLowerCase().trim() : '';
+    
+    // Try exact match first (in case data is already normalized)
+    let { data, error } = await supabase
       .from('conversations')
       .select('*')
-      .eq('customer_id', customerId);
+      .eq('customer_id', normalizedCustomerId);
+    
+    // If no results with normalized, try with original (case-sensitive) as fallback
+    if (!error && (!data || data.length === 0)) {
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('customer_id', customerId);
+      
+      if (!fallbackError && fallbackData && fallbackData.length > 0) {
+        data = fallbackData;
+        error = null;
+      }
+    }
+    
+    // If still no results, try case-insensitive search by fetching all and filtering
+    if (!error && (!data || data.length === 0)) {
+      const { data: allData, error: allError } = await supabase
+        .from('conversations')
+        .select('*');
+      
+      if (!allError && allData) {
+        // Filter in memory with case-insensitive matching
+        data = allData.filter((row: any) => {
+          const rowCustomerId = row.customer_id || row.customerId || '';
+          return rowCustomerId.toLowerCase().trim() === normalizedCustomerId;
+        });
+      }
+    }
     
     if (error) {
       // Check for connection/network errors
@@ -328,17 +364,109 @@ export const supabaseConversationService = {
       throw new Error(`Failed to fetch conversations by customer: ${error.message}`);
     }
     
-    return (data || []).map(supabaseRowToConversation);
+    // Normalize customerId and sellerId in returned conversations to ensure consistency
+    return (data || []).map(row => {
+      const conv = supabaseRowToConversation(row);
+      return {
+        ...conv,
+        sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+        customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
+      };
+    });
   },
 
   // Find conversations by seller ID
   async findBySellerId(sellerId: string): Promise<Conversation[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
-    const { data, error } = await supabase
+    // CRITICAL: Normalize sellerId for case-insensitive matching
+    const normalizedSellerId = sellerId ? sellerId.toLowerCase().trim() : '';
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 findBySellerId called:', {
+        originalSellerId: sellerId,
+        normalizedSellerId,
+        isServerSide
+      });
+    }
+    
+    // Try exact match first (in case data is already normalized)
+    let { data, error } = await supabase
       .from('conversations')
       .select('*')
-      .eq('seller_id', sellerId);
+      .eq('seller_id', normalizedSellerId);
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Supabase query result (normalized):', {
+        found: data?.length || 0,
+        error: error?.message,
+        sampleSellerIds: data?.slice(0, 3).map((row: any) => row.seller_id)
+      });
+    }
+    
+    // If no results with normalized, try with original (case-sensitive) as fallback
+    if (!error && (!data || data.length === 0)) {
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('seller_id', sellerId);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Supabase query result (original case):', {
+          found: fallbackData?.length || 0,
+          error: fallbackError?.message
+        });
+      }
+      
+      if (!fallbackError && fallbackData && fallbackData.length > 0) {
+        data = fallbackData;
+        error = null;
+      }
+    }
+    
+    // If still no results, try case-insensitive search by fetching all and filtering
+    // This is a fallback for databases that don't support case-insensitive queries
+    if (!error && (!data || data.length === 0)) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Trying fallback: fetch all and filter in memory');
+      }
+      
+      const { data: allData, error: allError } = await supabase
+        .from('conversations')
+        .select('*');
+      
+      if (!allError && allData) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 Fetched all conversations:', {
+            totalCount: allData.length,
+            uniqueSellerIds: [...new Set(allData.map((row: any) => row.seller_id))].slice(0, 5)
+          });
+        }
+        
+        // Filter in memory with case-insensitive matching
+        data = allData.filter((row: any) => {
+          const rowSellerId = row.seller_id || row.sellerId || '';
+          const matches = rowSellerId.toLowerCase().trim() === normalizedSellerId;
+          
+          if (process.env.NODE_ENV === 'development' && matches) {
+            console.log('✅ Found matching conversation:', {
+              id: row.id,
+              sellerId: row.seller_id,
+              normalized: rowSellerId.toLowerCase().trim(),
+              target: normalizedSellerId
+            });
+          }
+          
+          return matches;
+        });
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 Filtered results:', {
+            matchedCount: data.length
+          });
+        }
+      }
+    }
     
     if (error) {
       // Check for connection/network errors
@@ -348,7 +476,15 @@ export const supabaseConversationService = {
       throw new Error(`Failed to fetch conversations by seller: ${error.message}`);
     }
     
-    return (data || []).map(supabaseRowToConversation);
+    // Normalize sellerId in returned conversations to ensure consistency
+    return (data || []).map(row => {
+      const conv = supabaseRowToConversation(row);
+      return {
+        ...conv,
+        sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+        customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
+      };
+    });
   },
 
   // Find conversation by vehicle ID and customer ID

@@ -1,2 +1,187 @@
-<testsuites id="" name="" tests="0" failures="0" skipped="0" errors="0" time="52.646438">
+<testsuites id="" name="" tests="5" failures="5" skipped="0" errors="0" time="49.645222000000004">
+<testsuite name="mobile-pwa.spec.ts" timestamp="2026-02-13T19:17:29.719Z" hostname="Mobile Safari" tests="5" failures="5" skipped="0" time="83.926" errors="0">
+<testcase name="Mobile App and PWA Functionality › should display mobile bottom navigation on mobile viewport" classname="mobile-pwa.spec.ts" time="13.314">
+<failure message="mobile-pwa.spec.ts:11:3 should display mobile bottom navigation on mobile viewport" type="FAILURE">
+<![CDATA[  [Mobile Safari] › mobile-pwa.spec.ts:11:3 › Mobile App and PWA Functionality › should display mobile bottom navigation on mobile viewport 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('[data-testid="mobile-bottom-nav"]')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('[data-testid="mobile-bottom-nav"]')
+
+        at C:\Users\bhadr\Downloads\reride (2)\e2e\mobile-pwa.spec.ts:12:69)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:310:15)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\testInfo.js:305:17)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:308:22)
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-results\mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\test-failed-1.png]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\video.webm]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Mobile App and PWA Functionality › should navigate to buy view and show mobile header controls" classname="mobile-pwa.spec.ts" time="19.161">
+<failure message="mobile-pwa.spec.ts:20:3 should navigate to buy view and show mobile header controls" type="FAILURE">
+<![CDATA[  [Mobile Safari] › mobile-pwa.spec.ts:20:3 › Mobile App and PWA Functionality › should navigate to buy view and show mobile header controls 
+
+    TimeoutError: page.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for locator('[data-testid="mobile-bottom-nav"] button:has-text("Buy")')
+        - waiting for" http://localhost:5173/" navigation to finish...
+        - navigated to "http://localhost:5173/"
+
+        at C:\Users\bhadr\Downloads\reride (2)\e2e\mobile-pwa.spec.ts:21:16)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:310:15)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\testInfo.js:305:17)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:308:22)
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-results\mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\test-failed-1.png]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\video.webm]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Mobile App and PWA Functionality › should handle mobile menu drawer" classname="mobile-pwa.spec.ts" time="19.308">
+<failure message="mobile-pwa.spec.ts:27:3 should handle mobile menu drawer" type="FAILURE">
+<![CDATA[  [Mobile Safari] › mobile-pwa.spec.ts:27:3 › Mobile App and PWA Functionality › should handle mobile menu drawer 
+
+    TimeoutError: page.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for locator('[data-testid="mobile-bottom-nav"] button:has-text("Buy")')
+        - waiting for navigation to finish...
+        - navigated to "http://localhost:5173/"
+
+        at C:\Users\bhadr\Downloads\reride (2)\e2e\mobile-pwa.spec.ts:29:16)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:310:15)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\testInfo.js:305:17)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:308:22)
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-results\mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\test-failed-1.png]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\video.webm]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Mobile App and PWA Functionality › should open search from mobile header" classname="mobile-pwa.spec.ts" time="19.572">
+<failure message="mobile-pwa.spec.ts:43:3 should open search from mobile header" type="FAILURE">
+<![CDATA[  [Mobile Safari] › mobile-pwa.spec.ts:43:3 › Mobile App and PWA Functionality › should open search from mobile header 
+
+    TimeoutError: page.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for locator('[data-testid="mobile-bottom-nav"] button:has-text("Buy")')
+
+        at C:\Users\bhadr\Downloads\reride (2)\e2e\mobile-pwa.spec.ts:44:16)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:310:15)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\testInfo.js:305:17)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:308:22)
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-results\mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\test-failed-1.png]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\video.webm]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Mobile App and PWA Functionality › should open menu drawer from home using bottom-nav menu button" classname="mobile-pwa.spec.ts" time="12.571">
+<failure message="mobile-pwa.spec.ts:49:3 should open menu drawer from home using bottom-nav menu button" type="FAILURE">
+<![CDATA[  [Mobile Safari] › mobile-pwa.spec.ts:49:3 › Mobile App and PWA Functionality › should open menu drawer from home using bottom-nav menu button 
+
+    TimeoutError: page.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for locator('[data-testid="mobile-bottom-nav"] button:has-text("Menu")')
+        - waiting for" http://localhost:5173/" navigation to finish...
+        - navigated to "http://localhost:5173/"
+
+        at C:\Users\bhadr\Downloads\reride (2)\e2e\mobile-pwa.spec.ts:50:16)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:310:15)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\testInfo.js:305:17)
+        at C:\Users\bhadr\Downloads\reride (2)\node_modules\playwright\lib\worker\workerMain.js:308:22)
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ..\test-results\mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-results\mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\test-failed-1.png]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\video.webm]]
+
+[[ATTACHMENT|mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\error-context.md]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
 </testsuites>

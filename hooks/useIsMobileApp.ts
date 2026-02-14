@@ -10,46 +10,41 @@ export const useIsMobileApp = () => {
 
   useEffect(() => {
     let mediaQuery: MediaQueryList | null = null;
-    let handleChange: ((e: MediaQueryListEvent) => void) | null = null;
+    let handleDisplayModeChange: ((e: MediaQueryListEvent) => void) | null = null;
+    let handleResize: (() => void) | null = null;
 
     try {
-      // Check if running in standalone mode (installed PWA)
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                          (window.navigator as any).standalone || // iOS
-                          document.referrer.includes('android-app://'); // Android
-
-      // Check if device is mobile (more comprehensive)
-      const checkMobile = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-                         window.innerWidth <= 768 ||
-                         ('ontouchstart' in window); // Touch device
-
-      // Check if in mobile browser (not desktop)
-      const isMobileBrowser = checkMobile && !isStandalone;
-      
-      // Show mobile UI for both PWA and mobile browser
-      const shouldShowMobileUI = isStandalone || isMobileBrowser;
-
-      setIsMobileApp(shouldShowMobileUI);
-      setIsMobile(checkMobile);
-
-      console.log('📱 Mobile Detection:', {
-        isStandalone,
-        checkMobile,
-        isMobileBrowser,
-        shouldShowMobileUI,
-        userAgent: navigator.userAgent,
-        windowWidth: window.innerWidth
-      });
-
-      // Listen for display mode changes
       mediaQuery = window.matchMedia('(display-mode: standalone)');
-      handleChange = (e: MediaQueryListEvent) => {
-        const newMobileApp = e.matches || isMobileBrowser;
-        setIsMobileApp(newMobileApp);
+
+      const detectMobileState = () => {
+        const isStandalone = mediaQuery?.matches ||
+          (window.navigator as any).standalone || // iOS
+          document.referrer.includes('android-app://'); // Android
+
+        const checkMobile = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+          window.innerWidth <= 768 ||
+          ('ontouchstart' in window);
+
+        const isMobileBrowser = checkMobile && !isStandalone;
+        const shouldShowMobileUI = isStandalone || isMobileBrowser;
+
+        setIsMobileApp(shouldShowMobileUI);
+        setIsMobile(checkMobile);
       };
 
-      if (mediaQuery && handleChange) {
-        mediaQuery.addEventListener('change', handleChange);
+      // Initial detection.
+      detectMobileState();
+
+      // React to install-mode changes and viewport/device changes.
+      handleDisplayModeChange = () => detectMobileState();
+      handleResize = () => detectMobileState();
+
+      if (mediaQuery && handleDisplayModeChange) {
+        mediaQuery.addEventListener('change', handleDisplayModeChange);
+      }
+      if (handleResize) {
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', handleResize);
       }
     } catch (error) {
       console.error('Error in mobile detection:', error);
@@ -60,12 +55,16 @@ export const useIsMobileApp = () => {
 
     return () => {
       // Proper cleanup
-      if (mediaQuery && handleChange) {
+      if (mediaQuery && handleDisplayModeChange) {
         try {
-          mediaQuery.removeEventListener('change', handleChange);
+          mediaQuery.removeEventListener('change', handleDisplayModeChange);
         } catch (error) {
           console.warn('Error removing media query listener:', error);
         }
+      }
+      if (handleResize) {
+        window.removeEventListener('resize', handleResize);
+        window.removeEventListener('orientationchange', handleResize);
       }
     };
   }, []);

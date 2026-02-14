@@ -1599,9 +1599,38 @@ app.get('/api/notifications', (req, res) => {
 app.post('/api/notifications', (req, res) => {
   try {
     const notification = req.body;
-    // Emit real-time update to specific recipient
+    // CRITICAL FIX: Emit real-time update to specific recipient only
     if (io && notification.recipientEmail) {
-      io.emit('notifications:created', { notification });
+      // Normalize recipient email for matching
+      const normalizedRecipientEmail = (notification.recipientEmail || '').toLowerCase().trim();
+      
+      // Find and emit to specific recipient's socket(s)
+      let deliveredCount = 0;
+      io.sockets.sockets.forEach((socket) => {
+        const socketUserEmail = (socket.handshake.query?.userEmail || socket.handshake.auth?.userEmail || '').toLowerCase().trim();
+        
+        // If this socket belongs to the recipient, send them the notification
+        if (socketUserEmail === normalizedRecipientEmail) {
+          socket.emit('notifications:created', { notification });
+          deliveredCount++;
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`🔔 Real-time notification delivered to: ${socketUserEmail}`);
+          }
+        }
+      });
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ Notification broadcast: ${deliveredCount} recipient(s) notified`);
+      }
+      
+      // Fallback: If no matching socket found, broadcast to all (client will filter)
+      // This ensures delivery even if user hasn't connected yet
+      if (deliveredCount === 0) {
+        io.emit('notifications:created', { notification });
+        if (process.env.NODE_ENV === 'development') {
+          console.log('⚠️ No matching socket found, broadcasting to all (client will filter)');
+        }
+      }
     }
     // Accept and return the notification data (mock save)
     res.json({
@@ -1920,7 +1949,10 @@ if (io) {
           return;
         }
         
-        console.log('✅ Processing message:', { conversationId, messageId: message.id, sender: message.sender });
+        // CRITICAL FIX: Normalize sender email for consistent matching
+        const normalizedSenderEmail = (senderEmail || '').toLowerCase().trim();
+        
+        console.log('✅ Processing message:', { conversationId, messageId: message.id, sender: message.sender, senderEmail: normalizedSenderEmail });
         
         // If MongoDB is available, save to database
         if (Conversation) {
@@ -1964,11 +1996,12 @@ if (io) {
             const result = await response.json();
             if (result.success && result.data) {
               const conv = result.data;
+              // CRITICAL FIX: Normalize emails in conversation data
               fullConversationData = {
                 id: conv.id,
-                customerId: conv.customerId || '',
+                customerId: (conv.customerId || '').toLowerCase().trim(),
                 customerName: conv.customerName || 'Customer',
-                sellerId: conv.sellerId || '',
+                sellerId: (conv.sellerId || '').toLowerCase().trim(),
                 sellerName: conv.sellerName || 'Seller',
                 vehicleId: conv.vehicleId || 0,
                 vehicleName: conv.vehicleName || 'Vehicle',
@@ -1990,11 +2023,12 @@ if (io) {
             await ensureConnection();
             const dbConversation = await Conversation.findOne({ id: conversationId });
             if (dbConversation) {
+              // CRITICAL FIX: Normalize emails in conversation data
               fullConversationData = {
                 id: dbConversation.id,
-                customerId: dbConversation.customerId,
+                customerId: (dbConversation.customerId || '').toLowerCase().trim(),
                 customerName: dbConversation.customerName,
-                sellerId: dbConversation.sellerId,
+                sellerId: (dbConversation.sellerId || '').toLowerCase().trim(),
                 sellerName: dbConversation.sellerName,
                 vehicleId: dbConversation.vehicleId,
                 vehicleName: dbConversation.vehicleName,
@@ -2014,14 +2048,15 @@ if (io) {
         const roomName = `conversation:${conversationId}`;
         
         // Always include conversation data, even if minimal
+        // CRITICAL FIX: Use normalized sender email
         const conversationData = fullConversationData || {
           id: conversationId,
           lastMessageAt: message.timestamp,
           isReadBySeller: message.sender === 'seller',
           isReadByCustomer: message.sender === 'user',
           // Try to extract from message if available (from sender's context)
-          customerId: message.sender === 'user' ? senderEmail : undefined,
-          sellerId: message.sender === 'seller' ? senderEmail : undefined
+          customerId: message.sender === 'user' ? normalizedSenderEmail : undefined,
+          sellerId: message.sender === 'seller' ? normalizedSenderEmail : undefined
         };
         
         const messageData = {
@@ -2087,6 +2122,7 @@ if (io) {
         // Fallback broadcast: If we have conversation data, broadcast to matching users
         // Otherwise, broadcast to all sockets and let clients filter (less efficient but ensures delivery)
         if (conversation) {
+          // CRITICAL FIX: Normalize conversation participant emails
           const normalizedCustomerId = (conversation.customerId || '').toLowerCase().trim();
           const normalizedSellerId = (conversation.sellerId || '').toLowerCase().trim();
           
@@ -2096,12 +2132,16 @@ if (io) {
             const socketUserEmail = (socket.handshake.query?.userEmail || socket.handshake.auth?.userEmail || '').toLowerCase().trim();
             const socketUserRole = socket.handshake.query?.userRole || socket.handshake.auth?.userRole;
             
+            // CRITICAL FIX: Better recipient matching logic
             // If this socket belongs to the recipient (customer or seller), send them the message
             const isRecipient = 
               (message.sender === 'user' && socketUserEmail === normalizedSellerId && socketUserRole === 'seller') ||
               (message.sender === 'seller' && socketUserEmail === normalizedCustomerId && socketUserRole === 'customer');
             
-            if (isRecipient) {
+            // CRITICAL FIX: Also check if socket is already in the room (avoid duplicate)
+            const isInRoom = socket.rooms.has(roomName);
+            
+            if (isRecipient && !isInRoom) {
               socket.emit('conversation:new-message', messageData);
               fallbackCount++;
               if (process.env.NODE_ENV === 'development') {
@@ -2131,7 +2171,7 @@ if (io) {
         });
         
         // Then, mark as delivered to recipient's device (if they're online)
-        const roomName = `conversation:${conversationId}`;
+        // roomName is already declared above (line 2048), reuse it
         const roomClients = io.sockets.adapter.rooms.get(roomName);
         if (roomClients && roomClients.size > 1) {
           // Recipient is online and in the room - message is delivered

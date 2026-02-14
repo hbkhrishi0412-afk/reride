@@ -212,12 +212,78 @@ export const getValidImages = (images: string[]): string[] => {
 };
 
 /**
+ * Checks if an image URL is a Supabase Storage path that needs conversion
+ * @param url - The image URL/path to check
+ * @returns true if it's a Supabase Storage path
+ */
+const isSupabaseStoragePath = (url: string): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  // Check if it looks like a storage path (no http/https, contains path separators or is just a filename)
+  return !url.startsWith('http://') && 
+         !url.startsWith('https://') && 
+         !url.startsWith('data:') &&
+         !url.startsWith('blob:') &&
+         url.trim() !== '';
+};
+
+/**
+ * Converts a Supabase Storage path to a public URL
+ * @param path - The storage path (e.g., "vehicles/123/image.jpg")
+ * @returns Public URL or original path if conversion fails
+ */
+const convertStoragePathToUrl = (path: string): string => {
+  try {
+    // Try to get Supabase client (only works in browser/client context)
+    if (typeof window !== 'undefined') {
+      // Dynamic import to avoid SSR issues
+      import('../lib/supabase.js').then(({ getSupabaseClient }) => {
+        const supabase = getSupabaseClient();
+        const { data } = supabase.storage
+          .from('images')
+          .getPublicUrl(path);
+        return data.publicUrl || path;
+      }).catch(() => path);
+    }
+    // If we can't convert, return original path
+    return path;
+  } catch (error) {
+    console.warn('⚠️ Error converting storage path to URL:', error);
+    return path;
+  }
+};
+
+/**
  * Gets the first valid image from an array
  * @param images - Array of image sources
  * @returns First valid image source or placeholder
  */
 export const getFirstValidImage = (images: string[]): string => {
-  const validImages = getValidImages(images);
-  return validImages[0];
+  if (!Array.isArray(images) || images.length === 0) {
+    return DEFAULT_PLACEHOLDER;
+  }
+  
+  // Find first valid image (not a placeholder service, not empty)
+  for (const img of images) {
+    if (!img || img.trim() === '') continue;
+    
+    // If it's a Supabase Storage path, try to convert it
+    if (isSupabaseStoragePath(img)) {
+      // For now, return it as-is - the conversion should happen in supabaseRowToVehicle
+      // But if it still comes through, we'll try to handle it
+      const converted = convertStoragePathToUrl(img);
+      if (converted && converted !== img && !isPlaceholderService(converted)) {
+        return converted;
+      }
+    }
+    
+    // Skip placeholder services
+    if (isPlaceholderService(img)) continue;
+    
+    // Valid image URL
+    return getSafeImageSrc(img);
+  }
+  
+  // No valid images found, return placeholder
+  return DEFAULT_PLACEHOLDER;
 };
 

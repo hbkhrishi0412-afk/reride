@@ -1368,12 +1368,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Fallback to currentUser if localStorage doesn't have it (shouldn't happen, but safe)
         const isAdmin = (userRole || currentUser?.role) === 'admin';
         
-        // Use shorter timeout for faster failure handling
-        const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => {
+        // Keep UI responsive, but do not treat slow responses as empty data.
+        const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
           return Promise.race([
             promise,
-            new Promise<T>((resolve) => {
-              setTimeout(() => resolve(fallback), timeoutMs);
+            new Promise<null>((resolve) => {
+              setTimeout(() => resolve(null), timeoutMs);
             })
           ]);
         };
@@ -1381,33 +1381,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // PERFORMANCE: Use request deduplication to prevent duplicate API calls
         // Load vehicles and users in parallel with aggressive timeout for instant response
         // CRITICAL: Don't block UI - load data in background, UI already rendered
+        const vehicleRequest = deduplicateRequest(
+          `vehicles-${isAdmin ? 'admin' : 'user'}`,
+          () => dataService.getVehicles(isAdmin).catch((error) => {
+            logWarn('Failed to load vehicles:', error);
+            return [];
+          })
+        );
+        const usersRequest = deduplicateRequest(
+          'users',
+          () => dataService.getUsers().catch((error) => {
+            logWarn('Failed to load users:', error);
+            return [];
+          })
+        );
+
         Promise.all([
-          loadWithTimeout(
-            deduplicateRequest(
-              `vehicles-${isAdmin ? 'admin' : 'user'}`,
-              () => dataService.getVehicles(isAdmin).catch((error) => {
-                logWarn('Failed to load vehicles:', error);
-                return [];
-              })
-            ),
-            3000, // Increased to 3 seconds for slower networks, but still fast
-            []
-          ),
-          loadWithTimeout(
-            deduplicateRequest(
-              'users',
-              () => dataService.getUsers().catch((error) => {
-                logWarn('Failed to load users:', error);
-                return [];
-              })
-            ),
-            3000, // Increased to 3 seconds for slower networks
-            []
-          )
+          loadWithTimeout(vehicleRequest, 4500),
+          loadWithTimeout(usersRequest, 3500)
         ]).then(([vehiclesData, usersData]) => {
           if (!isMounted) return;
           
-          // Always update vehicles state, even if empty (to clear loading state)
+          // Update vehicles immediately when available.
+          // If timed out, keep current state and apply result when the original request completes.
           if (Array.isArray(vehiclesData)) {
             setVehicles(vehiclesData);
             // PERFORMANCE: Recommendations are now computed via useMemo from vehicles
@@ -1416,6 +1412,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else {
               logWarn('⚠️ API returned empty vehicles array. Check database for published vehicles.');
             }
+          } else if (vehiclesData === null) {
+            logWarn('⚠️ Vehicle API response exceeded initial timeout. Keeping current vehicles and waiting for response...');
+            vehicleRequest.then((lateVehicles) => {
+              if (!isMounted || !Array.isArray(lateVehicles)) return;
+              setVehicles(lateVehicles);
+              if (lateVehicles.length > 0) {
+                logInfo(`✅ Late vehicle response applied: ${lateVehicles.length} vehicles`);
+              }
+            }).catch((lateError) => {
+              logWarn('Late vehicle response failed:', lateError);
+            });
           } else {
             logError('❌ API returned non-array vehicles data:', typeof vehiclesData);
           }
@@ -1525,6 +1532,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
               }
             }
+          } else if (usersData === null) {
+            logWarn('⚠️ Users API response exceeded initial timeout. Keeping current users and waiting for response...');
+            usersRequest.then((lateUsers) => {
+              if (!isMounted || !Array.isArray(lateUsers)) return;
+              setUsers(lateUsers);
+              if (lateUsers.length > 0) {
+                logInfo(`✅ Late users response applied: ${lateUsers.length} users`);
+              }
+            }).catch((lateError) => {
+              logWarn('Late users response failed:', lateError);
+            });
           }
           
           // If no cached data was available, stop loading now
@@ -1639,10 +1657,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 
                 if (isMounted) {
                   if (result.success && result.data) {
-                    setConversations(result.data);
+                    // CRITICAL: Normalize sellerId in conversations to ensure proper matching
+                    const normalizedConversations = result.data.map(conv => ({
+                      ...conv,
+                      sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+                      customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
+                    }));
+                    
+                    setConversations(normalizedConversations);
                     // Cache the fresh data
                     try {
-                      localStorage.setItem('reRideConversations', JSON.stringify(result.data));
+                      localStorage.setItem('reRideConversations', JSON.stringify(normalizedConversations));
                     } catch (error) {
                       logWarn('Failed to cache conversations to localStorage:', error);
                     }
@@ -1655,7 +1680,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (isMounted) {
                 const localConversations = getConversations();
                 if (localConversations && localConversations.length > 0) {
-                  setConversations(localConversations);
+                  // CRITICAL: Normalize sellerId and customerId in cached conversations
+                  const normalizedConversations = localConversations.map(conv => ({
+                    ...conv,
+                    sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+                    customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
+                  }));
+                  setConversations(normalizedConversations);
                 } else {
                   setConversations([]);
                 }
@@ -2067,12 +2098,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (connected) {
         console.log('✅ Real-time chat service connected successfully');
       } else {
-        console.error('❌ Failed to connect to real-time chat service');
-        addToast('Real-time chat connection failed. Messages may be delayed.', 'warning');
+        // Only show warning if connection actually failed (not just "not available")
+        // The service now returns true even if WebSocket isn't available (messages still work)
+        console.log('ℹ️ Real-time chat: Using fallback mode (messages still work via API)');
       }
     }).catch((error) => {
-      console.error('❌ Error connecting to real-time chat:', error);
-      addToast('Real-time chat connection error. Please refresh the page.', 'error');
+      // Don't show error toast - messages still work via API
+      console.warn('⚠️ Real-time chat connection issue (non-critical):', error);
+      // Messages will still work via Supabase API, just not real-time
+    });
+    
+    // Setup connection status callback - only log, don't show error toasts
+    // Messages still work via API even if real-time connection fails
+    realtimeChatService.onConnection((connected) => {
+      if (connected) {
+        console.log('✅ Real-time chat connection established');
+      } else {
+        // Don't show error - messages still work via API
+        console.log('ℹ️ Real-time chat disconnected (messages still work via API)');
+      }
     });
 
     // Setup message received callback
@@ -2141,9 +2185,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const sellerName = (conversationData as any).sellerName;
             const newConversation: Conversation = {
               id: conversationData.id,
-              customerId: conversationData.customerId || '',
+              customerId: conversationData.customerId ? conversationData.customerId.toLowerCase().trim() : '',
               customerName: conversationData.customerName || 'Customer',
-              sellerId: conversationData.sellerId || '',
+              sellerId: conversationData.sellerId ? conversationData.sellerId.toLowerCase().trim() : '',
               vehicleId: conversationData.vehicleId || 0,
               vehicleName: conversationData.vehicleName || 'Vehicle',
               vehiclePrice: conversationData.vehiclePrice,
@@ -2373,6 +2417,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       });
     });
+
+    // Setup notification received callback for real-time notifications
+    realtimeChatService.onNotification((notification) => {
+      // CRITICAL FIX: Normalize recipient email for comparison
+      const normalizedNotificationRecipient = (notification.recipientEmail || '').toLowerCase().trim();
+      const normalizedCurrentUserEmail = (currentUser?.email || '').toLowerCase().trim();
+      
+      // Only add notification if it's for the current user
+      if (normalizedNotificationRecipient === normalizedCurrentUserEmail) {
+        console.log('📬 AppProvider: Received real-time notification:', { 
+          notificationId: notification.id, 
+          recipientEmail: notification.recipientEmail 
+        });
+        
+        setNotifications(prevNotifications => {
+          // Check if notification already exists (prevent duplicates)
+          const exists = prevNotifications.some(n => n.id === notification.id);
+          if (exists) {
+            console.log('⚠️ Notification already exists, skipping duplicate:', notification.id);
+            return prevNotifications;
+          }
+          
+          const updatedNotifications = [notification, ...prevNotifications];
+          
+          // Save to localStorage
+          try {
+            localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
+          } catch (error) {
+            console.error('Failed to save notifications to localStorage:', error);
+          }
+          
+          console.log('✅ Real-time notification added to state:', notification.id);
+          return updatedNotifications;
+        });
+      } else {
+        console.log('⚠️ Notification not for current user, ignoring:', {
+          notificationRecipient: notification.recipientEmail,
+          currentUserEmail: currentUser?.email
+        });
+      }
+    });
   }, [currentUser, joinAllConversationRooms, activeChat]);
 
   // Also join rooms when conversations are loaded/updated
@@ -2390,38 +2475,131 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // CRITICAL: Periodically refresh conversations for sellers to catch new ones
   // This ensures sellers see new conversations even if WebSocket delivery fails
   useEffect(() => {
-    if (!currentUser || currentUser.role !== 'seller') return;
+    if (!currentUser || currentUser.role !== 'seller' || !currentUser.email) return;
     
-    const refreshInterval = setInterval(async () => {
-      if (!currentUser?.email) return;
-      
+    const normalizedSellerEmail = currentUser.email.toLowerCase().trim();
+    
+    // Load conversations immediately when seller logs in
+    const loadSellerConversations = async () => {
       try {
         const { getConversationsFromSupabase } = await import('../services/conversationService');
-        const result = await getConversationsFromSupabase(undefined, currentUser.email);
+        
+        // CRITICAL: Use normalized email for query, but also try original email as fallback
+        const result = await getConversationsFromSupabase(undefined, normalizedSellerEmail);
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 Loading seller conversations:', {
+            sellerEmail: currentUser.email,
+            normalizedSellerEmail,
+            resultSuccess: result.success,
+            conversationCount: result.data?.length || 0
+          });
+        }
         
         if (result.success && result.data) {
-          // Only update if we got new conversations or if conversations changed
+          // Normalize sellerId and customerId in conversations to ensure proper matching
+          const normalizedConversations = result.data.map(conv => ({
+            ...conv,
+            sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+            customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
+          }));
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔍 Normalized conversations:', {
+              count: normalizedConversations.length,
+              conversations: normalizedConversations.map(c => ({
+                id: c.id,
+                sellerId: c.sellerId,
+                customerName: c.customerName,
+                vehicleName: c.vehicleName,
+                messageCount: c.messages?.length || 0
+              }))
+            });
+          }
+          
           setConversations(prev => {
             const prevIds = new Set(prev.map(c => c.id));
-            const newIds = new Set(result.data!.map(c => c.id));
             
             // Check if there are new conversations or if message counts changed
-            const hasNewConversations = result.data!.some(c => !prevIds.has(c.id));
-            const hasUpdatedMessages = result.data!.some(newConv => {
+            const hasNewConversations = normalizedConversations.some(c => !prevIds.has(c.id));
+            const hasUpdatedMessages = normalizedConversations.some(newConv => {
               const oldConv = prev.find(c => c.id === newConv.id);
               return oldConv && oldConv.messages.length !== newConv.messages.length;
             });
             
-            if (hasNewConversations || hasUpdatedMessages) {
+            if (hasNewConversations || hasUpdatedMessages || prev.length === 0) {
               console.log('🔄 Refreshing seller conversations:', {
-                newCount: result.data!.length,
+                newCount: normalizedConversations.length,
                 hasNew: hasNewConversations,
-                hasUpdated: hasUpdatedMessages
+                hasUpdated: hasUpdatedMessages,
+                previousCount: prev.length,
+                sellerEmail: normalizedSellerEmail
               });
               try {
-                saveConversations(result.data!);
+                saveConversations(normalizedConversations);
               } catch (error) {
                 console.error('Failed to save refreshed conversations:', error);
+              }
+              return normalizedConversations;
+            }
+            
+            return prev;
+          });
+        } else if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ Failed to load seller conversations:', {
+            success: result.success,
+            error: result.error,
+            sellerEmail: normalizedSellerEmail
+          });
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to refresh seller conversations:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error details:', error);
+        }
+      }
+    };
+    
+    // Load immediately
+    loadSellerConversations();
+    
+    // Then refresh periodically
+    const refreshInterval = setInterval(loadSellerConversations, 10000); // Refresh every 10 seconds for sellers
+    
+    return () => clearInterval(refreshInterval);
+  }, [currentUser?.email, currentUser?.role]);
+  
+  // CRITICAL: Periodically refresh notifications for all users
+  useEffect(() => {
+    if (!currentUser || !currentUser.email) return;
+    
+    const normalizedUserEmail = currentUser.email.toLowerCase().trim();
+    
+    // Load notifications immediately
+    const loadNotifications = async () => {
+      try {
+        const { getNotificationsFromSupabase } = await import('../services/notificationService');
+        const result = await getNotificationsFromSupabase(normalizedUserEmail);
+        
+        if (result.success && result.data) {
+          setNotifications(prev => {
+            const prevIds = new Set(prev.map(n => n.id));
+            const hasNewNotifications = result.data!.some(n => !prevIds.has(n.id));
+            const hasUpdatedNotifications = result.data!.some(newNotif => {
+              const oldNotif = prev.find(n => n.id === newNotif.id);
+              return oldNotif && oldNotif.isRead !== newNotif.isRead;
+            });
+            
+            if (hasNewNotifications || hasUpdatedNotifications || prev.length === 0) {
+              console.log('🔄 Refreshing notifications:', {
+                newCount: result.data!.length,
+                hasNew: hasNewNotifications,
+                hasUpdated: hasUpdatedNotifications
+              });
+              try {
+                localStorage.setItem('reRideNotifications', JSON.stringify(result.data!));
+              } catch (error) {
+                console.warn('Failed to save notifications:', error);
               }
               return result.data!;
             }
@@ -2430,12 +2608,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
       } catch (error) {
-        console.warn('⚠️ Failed to refresh seller conversations:', error);
+        console.warn('⚠️ Failed to refresh notifications:', error);
       }
-    }, 10000); // Refresh every 10 seconds for sellers
+    };
+    
+    // Load immediately
+    loadNotifications();
+    
+    // Then refresh periodically every 15 seconds
+    const refreshInterval = setInterval(loadNotifications, 15000);
     
     return () => clearInterval(refreshInterval);
-  }, [currentUser?.email, currentUser?.role]);
+  }, [currentUser?.email]);
 
   // CRITICAL: Join conversation room when activeChat changes (user opens a chat)
   // This ensures real-time message delivery works
@@ -3506,8 +3690,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // This ensures the message is broadcast to other participants
         console.log('🔧 Ensuring joined to conversation room before sending:', conversationId);
         await realtimeChatService.joinConversation(conversationId);
-        // Small delay to ensure room join completes on server
-        await new Promise(resolve => setTimeout(resolve, 150));
+        // CRITICAL FIX: Increased delay to ensure room join completes on server
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         // Find conversation BEFORE updating state to avoid stale state issues
         const conversation = conversations.find(conv => conv.id === conversationId);
@@ -3519,6 +3703,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Generate a more unique message ID to prevent collisions
         const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        
+        // CRITICAL FIX: Normalize user email before creating message
+        const normalizedUserEmail = (currentUser.email || '').toLowerCase().trim();
         
         const newMessage: ChatMessage = {
           id: messageId,
@@ -3558,7 +3745,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         // Send message via real-time chat service (handles WebSocket + Supabase sync)
-        const userEmail = currentUser.email;
+        // CRITICAL FIX: Use normalized email
+        const userEmail = normalizedUserEmail;
         const userRole = currentUser.role as 'customer' | 'seller';
         
         console.log('🔧 AppProvider: Sending message via realtimeChatService', { 
@@ -3603,7 +3791,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // Create notification for the recipient
-        const recipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
+        // CRITICAL FIX: Normalize recipient email to ensure proper matching
+        const rawRecipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
+        const recipientEmail = (rawRecipientEmail || '').toLowerCase().trim();
         const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
         
         // Generate a more unique notification ID
@@ -3660,8 +3850,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // This ensures the message is broadcast to other participants
         console.log('🔧 Ensuring joined to conversation room before sending (withType):', conversationId);
         await realtimeChatService.joinConversation(conversationId);
-        // Small delay to ensure room join completes on server
-        await new Promise(resolve => setTimeout(resolve, 150));
+        // CRITICAL FIX: Increased delay to ensure room join completes on server
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         // Find conversation BEFORE updating state to avoid stale state issues
         const conversation = conversations.find(conv => conv.id === conversationId);
@@ -3762,7 +3952,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         // Create notification for the recipient using the conversation we found
-        const recipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
+        // CRITICAL FIX: Normalize recipient email to ensure proper matching
+        const rawRecipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
+        const recipientEmail = (rawRecipientEmail || '').toLowerCase().trim();
         const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
         
         // Create appropriate notification message

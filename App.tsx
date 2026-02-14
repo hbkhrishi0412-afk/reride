@@ -262,7 +262,7 @@ const preloadCriticalComponents = () => {
   }
 };
 
-const AppContent: React.FC = React.memo(() => {
+const AppContent: React.FC = () => {
   // Detect if running as mobile app (standalone/installed PWA)
   const { isMobileApp, isMobile } = useIsMobileApp();
   
@@ -1209,6 +1209,13 @@ const AppContent: React.FC = React.memo(() => {
                   return;
                 }
                 
+                // CRITICAL FIX: Validate sellerEmail before proceeding
+                if (!vehicle.sellerEmail) {
+                  console.error('❌ Cannot start chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
+                  addToast('Unable to start chat: Seller information is missing', 'error');
+                  return;
+                }
+                
                 const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
                 let conversation = normalizedCustomerEmail ? conversations.find(c => {
                   if (!c || !c.customerId) return false;
@@ -1219,11 +1226,18 @@ const AppContent: React.FC = React.memo(() => {
                   // CRITICAL: Normalize sellerId to ensure it matches seller's email for filtering
                   const normalizedSellerId = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
                   
+                  // CRITICAL FIX: Ensure sellerId is not empty
+                  if (!normalizedSellerId) {
+                    console.error('❌ Cannot create conversation: normalized sellerId is empty', { vehicleId: vehicle.id, sellerEmail: vehicle.sellerEmail });
+                    addToast('Unable to start chat: Seller information is invalid', 'error');
+                    return;
+                  }
+                  
                   const newConversation = {
                     id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     customerId: currentUser.email,
-                    customerName: currentUser.name,
-                    sellerId: normalizedSellerId || vehicle.sellerEmail, // Use normalized, fallback to original
+                    customerName: currentUser.name || 'Customer',
+                    sellerId: normalizedSellerId, // Use normalized (already validated above)
                     vehicleId: vehicle.id,
                     vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
                     vehiclePrice: vehicle.price,
@@ -1238,18 +1252,29 @@ const AppContent: React.FC = React.memo(() => {
                     console.log('🔧 Creating conversation with normalized sellerId:', {
                       original: vehicle.sellerEmail,
                       normalized: normalizedSellerId,
-                      vehicleId: vehicle.id
+                      vehicleId: vehicle.id,
+                      conversationId: newConversation.id
                     });
                   }
                   
-                  if (process.env.NODE_ENV === 'development') {
-                    console.log('🔧 Creating new conversation:', newConversation.id);
+                  // CRITICAL FIX: Add to local state immediately and set activeChat synchronously
+                  setConversations(prev => [...prev, newConversation]);
+                  
+                  // CRITICAL FIX: Set activeChat immediately with the new conversation
+                  // This ensures the chat widget appears right away
+                  setActiveChat(newConversation);
+                  
+                  // Persist to localStorage immediately
+                  try {
+                    localStorage.setItem('reRideActiveChat', JSON.stringify({
+                      id: newConversation.id,
+                      updatedAt: Date.now(),
+                    }));
+                  } catch (error) {
+                    console.warn('Failed to save activeChat to localStorage:', error);
                   }
                   
-                  // Add to local state immediately
-                  setConversations([...conversations, newConversation]);
-                  
-                  // Save to Supabase with proper error handling
+                  // Save to Supabase with proper error handling (async, non-blocking)
                   try {
                     const { saveConversationToSupabase } = await import('./services/conversationService');
                     const { saveConversationWithSync } = await import('./services/syncService');
@@ -1268,30 +1293,52 @@ const AppContent: React.FC = React.memo(() => {
                         setConversations(prev => prev.map(c => 
                           c.id === newConversation.id ? saveResult.data! : c
                         ));
-                        conversation = saveResult.data;
+                        // Update activeChat with server response
+                        setActiveChat(saveResult.data);
+                        // Update localStorage with new ID
+                        try {
+                          localStorage.setItem('reRideActiveChat', JSON.stringify({
+                            id: saveResult.data.id,
+                            updatedAt: Date.now(),
+                          }));
+                        } catch (error) {
+                          console.warn('Failed to update activeChat in localStorage:', error);
+                        }
                       }
                     }
                   } catch (error) {
                     console.error('❌ Failed to save conversation:', error);
-                    // Still continue - conversation is in local state
+                    // Still continue - conversation is in local state and activeChat is set
                     const { saveConversationWithSync } = await import('./services/syncService');
                     await saveConversationWithSync(newConversation);
                   }
                   
                   conversation = newConversation;
+                  addToast('Chat started with seller', 'success');
                 } else {
                   if (process.env.NODE_ENV === 'development') {
                     console.log('🔧 Using existing conversation:', conversation.id);
                   }
+                  
+                  // CRITICAL FIX: Set activeChat for existing conversation
+                  setActiveChat(conversation);
+                  
+                  // Persist to localStorage
+                  try {
+                    localStorage.setItem('reRideActiveChat', JSON.stringify({
+                      id: conversation.id,
+                      updatedAt: Date.now(),
+                    }));
+                  } catch (error) {
+                    console.warn('Failed to save activeChat to localStorage:', error);
+                  }
+                  
+                  addToast('Chat started with seller', 'success');
                 }
                 
                 if (process.env.NODE_ENV === 'development') {
                   console.log('🔧 Setting activeChat:', conversation.id);
                 }
-                
-                // Set active chat - this will trigger room joining via useEffect
-                setActiveChat(conversation);
-                addToast('Chat started with seller', 'success');
               }}
               recommendations={recommendations}
               onSelectVehicle={selectVehicle}
@@ -1321,9 +1368,20 @@ const AppContent: React.FC = React.memo(() => {
               }
             }}
             onStartChat={async (vehicle) => {
+              if (process.env.NODE_ENV === 'development') {
+                console.log('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
+              }
+              
               if (!currentUser) {
                 addToast('Please login to start a chat', 'info');
                 navigate(ViewEnum.LOGIN_PORTAL);
+                return;
+              }
+              
+              // CRITICAL FIX: Validate sellerEmail before proceeding
+              if (!vehicle.sellerEmail) {
+                console.error('❌ Cannot start chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
+                addToast('Unable to start chat: Seller information is missing', 'error');
                 return;
               }
               
@@ -1337,11 +1395,18 @@ const AppContent: React.FC = React.memo(() => {
                 // CRITICAL: Normalize sellerId to ensure it matches seller's email for filtering
                 const normalizedSellerId = vehicle.sellerEmail ? vehicle.sellerEmail.toLowerCase().trim() : '';
                 
+                // CRITICAL FIX: Ensure sellerId is not empty
+                if (!normalizedSellerId) {
+                  console.error('❌ Cannot create conversation: normalized sellerId is empty', { vehicleId: vehicle.id, sellerEmail: vehicle.sellerEmail });
+                  addToast('Unable to start chat: Seller information is invalid', 'error');
+                  return;
+                }
+                
                 const newConversation = {
                   id: `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                   customerId: currentUser.email,
-                  customerName: currentUser.name,
-                  sellerId: normalizedSellerId || vehicle.sellerEmail, // Use normalized, fallback to original
+                  customerName: currentUser.name || 'Customer',
+                  sellerId: normalizedSellerId, // Use normalized (already validated above)
                   vehicleId: vehicle.id,
                   vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
                   vehiclePrice: vehicle.price,
@@ -1356,18 +1421,29 @@ const AppContent: React.FC = React.memo(() => {
                   console.log('🔧 Creating conversation with normalized sellerId:', {
                     original: vehicle.sellerEmail,
                     normalized: normalizedSellerId,
-                    vehicleId: vehicle.id
+                    vehicleId: vehicle.id,
+                    conversationId: newConversation.id
                   });
                 }
                 
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('🔧 Creating new conversation:', newConversation.id);
+                // CRITICAL FIX: Add to local state immediately and set activeChat synchronously
+                setConversations(prev => [...prev, newConversation]);
+                
+                // CRITICAL FIX: Set activeChat immediately with the new conversation
+                // This ensures the chat widget appears right away
+                setActiveChat(newConversation);
+                
+                // Persist to localStorage immediately
+                try {
+                  localStorage.setItem('reRideActiveChat', JSON.stringify({
+                    id: newConversation.id,
+                    updatedAt: Date.now(),
+                  }));
+                } catch (error) {
+                  console.warn('Failed to save activeChat to localStorage:', error);
                 }
                 
-                // Add to local state immediately
-                setConversations([...conversations, newConversation]);
-                
-                // Save to Supabase with proper error handling
+                // Save to Supabase with proper error handling (async, non-blocking)
                 try {
                   const { saveConversationToSupabase } = await import('./services/conversationService');
                   const { saveConversationWithSync } = await import('./services/syncService');
@@ -1386,30 +1462,52 @@ const AppContent: React.FC = React.memo(() => {
                       setConversations(prev => prev.map(c => 
                         c.id === newConversation.id ? saveResult.data! : c
                       ));
-                      conversation = saveResult.data;
+                      // Update activeChat with server response
+                      setActiveChat(saveResult.data);
+                      // Update localStorage with new ID
+                      try {
+                        localStorage.setItem('reRideActiveChat', JSON.stringify({
+                          id: saveResult.data.id,
+                          updatedAt: Date.now(),
+                        }));
+                      } catch (error) {
+                        console.warn('Failed to update activeChat in localStorage:', error);
+                      }
                     }
                   }
                 } catch (error) {
                   console.error('❌ Failed to save conversation:', error);
-                  // Still continue - conversation is in local state
+                  // Still continue - conversation is in local state and activeChat is set
                   const { saveConversationWithSync } = await import('./services/syncService');
                   await saveConversationWithSync(newConversation);
                 }
                 
                 conversation = newConversation;
+                addToast('Chat started with seller', 'success');
               } else {
                 if (process.env.NODE_ENV === 'development') {
                   console.log('🔧 Using existing conversation:', conversation.id);
                 }
+                
+                // CRITICAL FIX: Set activeChat for existing conversation
+                setActiveChat(conversation);
+                
+                // Persist to localStorage
+                try {
+                  localStorage.setItem('reRideActiveChat', JSON.stringify({
+                    id: conversation.id,
+                    updatedAt: Date.now(),
+                  }));
+                } catch (error) {
+                  console.warn('Failed to save activeChat to localStorage:', error);
+                }
+                
+                addToast('Chat started with seller', 'success');
               }
               
               if (process.env.NODE_ENV === 'development') {
                 console.log('🔧 Setting activeChat:', conversation.id);
               }
-              
-              // Set active chat - this will trigger room joining via useEffect
-              setActiveChat(conversation);
-              addToast('Chat started with seller', 'success');
             }}
             recommendations={recommendations}
             onSelectVehicle={selectVehicle}
@@ -3432,16 +3530,23 @@ const AppContent: React.FC = React.memo(() => {
           headerTitle={getPageTitle()}
           showBack={currentView === ViewEnum.DETAIL}
           onBack={() => navigate(ViewEnum.USED_CARS)}
-        currentView={currentView}
-        onNavigate={navigate}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        wishlistCount={wishlist.length}
-        inboxCount={conversations.filter(c => {
-          if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
-          return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-        }).length}
-      >
+          currentView={currentView}
+          onNavigate={navigate}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          wishlistCount={wishlist.length}
+          inboxCount={
+            currentUser?.role === 'seller'
+              ? conversations.filter(c => {
+                  if (!c || !c.sellerId || !currentUser?.email || c.isReadBySeller) return false;
+                  return c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+                }).length
+              : conversations.filter(c => {
+                  if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
+                  return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+                }).length
+          }
+        >
         <ErrorBoundary>
           <Suspense fallback={<LoadingSpinner />}>
             <PageTransition currentView={currentView}>
@@ -3608,7 +3713,7 @@ const AppContent: React.FC = React.memo(() => {
       </div>
     </>
   );
-});
+};
 
 const App: React.FC = () => {
   return (
