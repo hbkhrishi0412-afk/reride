@@ -150,6 +150,28 @@ class DataService {
             throw error;
           }
           
+          // Handle 503 Service Unavailable errors specially (e.g., missing SUPABASE_SERVICE_ROLE_KEY)
+          if (response.status === 503) {
+            const errorText = await response.text();
+            let errorMessage = 'Service temporarily unavailable. Please try again later.';
+            let errorData: any = {};
+            
+            try {
+              errorData = JSON.parse(errorText);
+              // Prioritize reason field, then error field, then diagnostic
+              errorMessage = errorData.reason || errorData.error || errorData.diagnostic || errorMessage;
+            } catch {
+              // Use default error message if JSON parsing fails
+            }
+            
+            // Throw error with status code and preserve error data
+            const error: any = new Error(errorMessage);
+            error.status = 503;
+            error.code = 503;
+            error.errorData = errorData; // Preserve full error object for detailed logging
+            throw error;
+          }
+          
           // For 404 errors in development, fail silently and let fallback handle it
           if (response.status === 404 && this.isDevelopment) {
             throw new Error('API endpoint not found (expected in development)');
@@ -200,12 +222,19 @@ class DataService {
       // Check if user has access token (required for production)
       const accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
       if (accessToken) {
+        // Log token presence (but not the token itself) for debugging
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📊 getAuthHeaders: Access token found, length:', accessToken.length);
+        }
         return { 'Authorization': `Bearer ${accessToken}` };
       }
       
       // In production, we must have a token - return empty headers to trigger 401
       // This will cause the API to return 401, which will trigger fallback to local storage
       // In development, we can proceed without token (localStorage mode)
+      if (!this.isDevelopment) {
+        console.warn('⚠️ getAuthHeaders: No access token found in production mode');
+      }
       if (!this.isDevelopment) {
         console.warn('⚠️ No access token found in production - API calls will fail and fallback to local storage');
       }
@@ -616,6 +645,7 @@ class DataService {
         console.warn('   1. No users exist in the database');
         console.warn('   2. Authentication/authorization issue');
         console.warn('   3. Database connection problem');
+        console.warn('   4. SUPABASE_SERVICE_ROLE_KEY might be missing (check Vercel environment variables)');
       }
       
       // Cache the API data locally for offline use (use production cache key)
@@ -623,6 +653,26 @@ class DataService {
       return users;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorAny = error as any;
+      
+      // Check for 503 Service Unavailable errors (e.g., missing SUPABASE_SERVICE_ROLE_KEY)
+      if (errorAny?.status === 503 || errorAny?.code === 503 || errorMessage.includes('503') || errorMessage.includes('Service temporarily unavailable')) {
+        const detailedError = errorAny?.errorData || {};
+        const reason = detailedError.reason || errorMessage;
+        const diagnostic = detailedError.diagnostic || '';
+        
+        console.error('❌ CRITICAL: Service unavailable error when fetching users:', reason);
+        if (diagnostic) {
+          console.error('   Diagnostic:', diagnostic);
+        }
+        console.error('   This usually means SUPABASE_SERVICE_ROLE_KEY is missing or misconfigured.');
+        console.error('   Check Vercel environment variables and ensure the key is set for Production environment.');
+        
+        // Don't use cached data for 503 errors - they indicate a configuration problem
+        // Return empty array so the UI shows 0 users, which will prompt admin to check configuration
+        return [];
+      }
+      
       console.error('❌ Production API failed to load users:', errorMessage);
       
       // Check if it's an authentication/authorization error

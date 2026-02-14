@@ -13,6 +13,7 @@ import { planService } from '../services/planService';
 import ImportVehiclesModal from './ImportVehiclesModal';
 import ImportUsersModal from './ImportUsersModal';
 import AdminServiceOps from './AdminServiceOps';
+import ServiceManagement from './ServiceManagement';
 
 // --- Seller Filter Dropdown Component ---
 interface SellerFilterDropdownProps {
@@ -166,7 +167,7 @@ interface AdminPanelProps {
     onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => void;
 }
 
-type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps';
+type AdminView = 'analytics' | 'users' | 'listings' | 'moderation' | 'certificationRequests' | 'vehicleData' | 'sellCarAdmin' | 'auditLog' | 'settings' | 'support' | 'faq' | 'payments' | 'planManagement' | 'serviceOps' | 'serviceManagement';
 type RoleFilter = 'all' | 'customer' | 'seller' | 'admin';
 // FIX: Restrict sortable keys to prevent comparison errors on incompatible types.
 type SortableUserKey = 'name' | 'status';
@@ -979,6 +980,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         console.warn('   2. Authentication/authorization issue - check if admin token is valid');
                         console.warn('   3. Database connection problem');
                         console.warn('   4. RLS policies blocking access');
+                        console.warn('   5. SUPABASE_SERVICE_ROLE_KEY might be missing in Vercel environment variables');
+                        console.warn('   → Check Vercel Dashboard → Settings → Environment Variables');
+                        console.warn('   → Ensure SUPABASE_SERVICE_ROLE_KEY is set for Production environment');
+                        console.warn('   → After setting, redeploy the application');
                         hasFetchedUsersRef.current = false; // Allow retry
                         return;
                     }
@@ -997,7 +1002,24 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         window.location.reload();
                     }, 500);
                 } catch (error) {
-                    console.error('❌ AdminPanel: Failed to fetch users:', error);
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.error('❌ AdminPanel: Failed to fetch users:', errorMessage);
+                    
+                    // Check for specific error types
+                    if (errorMessage.includes('SUPABASE_SERVICE_ROLE_KEY') || errorMessage.includes('Service temporarily unavailable') || errorMessage.includes('503')) {
+                        console.error('❌ CRITICAL: This appears to be a configuration issue.');
+                        console.error('   The SUPABASE_SERVICE_ROLE_KEY environment variable is likely missing or misconfigured.');
+                        console.error('   Action required:');
+                        console.error('   1. Go to Vercel Dashboard → Your Project → Settings → Environment Variables');
+                        console.error('   2. Add SUPABASE_SERVICE_ROLE_KEY for Production environment');
+                        console.error('   3. Get the key from Supabase Dashboard → Settings → API → service_role key');
+                        console.error('   4. Redeploy your application after setting the variable');
+                    } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden') || errorMessage.includes('Admin access required')) {
+                        console.error('❌ Access denied: Ensure you are logged in as an admin user.');
+                    } else if (errorMessage.includes('401') || errorMessage.includes('Authentication')) {
+                        console.error('❌ Authentication failed: Please log in again.');
+                    }
+                    
                     hasFetchedUsersRef.current = false; // Allow retry on next mount
                 }
             };
@@ -1769,6 +1791,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 return <PlanManagementView />;
             case 'serviceOps':
                 return <AdminServiceOps />;
+            case 'serviceManagement':
+                return <ServiceManagement />;
             default:
                 return null;
         }
@@ -3301,6 +3325,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             <NavItem view="planManagement" label="Plan Management" />
                             <NavItem view="faq" label="FAQ Management" />
                             <NavItem view="serviceOps" label="Service Ops" />
+                            <NavItem view="serviceManagement" label="Service Management" />
                             <NavItem view="vehicleData" label="Vehicle Data" />
                             <NavItem view="sellCarAdmin" label="Sell Car Submissions" />
                             <NavItem view="auditLog" label="Audit Log" />

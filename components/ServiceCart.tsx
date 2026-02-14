@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 
 type ServicePackage = {
     id: string;
@@ -172,26 +172,36 @@ const ServiceCart: React.FC<Props> = ({
                         isCustom: meta.price === undefined || meta.price === 0,
                     }));
                 
-                // If we have dynamic packages, use them; otherwise fall back to mock
-                if (dynamicPackages.length > 0) {
-                    setAvailableServicePackages(dynamicPackages);
-                    // Update items if the first service is no longer available
-                    setItems(prev => {
-                        const validItems = prev.filter(item => 
-                            dynamicPackages.some(pkg => pkg.id === item.serviceId)
-                        );
-                        // If no valid items, add the first available service
-                        if (validItems.length === 0 && dynamicPackages[0]) {
-                            return [{ serviceId: dynamicPackages[0].id, quantity: 1 }];
+                // Merge dynamic packages with existing packages (including mock and prefill packages)
+                setAvailableServicePackages(prev => {
+                    const existingIds = new Set(prev.map(p => p.id));
+                    const newPackages = dynamicPackages.filter(p => !existingIds.has(p.id));
+                    // Merge: keep existing packages (mock, prefill) and add new API packages
+                    const merged = [...prev, ...newPackages];
+                    // Also update existing packages if they match by name (for API updates)
+                    return merged.map(pkg => {
+                        const apiMatch = dynamicPackages.find(api => api.name === pkg.name && api.id !== pkg.id);
+                        // Only update if it's not a prefill package (prefill packages have service- prefix)
+                        if (apiMatch && !pkg.id.startsWith('service-')) {
+                            return { ...pkg, price: apiMatch.price, description: apiMatch.description };
                         }
-                        return validItems;
+                        return pkg;
                     });
-                } else {
-                    // Fall back to provided servicePackages or mock
-                    setAvailableServicePackages(servicePackages);
-                    if (items.length === 0 && servicePackages[0]) {
-                        setItems([{ serviceId: servicePackages[0].id, quantity: 1 }]);
-                    }
+                });
+                
+                // Only auto-add first service if cart is empty and no prefill is pending
+                if (items.length === 0 && !prefillDataRef.current?.serviceId) {
+                    setItems(prev => {
+                        if (prev.length > 0) return prev;
+                        // Prefer dynamic packages, but fall back to mock
+                        const firstPackage = dynamicPackages.length > 0 
+                            ? dynamicPackages[0] 
+                            : servicePackages[0];
+                        if (firstPackage) {
+                            return [{ serviceId: firstPackage.id, quantity: 1 }];
+                        }
+                        return prev;
+                    });
                 }
             } catch (error) {
                 console.error('Error fetching provider services:', error);
@@ -217,8 +227,37 @@ const ServiceCart: React.FC<Props> = ({
         localStorage.setItem(CART_KEY, JSON.stringify(payload));
     }, [items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses]);
 
-    // Load persisted cart
+    // Load persisted cart (but skip if prefill is present - prefill takes priority)
     useEffect(() => {
+        // Check if prefill exists - if so, don't load localStorage items to avoid conflicts
+        const hasPrefill = sessionStorage.getItem('service_cart_prefill');
+        if (hasPrefill) {
+            // Prefill will handle items, but we can still load other settings
+            const raw = localStorage.getItem(CART_KEY);
+            if (!raw) return;
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed.addresses && Array.isArray(parsed.addresses) && parsed.addresses.length > 0) {
+                    setAddresses(parsed.addresses);
+                }
+                // Don't set items - let prefill handle it
+                setSelectedAddress(parsed.selectedAddress || addresses[0]?.id || '');
+                setSelectedSlot(parsed.selectedSlot || timeSlots[0]?.id || '');
+                setSelectedCoupon(parsed.selectedCoupon);
+                setSelectedProviders(parsed.selectedProviders || (serviceProviders[0]?.id ? [serviceProviders[0].id] : []));
+                setNote(parsed.note || '');
+                if (parsed.carDetails) {
+                    setCarDetails(parsed.carDetails);
+                    setCarForm(parsed.carDetails);
+                    setCarFormOpen(false);
+                }
+            } catch {
+                // ignore parse errors
+            }
+            return;
+        }
+        
+        // No prefill - load normally from localStorage
         const raw = localStorage.getItem(CART_KEY);
         if (!raw) return;
         try {
@@ -243,12 +282,17 @@ const ServiceCart: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Store prefill data in a ref to use in multiple effects
+    const prefillDataRef = useRef<{ serviceId: string; serviceName?: string; price?: number; customQuote?: boolean; carDetails?: any } | null>(null);
+
     // Prefill from session (coming from landing cards or service detail page)
     useEffect(() => {
         const raw = sessionStorage.getItem('service_cart_prefill');
         if (!raw) return;
         try {
             const parsed = JSON.parse(raw);
+            prefillDataRef.current = parsed;
+            
             if (parsed.serviceId) {
                 // Check if this is a service ID from ServiceDetail (starts with 'service-')
                 if (parsed.serviceId.startsWith('service-')) {
@@ -273,29 +317,87 @@ const ServiceCart: React.FC<Props> = ({
                         isCustom: parsed.customQuote || parsed.price === 0,
                     };
                     
-                    // Add to available packages if it doesn't exist
+                    // Add to available packages and set items in the same update cycle
                     setAvailableServicePackages(prev => {
-                        if (prev.some(p => p.id === dynamicPackage.id)) {
-                            // Update existing package with new data
-                            return prev.map(p => p.id === dynamicPackage.id ? dynamicPackage : p);
+                        const updated = prev.some(p => p.id === dynamicPackage.id)
+                            ? prev.map(p => p.id === dynamicPackage.id ? dynamicPackage : p)
+                            : [...prev, dynamicPackage];
+                        
+                        // Set items after package is added (using functional update)
+                        // This ensures the package exists when items are set
+                        setItems(prevItems => {
+                            // Check if item already exists
+                            if (prevItems.some(item => item.serviceId === parsed.serviceId)) {
+                                return prevItems.map(item => 
+                                    item.serviceId === parsed.serviceId 
+                                        ? { ...item, quantity: Math.max(1, item.quantity) }
+                                        : item
+                                );
+                            }
+                            // Add the new item - package is guaranteed to exist in updated array
+                            return [...prevItems, { serviceId: parsed.serviceId, quantity: 1 }];
+                        });
+                        
+                        return updated;
+                    });
+                } else {
+                    // For non-service- prefixed IDs, check if package exists first
+                    setItems(prev => {
+                        if (prev.some(item => item.serviceId === parsed.serviceId)) {
+                            return prev;
                         }
-                        return [...prev, dynamicPackage];
+                        // Check if package exists in available packages
+                        setAvailableServicePackages(currentPackages => {
+                            if (currentPackages.some(p => p.id === parsed.serviceId)) {
+                                return currentPackages;
+                            }
+                            // Package doesn't exist, can't add item
+                            return currentPackages;
+                        });
+                        return [...prev, { serviceId: parsed.serviceId, quantity: 1 }];
                     });
                 }
-                
-                setItems([{ serviceId: parsed.serviceId, quantity: 1 }]);
             }
+            
             if (parsed.carDetails) {
                 setCarDetails(parsed.carDetails);
                 setCarForm(parsed.carDetails);
                 setCarFormOpen(false);
             }
-            // Clear the prefill after using it
+            
+            // Clear the prefill after processing
             sessionStorage.removeItem('service_cart_prefill');
-        } catch {
-            // ignore
+            prefillDataRef.current = null;
+        } catch (error) {
+            console.error('Error processing prefill:', error);
+            // Clear on error
+            prefillDataRef.current = null;
+            sessionStorage.removeItem('service_cart_prefill');
         }
     }, []);
+
+    // Backup: Set items after package is available in availableServicePackages
+    // This handles cases where the package might be added asynchronously (e.g., from API)
+    useEffect(() => {
+        if (!prefillDataRef.current?.serviceId) return;
+        
+        const serviceId = prefillDataRef.current.serviceId;
+        const packageExists = availableServicePackages.some(p => p.id === serviceId);
+        
+        if (packageExists) {
+            // Package is now available, ensure item is in cart
+            setItems(prev => {
+                // If the item is already in cart, keep it
+                if (prev.some(item => item.serviceId === serviceId)) {
+                    return prev;
+                }
+                // Otherwise, add it to the cart
+                return [...prev, { serviceId, quantity: 1 }];
+            });
+            // Clear the ref after using it
+            prefillDataRef.current = null;
+        }
+    }, [availableServicePackages]);
 
     const totals = useMemo(() => {
         const subtotal = items.reduce((sum, item) => {
@@ -452,6 +554,15 @@ const ServiceCart: React.FC<Props> = ({
         // Use the first provider as the primary providerId
         const primaryProviderId = providersToNotify[0];
         
+        // Build servicePackages array from selected items
+        const servicePackages = items.map(item => {
+            const svc = availableServicePackages.find(s => s.id === item.serviceId);
+            return {
+                id: item.serviceId,
+                name: svc?.name || item.serviceId,
+            };
+        });
+        
         const payload = {
             items,
             addressId: selectedAddress,
@@ -459,11 +570,20 @@ const ServiceCart: React.FC<Props> = ({
             slotId: selectedSlot,
             couponCode: selectedCoupon,
             providerId: primaryProviderId,
+            candidateProviderIds: providersToNotify, // Include all providers to notify
             total: totals.total,
             note,
             carDetails,
+            servicePackages,
+            serviceTypes: selectedServiceTypes,
         };
-        await onSubmitRequest?.(payload);
+        
+        try {
+            await onSubmitRequest?.(payload);
+        } catch (error) {
+            console.error('Error submitting service request:', error);
+            setCarFormError(error instanceof Error ? error.message : 'Failed to submit service request. Please try again.');
+        }
     };
 
     const handleSaveCarDetails = () => {
@@ -823,111 +943,112 @@ const ServiceCart: React.FC<Props> = ({
                                     <p className="text-xs text-gray-400 dark:text-gray-500">Add a service package below to get started</p>
                                 </div>
                             ) : (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {items.map((item, index) => {
                                         const svc = availableServicePackages.find(s => s.id === item.serviceId);
                                         if (!svc) {
-                                            console.warn('Service package not found for item:', item.serviceId);
                                             return null;
                                         }
                                         const itemTotal = svc.price * item.quantity;
                                         return (
-                                            <div key={`${item.serviceId}-${index}`} className="relative flex flex-col sm:flex-row gap-4 sm:gap-4 items-start bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-blue-900/20 dark:via-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 sm:p-6 border-2 border-blue-200 dark:border-blue-800 shadow-lg hover:shadow-xl transition-shadow">
+                                            <div key={`${item.serviceId}-${index}`} className="relative bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-blue-900/20 dark:via-purple-900/20 dark:to-pink-900/20 rounded-lg p-3 sm:p-4 border-2 border-blue-200 dark:border-blue-800 shadow-md hover:shadow-lg transition-shadow overflow-hidden">
                                                 {/* Selected Badge */}
-                                                <div className="absolute top-3 right-3 sm:top-4 sm:right-4">
-                                                    <div className="w-7 h-7 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center shadow-md">
-                                                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10">
+                                                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center shadow-sm">
+                                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                                         </svg>
                                                     </div>
                                                 </div>
                                                 
-                                                {/* Package Icon */}
-                                                <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-lg flex-shrink-0">
-                                                    {svc.name.slice(0, 1)}
-                                                </div>
-                                                
-                                                {/* Package Details */}
-                                                <div className="flex-1 min-w-0 w-full sm:pr-8">
-                                                    {/* Package Name */}
-                                                    <div className="font-black text-gray-900 dark:text-white text-lg sm:text-xl mb-2 pr-8 sm:pr-0">
-                                                        {svc.name}
+                                                {/* Main Content Grid */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-3 sm:gap-4">
+                                                    {/* Package Icon */}
+                                                    <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-black text-lg sm:text-xl shadow-md flex-shrink-0 mx-auto sm:mx-0">
+                                                        {svc.name.slice(0, 1)}
                                                     </div>
                                                     
-                                                    {/* Warranty & Description */}
-                                                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                                                        {svc.warrantyMonths > 0 && (
-                                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-xs font-semibold">
-                                                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                                                </svg>
-                                                                {svc.warrantyMonths} months warranty
-                                                            </span>
-                                                        )}
-                                                        {svc.description && (
-                                                            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">
-                                                                {svc.description}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    {/* Price Information */}
-                                                    <div className="mb-3 sm:mb-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                                                        <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
-                                                            <div>
-                                                                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Unit Price</div>
-                                                                <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400">
-                                                                    {svc.price > 0 ? `₹${svc.price.toLocaleString()}` : 'Custom quote'}
-                                                                </div>
-                                                            </div>
-                                                            {item.quantity > 1 && (
-                                                                <div className="text-left sm:text-right">
-                                                                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total</div>
-                                                                    <div className="text-lg sm:text-xl font-black text-gray-900 dark:text-white">
-                                                                        {item.quantity} × ₹{svc.price.toLocaleString()} = ₹{itemTotal.toLocaleString()}
-                                                                    </div>
-                                                                </div>
+                                                    {/* Package Details */}
+                                                    <div className="flex-1 min-w-0">
+                                                        {/* Package Name */}
+                                                        <div className="font-black text-gray-900 dark:text-white text-base sm:text-lg mb-1.5 pr-6">
+                                                            {svc.name}
+                                                        </div>
+                                                        
+                                                        {/* Warranty & Description */}
+                                                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2.5">
+                                                            {svc.warrantyMonths > 0 && (
+                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md text-xs font-semibold">
+                                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                    {svc.warrantyMonths} months warranty
+                                                                </span>
+                                                            )}
+                                                            {svc.description && (
+                                                                <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">
+                                                                    {svc.description}
+                                                                </span>
                                                             )}
                                                         </div>
-                                                    </div>
-                                                    
-                                                    {/* Quantity Controls & Actions */}
-                                                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                                                        {/* Mobile: Stack vertically, Desktop: Side by side */}
-                                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                                            {/* Quantity Section */}
-                                                            <div className="flex-1">
-                                                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">Quantity</label>
-                                                                <div className="flex items-center gap-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm w-fit">
-                                                                    <button
-                                                                        onClick={() => updateQuantity(item.serviceId, -1)}
-                                                                        className="h-9 w-9 rounded-l-lg flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-lg border-r border-gray-300 dark:border-gray-600 touch-manipulation"
-                                                                        aria-label="Decrease quantity"
-                                                                    >−</button>
-                                                                    <span className="h-9 w-10 flex items-center justify-center text-base font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border-x border-gray-300 dark:border-gray-600">
-                                                                        {item.quantity}
-                                                                    </span>
-                                                                    <button
-                                                                        onClick={() => updateQuantity(item.serviceId, 1)}
-                                                                        className="h-9 w-9 rounded-r-lg flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-lg border-l border-gray-300 dark:border-gray-600 touch-manipulation"
-                                                                        aria-label="Increase quantity"
-                                                                    >+</button>
+                                                        
+                                                        {/* Price Information */}
+                                                        <div className="mb-2.5 p-2 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">
+                                                            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1.5">
+                                                                <div>
+                                                                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Unit Price</div>
+                                                                    <div className="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400">
+                                                                        {svc.price > 0 ? `₹${svc.price.toLocaleString()}` : 'Custom quote'}
+                                                                    </div>
                                                                 </div>
+                                                                {item.quantity > 1 && (
+                                                                    <div className="text-left sm:text-right">
+                                                                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Total</div>
+                                                                        <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
+                                                                            {item.quantity} × ₹{svc.price.toLocaleString()} = ₹{itemTotal.toLocaleString()}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                            
-                                                            {/* Remove Button */}
-                                                            <div className="flex flex-col sm:items-end">
-                                                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide sm:opacity-0 sm:h-0">Action</label>
-                                                                <button
-                                                                    onClick={() => removeService(item.serviceId)}
-                                                                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 active:bg-red-100 dark:active:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-300 font-semibold rounded-lg transition-all border border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 shadow-sm hover:shadow touch-manipulation min-h-[36px] sm:min-h-0"
-                                                                    aria-label="Remove package"
-                                                                >
-                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                    </svg>
-                                                                    <span className="text-sm">Remove</span>
-                                                                </button>
+                                                        </div>
+                                                        
+                                                        {/* Quantity Controls & Actions */}
+                                                        <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                                                            <div className="flex flex-col sm:flex-row sm:items-end gap-2.5">
+                                                                {/* Quantity Section */}
+                                                                <div className="flex-shrink-0">
+                                                                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wide">Quantity</label>
+                                                                    <div className="flex items-center gap-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm">
+                                                                        <button
+                                                                            onClick={() => updateQuantity(item.serviceId, -1)}
+                                                                            className="h-8 w-8 rounded-l-lg flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-base border-r border-gray-300 dark:border-gray-600 touch-manipulation"
+                                                                            aria-label="Decrease quantity"
+                                                                        >−</button>
+                                                                        <span className="h-8 w-10 flex items-center justify-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border-x border-gray-300 dark:border-gray-600">
+                                                                            {item.quantity}
+                                                                        </span>
+                                                                        <button
+                                                                            onClick={() => updateQuantity(item.serviceId, 1)}
+                                                                            className="h-8 w-8 rounded-r-lg flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-base border-l border-gray-300 dark:border-gray-600 touch-manipulation"
+                                                                            aria-label="Increase quantity"
+                                                                        >+</button>
+                                                                    </div>
+                                                                </div>
+                                                                
+                                                                {/* Remove Button */}
+                                                                <div className="flex-shrink-0">
+                                                                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wide sm:opacity-0 sm:h-0">Action</label>
+                                                                    <button
+                                                                        onClick={() => removeService(item.serviceId)}
+                                                                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 active:bg-red-100 dark:active:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-300 font-semibold rounded-lg transition-all border border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 shadow-sm hover:shadow touch-manipulation min-h-[32px] text-sm"
+                                                                        aria-label="Remove package"
+                                                                    >
+                                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                        </svg>
+                                                                        <span className="text-xs">Remove</span>
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>

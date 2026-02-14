@@ -535,13 +535,17 @@ END $$;
 -- 11. FUNCTIONS: Auto-update updated_at timestamp
 -- ============================================================================
 -- Function to automatically update updated_at column
+-- SECURITY: Set search_path to prevent SQL injection vulnerabilities
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Drop existing triggers if they exist (to avoid errors on re-run)
 DROP TRIGGER IF EXISTS update_users_updated_at ON users;

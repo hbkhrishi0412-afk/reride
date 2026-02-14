@@ -43,27 +43,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         availability: body.availability || 'weekdays',
       };
 
-      // Only allow creating profile for the authenticated Firebase user
-      if (payload.email !== email.toLowerCase()) {
+      // Only allow creating profile for the authenticated user
+      const normalizedPayloadEmail = payload.email.toLowerCase().trim();
+      const normalizedAuthEmail = email.toLowerCase().trim();
+      
+      if (normalizedPayloadEmail !== normalizedAuthEmail) {
         return res.status(403).json({ error: 'Email mismatch with authenticated user' });
       }
 
-      await supabaseServiceProviderService.create({ ...payload, id: uid });
+      // Check if service provider profile already exists
+      try {
+        const existingProvider = await supabaseServiceProviderService.findByEmail(payload.email);
+        if (existingProvider) {
+          return res.status(400).json({ error: 'Service provider profile already exists for this email' });
+        }
+      } catch (error) {
+        // If findByEmail throws (not found), that's fine - we can create new
+        console.log('No existing provider found, proceeding with creation');
+      }
+
+      try {
+        await supabaseServiceProviderService.create({ ...payload, id: uid });
+      } catch (createError: any) {
+        console.error('Failed to create service provider:', createError);
+        // Check if it's a duplicate key error
+        if (createError.message?.includes('duplicate') || createError.message?.includes('already exists')) {
+          return res.status(400).json({ error: 'Service provider profile already exists for this account' });
+        }
+        throw createError;
+      }
 
       // Also sync into users collection so the provider shows up in admin panel
-      const existingUser = await supabaseUserService.findByEmail(payload.email);
-      if (!existingUser) {
-        await supabaseUserService.create({
-          name: payload.name,
-          email: payload.email,
-          mobile: payload.phone,
-          role: 'seller', // reuse seller slot for providers in admin panel
-          location: payload.city,
-          status: 'active',
-          authProvider: 'email',
-          firebaseUid: uid,
-          createdAt: new Date().toISOString(),
-        });
+      try {
+        const existingUser = await supabaseUserService.findByEmail(payload.email);
+        if (!existingUser) {
+          await supabaseUserService.create({
+            name: payload.name,
+            email: payload.email,
+            mobile: payload.phone,
+            role: 'seller', // reuse seller slot for providers in admin panel
+            location: payload.city,
+            status: 'active',
+            authProvider: 'email',
+            firebaseUid: uid,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } catch (userError) {
+        // Log but don't fail - service provider profile was created successfully
+        console.warn('Failed to sync service provider to users table:', userError);
       }
 
       return res.status(201).json({ uid, ...payload });
@@ -97,7 +125,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Service provider API error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    return res.status(401).json({ error: message });
+    
+    // Provide more specific error codes
+    if (message.includes('Missing bearer token') || message.includes('Invalid or expired token')) {
+      return res.status(401).json({ error: 'Authentication required. Please sign up or log in first.' });
+    }
+    
+    if (message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+      return res.status(500).json({ error: 'Server configuration error. Please contact support.' });
+    }
+    
+    // Default to 401 for auth errors, 500 for others
+    const statusCode = message.includes('token') || message.includes('auth') ? 401 : 500;
+    return res.status(statusCode).json({ error: message });
   }
 }
 

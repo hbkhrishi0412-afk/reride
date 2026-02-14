@@ -227,7 +227,7 @@ const isSupabaseStoragePath = (url: string): boolean => {
 };
 
 /**
- * Converts a Supabase Storage path to a public URL
+ * Converts a Supabase Storage path to a public URL (synchronous version)
  * @param path - The storage path (e.g., "vehicles/123/image.jpg")
  * @returns Public URL or original path if conversion fails
  */
@@ -235,14 +235,23 @@ const convertStoragePathToUrl = (path: string): string => {
   try {
     // Try to get Supabase client (only works in browser/client context)
     if (typeof window !== 'undefined') {
-      // Dynamic import to avoid SSR issues
-      import('../lib/supabase.js').then(({ getSupabaseClient }) => {
-        const supabase = getSupabaseClient();
-        const { data } = supabase.storage
-          .from('images')
-          .getPublicUrl(path);
-        return data.publicUrl || path;
-      }).catch(() => path);
+      // Try synchronous conversion if Supabase client is available
+      try {
+        // Check if we can access Supabase client synchronously
+        const supabaseModule = require('../lib/supabase.js');
+        if (supabaseModule && supabaseModule.getSupabaseClient) {
+          const supabase = supabaseModule.getSupabaseClient();
+          const { data } = supabase.storage
+            .from('images')
+            .getPublicUrl(path);
+          if (data?.publicUrl) {
+            return data.publicUrl;
+          }
+        }
+      } catch {
+        // If synchronous access fails, return path as-is
+        // The LazyImage component will handle async conversion on error
+      }
     }
     // If we can't convert, return original path
     return path;

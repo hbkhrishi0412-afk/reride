@@ -88,19 +88,41 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
         return;
       }
       
+      if (!email || !password) {
+        setError('Email and password are required');
+        setLoading(false);
+        return;
+      }
+      
       const result = await signUpWithEmail(email, password, {
         name,
         mobile: phone,
         role: 'seller',
       });
       
-      if (!result.success || !result.session) {
+      if (!result.success) {
         throw new Error(result.reason || 'Signup failed');
       }
 
+      // Check if user was created (even if session is null due to email confirmation)
+      if (!result.user) {
+        throw new Error('Failed to create user account');
+      }
+
+      // If session is null, it means email confirmation is required
+      if (!result.session) {
+        setError('Account created! Please check your email to confirm your account before signing in.');
+        setLoading(false);
+        return;
+      }
+
+      // Create service provider profile using the session token
       const resp = await fetch('/api/service-providers', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${result.session.access_token}`, 'Content-Type': 'application/json' },
+        headers: { 
+          Authorization: `Bearer ${result.session.access_token}`, 
+          'Content-Type': 'application/json' 
+        },
         body: JSON.stringify({
           name,
           email,
@@ -114,7 +136,14 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
 
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to create provider profile');
+        const errorMsg = data.error || 'Failed to create provider profile';
+        
+        // If it's an authentication error, provide helpful message
+        if (resp.status === 401 || resp.status === 403) {
+          throw new Error('Authentication failed. Please try logging in after confirming your email.');
+        }
+        
+        throw new Error(errorMsg);
       }
 
       const provider = await resp.json();
