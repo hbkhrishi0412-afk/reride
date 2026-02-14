@@ -40,25 +40,27 @@ interface VehicleListProps {
 // Base items per page - optimized for performance (10-12 vehicles per load)
 const BASE_ITEMS_PER_PAGE = 12;
 
+// Amazon/Flipkart-style skeleton loader with shimmer effect
 const VehicleCardSkeleton: React.FC = () => (
-    <div className="bg-white rounded-xl shadow-soft-lg overflow-hidden">
-      <div className="w-full h-40 sm:h-56 bg-reride-light-gray dark:bg-brand-gray-700 animate-pulse"></div>
+    <div className="bg-white rounded-xl shadow-soft-lg overflow-hidden relative">
+      {/* Image skeleton with shimmer - Amazon/Flipkart style */}
+      <div className="w-full h-40 sm:h-56 skeleton relative overflow-hidden"></div>
       <div className="p-3 sm:p-5">
-        <div className="flex justify-between items-start">
-          <div className="h-5 sm:h-6 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-3/5 mb-2 animate-pulse"></div>
-          <div className="h-5 sm:h-6 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-1/5 mb-2 animate-pulse"></div>
+        <div className="flex justify-between items-start mb-2">
+          <div className="h-5 sm:h-6 skeleton rounded w-3/5"></div>
+          <div className="h-5 sm:h-6 skeleton rounded w-1/5"></div>
         </div>
-        <div className="h-3 sm:h-4 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-1/3 mb-4 animate-pulse"></div>
-        <div className="h-px bg-reride-light-gray dark:bg-brand-gray-700 my-3 sm:my-4"></div>
+        <div className="h-3 sm:h-4 skeleton rounded w-1/3 mb-4"></div>
+        <div className="h-px bg-gray-200 my-3 sm:my-4"></div>
         <div className="grid grid-cols-2 gap-2">
-           <div className="h-4 sm:h-5 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
-           <div className="h-4 sm:h-5 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
-           <div className="h-4 sm:h-5 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
-           <div className="h-4 sm:h-5 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-full animate-pulse"></div>
+           <div className="h-4 sm:h-5 skeleton rounded w-full"></div>
+           <div className="h-4 sm:h-5 skeleton rounded w-full"></div>
+           <div className="h-4 sm:h-5 skeleton rounded w-full"></div>
+           <div className="h-4 sm:h-5 skeleton rounded w-full"></div>
         </div>
         <div className="flex justify-between items-center mt-4 sm:mt-6">
-           <div className="h-7 sm:h-8 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-2/5 animate-pulse"></div>
-           <div className="h-5 sm:h-6 bg-reride-light-gray dark:bg-brand-gray-700 rounded w-1/4 animate-pulse"></div>
+           <div className="h-7 sm:h-8 skeleton rounded w-2/5"></div>
+           <div className="h-5 sm:h-6 skeleton rounded w-1/4"></div>
         </div>
       </div>
     </div>
@@ -1556,17 +1558,23 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             {isLoading || isAiSearching ? (
               Array.from({ length: 6 }).map((_, index) => (
                 <div
-                  key={index}
-                  className="bg-white rounded-2xl shadow-lg overflow-hidden animate-pulse"
+                  key={`skeleton-${index}`}
+                  className="bg-white rounded-2xl shadow-lg overflow-hidden"
                   style={{
-                    height: '200px',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
                   }}
                 >
-                  <div className="w-full h-32 bg-gray-200"></div>
-                  <div className="p-4 space-y-2">
-                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  {/* Image skeleton - Amazon/Flipkart style */}
+                  <div className="w-full h-48 skeleton relative overflow-hidden"></div>
+                  <div className="p-4 space-y-3">
+                    <div className="h-5 skeleton rounded w-3/4"></div>
+                    <div className="h-4 skeleton rounded w-1/2"></div>
+                    <div className="flex gap-2 mt-2">
+                      <div className="h-3 skeleton rounded w-16"></div>
+                      <div className="h-3 skeleton rounded w-16"></div>
+                      <div className="h-3 skeleton rounded w-16"></div>
+                    </div>
+                    <div className="h-6 skeleton rounded w-2/5 mt-4"></div>
                   </div>
                 </div>
               ))

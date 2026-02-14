@@ -17,6 +17,7 @@ import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
 import { deduplicateRequest } from '../utils/requestDeduplication';
+import * as buyerService from '../services/buyerService';
 
 // PERFORMANCE: Helper function for user-friendly error messages
 // Improves UX by converting technical errors to actionable messages
@@ -99,7 +100,7 @@ function pathToView(path: string): View {
   if (normalizedPath === '/faq') return View.FAQ;
   if (normalizedPath === '/privacy-policy') return View.PRIVACY_POLICY;
   if (normalizedPath === '/terms-of-service') return View.TERMS_OF_SERVICE;
-  if (normalizedPath === '/buyer/dashboard') return View.BUYER_DASHBOARD;
+  if (normalizedPath === '/customer/dashboard' || normalizedPath === '/buyer/dashboard') return View.BUYER_DASHBOARD;
   if (normalizedPath.startsWith('/city/')) {
     // Path like /city/mumbai
     return View.CITY_LANDING;
@@ -1066,7 +1067,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       else if (view === View.FAQ) newPath = '/faq';
       else if (view === View.PRIVACY_POLICY) newPath = '/privacy-policy';
       else if (view === View.TERMS_OF_SERVICE) newPath = '/terms-of-service';
-      else if (view === View.BUYER_DASHBOARD) newPath = '/buyer/dashboard';
+      else if (view === View.BUYER_DASHBOARD) newPath = '/customer/dashboard';
       else if (view === View.CITY_LANDING) {
         // For city landing, include city in URL if available
         if (params?.city) {
@@ -2082,6 +2083,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser, conversations]);
 
+  // Load buyer activity from database on customer login
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'customer') {
+      return;
+    }
+
+    const loadBuyerActivity = async () => {
+      try {
+        const activity = await buyerService.getBuyerActivity(currentUser.email);
+        // Activity is automatically saved to localStorage by getBuyerActivity
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Buyer activity loaded from database:', {
+            userId: activity.userId,
+            recentlyViewedCount: activity.recentlyViewed.length,
+            savedSearchesCount: activity.savedSearches.length
+          });
+        }
+      } catch (error) {
+        logWarn('Failed to load buyer activity from database:', error);
+        // Continue with localStorage fallback (handled by getBuyerActivity)
+      }
+    };
+
+    loadBuyerActivity();
+  }, [currentUser]);
+
   // Real-time Chat Service Integration (end-to-end chat for buyers and sellers)
   useEffect(() => {
     if (!currentUser) {
@@ -2146,8 +2173,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   ...conv,
                   messages: [...conv.messages, message],
                   lastMessageAt: message.timestamp,
-                  isReadBySeller: message.sender === 'seller' ? true : conv.isReadBySeller,
-                  isReadByCustomer: message.sender === 'user' ? true : conv.isReadByCustomer
+                  isReadBySeller: message.sender === 'seller' ? true : (message.sender === 'user' ? false : conv.isReadBySeller),
+                  isReadByCustomer: message.sender === 'user' ? true : (message.sender === 'seller' ? false : conv.isReadByCustomer)
                 }
               : conv
           );
@@ -2193,8 +2220,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               vehiclePrice: conversationData.vehiclePrice,
               messages: [message],
               lastMessageAt: message.timestamp,
-              isReadBySeller: message.sender === 'seller' ? true : false,
-              isReadByCustomer: message.sender === 'user' ? true : false,
+              isReadBySeller: message.sender === 'seller' ? true : (message.sender === 'user' ? false : false),
+              isReadByCustomer: message.sender === 'user' ? true : (message.sender === 'seller' ? false : false),
               isFlagged: false
             };
             
@@ -3723,8 +3750,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...conv,
               messages: Array.isArray(conv.messages) ? [...conv.messages, newMessage] : [newMessage],
               lastMessageAt: newMessage.timestamp,
-              isReadBySeller: currentUser.role === 'seller' ? true : conv.isReadBySeller,
-              isReadByCustomer: currentUser.role === 'customer' ? true : conv.isReadByCustomer
+              isReadBySeller: currentUser.role === 'seller' ? true : (currentUser.role === 'customer' ? false : conv.isReadBySeller),
+              isReadByCustomer: currentUser.role === 'customer' ? true : (currentUser.role === 'seller' ? false : conv.isReadByCustomer)
             } : conv
           ) : [];
           
@@ -3881,8 +3908,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...conv,
               messages: Array.isArray(conv.messages) ? [...conv.messages, newMessage] : [newMessage],
               lastMessageAt: newMessage.timestamp,
-              isReadBySeller: currentUser.role === 'seller' ? true : conv.isReadBySeller,
-              isReadByCustomer: currentUser.role === 'customer' ? true : conv.isReadByCustomer
+              isReadBySeller: currentUser.role === 'seller' ? true : (currentUser.role === 'customer' ? false : conv.isReadBySeller),
+              isReadByCustomer: currentUser.role === 'customer' ? true : (currentUser.role === 'seller' ? false : conv.isReadByCustomer)
             } : conv
           ) : [];
           
@@ -4391,6 +4418,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!vehicle || !vehicle.id) {
         console.error('❌ selectVehicle called with invalid vehicle:', vehicle);
         return;
+      }
+      
+      // Track recently viewed for customers (async, non-blocking)
+      if (currentUser?.role === 'customer' && currentUser?.email) {
+        buyerService.addToRecentlyViewed(currentUser.email, vehicle.id).catch(error => {
+          logWarn('Failed to track recently viewed vehicle:', error);
+        });
       }
       
       // CRITICAL: Store vehicle in sessionStorage FIRST (synchronous, immediate)

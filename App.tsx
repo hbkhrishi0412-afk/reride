@@ -51,7 +51,7 @@ interface ServiceProvider {
 interface ServiceRequestPayload {
   providerId?: string | null;
   candidateProviderIds?: string[];
-  title: string;
+  title?: string;
   serviceType?: string;
   customerName?: string;
   customerPhone?: string;
@@ -79,6 +79,10 @@ interface ServiceRequestPayload {
     pincode?: string;
   };
   note?: string;
+  slotId?: string;
+  addressId?: string;
+  couponCode?: string;
+  total?: number;
 }
 
 interface ProviderResponse {
@@ -478,6 +482,12 @@ const AppContent: React.FC = () => {
       const allServiceTypes = payload.serviceTypes && payload.serviceTypes.length > 0
         ? payload.serviceTypes.join(', ')
         : serviceName;
+      const candidateProviderIds =
+        payload.candidateProviderIds && payload.candidateProviderIds.length > 0
+          ? payload.candidateProviderIds
+          : payload.providerId
+            ? [payload.providerId]
+            : [];
 
       const body = {
         title: payload.note || `${allServiceTypes} request`,
@@ -494,15 +504,16 @@ const AppContent: React.FC = () => {
         scheduledAt: payload.slotId || '',
         notes: payload.note || '',
         providerId: null,
-        candidateProviderIds: payload.candidateProviderIds || [], // These are filtered by service type
+        candidateProviderIds,
         services,
       };
+      const accessToken = typeof window !== 'undefined' ? localStorage.getItem('reRideAccessToken') : null;
 
       const resp = await fetch('/api/service-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify(body),
       });
@@ -522,7 +533,7 @@ const AppContent: React.FC = () => {
       console.error('Failed to submit service request', error);
       addToast(msg, 'error');
     }
-  }, [addToast, currentUser?.mobile, currentUser?.name, selectedCity]);
+  }, [addToast, currentUser?.email, currentUser?.mobile, currentUser?.name, selectedCity]);
 
   const [userCoords, setUserCoords] = React.useState<LocationCoordinates | null>(null);
   const [isLocating, setIsLocating] = React.useState(false);
@@ -578,7 +589,10 @@ const AppContent: React.FC = () => {
     const run = async () => {
       // Fetch actual service providers from API
       try {
-        const providersResp = await fetch('/api/service-providers?scope=all');
+        const accessToken = typeof window !== 'undefined' ? localStorage.getItem('reRideAccessToken') : null;
+        const providersResp = await fetch('/api/service-providers?scope=all', {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
         if (providersResp.ok) {
           const providers = await providersResp.json() as ProviderResponse[];
           const base = providers.map((p): ServiceProvider => ({
@@ -3630,7 +3644,10 @@ const AppContent: React.FC = () => {
           compareCount={comparisonList.length}
           wishlistCount={wishlist.length}
           inboxCount={conversations.filter(c => !c.isReadByCustomer).length}
-          notifications={notifications.filter(n => n.recipientEmail === currentUser?.email)}
+          notifications={notifications.filter(n => {
+            if (!n.recipientEmail || !currentUser?.email) return false;
+            return n.recipientEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
+          })}
           onNotificationClick={handleNotificationClick}
           onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
           onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}

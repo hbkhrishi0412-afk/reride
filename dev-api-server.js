@@ -2172,8 +2172,8 @@ if (io) {
         
         // Then, mark as delivered to recipient's device (if they're online)
         // roomName is already declared above (line 2048), reuse it
-        const roomClients = io.sockets.adapter.rooms.get(roomName);
-        if (roomClients && roomClients.size > 1) {
+        const deliveryRoomClients = io.sockets.adapter.rooms.get(roomName);
+        if (deliveryRoomClients && deliveryRoomClients.size > 1) {
           // Recipient is online and in the room - message is delivered
           setTimeout(() => {
             io.to(roomName).emit('message:status', {

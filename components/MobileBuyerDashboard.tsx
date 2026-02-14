@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import type { User, Vehicle, Conversation, SavedSearch } from '../types';
+import type { User, Vehicle, Conversation } from '../types';
 import { View as ViewEnum } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import * as buyerService from '../services/buyerService';
@@ -44,6 +44,19 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
     () => buyerService.getSavedSearches(currentUser?.email || ''),
     [currentUser?.email]
   );
+
+  // Get buyer activity for recently viewed - use sync version for immediate access
+  const buyerActivity = useMemo(
+    () => buyerService.getBuyerActivitySync(currentUser?.email || ''),
+    [currentUser?.email]
+  );
+
+  // Get recently viewed vehicles
+  const recentlyViewed = useMemo(() => {
+    if (!vehicles || !Array.isArray(vehicles)) return [];
+    const viewedIds = buyerActivity.recentlyViewed.slice(0, 6);
+    return vehicles.filter(v => v && viewedIds.includes(v.id));
+  }, [buyerActivity.recentlyViewed, vehicles]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -132,7 +145,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           </div>
-          <p className="text-3xl font-bold text-gray-900">0</p>
+          <p className="text-3xl font-bold text-gray-900">{recentlyViewed.length}</p>
         </div>
         
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -284,25 +297,74 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                 </button>
               </div>
             ) : (
-              savedSearches.map((search, idx) => (
-                <div key={idx} className="bg-white rounded-xl p-4 shadow-sm">
-                  <h3 className="font-semibold text-gray-900 mb-2">{search.name}</h3>
-                  <p className="text-sm text-gray-600 mb-3">{search.query}</p>
-                  <button
-                    onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                    className="text-sm text-orange-500 font-semibold"
-                  >
-                    View Results
-                  </button>
-                </div>
-              ))
+              savedSearches.map((search, idx) => {
+                const filters = search.filters || {};
+                const filterText = [
+                  filters.make && `Make: ${filters.make}`,
+                  filters.model && `Model: ${filters.model}`,
+                  (filters.minPrice || filters.maxPrice) && `Price: ₹${(filters.minPrice || 0).toLocaleString()} - ₹${(filters.maxPrice || 0).toLocaleString()}`,
+                ].filter(Boolean).join(' • ') || 'No filters';
+                
+                return (
+                  <div key={idx} className="bg-white rounded-xl p-4 shadow-sm">
+                    <h3 className="font-semibold text-gray-900 mb-2">{search.name}</h3>
+                    <p className="text-sm text-gray-600 mb-3">{filterText}</p>
+                    <button
+                      onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                      className="text-sm text-orange-500 font-semibold"
+                    >
+                      View Results
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
         )}
 
         {activeTab === 'activity' && (
           <div className="space-y-4">
-            <p className="text-gray-600 text-center py-8">Activity history coming soon</p>
+            {recentlyViewed.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-600 mb-2">No recently viewed vehicles</p>
+                <button
+                  onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                  className="text-orange-500 font-semibold"
+                >
+                  Start Browsing
+                </button>
+              </div>
+            ) : (
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 mb-3">Recently Viewed</h2>
+                <div className="space-y-3">
+                  {recentlyViewed.map((vehicle) => (
+                    <div
+                      key={vehicle.id}
+                      onClick={() => onSelectVehicle(vehicle)}
+                      className="bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform"
+                    >
+                      <img
+                        src={getFirstValidImage(vehicle.images)}
+                        alt={`${vehicle.make} ${vehicle.model}`}
+                        className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 mb-1">
+                          {vehicle.year} {vehicle.make} {vehicle.model}
+                        </h3>
+                        <p className="text-lg font-bold text-orange-500 mb-1">
+                          {formatCurrency(vehicle.price)}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {vehicle.mileage.toLocaleString()} km • {vehicle.fuelType}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
             {/* Logout Section */}
             {onLogout && (

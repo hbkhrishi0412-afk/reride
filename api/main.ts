@@ -650,6 +650,8 @@ async function mainHandler(
       return await handleConversations(req, res, handlerOptions);
     } else if (pathname.includes('/notifications') || pathname.endsWith('/notifications')) {
       return await handleNotifications(req, res, handlerOptions);
+    } else if (pathname.includes('/buyer-activity') || pathname.endsWith('/buyer-activity')) {
+      return await handleBuyerActivity(req, res, handlerOptions);
     } else {
       // Default to users for backward compatibility
       // This catches any unmatched routes, especially important for PUT /api/users
@@ -6218,6 +6220,170 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       reason: 'Failed to process notification request',
       error: errorMessage
     });
+  }
+}
+
+// Buyer Activity Handler
+async function handleBuyerActivity(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
+  try {
+    if (!USE_SUPABASE) {
+      return res.status(503).json({
+        success: false,
+        reason: 'Supabase is not configured. Please set Supabase environment variables.'
+      });
+    }
+
+    const auth = requireAuth(req, res, 'Buyer Activity');
+    if (!auth) {
+      return;
+    }
+    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+    const isAdmin = auth.user?.role === 'admin';
+
+    // GET - Retrieve buyer activity
+    if (req.method === 'GET') {
+      const { userId } = req.query;
+      
+      if (!userId) {
+        return res.status(400).json({ success: false, reason: 'User ID is required' });
+      }
+
+      const userIdValue = Array.isArray(userId) ? userId[0] : userId;
+      const normalizedUserId = userIdValue.toLowerCase().trim();
+      
+      // Users can only access their own activity (unless admin)
+      if (!isAdmin && normalizedUserId !== normalizedAuthEmail) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized access to buyer activity' });
+      }
+
+      const supabase = getSupabaseAdminClient();
+      const { data: activity, error } = await supabase
+        .from('buyer_activity')
+        .select('*')
+        .eq('user_id', normalizedUserId)
+        .single();
+
+      if (error) {
+        // If not found, return default activity
+        if (error.code === 'PGRST116') {
+          return res.status(200).json({
+            success: true,
+            data: {
+              id: `activity_${normalizedUserId}`,
+              userId: normalizedUserId,
+              recentlyViewed: [],
+              savedSearches: [],
+              notifications: {
+                priceDrops: [],
+                newMatches: []
+              }
+            }
+          });
+        }
+        logError('❌ Failed to fetch buyer activity:', error);
+        return res.status(500).json({ success: false, reason: 'Failed to fetch buyer activity' });
+      }
+
+      // Transform database format to app format
+      const transformedActivity = {
+        id: activity.id,
+        userId: activity.user_id,
+        recentlyViewed: activity.recently_viewed || [],
+        savedSearches: activity.saved_searches || [],
+        notifications: {
+          priceDrops: activity.price_drops || [],
+          newMatches: activity.new_matches || []
+        }
+      };
+
+      return res.status(200).json({ success: true, data: transformedActivity });
+    }
+
+    // POST - Create or update buyer activity
+    if (req.method === 'POST' || req.method === 'PUT') {
+      const activityData = req.body;
+      
+      if (!activityData.userId) {
+        return res.status(400).json({ success: false, reason: 'User ID is required' });
+      }
+
+      const normalizedUserId = activityData.userId.toLowerCase().trim();
+      
+      // Users can only save their own activity (unless admin)
+      if (!isAdmin && normalizedUserId !== normalizedAuthEmail) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized to save buyer activity' });
+      }
+
+      const supabase = getSupabaseAdminClient();
+      
+      // Check if activity exists
+      const { data: existing } = await supabase
+        .from('buyer_activity')
+        .select('id')
+        .eq('user_id', normalizedUserId)
+        .single();
+
+      const activityRecord = {
+        id: existing?.id || `activity_${normalizedUserId}_${Date.now()}`,
+        user_id: normalizedUserId,
+        recently_viewed: activityData.recentlyViewed || [],
+        saved_searches: activityData.savedSearches || [],
+        price_drops: activityData.notifications?.priceDrops || [],
+        new_matches: activityData.notifications?.newMatches || [],
+        updated_at: new Date().toISOString()
+      };
+
+      let result;
+      if (existing) {
+        // Update existing
+        const { data, error } = await supabase
+          .from('buyer_activity')
+          .update(activityRecord)
+          .eq('user_id', normalizedUserId)
+          .select()
+          .single();
+
+        if (error) {
+          logError('❌ Failed to update buyer activity:', error);
+          return res.status(500).json({ success: false, reason: 'Failed to update buyer activity' });
+        }
+        result = data;
+      } else {
+        // Create new
+        activityRecord.created_at = new Date().toISOString();
+        const { data, error } = await supabase
+          .from('buyer_activity')
+          .insert(activityRecord)
+          .select()
+          .single();
+
+        if (error) {
+          logError('❌ Failed to create buyer activity:', error);
+          return res.status(500).json({ success: false, reason: 'Failed to create buyer activity' });
+        }
+        result = data;
+      }
+
+      // Transform back to app format
+      const transformedActivity = {
+        id: result.id,
+        userId: result.user_id,
+        recentlyViewed: result.recently_viewed || [],
+        savedSearches: result.saved_searches || [],
+        notifications: {
+          priceDrops: result.price_drops || [],
+          newMatches: result.new_matches || []
+        }
+      };
+
+      return res.status(200).json({ success: true, data: transformedActivity });
+    }
+
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  } catch (error) {
+    logError('❌ Buyer Activity API Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({ success: false, reason: errorMessage, error: errorMessage });
   }
 }
 

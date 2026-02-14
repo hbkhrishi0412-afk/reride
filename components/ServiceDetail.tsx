@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
+import { fetchServices, getServicePricing, fallbackPricing } from '../services/servicePricingService';
 
 interface ServiceDetailProps {
   onNavigate?: (view: ViewEnum) => void;
@@ -194,44 +195,83 @@ const serviceDefinitions: Record<string, Omit<Service, 'icon'>> = {
   },
 };
 
-const servicePricing: Record<string, Service['pricing']> = {
-  'Car Diagnostics': {
-    basePrice: 999,
-    priceRange: '₹999 - ₹2,499',
-  },
-  'Engine Maintenance & Repairs': {
-    basePrice: 2499,
-    priceRange: '₹2,499 - ₹4,999',
-  },
-  'Car AC Servicing': {
-    basePrice: 1999,
-    priceRange: '₹1,999 - ₹3,499',
-  },
-  'Interior Deep Cleaning': {
-    basePrice: 3999,
-    priceRange: '₹3,999 - ₹5,999',
-  },
-  'Wheel Alignment & Balancing': {
-    basePrice: 1499,
-    priceRange: '₹1,499 - ₹2,999',
-  },
-  'Periodic Services': {
-    basePrice: 2499,
-    priceRange: '₹2,499 - ₹4,999',
-  },
-  'Clutch & Suspension': {
-    basePrice: 3499,
-    priceRange: '₹3,499 - ₹7,999',
-    customQuote: true,
-  },
-  'Denting & Painting': {
-    basePrice: 0,
-    customQuote: true,
-  },
-};
+// Import service pricing service
+import { fetchServices, getServicePricing, fallbackPricing } from '../services/servicePricingService';
 
 const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [servicePricingData, setServicePricingData] = useState<Record<string, Service['pricing']>>({});
+  const [loadingPricing, setLoadingPricing] = useState(true);
+
+  // Fetch services pricing from Supabase
+  useEffect(() => {
+    const loadPricing = async () => {
+      try {
+        await fetchServices();
+        // Build pricing map from fetched services
+        const pricingMap: Record<string, Service['pricing']> = {};
+        const serviceTitles = [
+          'Car Diagnostics',
+          'Engine Maintenance & Repairs',
+          'Car AC Servicing',
+          'Interior Deep Cleaning',
+          'Wheel Alignment & Balancing',
+          'Periodic Services',
+        ];
+
+        serviceTitles.forEach((title) => {
+          const pricing = getServicePricing(title);
+          if (pricing) {
+            pricingMap[title] = {
+              basePrice: pricing.base_price,
+              priceRange: pricing.price_range || `₹${pricing.min_price.toLocaleString()} - ₹${pricing.max_price.toLocaleString()}`,
+            };
+          } else {
+            // Use fallback if not found
+            pricingMap[title] = fallbackPricing[title] || { basePrice: 0, priceRange: 'Contact for quote' };
+          }
+        });
+
+        // Add hardcoded services that might not be in Supabase
+        pricingMap['Clutch & Suspension'] = {
+          basePrice: 3499,
+          priceRange: '₹3,499 - ₹7,999',
+          customQuote: true,
+        };
+        pricingMap['Denting & Painting'] = {
+          basePrice: 0,
+          customQuote: true,
+        };
+
+        setServicePricingData(pricingMap);
+      } catch (error) {
+        console.error('Error loading pricing:', error);
+        // Use fallback pricing on error
+        const fallback: Record<string, Service['pricing']> = {
+          'Car Diagnostics': fallbackPricing['Car Diagnostics'],
+          'Engine Maintenance & Repairs': fallbackPricing['Engine Maintenance & Repairs'],
+          'Car AC Servicing': fallbackPricing['Car AC Servicing'],
+          'Interior Deep Cleaning': fallbackPricing['Interior Deep Cleaning'],
+          'Wheel Alignment & Balancing': fallbackPricing['Wheel Alignment & Balancing'],
+          'Periodic Services': fallbackPricing['Periodic Services'],
+          'Clutch & Suspension': {
+            basePrice: 3499,
+            priceRange: '₹3,499 - ₹7,999',
+            customQuote: true,
+          },
+          'Denting & Painting': {
+            basePrice: 0,
+            customQuote: true,
+          },
+        };
+        setServicePricingData(fallback);
+      } finally {
+        setLoadingPricing(false);
+      }
+    };
+
+    loadPricing();
+  }, []);
 
   useEffect(() => {
     // Get service title from sessionStorage
@@ -266,11 +306,12 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
 
     // Store service in cart prefill
     const serviceId = `service-${selectedService.title.toLowerCase().replace(/\s+/g, '-')}`;
+    const pricing = servicePricingData[selectedService.title] || { basePrice: 0, customQuote: false };
     sessionStorage.setItem('service_cart_prefill', JSON.stringify({
       serviceId,
       serviceName: selectedService.title,
-      price: servicePricing[selectedService.title]?.basePrice || 0,
-      customQuote: servicePricing[selectedService.title]?.customQuote || false,
+      price: pricing.basePrice || 0,
+      customQuote: pricing.customQuote || false,
     }));
 
     // Navigate to cart
@@ -292,7 +333,7 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
     );
   }
 
-  const pricing = servicePricing[selectedService.title] || { basePrice: 0, customQuote: true };
+  const pricing = servicePricingData[selectedService.title] || { basePrice: 0, customQuote: true };
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen pb-safe">

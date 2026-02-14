@@ -123,7 +123,33 @@ export const LazyImage: React.FC<LazyImageProps> = ({
     if (onLoad) onLoad();
   };
 
-  const handleError = () => {
+  const handleError = (e?: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    // Prevent infinite error loops
+    const target = e?.target as HTMLImageElement;
+    if (target && !target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
+      // Try to convert Supabase storage path if it looks like one
+      if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
+        // This might be a Supabase storage path that wasn't converted
+        try {
+          if (typeof window !== 'undefined') {
+            import('../lib/supabase.js').then(({ getSupabaseClient }) => {
+              const supabase = getSupabaseClient();
+              const { data } = supabase.storage
+                .from('images')
+                .getPublicUrl(src);
+              if (data?.publicUrl && data.publicUrl !== src) {
+                target.src = data.publicUrl;
+                return; // Don't set error if we can convert it
+              }
+            }).catch(() => {
+              setHasError(true);
+            });
+          }
+        } catch {
+          // Fall through to set error
+        }
+      }
+    }
     setHasError(true);
     if (onError) onError();
   };
@@ -189,6 +215,7 @@ export const LazyImage: React.FC<LazyImageProps> = ({
                 onLoad={handleLoad}
                 onError={handleError}
                 decoding="async"
+                crossOrigin="anonymous"
               />
             </picture>
           );
@@ -209,6 +236,7 @@ export const LazyImage: React.FC<LazyImageProps> = ({
             onLoad={handleLoad}
             onError={handleError}
             decoding="async"
+            crossOrigin="anonymous"
           />
         );
       })()}

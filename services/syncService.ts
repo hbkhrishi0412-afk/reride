@@ -1,10 +1,11 @@
-import type { Conversation, Notification } from '../types';
+import type { Conversation, Notification, BuyerActivity } from '../types';
 import { saveConversationToSupabase, addMessageToConversation } from './conversationService';
 import { saveNotificationToSupabase, updateNotificationInSupabase } from './notificationService';
+import { saveBuyerActivityToSupabase } from './buyerActivityService';
 
 interface SyncQueueItem {
   id: string;
-  type: 'conversation' | 'notification' | 'message';
+  type: 'conversation' | 'notification' | 'message' | 'buyer_activity';
   data: any;
   retries: number;
   timestamp: number;
@@ -94,6 +95,10 @@ export async function processSyncQueue(): Promise<{ success: number; failed: num
             const notifResult = await saveNotificationToSupabase(item.data);
             syncSuccess = notifResult.success;
           }
+          break;
+        case 'buyer_activity':
+          const activityResult = await saveBuyerActivityToSupabase(item.data);
+          syncSuccess = activityResult.success;
           break;
       }
 
@@ -241,6 +246,29 @@ export function getSyncQueueStatus(): { pending: number; items: SyncQueueItem[] 
     pending: queue.length,
     items: queue
   };
+}
+
+/**
+ * Save buyer activity with sync queue fallback
+ */
+export async function saveBuyerActivityWithSync(activity: BuyerActivity): Promise<{ synced: boolean; queued: boolean }> {
+  try {
+    const result = await saveBuyerActivityToSupabase(activity);
+    if (result.success) {
+      return { synced: true, queued: false };
+    }
+  } catch (error) {
+    console.warn('Failed to save buyer activity to Supabase:', error);
+  }
+
+  // Add to sync queue
+  addToSyncQueue({
+    id: `buyer_activity_${activity.userId}_${Date.now()}`,
+    type: 'buyer_activity',
+    data: activity
+  });
+
+  return { synced: false, queued: true };
 }
 
 /**

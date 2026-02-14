@@ -1,4 +1,5 @@
 import type { SavedSearch, BuyerActivity, Vehicle } from '../types';
+import { saveBuyerActivityToSupabase, getBuyerActivityFromSupabase } from './buyerActivityService';
 
 // Save search
 export const saveSearch = (userId: string, search: Omit<SavedSearch, 'id' | 'createdAt'>): SavedSearch => {
@@ -98,44 +99,100 @@ export const findNewMatches = (userId: string, vehicles: Vehicle[]): { searchId:
   }));
 };
 
-// Get buyer activity
-export const getBuyerActivity = (userId: string): BuyerActivity => {
+// Get buyer activity - loads from database first, falls back to localStorage
+export const getBuyerActivity = async (userId: string): Promise<BuyerActivity> => {
+  try {
+    // Try to load from database first
+    const dbResult = await getBuyerActivityFromSupabase(userId);
+    if (dbResult.success && dbResult.data) {
+      // Save to localStorage for offline access
+      const key = `buyerActivity_${userId}`;
+      localStorage.setItem(key, JSON.stringify(dbResult.data));
+      return dbResult.data;
+    }
+  } catch (error) {
+    console.warn('Failed to load buyer activity from database, using localStorage:', error);
+  }
+
+  // Fallback to localStorage
   try {
     const key = `buyerActivity_${userId}`;
     const activityJson = localStorage.getItem(key);
     if (activityJson) {
       return JSON.parse(activityJson);
     }
-
-    // Create default activity
-    const defaultActivity: BuyerActivity = {
-      userId,
-      recentlyViewed: [],
-      savedSearches: getSavedSearches(userId),
-      notifications: {
-        priceDrops: [],
-        newMatches: [],
-      },
-    };
-    return defaultActivity;
   } catch (error) {
-    console.error('Failed to get buyer activity:', error);
-    return {
-      userId,
-      recentlyViewed: [],
-      savedSearches: [],
-      notifications: { priceDrops: [], newMatches: [] },
-    };
+    console.error('Failed to parse buyer activity from localStorage:', error);
   }
+
+  // Create default activity
+  const defaultActivity: BuyerActivity = {
+    userId,
+    recentlyViewed: [],
+    savedSearches: getSavedSearches(userId),
+    notifications: {
+      priceDrops: [],
+      newMatches: [],
+    },
+  };
+  return defaultActivity;
 };
 
-// Save buyer activity
-export const saveBuyerActivity = (activity: BuyerActivity): void => {
+// Synchronous version for immediate access (uses localStorage only)
+export const getBuyerActivitySync = (userId: string): BuyerActivity => {
   try {
+    const key = `buyerActivity_${userId}`;
+    const activityJson = localStorage.getItem(key);
+    if (activityJson) {
+      return JSON.parse(activityJson);
+    }
+  } catch (error) {
+    console.error('Failed to get buyer activity from localStorage:', error);
+  }
+
+  // Create default activity
+  const defaultActivity: BuyerActivity = {
+    userId,
+    recentlyViewed: [],
+    savedSearches: getSavedSearches(userId),
+    notifications: {
+      priceDrops: [],
+      newMatches: [],
+    },
+  };
+  return defaultActivity;
+};
+
+// Save buyer activity - saves to localStorage immediately, syncs to database
+export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> => {
+  try {
+    // Save to localStorage immediately for instant UI update
     const key = `buyerActivity_${activity.userId}`;
     localStorage.setItem(key, JSON.stringify(activity));
   } catch (error) {
-    console.error('Failed to save buyer activity:', error);
+    console.error('Failed to save buyer activity to localStorage:', error);
+  }
+
+  // Sync to database (async, non-blocking)
+  try {
+    const result = await saveBuyerActivityToSupabase(activity);
+    if (result.success) {
+      console.log('✅ Buyer activity synced to database');
+    } else {
+      console.warn('⚠️ Failed to sync buyer activity to database:', result.error);
+      // Add to sync queue for retry
+      const { saveBuyerActivityWithSync } = await import('./syncService');
+      await saveBuyerActivityWithSync(activity);
+    }
+  } catch (error) {
+    console.warn('⚠️ Error syncing buyer activity to database:', error);
+    // Add to sync queue for retry
+    try {
+      const { saveBuyerActivityWithSync } = await import('./syncService');
+      await saveBuyerActivityWithSync(activity);
+    } catch (syncError) {
+      console.error('Failed to queue buyer activity for sync:', syncError);
+    }
   }
 };
 
@@ -237,10 +294,11 @@ export const getRecentlyViewed = (userId: string): number[] => {
   }
 };
 
-// Add to recently viewed
-export const addToRecentlyViewed = (userId: string, vehicleId: number): void => {
+// Add to recently viewed - uses sync version for immediate access
+export const addToRecentlyViewed = async (userId: string, vehicleId: number): Promise<void> => {
   try {
-    const activity = getBuyerActivity(userId);
+    // Use sync version for immediate access
+    const activity = getBuyerActivitySync(userId);
     
     // Remove if already exists
     activity.recentlyViewed = activity.recentlyViewed.filter(id => id !== vehicleId);
@@ -251,7 +309,8 @@ export const addToRecentlyViewed = (userId: string, vehicleId: number): void => 
     // Keep only last 20
     activity.recentlyViewed = activity.recentlyViewed.slice(0, 20);
     
-    saveBuyerActivity(activity);
+    // Save (async, will sync to database)
+    await saveBuyerActivity(activity);
   } catch (error) {
     console.error('Failed to add to recently viewed:', error);
   }

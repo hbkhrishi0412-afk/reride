@@ -56,9 +56,9 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     );
   }
 
-  // Get buyer activity
+  // Get buyer activity - use sync version for immediate access
   const buyerActivity = useMemo(
-    () => buyerService.getBuyerActivity(currentUser.email),
+    () => buyerService.getBuyerActivitySync(currentUser.email),
     [currentUser.email]
   );
 
