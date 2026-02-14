@@ -268,7 +268,8 @@ class DataService {
       // If we have cached data, return it immediately and fetch fresh data in background
       if (cachedVehicles.length > 0) {
         // Fetch fresh data in background (don't await) - use pagination for speed
-        const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=50&skipExpiryCheck=true';
+        // IMPORTANT: Refresh full dataset in background to avoid replacing cache with a partial page.
+        const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0&skipExpiryCheck=true';
         this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
           .then(response => {
             // Handle both array response (limit=0) and paginated response (limit>0)

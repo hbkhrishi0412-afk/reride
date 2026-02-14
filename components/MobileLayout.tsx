@@ -42,6 +42,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   inboxCount = 0
 }) => {
   const [showMenu, setShowMenu] = useState(false);
+  const shouldRenderHeader = showHeader || showMenu;
   const headerHeight = showHeader ? 56 : 0;
   const bottomNavHeight = showBottomNav ? 70 : 0; // Updated to match refined premium nav height
   
@@ -83,7 +84,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
         background: 'transparent'
       } : {}}
     >
-      {showHeader && (
+      {shouldRenderHeader && (
         <MobileHeader
           onNavigate={onNavigate}
           currentUser={currentUser}

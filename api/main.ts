@@ -2650,18 +2650,23 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           console.log(`📊 Published vehicles fetched (paginated): ${vehicles.length} of ${totalVehiclesCount} total`);
         } else {
           // For non-paginated requests (limit=0), fetch all with database sorting
-          // But still use COUNT query for total count (much faster)
+          // Skip extra COUNT query for fast full-list fetches used by initial client hydration.
           vehicles = await vehicleService.findByStatus('published', {
             orderBy: 'created_at',
             orderDirection: 'desc'
           });
-          // Use COUNT query for total count instead of vehicles.length
-          try {
-            totalVehiclesCount = await vehicleService.countByStatus('published');
-            console.log(`📊 Published vehicles fetched: ${vehicles.length} (total: ${totalVehiclesCount})`);
-          } catch (countError) {
+          if (skipExpiryCheck) {
             totalVehiclesCount = vehicles.length;
-            console.log(`📊 Published vehicles fetched: ${vehicles.length} (count query failed, using length)`);
+            console.log(`📊 Published vehicles fetched (fast path): ${vehicles.length}`);
+          } else {
+            // Use COUNT query for total count instead of vehicles.length
+            try {
+              totalVehiclesCount = await vehicleService.countByStatus('published');
+              console.log(`📊 Published vehicles fetched: ${vehicles.length} (total: ${totalVehiclesCount})`);
+            } catch (countError) {
+              totalVehiclesCount = vehicles.length;
+              console.log(`📊 Published vehicles fetched: ${vehicles.length} (count query failed, using length)`);
+            }
           }
           
           // DIAGNOSTIC: Log if no vehicles found
@@ -5772,7 +5777,18 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         if (!isAdmin && normalizedAuthEmail !== normalizedSellerId) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
         }
-        conversations = await conversationService.findBySellerId(String(sellerId));
+        // CRITICAL: Pass normalized sellerId to service for consistent matching
+        // The service will also normalize internally, but passing normalized ensures consistency
+        conversations = await conversationService.findBySellerId(normalizedSellerId);
+        
+        // Log for debugging in development
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 API: Fetching conversations for seller', {
+            originalSellerId: String(sellerId),
+            normalizedSellerId,
+            foundCount: conversations?.length || 0
+          });
+        }
       } else {
         if (!isAdmin) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });

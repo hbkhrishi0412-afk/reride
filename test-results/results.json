@@ -10,7 +10,9 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {},
+    "metadata": {
+      "actualWorkers": 4
+    },
     "preserveOutput": "always",
     "reporter": [
       [
@@ -40,7 +42,9 @@
         "outputDir": "C:/Users/bhadr/Downloads/reride (2)/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 4
+        },
         "id": "chromium",
         "name": "chromium",
         "testDir": "C:/Users/bhadr/Downloads/reride (2)/e2e",
@@ -54,7 +58,9 @@
         "outputDir": "C:/Users/bhadr/Downloads/reride (2)/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 4
+        },
         "id": "firefox",
         "name": "firefox",
         "testDir": "C:/Users/bhadr/Downloads/reride (2)/e2e",
@@ -68,7 +74,9 @@
         "outputDir": "C:/Users/bhadr/Downloads/reride (2)/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 4
+        },
         "id": "webkit",
         "name": "webkit",
         "testDir": "C:/Users/bhadr/Downloads/reride (2)/e2e",
@@ -82,7 +90,9 @@
         "outputDir": "C:/Users/bhadr/Downloads/reride (2)/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 4
+        },
         "id": "Mobile Chrome",
         "name": "Mobile Chrome",
         "testDir": "C:/Users/bhadr/Downloads/reride (2)/e2e",
@@ -96,7 +106,9 @@
         "outputDir": "C:/Users/bhadr/Downloads/reride (2)/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 4
+        },
         "id": "Mobile Safari",
         "name": "Mobile Safari",
         "testDir": "C:/Users/bhadr/Downloads/reride (2)/e2e",
@@ -110,7 +122,9 @@
         "outputDir": "C:/Users/bhadr/Downloads/reride (2)/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 4
+        },
         "id": "Microsoft Edge",
         "name": "Microsoft Edge",
         "testDir": "C:/Users/bhadr/Downloads/reride (2)/e2e",
@@ -124,7 +138,9 @@
         "outputDir": "C:/Users/bhadr/Downloads/reride (2)/test-results",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 4
+        },
         "id": "Google Chrome",
         "name": "Google Chrome",
         "testDir": "C:/Users/bhadr/Downloads/reride (2)/e2e",
@@ -147,19 +163,397 @@
       "timeout": 120000
     }
   },
-  "suites": [],
-  "errors": [
+  "suites": [
     {
-      "message": "Error: Process from config.webServer was not able to start. Exit code: 1",
-      "stack": "Error: Process from config.webServer was not able to start. Exit code: 1"
+      "title": "mobile-pwa.spec.ts",
+      "file": "mobile-pwa.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Mobile App and PWA Functionality",
+          "file": "mobile-pwa.spec.ts",
+          "line": 3,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should display mobile bottom navigation on mobile viewport",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "Mobile Safari",
+                  "projectName": "Mobile Safari",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 13314,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[data-testid=\"mobile-bottom-nav\"]')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"]')\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[data-testid=\"mobile-bottom-nav\"]')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"]')\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:12:69)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)",
+                        "location": {
+                          "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                          "column": 69,
+                          "line": 12
+                        }
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                            "column": 69,
+                            "line": 12
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('[data-testid=\"mobile-bottom-nav\"]')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"]')\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:12:69)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-13T19:17:35.979Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--d6076-vigation-on-mobile-viewport-Mobile-Safari\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                        "column": 69,
+                        "line": 12
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "d2321e5f8fe723e613a0-8cf5d96976c94ebea78b",
+              "file": "mobile-pwa.spec.ts",
+              "line": 11,
+              "column": 3
+            },
+            {
+              "title": "should navigate to buy view and show mobile header controls",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "Mobile Safari",
+                  "projectName": "Mobile Safari",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "failed",
+                      "duration": 19161,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n\u001b[2m    - waiting for\" http://localhost:5173/\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n\u001b[2m    - waiting for\" http://localhost:5173/\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:21:16)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)",
+                        "location": {
+                          "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                          "column": 16,
+                          "line": 21
+                        }
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                            "column": 16,
+                            "line": 21
+                          },
+                          "message": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n\u001b[2m    - waiting for\" http://localhost:5173/\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:21:16)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-13T19:17:35.865Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--88639-show-mobile-header-controls-Mobile-Safari\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                        "column": 16,
+                        "line": 21
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "d2321e5f8fe723e613a0-61770da267423fdb4f4b",
+              "file": "mobile-pwa.spec.ts",
+              "line": 20,
+              "column": 3
+            },
+            {
+              "title": "should handle mobile menu drawer",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "Mobile Safari",
+                  "projectName": "Mobile Safari",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
+                      "status": "failed",
+                      "duration": 19308,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n\u001b[2m    - waiting for navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n\u001b[2m    - waiting for navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:29:16)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)",
+                        "location": {
+                          "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                          "column": 16,
+                          "line": 29
+                        }
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                            "column": 16,
+                            "line": 29
+                          },
+                          "message": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n\u001b[2m    - waiting for navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:29:16)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-13T19:17:35.862Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--ce4d9-d-handle-mobile-menu-drawer-Mobile-Safari\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                        "column": 16,
+                        "line": 29
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "d2321e5f8fe723e613a0-2e3b8cb0b270a74aa808",
+              "file": "mobile-pwa.spec.ts",
+              "line": 27,
+              "column": 3
+            },
+            {
+              "title": "should open search from mobile header",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "Mobile Safari",
+                  "projectName": "Mobile Safari",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "failed",
+                      "duration": 19572,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:44:16)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)",
+                        "location": {
+                          "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                          "column": 16,
+                          "line": 44
+                        }
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                            "column": 16,
+                            "line": 44
+                          },
+                          "message": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Buy\")')\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:44:16)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-13T19:17:35.698Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--70d6a-n-search-from-mobile-header-Mobile-Safari\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                        "column": 16,
+                        "line": 44
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "d2321e5f8fe723e613a0-05ec2c5a48d050bade7e",
+              "file": "mobile-pwa.spec.ts",
+              "line": 43,
+              "column": 3
+            },
+            {
+              "title": "should open menu drawer from home using bottom-nav menu button",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "Mobile Safari",
+                  "projectName": "Mobile Safari",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 12571,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Menu\")')\u001b[22m\n\u001b[2m    - waiting for\" http://localhost:5173/\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Menu\")')\u001b[22m\n\u001b[2m    - waiting for\" http://localhost:5173/\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:50:16)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)",
+                        "location": {
+                          "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                          "column": 16,
+                          "line": 50
+                        }
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                            "column": 16,
+                            "line": 50
+                          },
+                          "message": "TimeoutError: page.click: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"mobile-bottom-nav\"] button:has-text(\"Menu\")')\u001b[22m\n\u001b[2m    - waiting for\" http://localhost:5173/\" navigation to finish...\u001b[22m\n\u001b[2m    - navigated to \"http://localhost:5173/\"\u001b[22m\n\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\e2e\\mobile-pwa.spec.ts:50:16)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:310:15)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\testInfo.js:305:17)\n    at C:\\Users\\bhadr\\Downloads\\reride (2)\\node_modules\\playwright\\lib\\worker\\workerMain.js:308:22)"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-13T19:17:58.963Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\bhadr\\Downloads\\reride (2)\\test-results\\mobile-pwa-Mobile-App-and--25387-sing-bottom-nav-menu-button-Mobile-Safari\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "2)\\e2e\\mobile-pwa.spec.ts",
+                        "column": 16,
+                        "line": 50
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "d2321e5f8fe723e613a0-82e7c2efd46c8f05e4aa",
+              "file": "mobile-pwa.spec.ts",
+              "line": 49,
+              "column": 3
+            }
+          ]
+        }
+      ]
     }
   ],
+  "errors": [],
   "stats": {
-    "startTime": "2025-10-24T19:48:51.269Z",
-    "duration": 52646.438,
+    "startTime": "2026-02-13T19:17:22.293Z",
+    "duration": 49645.222,
     "expected": 0,
     "skipped": 0,
-    "unexpected": 0,
+    "unexpected": 5,
     "flaky": 0
   }
 }

@@ -1538,14 +1538,65 @@ const InquiriesView: React.FC<{
 
     const sortedConversations = useMemo(() => {
         // Filter conversations to only show those for the current seller
-        if (!conversations || !Array.isArray(conversations) || !sellerEmail) return [];
+        if (!conversations || !Array.isArray(conversations) || !sellerEmail) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔍 InquiriesView: No conversations or sellerEmail', {
+              conversationsLength: conversations?.length || 0,
+              sellerEmail: sellerEmail || 'missing'
+            });
+          }
+          return [];
+        }
+        
         // Normalize emails for case-insensitive comparison (critical for production)
         const normalizedSellerEmail = (sellerEmail || '').toLowerCase().trim();
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 InquiriesView: Filtering conversations', {
+            totalConversations: conversations.length,
+            normalizedSellerEmail,
+            conversations: conversations.map(c => ({
+              id: c?.id,
+              sellerId: c?.sellerId,
+              normalizedSellerId: c?.sellerId ? c.sellerId.toLowerCase().trim() : null,
+              customerName: c?.customerName,
+              vehicleName: c?.vehicleName,
+              messageCount: c?.messages?.length || 0
+            }))
+          });
+        }
+        
         const sellerConversations = conversations.filter(conv => {
-          if (!conv || !conv.sellerId) return false;
+          if (!conv || !conv.sellerId) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('⚠️ InquiriesView: Skipping conversation - missing sellerId', { convId: conv?.id });
+            }
+            return false;
+          }
           const normalizedConvSellerId = (conv.sellerId || '').toLowerCase().trim();
-          return normalizedConvSellerId === normalizedSellerEmail;
+          const matches = normalizedConvSellerId === normalizedSellerEmail;
+          
+          if (process.env.NODE_ENV === 'development' && !matches) {
+            console.log('⚠️ InquiriesView: Conversation sellerId mismatch', {
+              convId: conv.id,
+              convSellerId: conv.sellerId,
+              normalizedConvSellerId,
+              sellerEmail,
+              normalizedSellerEmail,
+              matches
+            });
+          }
+          
+          return matches;
         });
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ InquiriesView: Filtered conversations', {
+            matchedCount: sellerConversations.length,
+            matchedIds: sellerConversations.map(c => c.id)
+          });
+        }
+        
         return [...sellerConversations].sort((a, b) => {
           const dateA = a?.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
           const dateB = b?.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;

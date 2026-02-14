@@ -21,10 +21,62 @@ function validateCategory(category: unknown): VehicleCategory {
   return VehicleCategory.FOUR_WHEELER;
 }
 
+/**
+ * Converts image paths/URLs to public URLs
+ * Handles both Supabase Storage paths and full URLs
+ */
+function processImageUrls(images: string[] | null | undefined, vehicleId?: number): string[] {
+  if (!Array.isArray(images) || images.length === 0) {
+    return [];
+  }
+
+  try {
+    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+    
+    return images.map((image) => {
+      // If already a full URL (http/https), return as-is
+      if (image && (image.startsWith('http://') || image.startsWith('https://'))) {
+        return image;
+      }
+      
+      // If it's a Supabase Storage path (e.g., "vehicles/123/image.jpg" or just "image.jpg")
+      if (image && typeof image === 'string' && image.trim() !== '') {
+        // If it's already a full path, use it directly
+        // Otherwise, construct path from vehicleId if available
+        let filePath = image;
+        if (!image.includes('/') && vehicleId) {
+          filePath = `vehicles/${vehicleId}/${image}`;
+        } else if (!image.includes('/')) {
+          filePath = `vehicles/${image}`;
+        }
+        
+        // Get public URL from Supabase Storage
+        const { data } = supabase.storage
+          .from('images')
+          .getPublicUrl(filePath);
+        
+        return data.publicUrl || image; // Fallback to original if URL generation fails
+      }
+      
+      // Invalid image, return empty string (will be filtered out)
+      return '';
+    }).filter(img => img && img.trim() !== ''); // Remove empty strings
+  } catch (error) {
+    console.warn('⚠️ Error processing image URLs:', error);
+    // Return original images if processing fails
+    return images.filter(img => img && typeof img === 'string' && img.trim() !== '');
+  }
+}
+
 // Helper to convert Supabase row to Vehicle type
 function supabaseRowToVehicle(row: any): Vehicle {
+  const vehicleId = Number(row.id) || 0;
+  
+  // CRITICAL FIX: Process images to convert storage paths to public URLs
+  const processedImages = processImageUrls(row.images, vehicleId);
+  
   return {
-    id: Number(row.id) || 0,
+    id: vehicleId,
     category: validateCategory(row.category),
     make: row.make || '',
     model: row.model || '',
@@ -32,7 +84,7 @@ function supabaseRowToVehicle(row: any): Vehicle {
     year: row.year || 0,
     price: Number(row.price) || 0,
     mileage: Number(row.mileage) || 0,
-    images: row.images || [],
+    images: processedImages, // Use processed images with public URLs
     features: row.features || [],
     description: row.description || '',
     sellerEmail: row.seller_email || '',
