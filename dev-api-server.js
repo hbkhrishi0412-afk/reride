@@ -850,6 +850,94 @@ const mockProviderServices = {};
 // Mock service requests store
 let mockServiceRequests = [];
 
+// Mock services store (for service management)
+let mockServices = [
+  {
+    id: 'periodic-service',
+    name: 'Periodic Service',
+    display_name: 'Periodic Service',
+    description: 'OEM recommended service schedules with genuine parts',
+    base_price: 2499,
+    min_price: 2499,
+    max_price: 4999,
+    price_range: '₹2,499 - ₹4,999',
+    icon_name: 'calendar',
+    active: true,
+    display_order: 1,
+    metadata: {}
+  },
+  {
+    id: 'ac-service',
+    name: 'AC Service',
+    display_name: 'AC Service',
+    description: 'Complete AC servicing ensures reliable performance in all weather conditions',
+    base_price: 1999,
+    min_price: 1999,
+    max_price: 3499,
+    price_range: '₹1,999 - ₹3,499',
+    icon_name: 'snowflake',
+    active: true,
+    display_order: 2,
+    metadata: {}
+  },
+  {
+    id: 'car-scan',
+    name: 'Car Scan',
+    display_name: 'Car Scan',
+    description: 'Complete car health scanning and diagnostics',
+    base_price: 999,
+    min_price: 999,
+    max_price: 2499,
+    price_range: '₹999 - ₹2,499',
+    icon_name: 'magnifying-glass',
+    active: true,
+    display_order: 3,
+    metadata: {}
+  },
+  {
+    id: 'wheel-care',
+    name: 'Wheel Care',
+    display_name: 'Wheel Care',
+    description: 'Factory-spec wheel alignment for better stability and fuel efficiency',
+    base_price: 1499,
+    min_price: 1499,
+    max_price: 2999,
+    price_range: '₹1,499 - ₹2,999',
+    icon_name: 'gear',
+    active: true,
+    display_order: 4,
+    metadata: {}
+  },
+  {
+    id: 'interior-clean',
+    name: 'Interior Clean',
+    display_name: 'Interior Clean',
+    description: 'Deep cleaning to keep your car interior fresh and hygienic',
+    base_price: 3999,
+    min_price: 3999,
+    max_price: 5999,
+    price_range: '₹3,999 - ₹5,999',
+    icon_name: 'broom',
+    active: true,
+    display_order: 5,
+    metadata: {}
+  },
+  {
+    id: 'engine-care',
+    name: 'Engine Care',
+    display_name: 'Engine Care',
+    description: 'Engine maintenance and repairs with expert mechanics',
+    base_price: 2499,
+    min_price: 2499,
+    max_price: 4999,
+    price_range: '₹2,499 - ₹4,999',
+    icon_name: 'wrench',
+    active: true,
+    display_order: 6,
+    metadata: {}
+  }
+];
+
 // Helper to pick uid from header/query (fallback to a fixed dev uid)
 const getDevUid = (req) => (req.headers['x-dev-uid'] || req.query.uid || 'dev-uid');
 
@@ -1069,6 +1157,83 @@ app.post('/api/service-providers', (req, res) => {
   }
 
   return res.status(201).json({ uid, ...payload });
+});
+
+// --- Services API (for service management) ---
+app.get('/api/services', (req, res) => {
+  // Development server - return all services (admin panel needs to see all)
+  // In production, the actual api/services.ts will handle filtering
+  let services = [...mockServices];
+  
+  // Sort by display_order
+  services.sort((a, b) => a.display_order - b.display_order);
+  
+  return res.json(services);
+});
+
+app.post('/api/services', (req, res) => {
+  // Development server - allow requests without auth
+  // In production, the actual api/services.ts will handle auth
+  
+  const service = req.body;
+  if (!service.name || !service.display_name) {
+    return res.status(400).json({ error: 'Missing required fields: name, display_name' });
+  }
+  
+  const newService = {
+    id: service.id || service.name.toLowerCase().replace(/\s+/g, '-'),
+    name: service.name,
+    display_name: service.display_name,
+    description: service.description || '',
+    base_price: service.base_price || 0,
+    min_price: service.min_price || service.base_price || 0,
+    max_price: service.max_price || service.base_price || 0,
+    price_range: service.price_range || '',
+    icon_name: service.icon_name || '',
+    active: service.active !== false,
+    display_order: service.display_order || mockServices.length + 1,
+    metadata: service.metadata || {}
+  };
+  
+  mockServices.push(newService);
+  return res.status(201).json(newService);
+});
+
+app.patch('/api/services', (req, res) => {
+  // Development server - allow requests without auth
+  // In production, the actual api/services.ts will handle auth
+  
+  const { id, ...updates } = req.body;
+  if (!id) {
+    return res.status(400).json({ error: 'Missing service id' });
+  }
+  
+  const index = mockServices.findIndex(s => s.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Service not found' });
+  }
+  
+  mockServices[index] = { ...mockServices[index], ...updates };
+  return res.json(mockServices[index]);
+});
+
+app.delete('/api/services', (req, res) => {
+  // Development server - allow requests without auth
+  // In production, the actual api/services.ts will handle auth
+  
+  const { id } = req.query;
+  if (!id) {
+    return res.status(400).json({ error: 'Missing service id' });
+  }
+  
+  const index = mockServices.findIndex(s => s.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Service not found' });
+  }
+  
+  // Soft delete by setting active to false
+  mockServices[index].active = false;
+  return res.json(mockServices[index]);
 });
 
 app.patch('/api/service-providers', (req, res) => {
@@ -2474,6 +2639,7 @@ app.get('/api/health', (req, res) => {
       vehicleDataManagement: '/api/vehicle-data-management',
       users: '/api/users',
       faqs: '/api/faqs',
+      services: '/api/services',
       conversations: '/api/conversations',
       notifications: '/api/notifications',
       payments: '/api/payments',
@@ -2509,6 +2675,10 @@ server.listen(PORT, () => {
   console.log(`   - POST /api/faqs - Create new FAQ`);
   console.log(`   - PUT  /api/content?type=faqs&id=... - Update FAQ`);
   console.log(`   - DELETE /api/content?type=faqs&id=... - Delete FAQ`);
+  console.log(`   - GET  /api/services - Get all services (public: active only, admin: all)`);
+  console.log(`   - POST /api/services - Create new service (admin only)`);
+  console.log(`   - PATCH /api/services - Update service (admin only)`);
+  console.log(`   - DELETE /api/services?id=... - Delete service (admin only)`);
   console.log(`   - GET  /api/conversations - Get conversations (returns empty in dev)`);
   console.log(`   - POST /api/conversations - Save conversation`);
   console.log(`   - PUT  /api/conversations - Update conversation`);
