@@ -134,20 +134,49 @@ export const LazyImage: React.FC<LazyImageProps> = ({
           if (typeof window !== 'undefined') {
             import('../lib/supabase.js').then(({ getSupabaseClient }) => {
               const supabase = getSupabaseClient();
-              const { data } = supabase.storage
-                .from('images')
-                .getPublicUrl(src);
-              if (data?.publicUrl && data.publicUrl !== src) {
-                target.src = data.publicUrl;
-                return; // Don't set error if we can convert it
+              
+              // Try different path formats
+              const pathAttempts = [
+                src, // Original path
+                src.includes('/') ? src : `vehicles/${src}`, // Add vehicles prefix if missing
+              ];
+              
+              for (const path of pathAttempts) {
+                const { data, error } = supabase.storage
+                  .from('images')
+                  .getPublicUrl(path);
+                
+                if (data?.publicUrl && data.publicUrl !== src && !error) {
+                  console.log('✅ LazyImage: Converted storage path to URL:', { original: src, path, url: data.publicUrl });
+                  target.src = data.publicUrl;
+                  return; // Don't set error if we can convert it
+                }
               }
-            }).catch(() => {
+              
+              // If all attempts failed, log for debugging
+              console.warn('⚠️ LazyImage: Could not convert storage path:', {
+                original: src,
+                attemptedPaths: pathAttempts,
+                error: 'No valid public URL generated'
+              });
+              setHasError(true);
+            }).catch((err) => {
+              console.error('❌ LazyImage: Error importing Supabase client:', err);
               setHasError(true);
             });
+            return; // Don't set error immediately, wait for async conversion
           }
-        } catch {
+        } catch (err) {
+          console.error('❌ LazyImage: Error in handleError:', err);
           // Fall through to set error
         }
+      } else {
+        // Log failed image load for debugging
+        console.warn('⚠️ LazyImage: Image failed to load:', {
+          src: target.src,
+          originalSrc: src,
+          isPlaceholder: target.src.includes('placeholder.com') || target.src.includes('text=Car')
+        });
       }
     }
     setHasError(true);
