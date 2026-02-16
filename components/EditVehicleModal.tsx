@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Vehicle } from '../types';
+import { getSupabaseClient } from '../lib/supabase.js';
 
 interface EditVehicleModalProps {
     vehicle: Vehicle;
@@ -23,6 +24,42 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
             });
         }
     }, [vehicle]);
+
+    // Convert storage paths to public URLs for display
+    const displayImages = useMemo(() => {
+        if (!formData.images || formData.images.length === 0) return [];
+        
+        try {
+            const supabase = getSupabaseClient();
+            return formData.images.map((image) => {
+                // If already a full URL, return as-is
+                if (image && (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('data:'))) {
+                    return image;
+                }
+                
+                // If it's a storage path, convert to public URL
+                if (image && typeof image === 'string' && image.trim() !== '') {
+                    let filePath = image.trim();
+                    
+                    // Ensure path has proper format
+                    if (!filePath.includes('/')) {
+                        filePath = `vehicles/${filePath}`;
+                    }
+                    
+                    const { data } = supabase.storage
+                        .from('images')
+                        .getPublicUrl(filePath);
+                    
+                    return data?.publicUrl || image;
+                }
+                
+                return image;
+            });
+        } catch (error) {
+            console.error('Error converting image URLs:', error);
+            return formData.images; // Return original on error
+        }
+    }, [formData.images]);
 
     const validateField = (name: string, value: any): string => {
         switch (name) {
@@ -396,22 +433,30 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                                 Uploaded Images ({formData.images.length})
                                             </p>
                                             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                                                {formData.images.map((url, index) => (
-                                                    <div key={index} className="relative group">
-                                                        <img 
-                                                            src={url} 
-                                                            className="w-full h-20 object-cover rounded-lg shadow-sm" 
-                                                            alt={`Vehicle image ${index + 1}`} 
-                                                        />
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={() => handleRemoveImageUrl(url)} 
-                                                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    </div>
-                                                ))}
+                                                {formData.images.map((url, index) => {
+                                                    const displayUrl = displayImages[index] || url;
+                                                    return (
+                                                        <div key={index} className="relative group">
+                                                            <img 
+                                                                src={displayUrl} 
+                                                                className="w-full h-20 object-cover rounded-lg shadow-sm" 
+                                                                alt={`Vehicle image ${index + 1}`}
+                                                                onError={(e) => {
+                                                                    // Fallback to placeholder if image fails to load
+                                                                    const target = e.target as HTMLImageElement;
+                                                                    target.src = 'https://via.placeholder.com/200x150?text=Image+Not+Available';
+                                                                }}
+                                                            />
+                                                            <button 
+                                                                type="button" 
+                                                                onClick={() => handleRemoveImageUrl(url)} 
+                                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     )}

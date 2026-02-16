@@ -33,10 +33,10 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   conversations,
   onNavigate,
   onSelectVehicle,
-  onToggleWishlist,
-  onToggleCompare,
+  onToggleWishlist: _onToggleWishlist,
+  onToggleCompare: _onToggleCompare,
   comparisonList,
-  onViewSellerProfile,
+  onViewSellerProfile: _onViewSellerProfile,
   onLogout
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity'>('overview');
