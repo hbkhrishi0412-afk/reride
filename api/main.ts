@@ -8,6 +8,7 @@ import { VehicleCategory } from '../types.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
+import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
@@ -975,6 +976,30 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(401).json({ success: false, reason: 'Invalid credentials.' });
       }
       
+      // CRITICAL FIX: Check if user is a service provider trying to login as regular seller
+      // Service providers should only login through the service provider login page
+      if (user.role === 'seller') {
+        try {
+          const serviceProvider = await supabaseServiceProviderService.findByEmail(normalizedEmail);
+          if (serviceProvider) {
+            // User is a service provider - they must use the service provider login page
+            logWarn('⚠️ Service provider attempted regular login:', {
+              email: normalizedEmail,
+              requestedRole: sanitizedData.role
+            });
+            return res.status(403).json({ 
+              success: false, 
+              reason: 'Service providers must login through the Service Provider login page.',
+              isServiceProvider: true
+            });
+          }
+        } catch (spError) {
+          // If service provider lookup fails, log but don't block login
+          // This ensures regular sellers can still login even if service provider service has issues
+          logWarn('⚠️ Error checking service provider status:', spError);
+        }
+      }
+      
       if (sanitizedData.role && user.role !== sanitizedData.role) {
         return res.status(403).json({ success: false, reason: `User is not a registered ${sanitizedData.role}.` });
       }
@@ -1868,6 +1893,9 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       const unsetFields: Record<string, unknown> = {};
       
       // Handle password update separately - it needs to be hashed
+      // CRITICAL: Store plain text password before hashing for Supabase Auth sync
+      let plainTextPassword: string | null = null;
+      
       if (updateData.password !== undefined && updateData.password !== null) {
         try {
           // Validate password is a string
@@ -1889,8 +1917,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             if (process.env.NODE_ENV !== 'production') {
               logInfo('🔐 Password already hashed, using as-is');
             }
+            // Cannot sync to Supabase Auth if password is already hashed
+            plainTextPassword = null;
           } else {
-            // Hash the plain text password before updating
+            // Store plain text password for Supabase Auth sync (before hashing)
+            plainTextPassword = updateData.password;
+            
+            // Hash the plain text password before updating users table
             // Only log in development to avoid information leakage
             if (process.env.NODE_ENV !== 'production') {
               logInfo('🔐 Hashing password...');
@@ -2044,7 +2077,51 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
         logInfo('✅ User updated successfully:', updatedUser.email);
 
-        // Note: Supabase handles authentication separately from user data
+        // CRITICAL FIX: Sync password update with Supabase Auth
+        // When password is updated in users table, also update Supabase Auth password
+        // This must be done BEFORE updating the users table to ensure both are in sync
+        if (plainTextPassword) {
+          try {
+            const supabaseAdmin = getSupabaseAdminClient();
+            
+            // Get the user's auth ID from Supabase Auth by email
+            // Use listUsers with pagination to find the user efficiently
+            const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+            
+            if (listError) {
+              logWarn('⚠️ Could not list auth users to sync password:', listError.message);
+            } else {
+              // Find the auth user by email (case-insensitive)
+              const authUser = authUsers.users.find(u => 
+                u.email?.toLowerCase().trim() === normalizedEmail
+              );
+              
+              if (authUser) {
+                // Update password in Supabase Auth (use plain text password)
+                // Supabase Auth will hash it with its own algorithm
+                const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+                  authUser.id,
+                  { password: plainTextPassword }
+                );
+                
+                if (authUpdateError) {
+                  logWarn('⚠️ Failed to update Supabase Auth password:', authUpdateError.message);
+                  // Don't fail the entire update - users table password was updated successfully
+                } else {
+                  logInfo('✅ Password synced to Supabase Auth successfully');
+                }
+              } else {
+                logWarn('⚠️ Auth user not found for email (user may not have Supabase Auth account):', normalizedEmail);
+                // This is OK - user might only exist in users table (legacy users)
+              }
+            }
+          } catch (authSyncError) {
+            logWarn('⚠️ Error syncing password to Supabase Auth:', authSyncError);
+            // Don't fail the entire update - users table password was updated successfully
+          }
+        } else if (updateFields.password) {
+          logWarn('⚠️ Password was updated but plain text not available for Supabase Auth sync (password was already hashed)');
+        }
 
         // SYNC VEHICLE EXPIRY DATES when planExpiryDate is updated
         if (updateFields.planExpiryDate !== undefined || unsetFields.planExpiryDate !== undefined) {
@@ -2196,9 +2273,45 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(404).json({ success: false, reason: 'User not found.' });
       }
 
-      // Delete user from Supabase
+      // Delete user from Supabase users table
       await userService.delete(normalizedEmail);
-        logInfo('✅ User deleted successfully from Supabase:', normalizedEmail);
+      logInfo('✅ User deleted successfully from Supabase users table:', normalizedEmail);
+
+      // CRITICAL FIX: Also delete user from Supabase Auth
+      try {
+        const supabaseAdmin = getSupabaseAdminClient();
+        
+        // Get the user's auth ID from Supabase Auth by email
+        const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        
+        if (listError) {
+          logWarn('⚠️ Could not list auth users to delete:', listError.message);
+        } else {
+          // Find the auth user by email
+          const authUser = authUsers.users.find(u => 
+            u.email?.toLowerCase().trim() === normalizedEmail
+          );
+          
+          if (authUser) {
+            // Delete user from Supabase Auth
+            const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(
+              authUser.id
+            );
+            
+            if (authDeleteError) {
+              logWarn('⚠️ Failed to delete user from Supabase Auth:', authDeleteError.message);
+              // Don't fail the entire deletion - users table record was deleted successfully
+            } else {
+              logInfo('✅ User deleted from Supabase Auth successfully');
+            }
+          } else {
+            logWarn('⚠️ Auth user not found for email (may have been deleted already):', normalizedEmail);
+          }
+        }
+      } catch (authDeleteError) {
+        logWarn('⚠️ Error deleting user from Supabase Auth:', authDeleteError);
+        // Don't fail the entire deletion - users table record was deleted successfully
+      }
 
       // Verify the user was deleted by querying it
       const verifyUser = await userService.findByEmail(normalizedEmail);
