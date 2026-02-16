@@ -950,7 +950,34 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
     const [showImportUsersModal, setShowImportUsersModal] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const hasFetchedUsersRef = useRef(false);
+    const [configError, setConfigError] = useState<{ reason: string; diagnostic?: string } | null>(null);
     
+    // Check for configuration errors from localStorage
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const errorInfo = localStorage.getItem('reRideUsers_error');
+            if (errorInfo) {
+                try {
+                    const error = JSON.parse(errorInfo);
+                    // Only show error if it's recent (within last hour)
+                    if (error.timestamp && Date.now() - error.timestamp < 3600000) {
+                        setConfigError({
+                            reason: error.reason || 'Configuration error',
+                            diagnostic: error.diagnostic
+                        });
+                    } else {
+                        // Clear stale error
+                        localStorage.removeItem('reRideUsers_error');
+                    }
+                } catch (e) {
+                    // Ignore parse errors
+                }
+            } else {
+                setConfigError(null);
+            }
+        }
+    }, [users]); // Re-check when users change
+
     // Fetch users when AdminPanel mounts if they're empty (for admin users)
     useEffect(() => {
         // Only fetch if:
@@ -973,6 +1000,14 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     const { dataService } = await import('../services/dataService');
                     const usersData = await dataService.getUsers();
                     console.log(`✅ AdminPanel: Fetched ${usersData.length} users`);
+                    
+                    // Clear any configuration errors on success
+                    if (usersData.length > 0) {
+                        setConfigError(null);
+                        if (typeof window !== 'undefined') {
+                            localStorage.removeItem('reRideUsers_error');
+                        }
+                    }
                     
                     if (usersData.length === 0) {
                         console.warn('⚠️ AdminPanel: API returned 0 users. This might indicate:');
@@ -1003,10 +1038,16 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     }, 500);
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : String(error);
+                    const errorAny = error as any;
                     console.error('❌ AdminPanel: Failed to fetch users:', errorMessage);
                     
                     // Check for specific error types
-                    if (errorMessage.includes('SUPABASE_SERVICE_ROLE_KEY') || errorMessage.includes('Service temporarily unavailable') || errorMessage.includes('503')) {
+                    if (errorMessage.includes('SUPABASE_SERVICE_ROLE_KEY') || errorMessage.includes('Service temporarily unavailable') || errorMessage.includes('503') || errorAny?.status === 503) {
+                        const errorData = errorAny?.errorData || {};
+                        setConfigError({
+                            reason: errorData.reason || errorMessage || 'SUPABASE_SERVICE_ROLE_KEY is not configured',
+                            diagnostic: errorData.diagnostic
+                        });
                         console.error('❌ CRITICAL: This appears to be a configuration issue.');
                         console.error('   The SUPABASE_SERVICE_ROLE_KEY environment variable is likely missing or misconfigured.');
                         console.error('   Action required:');
@@ -3362,6 +3403,53 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 </aside>
                 <main className="flex-1 p-8">
                     <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 min-h-[600px]">
+                        {/* Configuration Error Banner */}
+                        {configError && (
+                            <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                            <div className="flex items-start">
+                                <div className="flex-shrink-0">
+                                    <svg className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div className="ml-3 flex-1">
+                                    <h3 className="text-sm font-medium text-red-800 mb-2">
+                                        Configuration Error: Cannot Fetch Data from Supabase
+                                    </h3>
+                                    <p className="text-sm text-red-700 mb-2">
+                                        {configError.reason}
+                                    </p>
+                                    {configError.diagnostic && (
+                                        <p className="text-xs text-red-600 mb-3">
+                                            {configError.diagnostic}
+                                        </p>
+                                    )}
+                                    <div className="text-xs text-red-600 space-y-1">
+                                        <p className="font-semibold">To fix this issue:</p>
+                                        <ol className="list-decimal list-inside space-y-1 ml-2">
+                                            <li>Go to <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline">Vercel Dashboard</a> → Your Project → Settings → Environment Variables</li>
+                                            <li>Add <code className="bg-red-100 px-1 rounded">SUPABASE_SERVICE_ROLE_KEY</code> for <strong>Production</strong> environment</li>
+                                            <li>Get the key from <a href="https://app.supabase.com" target="_blank" rel="noopener noreferrer" className="underline">Supabase Dashboard</a> → Settings → API → service_role key</li>
+                                            <li><strong>Redeploy your application</strong> after setting the variable (environment variables only take effect after redeploy)</li>
+                                        </ol>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setConfigError(null);
+                                            if (typeof window !== 'undefined') {
+                                                localStorage.removeItem('reRideUsers_error');
+                                            }
+                                            hasFetchedUsersRef.current = false;
+                                            window.location.reload();
+                                        }}
+                                        className="mt-3 text-sm text-red-700 hover:text-red-900 underline"
+                                    >
+                                        Dismiss and Retry
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        )}
                         {renderContent()}
                     </div>
                 </main>
