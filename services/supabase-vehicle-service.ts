@@ -43,26 +43,61 @@ function processImageUrls(images: string[] | null | undefined, vehicleId?: numbe
       if (image && typeof image === 'string' && image.trim() !== '') {
         // If it's already a full path, use it directly
         // Otherwise, construct path from vehicleId if available
-        let filePath = image;
-        if (!image.includes('/') && vehicleId) {
-          filePath = `vehicles/${vehicleId}/${image}`;
-        } else if (!image.includes('/')) {
-          filePath = `vehicles/${image}`;
+        let filePath = image.trim();
+        
+        // Handle different path formats:
+        // 1. Full path: "vehicles/123/image.jpg" -> use as-is
+        // 2. Relative with vehicleId: "image.jpg" + vehicleId -> "vehicles/123/image.jpg"
+        // 3. Relative without vehicleId: "image.jpg" -> "vehicles/image.jpg"
+        if (!filePath.includes('/')) {
+          if (vehicleId) {
+            filePath = `vehicles/${vehicleId}/${filePath}`;
+          } else {
+            filePath = `vehicles/${filePath}`;
+          }
         }
         
         // Get public URL from Supabase Storage
-        const { data } = supabase.storage
+        const { data, error } = supabase.storage
           .from('images')
           .getPublicUrl(filePath);
         
-        return data.publicUrl || image; // Fallback to original if URL generation fails
+        // Enhanced error logging for debugging
+        if (error) {
+          console.error('❌ Error getting public URL for image:', {
+            original: image,
+            constructedPath: filePath,
+            vehicleId,
+            error: error.message
+          });
+          return image; // Return original on error
+        }
+        
+        if (data?.publicUrl) {
+          // Log successful conversion in development
+          if (process.env.NODE_ENV !== 'production' && !isServerSide) {
+            console.log('✅ Image URL converted:', {
+              original: image,
+              path: filePath,
+              publicUrl: data.publicUrl
+            });
+          }
+          return data.publicUrl;
+        } else {
+          console.warn('⚠️ No public URL generated for image:', {
+            original: image,
+            constructedPath: filePath,
+            vehicleId
+          });
+          return image; // Return original if no URL generated
+        }
       }
       
       // Invalid image, return empty string (will be filtered out)
       return '';
     }).filter(img => img && img.trim() !== ''); // Remove empty strings
   } catch (error) {
-    console.warn('⚠️ Error processing image URLs:', error);
+    console.error('❌ Error processing image URLs:', error);
     // Return original images if processing fails
     return images.filter(img => img && typeof img === 'string' && img.trim() !== '');
   }
