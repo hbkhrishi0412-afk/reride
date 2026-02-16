@@ -1989,13 +1989,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
       
       const verificationStatus = updateFields.verificationStatus as Partial<VerificationStatus>;
-      if (updateFields.phoneVerified !== undefined) {
+      if (updateFields.phoneVerified !== undefined && updateFields.phoneVerified !== null) {
         verificationStatus.phoneVerified = updateFields.phoneVerified;
       }
-      if (updateFields.emailVerified !== undefined) {
+      if (updateFields.emailVerified !== undefined && updateFields.emailVerified !== null) {
         verificationStatus.emailVerified = updateFields.emailVerified;
       }
-      if (updateFields.govtIdVerified !== undefined) {
+      if (updateFields.govtIdVerified !== undefined && updateFields.govtIdVerified !== null) {
         verificationStatus.govtIdVerified = updateFields.govtIdVerified;
       }
 
@@ -6436,7 +6436,7 @@ async function handleBuyerActivity(req: VercelRequest, res: VercelResponse, _opt
         .eq('user_id', normalizedUserId)
         .single();
 
-      const activityRecord = {
+      const activityRecord: Record<string, unknown> = {
         id: existing?.id || `activity_${normalizedUserId}_${Date.now()}`,
         user_id: normalizedUserId,
         recently_viewed: activityData.recentlyViewed || [],

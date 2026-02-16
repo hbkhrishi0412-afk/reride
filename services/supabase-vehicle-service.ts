@@ -58,20 +58,10 @@ function processImageUrls(images: string[] | null | undefined, vehicleId?: numbe
         }
         
         // Get public URL from Supabase Storage
-        const { data, error } = supabase.storage
+        // Note: getPublicUrl doesn't return an error - it always returns a URL
+        const { data } = supabase.storage
           .from('images')
           .getPublicUrl(filePath);
-        
-        // Enhanced error logging for debugging
-        if (error) {
-          console.error('❌ Error getting public URL for image:', {
-            original: image,
-            constructedPath: filePath,
-            vehicleId,
-            error: error.message
-          });
-          return image; // Return original on error
-        }
         
         if (data?.publicUrl) {
           // Log successful conversion in development
@@ -400,9 +390,16 @@ export const supabaseVehicleService = {
   ): Promise<Vehicle[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
+    // CRITICAL FIX: Add default limit to prevent timeout on large datasets
+    // Default to 100 items per page if no limit specified
+    const limit = options?.limit || 100;
+    const offset = options?.offset || 0;
+    
+    // CRITICAL FIX: Use select with specific columns instead of '*' for better performance
+    // This reduces data transfer and query time
     let query = supabase
       .from('vehicles')
-      .select('*')
+      .select('id, make, model, variant, year, price, mileage, category, seller_email, status, is_featured, images, description, engine, fuel_type, transmission, fuel_efficiency, color, registration_year, insurance_validity, insurance_type, rto, city, state, location, no_of_owners, displacement, ground_clearance, boot_space, features, created_at, updated_at, listing_expires_at, listing_status, views, inquiries_count, certification_status, active_boosts')
       .eq('status', status); // Uses idx_vehicles_status_created_at index
     
     // Apply database-level sorting (much faster than in-memory sorting)
@@ -415,17 +412,52 @@ export const supabaseVehicleService = {
       query = query.order('created_at', { ascending: false });
     }
     
-    // Apply pagination at database level if specified
+    // CRITICAL FIX: Always apply pagination to prevent timeout
     // Use .range() for pagination (it handles both offset and limit)
-    if (options?.limit) {
-      const offset = options.offset || 0;
-      // .range() is inclusive on both ends, so we need offset to offset+limit-1
-      query = query.range(offset, offset + options.limit - 1);
+    // .range() is inclusive on both ends, so we need offset to offset+limit-1
+    query = query.range(offset, offset + limit - 1);
+    
+    // CRITICAL FIX: Add timeout handling
+    let data: any[] | null = null;
+    let error: any = null;
+    
+    try {
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Query timeout: Vehicle fetch took too long')), 25000) // 25 second timeout
+      );
+      
+      // Race between query and timeout
+      const result = await Promise.race([
+        query,
+        timeoutPromise
+      ]) as { data: any[] | null; error: any };
+      
+      data = result.data;
+      error = result.error;
+    } catch (timeoutError) {
+      // If timeout occurs, return empty array instead of throwing
+      console.error('❌ Vehicle query timeout:', {
+        status,
+        limit,
+        offset,
+        error: timeoutError instanceof Error ? timeoutError.message : 'Unknown timeout error'
+      });
+      return [];
     }
     
-    const { data, error } = await query;
-    
     if (error) {
+      // Log timeout errors specifically
+      if (error.message?.includes('timeout') || error.message?.includes('canceling statement')) {
+        console.error('❌ Vehicle query timeout:', {
+          status,
+          limit,
+          offset,
+          error: error.message
+        });
+        // Return empty array instead of throwing to prevent cascading failures
+        return [];
+      }
       throw new Error(`Failed to fetch vehicles by status: ${error.message}`);
     }
     
