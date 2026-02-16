@@ -1754,13 +1754,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       
       // CRITICAL: Check if SUPABASE_SERVICE_ROLE_KEY is configured
       // This is required for admin operations to bypass RLS
-      if (!process.env.SUPABASE_SERVICE_ROLE_KEY || 
-          process.env.SUPABASE_SERVICE_ROLE_KEY.trim() === '' ||
-          process.env.SUPABASE_SERVICE_ROLE_KEY.includes('your_supabase_service_role_key')) {
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!serviceRoleKey || 
+          serviceRoleKey.trim() === '' ||
+          serviceRoleKey.includes('your_supabase_service_role_key')) {
         const errorMsg = 'SUPABASE_SERVICE_ROLE_KEY is not configured. ' +
                         'This is required for fetching users in the admin panel. ' +
                         'Set SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables (Production). ' +
-                        'Get the key from Supabase Dashboard → Settings → API → service_role key.';
+                        'Get the key from Supabase Dashboard → Settings → API → service_role key. ' +
+                        'IMPORTANT: After adding the key, you must redeploy your application for it to take effect.';
         logError('❌ CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing for user fetch:', errorMsg);
         return res.status(503).json({
           success: false,
@@ -1770,16 +1772,46 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         });
       }
       
+      // Verify key format (should be a JWT token, typically 100+ characters)
+      if (serviceRoleKey.length < 50) {
+        logWarn('⚠️ SUPABASE_SERVICE_ROLE_KEY seems too short. Expected 100+ characters. Current length:', serviceRoleKey.length);
+        logWarn('   This might indicate the key was not copied completely.');
+      }
+      
+      logInfo('✅ SUPABASE_SERVICE_ROLE_KEY is configured (length: ' + serviceRoleKey.length + ' characters)');
+      
       logInfo('✅ SUPABASE_SERVICE_ROLE_KEY is configured, proceeding with user fetch...');
+      
+      // Test the service role key by attempting to create admin client
+      try {
+        const testClient = getSupabaseAdminClient();
+        logInfo('✅ Supabase admin client created successfully');
+      } catch (clientError: any) {
+        const clientErrorMessage = clientError instanceof Error ? clientError.message : String(clientError);
+        logError('❌ Failed to create Supabase admin client:', clientErrorMessage);
+        return res.status(503).json({
+          success: false,
+          reason: `Failed to initialize Supabase admin client: ${clientErrorMessage}. ` +
+                  'This might indicate the SUPABASE_SERVICE_ROLE_KEY is invalid or malformed. ' +
+                  'Please verify the key is correct in Vercel environment variables.',
+          users: [],
+          diagnostic: 'Service role key validation failed during client initialization'
+        });
+      }
+      
       const users = await userService.findAll();
       logInfo(`✅ Fetched ${users.length} raw users from Supabase database`);
       
       if (users.length === 0) {
         logWarn('⚠️ Supabase returned 0 users. This might indicate:');
         logWarn('   1. No users exist in the database');
-        logWarn('   2. RLS (Row Level Security) policies are blocking access');
+        logWarn('   2. RLS (Row Level Security) policies are blocking access (even with service role key)');
         logWarn('   3. Database connection issue');
         logWarn('   4. Table name mismatch (expected: "users")');
+        logWarn('   5. Service role key might not have proper permissions');
+        
+        // Return a warning but still return empty array (not an error)
+        return res.status(200).json([]);
       }
       
       // SECURITY FIX: Normalize all users to remove passwords
@@ -1823,6 +1855,42 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           reason: errorMsg,
           users: [],
           diagnostic: 'Service role key is required to bypass RLS policies and fetch users',
+          error: process.env.NODE_ENV !== 'production' ? errorMessage : undefined
+        });
+      }
+      
+      // Check for RLS policy errors
+      if (errorMessage.includes('permission denied') || 
+          errorMessage.includes('row-level security') || 
+          errorMessage.includes('RLS') ||
+          errorMessage.includes('42501')) {
+        const errorMsg = 'Row Level Security (RLS) policy is blocking access to users table. ' +
+                        'Even with service role key, RLS policies might be misconfigured. ' +
+                        'Check your Supabase RLS policies for the users table. ' +
+                        'Service role key should bypass RLS, but verify the key is correct.';
+        logError('❌ RLS Policy Error:', errorMsg);
+        return res.status(503).json({
+          success: false,
+          reason: errorMsg,
+          users: [],
+          diagnostic: 'RLS policy blocking access - verify service role key and RLS policies',
+          error: process.env.NODE_ENV !== 'production' ? errorMessage : undefined
+        });
+      }
+      
+      // Check for database connection errors
+      if (errorMessage.includes('connection') || 
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('network') ||
+          errorMessage.includes('ECONNREFUSED')) {
+        const errorMsg = 'Database connection error. Unable to connect to Supabase. ' +
+                        'Please check your SUPABASE_URL and network connectivity.';
+        logError('❌ Database Connection Error:', errorMsg);
+        return res.status(503).json({
+          success: false,
+          reason: errorMsg,
+          users: [],
+          diagnostic: 'Database connection failed - check SUPABASE_URL and network',
           error: process.env.NODE_ENV !== 'production' ? errorMessage : undefined
         });
       }

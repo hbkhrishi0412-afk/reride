@@ -649,7 +649,44 @@ class DataService {
       }
 
       console.log('📊 getUsers: Making API request to /api/users...');
-      const rawResponse = await this.makeApiRequest<User[] | { users?: User[]; data?: User[]; success?: boolean; reason?: string }>('/users');
+      const rawResponse = await this.makeApiRequest<User[] | { users?: User[]; data?: User[]; success?: boolean; reason?: string; diagnostic?: string }>('/users');
+      
+      // Check if response indicates an error (503 or other error format)
+      if (rawResponse && typeof rawResponse === 'object' && 'success' in rawResponse && rawResponse.success === false) {
+        const errorReason = rawResponse.reason || 'Unknown error';
+        const errorDiagnostic = rawResponse.diagnostic || '';
+        
+        // Store error message in localStorage for UI to display
+        const errorInfo = {
+          reason: errorReason,
+          diagnostic: errorDiagnostic,
+          timestamp: Date.now()
+        };
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('reRideUsers_error', JSON.stringify(errorInfo));
+        }
+        
+        // Check if it's a 503/configuration error
+        if (errorReason.includes('SUPABASE_SERVICE_ROLE_KEY') || errorReason.includes('Service temporarily unavailable') || errorDiagnostic.includes('Service role key')) {
+          console.error('❌ CRITICAL: Service unavailable error when fetching users:', errorReason);
+          if (errorDiagnostic) {
+            console.error('   Diagnostic:', errorDiagnostic);
+          }
+          console.error('   This usually means SUPABASE_SERVICE_ROLE_KEY is missing or misconfigured.');
+          console.error('   Check Vercel environment variables and ensure the key is set for Production environment.');
+          
+          // Throw error with specific message so UI can display it
+          const configError: any = new Error(errorReason);
+          configError.status = 503;
+          configError.code = 503;
+          configError.errorData = { reason: errorReason, diagnostic: errorDiagnostic };
+          throw configError;
+        }
+        
+        // For other errors, throw with the reason
+        throw new Error(errorReason);
+      }
+      
       const users = Array.isArray(rawResponse)
         ? rawResponse
         : Array.isArray(rawResponse?.users)
@@ -662,6 +699,11 @@ class DataService {
       if (!Array.isArray(users)) {
         console.error('❌ getUsers: Invalid response format - expected array, got:', typeof rawResponse, rawResponse);
         throw new Error('Invalid response format: expected array');
+      }
+      
+      // Clear any previous error messages on success
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('reRideUsers_error');
       }
       
       console.log(`✅ getUsers: Successfully fetched ${users.length} users from API`);
