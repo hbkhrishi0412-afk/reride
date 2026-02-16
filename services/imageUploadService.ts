@@ -124,7 +124,7 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
     // Upload to Supabase Storage
     console.log(`💾 Uploading to Supabase Storage: ${filePath}`);
     const { data, error } = await supabase.storage
-      .from('images') // Bucket name - make sure this bucket exists in Supabase
+      .from('Images') // Bucket name - must match exact case in Supabase (Images with capital I)
       .upload(filePath, resizedFile, {
         cacheControl: '3600',
         upsert: false
@@ -137,7 +137,7 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
       if (error.message.includes('Bucket not found') || error.message.includes('not found')) {
         return {
           success: false,
-          error: 'Storage bucket not found. Please create an "images" bucket in Supabase Storage.'
+          error: 'Storage bucket not found. Please create an "Images" bucket in Supabase Storage.'
         };
       }
       
@@ -157,7 +157,7 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
     
     // Get public URL for the uploaded image
     const { data: urlData } = supabase.storage
-      .from('images')
+      .from('Images')
       .getPublicUrl(filePath);
     
     const publicUrl = urlData.publicUrl;
@@ -342,7 +342,7 @@ export const getImageFromDatabase = async (imageId: string, folder: string = 've
     
     // Get public URL
     const { data } = supabase.storage
-      .from('images')
+      .from('Images')
       .getPublicUrl(filePath);
     
     return data.publicUrl || null;

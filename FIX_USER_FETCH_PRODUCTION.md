@@ -1,4 +1,4 @@
-# Fix: Users Not Fetching in Production (Total Users: 0)
+    # Fix: Users Not Fetching in Production (Total Users: 0)
 
 ## Problem
 Your admin panel shows "Total Users: 0" even though you have 9 users in your Supabase database.

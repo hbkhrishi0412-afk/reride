@@ -38,28 +38,28 @@ async function testStorageBucket() {
       return;
     }
     
-    const imagesBucket = buckets.find(b => b.name === 'images');
+    const imagesBucket = buckets.find(b => b.name === 'Images' || b.name === 'images');
     if (!imagesBucket) {
-      console.error('❌ "images" bucket not found!');
+      console.error('❌ "Images" bucket not found!');
       console.log('Available buckets:', buckets.map(b => b.name).join(', '));
       console.log('\n💡 Solution: Create an "images" bucket in Supabase Dashboard → Storage');
       return;
     }
     
-    console.log('✅ "images" bucket found');
+    console.log(`✅ "${imagesBucket.name}" bucket found`);
     console.log('   - Public:', imagesBucket.public ? 'Yes' : 'No');
     console.log('   - Created:', imagesBucket.created_at);
     
     if (!imagesBucket.public) {
       console.warn('\n⚠️  WARNING: Bucket is not public!');
       console.warn('   Images may not be accessible via public URLs.');
-      console.warn('   Solution: Make the bucket public in Supabase Dashboard → Storage → images → Settings');
+      console.warn(`   Solution: Make the bucket public in Supabase Dashboard → Storage → ${imagesBucket.name} → Settings`);
     }
     
     // 2. List files in the bucket
-    console.log('\n2. Listing files in "images" bucket...');
+    console.log(`\n2. Listing files in "${imagesBucket.name}" bucket...`);
     const { data: files, error: listFilesError } = await supabase.storage
-      .from('images')
+      .from(imagesBucket.name)
       .list('', {
         limit: 10,
         sortBy: { column: 'created_at', order: 'desc' }
@@ -71,7 +71,7 @@ async function testStorageBucket() {
     }
     
     if (!files || files.length === 0) {
-      console.warn('⚠️  No files found in "images" bucket');
+      console.warn(`⚠️  No files found in "${imagesBucket.name}" bucket`);
       console.log('   This is normal if you haven\'t uploaded any images yet.');
     } else {
       console.log(`✅ Found ${files.length} file(s):`);
@@ -87,7 +87,7 @@ async function testStorageBucket() {
       const testPath = testFile.name;
       
       const { data: urlData, error: urlError } = supabase.storage
-        .from('images')
+        .from(imagesBucket.name)
         .getPublicUrl(testPath);
       
       if (urlError) {
