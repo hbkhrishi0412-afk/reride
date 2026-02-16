@@ -34,12 +34,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = getSupabaseAdminClient();
 
     if (req.method === 'GET') {
-      // Public read access for active services
-      const { data, error } = await supabase
+      // Check if user is admin for full access
+      const admin = await isAdmin(req);
+      
+      let query = supabase
         .from('services')
-        .select('*')
-        .eq('active', true)
-        .order('display_order', { ascending: true });
+        .select('*');
+      
+      // Public users only see active services, admins see all
+      if (!admin) {
+        query = query.eq('active', true);
+      }
+      
+      const { data, error } = await query.order('display_order', { ascending: true });
 
       if (error) {
         // If table doesn't exist, return empty array (graceful degradation)
