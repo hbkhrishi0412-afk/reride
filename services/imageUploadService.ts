@@ -141,11 +141,19 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
         };
       }
       
+      // Check for RLS policy errors
+      if (error.message.includes('row-level security') || error.message.includes('violates row-level security policy') || error.message.includes('RLS')) {
+        return {
+          success: false,
+          error: 'Storage RLS policy error. Please run the SQL script in scripts/fix-storage-rls-policies.sql to create the necessary policies.'
+        };
+      }
+      
       // Check for permission errors
       if (error.message.includes('permission') || error.message.includes('denied')) {
         return {
           success: false,
-          error: 'Permission denied. Please check Supabase Storage policies.'
+          error: 'Permission denied. Please check Supabase Storage policies. Run scripts/fix-storage-rls-policies.sql to fix this.'
         };
       }
       
