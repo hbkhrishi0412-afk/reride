@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomBytes } from 'crypto';
 import { PLAN_DETAILS } from '../constants.js';
-import { planService } from '../services/planService.js';
 import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../types.js';
 // Supabase services
@@ -5040,7 +5039,7 @@ async function handleContent(req: VercelRequest, res: VercelResponse, _options: 
 
 // FAQs Handler
 async function handleFAQs(req: VercelRequest, res: VercelResponse) {
-  const faqsPath = `${DB_PATHS.VEHICLE_DATA}/faqs`;
+  const faqsPath = 'faqs';
 
   switch (req.method) {
     case 'GET':
@@ -5188,7 +5187,7 @@ async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, faqsPath
 
 // Support Tickets Handler
 async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
-  const ticketsPath = `${DB_PATHS.VEHICLE_DATA}/supportTickets`;
+  const ticketsPath = 'support_tickets';
   const auth = requireAuth(req, res, 'Support tickets');
   if (!auth) {
     return;
@@ -5421,7 +5420,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
 
   const { method } = req;
 
-  const submissionsPath = `${DB_PATHS.VEHICLE_DATA}/sellCarSubmissions`;
+  const submissionsPath = 'sell_car_submissions';
 
   try {
 
@@ -5648,6 +5647,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
     }
 
     const { action } = req.query;
+    const paymentRequestsPath = 'payment_requests';
 
     if (action === 'create') {
       if (req.method !== 'POST') {
@@ -5664,16 +5664,19 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
-        // Create payment request (simplified for demo)
+        // Persist payment request in Supabase
         const paymentRequest = {
-          id: Date.now(),
+          id: `payment_${Date.now()}`,
           sellerEmail,
           amount,
           plan,
           packageId,
           status: 'pending',
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         };
+
+        await adminCreate(paymentRequestsPath, paymentRequest, String(paymentRequest.id));
 
         return res.status(201).json({
           success: true,
@@ -5705,13 +5708,29 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
-        // Get payment status (simplified for demo)
-        const paymentStatus = {
-          sellerEmail: sellerEmail as string,
-          status: 'pending',
-          lastPayment: null,
-          nextDue: null
-        };
+        const allRequests = await adminReadAll<Record<string, unknown>>(paymentRequestsPath);
+        const sellerRequests = Object.values(allRequests)
+          .filter((r) => String(r.sellerEmail || '').toLowerCase().trim() === String(sellerEmail).toLowerCase().trim())
+          .sort((a, b) => {
+            const aTime = a.createdAt ? new Date(String(a.createdAt)).getTime() : 0;
+            const bTime = b.createdAt ? new Date(String(b.createdAt)).getTime() : 0;
+            return bTime - aTime;
+          });
+
+        const latest = sellerRequests[0];
+        const paymentStatus = latest
+          ? {
+              sellerEmail: String(latest.sellerEmail || sellerEmail),
+              status: String(latest.status || 'pending'),
+              lastPayment: latest,
+              nextDue: null
+            }
+          : {
+              sellerEmail: sellerEmail as string,
+              status: 'none',
+              lastPayment: null,
+              nextDue: null
+            };
 
         return res.status(200).json({
           success: true,
@@ -5742,7 +5761,14 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
-        // Approve payment (simplified for demo)
+        await adminUpdate(paymentRequestsPath, String(paymentRequestId), {
+          status: 'approved',
+          reviewedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          notes: req.body?.notes,
+          adminEmail: req.body?.adminEmail
+        });
+
         return res.status(200).json({
           success: true,
           message: 'Payment request approved successfully',
@@ -5764,7 +5790,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
       }
 
       try {
-        const { paymentRequestId, reason } = req.body;
+        const { paymentRequestId, rejectionReason } = req.body;
         
         if (!paymentRequestId) {
           return res.status(400).json({ 
@@ -5773,12 +5799,19 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
-        // Reject payment (simplified for demo)
+        await adminUpdate(paymentRequestsPath, String(paymentRequestId), {
+          status: 'rejected',
+          reviewedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          rejectionReason: rejectionReason || 'No reason provided',
+          adminEmail: req.body?.adminEmail
+        });
+
         return res.status(200).json({
           success: true,
           message: 'Payment request rejected',
           paymentRequestId,
-          reason: reason || 'No reason provided'
+          reason: rejectionReason || 'No reason provided'
         });
 
       } catch (error) {
@@ -5793,8 +5826,22 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
     // Get all payment requests
     if (req.method === 'GET') {
       try {
-        // Return empty array for demo (in real implementation, fetch from database)
-        const paymentRequests: any[] = [];
+        const { status } = req.query;
+        const allRequests = await adminReadAll<Record<string, unknown>>(paymentRequestsPath);
+        let paymentRequests = Object.values(allRequests);
+
+        if (status && typeof status === 'string') {
+          const normalizedStatus = status.toLowerCase().trim();
+          paymentRequests = paymentRequests.filter((request) =>
+            String(request.status || '').toLowerCase().trim() === normalizedStatus
+          );
+        }
+
+        paymentRequests = paymentRequests.sort((a, b) => {
+          const aTime = a.createdAt ? new Date(String(a.createdAt)).getTime() : 0;
+          const bTime = b.createdAt ? new Date(String(b.createdAt)).getTime() : 0;
+          return bTime - aTime;
+        });
         
         return res.status(200).json({
           success: true,
@@ -6571,67 +6618,139 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
         reason: 'Firebase is not configured. Please set Firebase environment variables.'
       });
     }
+    const plansPath = 'plans';
+    const basePlanOrder = ['free', 'pro', 'premium'];
+    const toNumber = (value: unknown, fallback: number): number => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    const toPlanDetails = (id: string, row: Record<string, unknown>) => {
+      const basePlan = PLAN_DETAILS[id as keyof typeof PLAN_DETAILS];
+      const metadata = (row.metadata as Record<string, unknown> | undefined) || {};
+      return {
+        id,
+        name: String(row.name || basePlan?.name || 'Custom Plan'),
+        price: toNumber(row.price, basePlan?.price ?? 0),
+        features: Array.isArray(row.features) ? row.features.map(String) : (basePlan?.features || []),
+        listingLimit: toNumber(row.listingLimit ?? metadata.listingLimit, basePlan?.listingLimit ?? 0),
+        featuredCredits: toNumber(row.featuredCredits ?? metadata.featuredCredits, basePlan?.featuredCredits ?? 0),
+        freeCertifications: toNumber(row.freeCertifications ?? metadata.freeCertifications, basePlan?.freeCertifications ?? 0),
+        isMostPopular: Boolean(row.isMostPopular ?? metadata.isMostPopular ?? basePlan?.isMostPopular ?? false),
+      };
+    };
 
     switch (req.method) {
-      case 'GET':
-        // Get all plans
-        const plans = await planService.getAllPlans();
-        return res.status(200).json(plans);
+      case 'GET': {
+        const allRows = await adminReadAll<Record<string, unknown>>(plansPath);
+        const fromDb = Object.entries(allRows).map(([id, row]) => toPlanDetails(id, row));
+        const presentIds = new Set(fromDb.map((plan) => String(plan.id)));
 
-      case 'POST':
+        // Ensure base plans always exist in response
+        const basePlans = Object.entries(PLAN_DETAILS)
+          .filter(([id]) => !presentIds.has(id))
+          .map(([id, plan]) => ({
+            id,
+            name: plan.name,
+            price: plan.price,
+            features: plan.features,
+            listingLimit: plan.listingLimit,
+            featuredCredits: plan.featuredCredits,
+            freeCertifications: plan.freeCertifications,
+            isMostPopular: Boolean(plan.isMostPopular),
+          }));
+
+        const plans = [...fromDb, ...basePlans].sort((a, b) => {
+          const aIndex = basePlanOrder.indexOf(String(a.id));
+          const bIndex = basePlanOrder.indexOf(String(b.id));
+          if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+          if (aIndex !== -1) return -1;
+          if (bIndex !== -1) return 1;
+          return String(a.name).localeCompare(String(b.name));
+        });
+
+        return res.status(200).json(plans);
+      }
+
+      case 'POST': {
         if (!requireAdmin(req, res, 'Create plan')) {
           return;
         }
-        // Create new plan
-        const newPlanData = req.body;
-        if (!newPlanData || !newPlanData.name) {
+        const newPlanData = req.body || {};
+        if (!newPlanData.name) {
           return res.status(400).json({ error: 'Plan name is required' });
         }
-        
-        const planId = await planService.createPlan(newPlanData);
-        const createdPlan = await planService.getCustomPlanDetails(planId);
-        
-        return res.status(201).json(createdPlan);
 
-      case 'PUT':
+        const planId = String(newPlanData.id || `custom_${Date.now()}`);
+        const record = {
+          id: planId,
+          name: String(newPlanData.name),
+          price: toNumber(newPlanData.price, 0),
+          features: Array.isArray(newPlanData.features) ? newPlanData.features : [],
+          listingLimit: toNumber(newPlanData.listingLimit, 0),
+          featuredCredits: toNumber(newPlanData.featuredCredits, 0),
+          freeCertifications: toNumber(newPlanData.freeCertifications, 0),
+          isMostPopular: Boolean(newPlanData.isMostPopular),
+          isCustom: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        await adminCreate(plansPath, record, planId);
+        return res.status(201).json(toPlanDetails(planId, record));
+      }
+
+      case 'PUT': {
         if (!requireAdmin(req, res, 'Update plan')) {
           return;
         }
-        // Update existing plan
-        const { planId: updatePlanId, ...updateData } = req.body;
-        if (!updatePlanId) {
+        const { planId: updatePlanId, ...updateData } = req.body || {};
+        if (!updatePlanId || typeof updatePlanId !== 'string') {
           return res.status(400).json({ error: 'Plan ID is required' });
         }
-        
-        // Validate planId is a string and a valid SubscriptionPlan
-        if (typeof updatePlanId !== 'string') {
-          return res.status(400).json({ error: 'Plan ID must be a string' });
-        }
-        if (!['free', 'pro', 'premium'].includes(updatePlanId)) {
-          return res.status(400).json({ error: 'Invalid plan ID. Must be one of: free, pro, premium' });
-        }
-        
-        planService.updatePlan(updatePlanId as SubscriptionPlan, updateData);
-        const updatedPlan = await planService.getPlanDetails(updatePlanId as SubscriptionPlan);
-        
-        return res.status(200).json(updatedPlan);
 
-      case 'DELETE':
+        const existing = await adminRead<Record<string, unknown>>(plansPath, updatePlanId);
+        const basePlan = PLAN_DETAILS[updatePlanId as keyof typeof PLAN_DETAILS];
+        const merged = {
+          ...(existing || {}),
+          id: updatePlanId,
+          name: String(updateData.name ?? existing?.name ?? basePlan?.name ?? 'Plan'),
+          price: toNumber(updateData.price ?? existing?.price, basePlan?.price ?? 0),
+          features: Array.isArray(updateData.features)
+            ? updateData.features
+            : (Array.isArray(existing?.features) ? existing?.features : (basePlan?.features || [])),
+          listingLimit: toNumber(updateData.listingLimit ?? existing?.listingLimit, basePlan?.listingLimit ?? 0),
+          featuredCredits: toNumber(updateData.featuredCredits ?? existing?.featuredCredits, basePlan?.featuredCredits ?? 0),
+          freeCertifications: toNumber(updateData.freeCertifications ?? existing?.freeCertifications, basePlan?.freeCertifications ?? 0),
+          isMostPopular: Boolean(updateData.isMostPopular ?? existing?.isMostPopular ?? basePlan?.isMostPopular ?? false),
+          isCustom: !basePlan,
+          updatedAt: new Date().toISOString(),
+        };
+
+        if (existing) {
+          await adminUpdate(plansPath, updatePlanId, merged);
+        } else {
+          await adminCreate(plansPath, { ...merged, createdAt: new Date().toISOString() }, updatePlanId);
+        }
+
+        return res.status(200).json(toPlanDetails(updatePlanId, merged));
+      }
+
+      case 'DELETE': {
         if (!requireAdmin(req, res, 'Delete plan')) {
           return;
         }
-        // Delete plan
         const { planId: deletePlanId } = req.query;
         if (!deletePlanId || typeof deletePlanId !== 'string') {
           return res.status(400).json({ error: 'Plan ID is required' });
         }
-        
-        const deleted = await planService.deletePlan(deletePlanId);
-        if (!deleted) {
+        if (['free', 'pro', 'premium'].includes(deletePlanId)) {
           return res.status(400).json({ error: 'Cannot delete base plans' });
         }
-        
+
+        await adminDelete(plansPath, deletePlanId);
         return res.status(200).json({ success: true, message: 'Plan deleted successfully' });
+      }
 
       default:
         return res.status(405).json({ error: 'Method not allowed' });

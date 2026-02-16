@@ -8,7 +8,12 @@ import { realtimeChatService } from '../services/realtimeChatService';
 import { getSettings } from '../services/settingsService';
 import { getAuditLog, logAction, saveAuditLog } from '../services/auditLogService';
 import { getFaqs, saveFaqs } from '../services/faqService';
-import { getSupportTickets } from '../services/supportTicketService';
+import {
+  getSupportTickets,
+  saveSupportTickets,
+  fetchSupportTicketsFromSupabase,
+  updateSupportTicketInSupabase,
+} from '../services/supportTicketService';
 import { dataService } from '../services/dataService';
 import { getAuthHeaders } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
@@ -1521,15 +1526,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       setUsers(currentUsers);
                     } else {
                       console.log('ℹ️ API returned empty users array and cache is also empty (production mode)');
-                      setUsers([]);
+                      // Preserve existing in-memory users if already present to avoid admin-panel flicker to empty.
+                      setUsers(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
                     }
                   } catch (parseError) {
                     console.warn('Failed to parse cached users in production:', parseError);
-                    setUsers([]);
+                    setUsers(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
                   }
                 } else {
                   console.log('ℹ️ API returned empty users array and no cache available (production mode)');
-                  setUsers([]);
+                  setUsers(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
                 }
               }
             }
@@ -1588,6 +1594,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               } catch (error) {
                 const localFaqs = getFaqs();
                 if (isMounted) setFaqItems(localFaqs || []);
+              }
+            })(),
+
+            // Support tickets
+            (async () => {
+              try {
+                const savedUser = localStorage.getItem('reRideCurrentUser');
+                if (!savedUser) return;
+
+                const parsedUser = JSON.parse(savedUser);
+                const email = parsedUser?.email ? String(parsedUser.email) : '';
+                const role = parsedUser?.role ? String(parsedUser.role) : '';
+                if (!email) return;
+
+                const tickets = await deduplicateRequest(
+                  `support-tickets-${role}-${email}`,
+                  () => fetchSupportTicketsFromSupabase(role === 'admin' ? undefined : email)
+                );
+
+                if (isMounted) {
+                  setSupportTickets(Array.isArray(tickets) ? tickets : []);
+                }
+              } catch (error) {
+                logWarn('Failed to load support tickets:', error);
+                const localTickets = getSupportTickets();
+                if (isMounted && localTickets) {
+                  setSupportTickets(localTickets);
+                }
               }
             })(),
             
@@ -2049,6 +2083,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveAuditLog(auditLog);
     }
   }, [auditLog]);
+
+  // Save support tickets to localStorage whenever they change
+  useEffect(() => {
+    if (supportTickets.length > 0) {
+      saveSupportTickets(supportTickets);
+    }
+  }, [supportTickets]);
+
+  // Keep admin support queue in near real-time sync with backend updates
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    const role = currentUser.role;
+    const email = currentUser.email;
+
+    let isMounted = true;
+    const refreshSupportTickets = async () => {
+      try {
+        const tickets = await fetchSupportTicketsFromSupabase(role === 'admin' ? undefined : email);
+        if (isMounted) {
+          setSupportTickets(Array.isArray(tickets) ? tickets : []);
+        }
+      } catch {
+        // non-blocking background refresh
+      }
+    };
+
+    refreshSupportTickets();
+    const interval = setInterval(refreshSupportTickets, 20000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [currentUser?.email, currentUser?.role]);
 
   // Helper function to join all relevant conversation rooms
   const joinAllConversationRooms = useCallback(() => {
@@ -3248,29 +3316,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           addToast('Failed to update vehicle feature status', 'error');
         }
       },
-    onResolveFlag: (type: 'vehicle' | 'conversation', id: number | string) => {
-      if (type === 'vehicle') {
-        const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
-        setVehicles(prev => Array.isArray(prev) ? prev.map(vehicle => 
-          vehicle && vehicle.id === id ? { ...vehicle, isFlagged: false } : vehicle
-        ) : []);
-        
-        // Log audit entry for flag resolution
-        const actor = currentUser?.name || currentUser?.email || 'System';
-        const targetInfo = vehicle ? `${vehicle.make} ${vehicle.model} (ID: ${id})` : `Vehicle #${id}`;
-        const entry = logAction(actor, 'Resolve Flag', targetInfo, `Resolved flag on ${type}`);
-        setAuditLog(prev => [entry, ...prev]);
-      } else {
-        setConversations(prev => Array.isArray(prev) ? prev.map(conv => 
-          conv && conv.id === id ? { ...conv, isFlagged: false } : conv
-        ) : []);
-        
-        // Log audit entry for flag resolution
-        const actor = currentUser?.name || currentUser?.email || 'System';
-        const entry = logAction(actor, 'Resolve Flag', `Conversation ${id}`, `Resolved flag on ${type}`);
-        setAuditLog(prev => [entry, ...prev]);
+    onResolveFlag: async (type: 'vehicle' | 'conversation', id: number | string) => {
+      try {
+        if (type === 'vehicle') {
+          const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
+          if (!vehicle) {
+            addToast('Vehicle not found', 'error');
+            return;
+          }
+
+          const updatedVehicle = { ...vehicle, isFlagged: false };
+          await dataService.updateVehicle(updatedVehicle);
+          setVehicles(prev => Array.isArray(prev) ? prev.map(v =>
+            v && v.id === id ? updatedVehicle : v
+          ) : []);
+
+          const actor = currentUser?.name || currentUser?.email || 'System';
+          const targetInfo = `${vehicle.make} ${vehicle.model} (ID: ${id})`;
+          const entry = logAction(actor, 'Resolve Flag', targetInfo, `Resolved flag on ${type}`);
+          setAuditLog(prev => [entry, ...prev]);
+        } else {
+          const conversation = Array.isArray(conversations) ? conversations.find(conv => conv && conv.id === id) : undefined;
+          if (!conversation) {
+            addToast('Conversation not found', 'error');
+            return;
+          }
+
+          const updatedConversation = { ...conversation, isFlagged: false };
+          const { saveConversationToSupabase } = await import('../services/conversationService');
+          const result = await saveConversationToSupabase(updatedConversation);
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to update conversation');
+          }
+
+          setConversations(prev => Array.isArray(prev) ? prev.map(conv =>
+            conv && conv.id === id ? updatedConversation : conv
+          ) : []);
+
+          const actor = currentUser?.name || currentUser?.email || 'System';
+          const entry = logAction(actor, 'Resolve Flag', `Conversation ${id}`, `Resolved flag on ${type}`);
+          setAuditLog(prev => [entry, ...prev]);
+        }
+        addToast(`Flag resolved for ${type}`, 'success');
+      } catch (error) {
+        console.error('Failed to resolve flag:', error);
+        addToast(`Failed to resolve ${type} flag`, 'error');
       }
-      addToast(`Flag resolved for ${type}`, 'success');
     },
     onUpdateSettings: (settings: PlatformSettings) => {
       setPlatformSettings(settings);
@@ -3579,11 +3670,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ) : []);
       addToast(`Verification status toggled for ${email}`, 'success');
     },
-    onUpdateSupportTicket: (ticket: SupportTicket) => {
-      setSupportTickets(prev => Array.isArray(prev) ? prev.map(t => 
-        t && t.id === ticket.id ? ticket : t
-      ) : []);
-      addToast('Support ticket updated', 'success');
+    onUpdateSupportTicket: async (ticket: SupportTicket) => {
+      try {
+        // Persist to API first, then sync local state
+        const success = await updateSupportTicketInSupabase(ticket);
+        if (!success) {
+          throw new Error('Failed to update support ticket in Supabase');
+        }
+
+        setSupportTickets(prev => Array.isArray(prev) ? prev.map(t =>
+          t && t.id === ticket.id ? ticket : t
+        ) : []);
+        addToast('Support ticket updated', 'success');
+      } catch (error) {
+        console.error('Failed to update support ticket:', error);
+        addToast('Failed to update support ticket', 'error');
+        throw error;
+      }
     },
     onAddFaq: async (faq: Omit<FAQItem, 'id'>) => {
       try {
@@ -3669,23 +3772,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         throw error;
       }
     },
-    onCertificationApproval: (vehicleId: number, decision: 'approved' | 'rejected') => {
-      const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v && v.id === vehicleId) : undefined;
-      
-      setVehicles(prev => Array.isArray(prev) ? prev.map(vehicle => 
-        vehicle && vehicle.id === vehicleId ? { 
-          ...vehicle, 
-          certificationStatus: decision === 'approved' ? 'certified' : 'rejected' 
-        } : vehicle
-      ) : []);
-      
-      // Log audit entry for certification approval/rejection
-      const actor = currentUser?.name || currentUser?.email || 'System';
-      const vehicleInfo = vehicle ? `${vehicle.make} ${vehicle.model} (ID: ${vehicleId})` : `Vehicle #${vehicleId}`;
-      const entry = logAction(actor, `Certification ${decision === 'approved' ? 'Approve' : 'Reject'}`, vehicleInfo, `Certification ${decision} for vehicle`);
-      setAuditLog(prev => [entry, ...prev]);
-      
-      addToast(`Certification ${decision} for vehicle`, 'success');
+    onCertificationApproval: async (vehicleId: number, decision: 'approved' | 'rejected') => {
+      try {
+        const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v && v.id === vehicleId) : undefined;
+        if (!vehicle) {
+          addToast('Vehicle not found', 'error');
+          return;
+        }
+
+        const updatedVehicle: Vehicle = {
+          ...vehicle,
+          certificationStatus: decision === 'approved' ? 'certified' : 'rejected'
+        };
+
+        await dataService.updateVehicle(updatedVehicle);
+        setVehicles(prev => Array.isArray(prev) ? prev.map(v =>
+          v && v.id === vehicleId ? updatedVehicle : v
+        ) : []);
+
+        const actor = currentUser?.name || currentUser?.email || 'System';
+        const vehicleInfo = `${vehicle.make} ${vehicle.model} (ID: ${vehicleId})`;
+        const entry = logAction(actor, `Certification ${decision === 'approved' ? 'Approve' : 'Reject'}`, vehicleInfo, `Certification ${decision} for vehicle`);
+        setAuditLog(prev => [entry, ...prev]);
+
+        addToast(`Certification ${decision} for vehicle`, 'success');
+      } catch (error) {
+        console.error('Failed to update certification:', error);
+        addToast('Certification update failed', 'error');
+      }
     },
     
     // Additional functions

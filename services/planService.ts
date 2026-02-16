@@ -35,11 +35,33 @@ const getPlanModel = async () => {
   return planModelPromise;
 };
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+const normalizePlan = (raw: any): PlanDetails => ({
+    id: String(raw?.id || raw?.planId || `custom_${Date.now()}`),
+    name: String(raw?.name || 'Custom Plan'),
+    price: Number(raw?.price || 0),
+    features: Array.isArray(raw?.features) ? raw.features.map(String) : [],
+    listingLimit: Number(raw?.listingLimit || 0),
+    featuredCredits: Number(raw?.featuredCredits || 0),
+    freeCertifications: Number(raw?.freeCertifications || 0),
+    isMostPopular: Boolean(raw?.isMostPopular),
+});
+
 export const planService = {
     // Get plan details with any updates applied
     getPlanDetails: async (planId: SubscriptionPlan): Promise<PlanDetails> => {
         const { PLAN_DETAILS } = await import('../constants.js');
         const basePlan = PLAN_DETAILS[planId];
+        if (typeof window !== 'undefined') {
+            try {
+                const allPlans = await planService.getAllPlans();
+                const match = allPlans.find((p) => p.id === planId);
+                return match || basePlan;
+            } catch {
+                return basePlan;
+            }
+        }
         
         try {
             // Only access database if Plan model is available (server-side only)
@@ -71,6 +93,14 @@ export const planService = {
 
     // Get custom plan details
     getCustomPlanDetails: async (planId: string): Promise<PlanDetails | null> => {
+        if (typeof window !== 'undefined') {
+            try {
+                const plans = await planService.getAllPlans();
+                return plans.find((plan) => plan.id === planId) || null;
+            } catch {
+                return null;
+            }
+        }
         try {
             const Plan = await getPlanModel();
             // Browser fallback - return null since database access not available
@@ -100,6 +130,24 @@ export const planService = {
 
     // Get all plan details with updates applied (max 4 plans)
     getAllPlans: async (): Promise<PlanDetails[]> => {
+        if (typeof window !== 'undefined') {
+            try {
+                const response = await fetch(`${API_BASE_URL}/plans?type=plans`);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch plans: ${response.status}`);
+                }
+                const data = await response.json();
+                if (!Array.isArray(data)) {
+                    return [];
+                }
+                return data.map(normalizePlan).slice(0, 4);
+            } catch (error) {
+                console.warn('Failed to fetch plans from API:', error);
+                const { PLAN_DETAILS } = await import('../constants.js');
+                return Object.keys(PLAN_DETAILS).map((planId) => PLAN_DETAILS[planId as SubscriptionPlan]).slice(0, 4);
+            }
+        }
+
         const { PLAN_DETAILS } = await import('../constants.js');
         const basePlans = await Promise.all(
             Object.keys(PLAN_DETAILS).map(planId => 
@@ -132,6 +180,19 @@ export const planService = {
 
     // Update plan details
     updatePlan: async (planId: SubscriptionPlan | string, updates: Partial<PlanDetails>): Promise<void> => {
+        if (typeof window !== 'undefined') {
+            const response = await fetch(`${API_BASE_URL}/plans?type=plans`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ planId, ...updates }),
+            });
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                throw new Error(text || `Failed to update plan (${response.status})`);
+            }
+            return;
+        }
+
         const Plan = await getPlanModel();
         // Browser fallback - throw error since database access not available
         if (!Plan) {
@@ -169,6 +230,20 @@ export const planService = {
 
     // Create new plan
     createPlan: async (planData: Omit<PlanDetails, 'id'>): Promise<string> => {
+        if (typeof window !== 'undefined') {
+            const response = await fetch(`${API_BASE_URL}/plans?type=plans`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(planData),
+            });
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                throw new Error(text || `Failed to create plan (${response.status})`);
+            }
+            const created = await response.json().catch(() => null);
+            return String(created?.id || `custom_${Date.now()}`);
+        }
+
         const Plan = await getPlanModel();
         // Browser fallback - throw error since database access not available
         if (!Plan) {
@@ -201,6 +276,13 @@ export const planService = {
 
     // Delete custom plan
     deletePlan: async (planId: string): Promise<boolean> => {
+        if (typeof window !== 'undefined') {
+            const response = await fetch(`${API_BASE_URL}/plans?type=plans&planId=${encodeURIComponent(planId)}`, {
+                method: 'DELETE',
+            });
+            return response.ok;
+        }
+
         const Plan = await getPlanModel();
         // Browser fallback - return false since database access not available
         if (!Plan) {

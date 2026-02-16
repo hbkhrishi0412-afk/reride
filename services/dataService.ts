@@ -617,24 +617,50 @@ class DataService {
 
     try {
       // Check if we have an access token before making the request
-      const accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
+      let accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
       if (!accessToken) {
-        console.warn('⚠️ No access token found. Cannot fetch users from API.');
-        // Try to use cached data
-        const cachedUsers = this.getLocalStorageData<User[]>('reRideUsers_prod', []);
-        if (cachedUsers.length > 0) {
-          console.warn('⚠️ Using cached users data (no token available)');
-          return cachedUsers;
+        // Try refresh-token flow before giving up.
+        // This is critical in production where currentUser may be restored from storage
+        // but access token is temporarily missing.
+        try {
+          const { refreshAccessToken } = await import('./userService');
+          const refreshResult = await refreshAccessToken();
+          if (refreshResult.success && refreshResult.accessToken) {
+            accessToken = refreshResult.accessToken;
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('reRideAccessToken', accessToken);
+            }
+            console.log('✅ getUsers: Refreshed missing access token successfully');
+          }
+        } catch (refreshError) {
+          console.warn('⚠️ getUsers: Token refresh failed when token was missing:', refreshError);
         }
-        return [];
+
+        if (!accessToken) {
+          console.warn('⚠️ No access token found. Cannot fetch users from API.');
+          // Try to use cached data
+          const cachedUsers = this.getLocalStorageData<User[]>('reRideUsers_prod', []);
+          if (cachedUsers.length > 0) {
+            console.warn('⚠️ Using cached users data (no token available)');
+            return cachedUsers;
+          }
+          return [];
+        }
       }
 
       console.log('📊 getUsers: Making API request to /api/users...');
-      const users = await this.makeApiRequest<User[]>('/users');
+      const rawResponse = await this.makeApiRequest<User[] | { users?: User[]; data?: User[]; success?: boolean; reason?: string }>('/users');
+      const users = Array.isArray(rawResponse)
+        ? rawResponse
+        : Array.isArray(rawResponse?.users)
+          ? rawResponse.users
+          : Array.isArray(rawResponse?.data)
+            ? rawResponse.data
+            : [];
       
       // Validate response is an array
       if (!Array.isArray(users)) {
-        console.error('❌ getUsers: Invalid response format - expected array, got:', typeof users, users);
+        console.error('❌ getUsers: Invalid response format - expected array, got:', typeof rawResponse, rawResponse);
         throw new Error('Invalid response format: expected array');
       }
       

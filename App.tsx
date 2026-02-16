@@ -305,6 +305,7 @@ const AppContent: React.FC = () => {
     platformSettings,
     auditLog,
     supportTickets,
+    setSupportTickets,
     selectedCategory: currentCategory,
     initialSearchQuery,
     selectedCity,
@@ -2751,10 +2752,21 @@ const AppContent: React.FC = () => {
           return (
             <MobileSupportPage
               currentUser={currentUser}
-              onSubmitTicket={(_ticket) => {
-                // Handle support ticket submission
-                addToast('Support ticket submitted!', 'success');
-                navigate(ViewEnum.HOME);
+              onSubmitTicket={async (ticket) => {
+                try {
+                  const { createSupportTicketInSupabase } = await import('./services/supportTicketService');
+                  const created = await createSupportTicketInSupabase(ticket);
+                  if (!created) {
+                    addToast('Failed to submit support ticket. Please try again.', 'error');
+                    return;
+                  }
+                  setSupportTickets(prev => [created, ...(Array.isArray(prev) ? prev : [])]);
+                  addToast('Support ticket submitted!', 'success');
+                  navigate(ViewEnum.HOME);
+                } catch (error) {
+                  console.error('Support ticket submission failed:', error);
+                  addToast('Failed to submit support ticket. Please try again.', 'error');
+                }
               }}
               onNavigate={navigate}
             />
@@ -2763,9 +2775,20 @@ const AppContent: React.FC = () => {
         return (
           <SupportPage 
             currentUser={currentUser}
-            onSubmitTicket={(ticket) => {
-              // Handle support ticket submission
-              console.log('Support ticket submitted:', ticket);
+            onSubmitTicket={async (ticket) => {
+              try {
+                const { createSupportTicketInSupabase } = await import('./services/supportTicketService');
+                const created = await createSupportTicketInSupabase(ticket);
+                if (!created) {
+                  addToast('Failed to submit support ticket. Please try again.', 'error');
+                  return;
+                }
+                setSupportTickets(prev => [created, ...(Array.isArray(prev) ? prev : [])]);
+                addToast('Support ticket submitted!', 'success');
+              } catch (error) {
+                console.error('Support ticket submission failed:', error);
+                addToast('Failed to submit support ticket. Please try again.', 'error');
+              }
             }}
           />
         );
