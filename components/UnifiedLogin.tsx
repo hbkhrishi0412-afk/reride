@@ -127,8 +127,20 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           onRegister(result.user);
         }
       } else {
-        // Check if error includes detected role hint
+        // Check if user is a service provider trying to login through regular form
         const errorMessage = result.reason || 'An unknown error occurred.';
+        const isServiceProvider = (result as any).isServiceProvider;
+        
+        if (isServiceProvider) {
+          // Redirect to service provider login page
+          setError('Service providers must login through the Service Provider login page.');
+          setTimeout(() => {
+            onNavigate(View.CAR_SERVICE_LOGIN);
+          }, 2000);
+          return;
+        }
+        
+        // Check if error includes detected role hint
         const detectedRole = result.detectedRole;
         if (detectedRole && allowedRoles.includes(detectedRole as UserRole)) {
           // Auto-switch to detected role and show helpful message

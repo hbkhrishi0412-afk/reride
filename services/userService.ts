@@ -870,11 +870,12 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       
       if (!result.success) {
         console.warn('⚠️ API login failed:', result.reason);
-        // Pass through detectedRole if API provided it
+        // Pass through detectedRole and isServiceProvider if API provided them
         return {
           success: result.success,
           reason: result.reason,
-          detectedRole: result.detectedRole
+          detectedRole: result.detectedRole,
+          isServiceProvider: result.isServiceProvider
         };
       }
       
