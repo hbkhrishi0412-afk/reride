@@ -47,7 +47,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                     }
                     
                     const { data } = supabase.storage
-                        .from('images')
+                        .from('Images')
                         .getPublicUrl(filePath);
                     
                     return data?.publicUrl || image;

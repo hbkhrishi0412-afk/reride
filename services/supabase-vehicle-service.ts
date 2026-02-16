@@ -60,7 +60,7 @@ function processImageUrls(images: string[] | null | undefined, vehicleId?: numbe
         // Get public URL from Supabase Storage
         // Note: getPublicUrl doesn't return an error - it always returns a URL
         const { data } = supabase.storage
-          .from('images')
+          .from('Images')
           .getPublicUrl(filePath);
         
         if (data?.publicUrl) {

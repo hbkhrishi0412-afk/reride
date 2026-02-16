@@ -1989,13 +1989,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
       
       const verificationStatus = updateFields.verificationStatus as Partial<VerificationStatus>;
-      if (updateFields.phoneVerified !== undefined && updateFields.phoneVerified !== null) {
+      if (updateFields.phoneVerified !== undefined && updateFields.phoneVerified !== null && typeof updateFields.phoneVerified === 'boolean') {
         verificationStatus.phoneVerified = updateFields.phoneVerified;
       }
-      if (updateFields.emailVerified !== undefined && updateFields.emailVerified !== null) {
+      if (updateFields.emailVerified !== undefined && updateFields.emailVerified !== null && typeof updateFields.emailVerified === 'boolean') {
         verificationStatus.emailVerified = updateFields.emailVerified;
       }
-      if (updateFields.govtIdVerified !== undefined && updateFields.govtIdVerified !== null) {
+      if (updateFields.govtIdVerified !== undefined && updateFields.govtIdVerified !== null && typeof updateFields.govtIdVerified === 'boolean') {
         verificationStatus.govtIdVerified = updateFields.govtIdVerified;
       }
 
@@ -5855,12 +5855,29 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       });
     }
 
-    const auth = requireAuth(req, res, 'Conversations');
-    if (!auth) {
-      return;
+    // CRITICAL FIX: Make authentication optional for GET requests
+    // If no auth token, return empty array instead of 401 (user might not be logged in yet)
+    let auth: AuthResult | null = null;
+    let normalizedAuthEmail = '';
+    let isAdmin = false;
+    
+    if (req.method === 'GET') {
+      // Try to authenticate, but don't fail if no token
+      auth = authenticateRequest(req);
+      if (auth.isValid && auth.user) {
+        normalizedAuthEmail = auth.user.email ? auth.user.email.toLowerCase().trim() : '';
+        isAdmin = auth.user.role === 'admin';
+      }
+      // If auth fails, continue with empty auth (will return empty array)
+    } else {
+      // POST/PUT/DELETE require authentication
+      auth = requireAuth(req, res, 'Conversations');
+      if (!auth) {
+        return;
+      }
+      normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      isAdmin = auth.user?.role === 'admin';
     }
-    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
-    const isAdmin = auth.user?.role === 'admin';
 
     // GET - Retrieve conversations
     if (req.method === 'GET') {
@@ -5874,6 +5891,10 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         }
         const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
         const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
+        // If not authenticated, return 404 (don't reveal conversation exists)
+        if (!auth || !auth.isValid) {
+          return res.status(404).json({ success: false, reason: 'Conversation not found' });
+        }
         if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversation' });
         }
@@ -5883,12 +5904,20 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       let conversations;
       if (customerId) {
         const normalizedCustomerId = String(customerId).toLowerCase().trim();
+        // If not authenticated, return empty array
+        if (!auth || !auth.isValid) {
+          return res.status(200).json({ success: true, data: [] });
+        }
         if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
         }
         conversations = await conversationService.findByCustomerId(String(customerId));
       } else if (sellerId) {
         const normalizedSellerId = String(sellerId).toLowerCase().trim();
+        // If not authenticated, return empty array
+        if (!auth || !auth.isValid) {
+          return res.status(200).json({ success: true, data: [] });
+        }
         if (!isAdmin && normalizedAuthEmail !== normalizedSellerId) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
         }
@@ -5905,8 +5934,10 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           });
         }
       } else {
-        if (!isAdmin) {
-          return res.status(403).json({ success: false, reason: 'Unauthorized access to conversations' });
+        // No customerId or sellerId - return empty array if not admin or not authenticated
+        if (!auth || !auth.isValid || !isAdmin) {
+          // Return empty array instead of 401 for unauthenticated requests
+          return res.status(200).json({ success: true, data: [] });
         }
         conversations = await conversationService.findAll();
       }
@@ -6076,12 +6107,29 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       });
     }
 
-    const auth = requireAuth(req, res, 'Notifications');
-    if (!auth) {
-      return;
+    // CRITICAL FIX: Make authentication optional for GET requests
+    // If no auth token, return empty array instead of 401 (user might not be logged in yet)
+    let auth: AuthResult | null = null;
+    let normalizedAuthEmail = '';
+    let isAdmin = false;
+    
+    if (req.method === 'GET') {
+      // Try to authenticate, but don't fail if no token
+      auth = authenticateRequest(req);
+      if (auth.isValid && auth.user) {
+        normalizedAuthEmail = auth.user.email ? auth.user.email.toLowerCase().trim() : '';
+        isAdmin = auth.user.role === 'admin';
+      }
+      // If auth fails, continue with empty auth (will return empty array for non-admin)
+    } else {
+      // POST/PUT/DELETE require authentication
+      auth = requireAuth(req, res, 'Notifications');
+      if (!auth) {
+        return;
+      }
+      normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
+      isAdmin = auth.user?.role === 'admin';
     }
-    const normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
-    const isAdmin = auth.user?.role === 'admin';
 
     // GET - Retrieve notifications
     if (req.method === 'GET') {
@@ -6089,6 +6137,11 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       
       if (notificationId) {
         // Get single notification from Supabase
+        // If not authenticated, return 404 (don't reveal notification exists)
+        if (!auth || !auth.isValid) {
+          return res.status(404).json({ success: false, reason: 'Notification not found' });
+        }
+        
         const supabase = getSupabaseAdminClient();
         const { data: notification, error } = await supabase
           .from('notifications')
@@ -6128,6 +6181,11 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
       if (recipientEmail) {
         const emailValue = Array.isArray(recipientEmail) ? recipientEmail[0] : recipientEmail;
         const normalizedEmail = emailValue.toLowerCase().trim();
+        // If not authenticated or not admin, only return notifications for the authenticated user
+        if (!auth || !auth.isValid) {
+          // No auth token - return empty array instead of 401
+          return res.status(200).json({ success: true, data: [] });
+        }
         if (!isAdmin && normalizedAuthEmail !== normalizedEmail) {
           return res.status(403).json({ success: false, reason: 'Unauthorized access to notifications' });
         }
@@ -6135,8 +6193,12 @@ async function handleNotifications(req: VercelRequest, res: VercelResponse, _opt
           const recipient = n.recipientEmail || n.recipient_email || n.user_id || '';
           return recipient.toString().toLowerCase().trim() === normalizedEmail;
         });
-      } else if (!isAdmin) {
-        return res.status(403).json({ success: false, reason: 'Unauthorized access to notifications' });
+      } else {
+        // No recipientEmail specified - only admins can see all notifications
+        if (!auth || !auth.isValid || !isAdmin) {
+          // Return empty array instead of 401/403 for unauthenticated or non-admin requests
+          return res.status(200).json({ success: true, data: [] });
+        }
       }
       
       if (isRead !== undefined) {

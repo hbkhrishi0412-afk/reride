@@ -242,7 +242,7 @@ const convertStoragePathToUrl = (path: string): string => {
         if (supabaseModule && supabaseModule.getSupabaseClient) {
           const supabase = supabaseModule.getSupabaseClient();
           const { data } = supabase.storage
-            .from('images')
+            .from('Images')
             .getPublicUrl(path);
           if (data?.publicUrl) {
             return data.publicUrl;

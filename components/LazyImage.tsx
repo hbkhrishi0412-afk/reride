@@ -143,7 +143,7 @@ export const LazyImage: React.FC<LazyImageProps> = ({
               
               for (const path of pathAttempts) {
                 const { data, error } = supabase.storage
-                  .from('images')
+                  .from('Images')
                   .getPublicUrl(path);
                 
                 if (data?.publicUrl && data.publicUrl !== src && !error) {
