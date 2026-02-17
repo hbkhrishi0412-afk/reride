@@ -110,13 +110,57 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
     const supabase = getSupabaseClient();
     
     // Check if user is authenticated (required for RLS policy)
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.error('❌ Authentication check failed:', authError?.message || 'User not authenticated');
-      return {
-        success: false,
-        error: 'You must be logged in to upload images. Please log in and try again.'
-      };
+    // First try to get the session (more reliable than getUser)
+    let { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    // If no session, try to refresh it
+    if (!session && !sessionError) {
+      const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError && refreshedSession) {
+        session = refreshedSession;
+      }
+    }
+    
+    // If still no session, try getUser as fallback
+    let user = session?.user;
+    if (!user) {
+      const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
+      if (!getUserError && getUserResult) {
+        user = getUserResult;
+      }
+    }
+    
+    if (!user) {
+      console.error('❌ Authentication check failed:', sessionError?.message || 'No Supabase session found');
+      
+      // Check if user is logged into the app (but Supabase session expired)
+      const appUser = typeof window !== 'undefined' 
+        ? JSON.parse(localStorage.getItem('reRideCurrentUser') || 'null')
+        : null;
+      
+      if (appUser) {
+        console.warn('⚠️ User is logged into app but Supabase session is missing/expired');
+        console.warn('   App user:', appUser.email);
+        console.warn('   Attempting to restore Supabase session...');
+        
+        // Try to restore session by checking if there's a stored session
+        const { data: { session: storedSession } } = await supabase.auth.getSession();
+        if (storedSession) {
+          console.log('✅ Found stored session, retrying upload...');
+          // Retry with the stored session
+          user = storedSession.user;
+        } else {
+          return {
+            success: false,
+            error: 'Your Supabase session has expired. Please log out and log back in to upload images. The app session and Supabase session need to be in sync.'
+          };
+        }
+      } else {
+        return {
+          success: false,
+          error: 'You must be logged in to upload images. Please log in and try again.'
+        };
+      }
     }
     console.log(`✅ User authenticated: ${user.email}`);
     
