@@ -91,10 +91,16 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 function normalizeUser(user: UserType | null | undefined): NormalizedUser | null {
   if (!user) return null;
   
-  // Supabase users already have id field (no _id conversion needed)
-  const id = user.id;
+  // CRITICAL FIX: Generate id from email if missing (shouldn't happen but handle gracefully)
+  let id = user.id;
+  if (!id && user.email) {
+    const emailKey = user.email.toLowerCase().trim().replace(/[.#$[\]]/g, '_');
+    logWarn('⚠️ User object missing id field, generating from email:', { email: user.email, generatedId: emailKey });
+    id = emailKey;
+  }
+  
   if (!id) {
-    logWarn('⚠️ User object missing id field');
+    logWarn('⚠️ User object missing both id and email fields, cannot normalize');
     return null;
   }
   
@@ -1809,13 +1815,37 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         logWarn('   3. Database connection issue');
         logWarn('   4. Table name mismatch (expected: "users")');
         logWarn('   5. Service role key might not have proper permissions');
+        logWarn('   6. SUPABASE_SERVICE_ROLE_KEY might not be configured in Vercel environment variables');
         
         // Return a warning but still return empty array (not an error)
         return res.status(200).json([]);
       }
       
+      // CRITICAL FIX: Log user data structure for debugging
+      if (users.length > 0) {
+        const sampleUser = users[0];
+        logInfo('📊 Sample user structure:', {
+          hasId: !!sampleUser.id,
+          idType: typeof sampleUser.id,
+          idValue: sampleUser.id,
+          hasEmail: !!sampleUser.email,
+          email: sampleUser.email,
+          hasRole: !!sampleUser.role,
+          role: sampleUser.role,
+          keys: Object.keys(sampleUser)
+        });
+      }
+      
       // SECURITY FIX: Normalize all users to remove passwords
+      // CRITICAL FIX: Don't filter out users - fix them instead
       const normalizedUsers = users.map(user => {
+        // CRITICAL FIX: If user doesn't have an id, try to generate one from email
+        if (!user.id && user.email) {
+          const emailKey = user.email.toLowerCase().trim().replace(/[.#$[\]]/g, '_');
+          logWarn(`⚠️ User missing id, generating from email:`, { email: user.email, generatedId: emailKey });
+          user.id = emailKey;
+        }
+        
         const normalized = normalizeUser(user);
         if (!normalized) {
           logWarn(`⚠️ User filtered out during normalization:`, { 
@@ -1824,7 +1854,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             hasId: !!user.id, 
             hasEmail: !!user.email,
             hasRole: !!user.role,
-            roleValue: user.role
+            roleValue: user.role,
+            fullUser: JSON.stringify(user).substring(0, 200) // First 200 chars for debugging
           });
         }
         return normalized;
@@ -1833,9 +1864,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       const filteredCount = users.length - normalizedUsers.length;
       if (filteredCount > 0) {
         logWarn(`⚠️ ${filteredCount} users were filtered out during normalization`);
+        logWarn(`   Original count: ${users.length}, Normalized count: ${normalizedUsers.length}`);
       }
       
-      logInfo(`✅ Returning ${normalizedUsers.length} normalized users to admin panel`);
+      logInfo(`✅ Returning ${normalizedUsers.length} normalized users to admin panel (from ${users.length} raw users)`);
       return res.status(200).json(normalizedUsers);
     } catch (error) {
       logError('❌ Error fetching users from Supabase:', error);
