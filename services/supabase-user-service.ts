@@ -318,8 +318,34 @@ export const supabaseUserService = {
       let hasMore = true;
       
       console.log('📊 findAll: Starting to fetch all users with pagination...');
+      console.log('📊 findAll: Using Supabase client type:', isServerSide ? 'Admin (service_role)' : 'Client (anon)');
+      
+      // CRITICAL: First, test with a count query to verify connection
+      try {
+        const { count, error: countError } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true });
+        
+        if (countError) {
+          console.error('❌ Count query failed:', {
+            message: countError.message,
+            details: countError.details,
+            hint: countError.hint,
+            code: countError.code
+          });
+        } else {
+          console.log(`📊 findAll: Count query result: ${count || 0} users in database`);
+          if (count === 0) {
+            console.warn('⚠️ Count query returned 0 - no users in database or RLS blocking');
+          }
+        }
+      } catch (countErr) {
+        console.error('❌ Count query exception:', countErr);
+      }
       
       while (hasMore) {
+        console.log(`📊 findAll: Fetching page ${Math.floor(offset / pageSize) + 1} (offset: ${offset}, limit: ${pageSize})...`);
+        
         const { data, error } = await supabase
           .from('users')
           .select('*')
@@ -332,7 +358,8 @@ export const supabaseUserService = {
             details: error.details,
             hint: error.hint,
             code: error.code,
-            offset
+            offset,
+            pageSize
           });
           
           // Provide specific guidance for RLS errors
@@ -341,17 +368,50 @@ export const supabaseUserService = {
             console.error('   Even with service role key, if RLS is misconfigured, access can be blocked.');
             console.error('   Check if RLS is enabled and if there are SELECT policies on the users table.');
             console.error('   Service role key should bypass RLS, but verify it is set correctly.');
+            console.error('   Verify SUPABASE_SERVICE_ROLE_KEY is set in Vercel environment variables.');
           }
           
           throw new Error(`Failed to fetch users from Supabase: ${error.message} (Code: ${error.code || 'unknown'})`);
         }
         
-        if (!data || data.length === 0) {
+        if (!data) {
+          console.warn('⚠️ Query returned null data');
           hasMore = false;
           break;
         }
         
+        if (data.length === 0) {
+          console.log('📊 findAll: No more data, reached end of results');
+          hasMore = false;
+          break;
+        }
+        
+        console.log(`📊 findAll: Raw data received: ${data.length} rows`);
+        if (data.length > 0) {
+          console.log('📊 findAll: Sample raw row:', {
+            hasId: !!data[0].id,
+            id: data[0].id,
+            hasEmail: !!data[0].email,
+            email: data[0].email,
+            hasRole: !!data[0].role,
+            role: data[0].role,
+            rowKeys: Object.keys(data[0])
+          });
+        }
+        
         const users = data.map(supabaseRowToUser);
+        console.log(`📊 findAll: Converted ${users.length} rows to User objects`);
+        if (users.length > 0) {
+          console.log('📊 findAll: Sample converted user:', {
+            hasId: !!users[0].id,
+            id: users[0].id,
+            hasEmail: !!users[0].email,
+            email: users[0].email,
+            hasRole: !!users[0].role,
+            role: users[0].role
+          });
+        }
+        
         allUsers.push(...users);
         
         console.log(`📊 findAll: Fetched ${users.length} users (total so far: ${allUsers.length})`);
@@ -372,6 +432,7 @@ export const supabaseUserService = {
         console.warn('   2. RLS policies are blocking access (unlikely with service role key)');
         console.warn('   3. Table name mismatch (expected: "users")');
         console.warn('   4. Service role key is not being used correctly');
+        console.warn('   5. Users are being filtered out during conversion');
       }
       
       return allUsers;
