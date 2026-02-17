@@ -3,47 +3,40 @@ import type { User } from '../types';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
-// Fallback mock users to prevent loading issues
+// Fallback mock users for development only (no credentials stored in source)
+// In production, all users come from Supabase — these are never used.
 const FALLBACK_USERS: User[] = [
   {
-    name: 'Prestige Motors',
+    name: 'Demo Seller',
     email: 'seller@test.com',
-    password: 'password',
-    mobile: '+91-98765-43210',
+    mobile: '+91-00000-00000',
     role: 'seller',
     location: 'Mumbai',
     status: 'active',
     createdAt: new Date().toISOString(),
-    dealershipName: 'Prestige Motors',
-    bio: 'Specializing in luxury and performance electric vehicles since 2020.',
-    logoUrl: 'https://i.pravatar.cc/100?u=seller',
-    avatarUrl: 'https://i.pravatar.cc/150?u=seller@test.com',
-    isVerified: true,
-    subscriptionPlan: 'premium',
-    featuredCredits: 5,
-    usedCertifications: 1
+    dealershipName: 'Demo Motors',
+    isVerified: false,
+    subscriptionPlan: 'free',
+    featuredCredits: 0,
+    usedCertifications: 0
   },
   {
-    name: 'Mock Customer',
+    name: 'Demo Customer',
     email: 'customer@test.com',
-    password: 'password',
-    mobile: '555-987-6543',
+    mobile: '+91-00000-00001',
     role: 'customer',
     location: 'Delhi',
     status: 'active',
     createdAt: new Date().toISOString(),
-    avatarUrl: 'https://i.pravatar.cc/150?u=customer@test.com'
   },
   {
-    name: 'Mock Admin',
+    name: 'Demo Admin',
     email: 'admin@test.com',
-    password: 'password',
-    mobile: '111-222-3333',
+    mobile: '+91-00000-00002',
     role: 'admin',
     location: 'Bangalore',
     status: 'active',
     createdAt: new Date().toISOString(),
-    avatarUrl: 'https://i.pravatar.cc/150?u=admin@test.com'
   }
 ];
 
@@ -197,91 +190,21 @@ export const getUsersLocal = async (): Promise<User[]> => {
         return FALLBACK_USERS;
     }
     try {
-        console.log('getUsersLocal: Starting...');
         let usersJson = localStorage.getItem('reRideUsers');
         if (!usersJson || usersJson === '[]' || usersJson === 'null') {
-            console.log('getUsersLocal: No cached data or empty array, loading fallback data...');
-            // Use FALLBACK_USERS directly instead of trying to import MOCK_USERS
-            // MOCK_USERS might be empty in constants/index.ts
             const usersToStore = FALLBACK_USERS;
             localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
             usersJson = JSON.stringify(usersToStore);
-            console.log(`✅ Populated local storage with ${usersToStore.length} users from FALLBACK_USERS`);
         } else {
-            console.log('getUsersLocal: Using cached data');
-            // Validate that we have users with proper structure
             const parsedUsers = JSON.parse(usersJson);
             if (!Array.isArray(parsedUsers) || parsedUsers.length === 0) {
-                console.warn('getUsersLocal: Cached data is invalid, using FALLBACK_USERS');
                 const usersToStore = FALLBACK_USERS;
                 localStorage.setItem('reRideUsers', JSON.stringify(usersToStore));
                 usersJson = JSON.stringify(usersToStore);
-            } else {
-                // Ensure critical test users (seller, customer, admin) exist with correct plain text passwords
-                // This fixes cases where passwords might have been incorrectly hashed or corrupted
-                const criticalUsers = FALLBACK_USERS.filter(fu => 
-                    ['seller@test.com', 'customer@test.com', 'admin@test.com'].includes(fu.email.toLowerCase())
-                );
-                
-                let needsUpdate = false;
-                const updatedUsers = parsedUsers.map((u: User) => {
-                    const criticalUser = criticalUsers.find(cu => cu.email.toLowerCase() === (u.email || '').toLowerCase());
-                    if (criticalUser) {
-                        // Fix corrupted or incorrectly stored passwords
-                        const storedPassword = (u.password || '').trim();
-                        const expectedPassword = (criticalUser.password || '').trim();
-                        
-                        // Check if password needs to be fixed:
-                        // 1. Password is hashed (starts with $2) - should be plain text in development
-                        // 2. Password is empty or missing
-                        // 3. Password doesn't match expected plain text value
-                        // 4. Password is corrupted (contains invalid characters or wrong length)
-                        const isHashed = storedPassword.startsWith('$2');
-                        const isEmpty = !storedPassword || storedPassword.length === 0;
-                        const isMismatched = storedPassword !== expectedPassword;
-                        const isCorrupted = storedPassword.length > 100 || storedPassword.includes('\n') || storedPassword.includes('\r');
-                        
-                        if (isHashed || isEmpty || isMismatched || isCorrupted) {
-                            const reason = isHashed ? 'hashed' : isEmpty ? 'empty' : isCorrupted ? 'corrupted' : 'mismatched';
-                            console.warn(`⚠️ getUsersLocal: Fixing ${reason} password for ${u.email} - resetting to plain text`);
-                            needsUpdate = true;
-                            // Reset to fallback user data to ensure all fields are correct
-                            return { ...criticalUser, ...u, password: expectedPassword };
-                        }
-                    }
-                    return u;
-                });
-                
-                // Add any missing critical users
-                criticalUsers.forEach(criticalUser => {
-                    const exists = updatedUsers.some((u: User) => 
-                        (u.email || '').toLowerCase() === criticalUser.email.toLowerCase()
-                    );
-                    if (!exists) {
-                        console.warn(`⚠️ getUsersLocal: Missing critical user ${criticalUser.email} - adding from fallback`);
-                        needsUpdate = true;
-                        updatedUsers.push(criticalUser);
-                    }
-                });
-                
-                if (needsUpdate) {
-                    console.log('✅ getUsersLocal: Fixed corrupted user data in localStorage');
-                    localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
-                    usersJson = JSON.stringify(updatedUsers);
-                } else {
-                    usersJson = JSON.stringify(updatedUsers);
-                }
             }
         }
-        const users = JSON.parse(usersJson);
-        console.log('getUsersLocal: Successfully loaded', users.length, 'users');
-        // Log available emails for debugging
-        console.log('getUsersLocal: Available user emails:', users.map((u: User) => u.email));
-        return users;
-    } catch (error) {
-        console.error('getUsersLocal: Error loading users:', error);
-        // Return FALLBACK_USERS as fallback
-        console.log('getUsersLocal: Returning FALLBACK_USERS as fallback');
+        return JSON.parse(usersJson);
+    } catch {
         return FALLBACK_USERS;
     }
 };
@@ -324,7 +247,6 @@ const updateUserLocal = async (userData: Partial<User> & { email: string }): Pro
     // BUT: Keep the localStorage update (reRideUsers) since we just saved the new password there
     // Only execute this after confirming the update succeeded
     if (passwordWasUpdated) {
-        console.log('🔐 Password updated - clearing session cache to force fresh authentication');
         // Clear production cache if it exists (might have stale data)
         localStorage.removeItem('reRideUsers_prod');
         // Clear current user session to force re-authentication with new password
@@ -348,180 +270,32 @@ const deleteUserLocal = async (email: string): Promise<{ success: boolean, email
 };
 
 const loginLocal = async (
-    credentials: any & { skipRoleCheck?: boolean }
+    credentials: { email?: string; password?: string; role?: string; skipRoleCheck?: boolean }
 ): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
     const { email, password, role, skipRoleCheck } = credentials;
     
-    // Normalize email (trim and lowercase for comparison)
     const normalizedEmail = (email || '').trim().toLowerCase();
     const normalizedPassword = (password || '').trim();
     
-    console.log('🔐 loginLocal: Attempting login', { 
-        email: normalizedEmail, 
-        passwordLength: normalizedPassword.length,
-        role 
-    });
-    
-    // CRITICAL FIX: Warn if using cached data - password might be stale
-    console.warn('⚠️ loginLocal: Using localStorage cache - if password was recently updated, this may fail. Clear cache and try again.');
-    
     const users = await getUsersLocal();
     
-    // Find user by email (case-insensitive comparison)
+    // Find user by email (case-insensitive)
     const user = users.find(u => (u.email || '').trim().toLowerCase() === normalizedEmail);
     
     if (!user) {
-        console.log('❌ loginLocal: User not found', { email: normalizedEmail, availableEmails: users.map(u => u.email) });
-        
-        // If admin user doesn't exist, try to add it from FALLBACK_USERS
-        if (normalizedEmail === 'admin@test.com' && role === 'admin') {
-            console.log('🔧 loginLocal: Admin user not found, attempting to add from fallback...');
-            try {
-                const adminFallback = FALLBACK_USERS.find(u => u.email.toLowerCase() === 'admin@test.com' && u.role === 'admin');
-                if (adminFallback) {
-                    const updatedUsers = [...users, adminFallback];
-                    localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
-                    console.log('✅ loginLocal: Admin user added from fallback, retrying login...');
-                    // Retry with the updated users list
-                    const retryUser = updatedUsers.find(u => (u.email || '').trim().toLowerCase() === normalizedEmail);
-                    if (retryUser) {
-                        // Validate password
-                        const storedPassword = (retryUser.password || '').trim();
-                        const isPasswordValid = storedPassword === normalizedPassword;
-                        
-                        if (!isPasswordValid) {
-                            console.log('❌ loginLocal: Password mismatch after adding admin user');
-                            return { success: false, reason: 'Invalid credentials.' };
-                        }
-                        
-                        // Check role if required
-                        if (!skipRoleCheck && role && retryUser.role !== role) {
-                            return { 
-                                success: false, 
-                                reason: `User is not a registered ${role}.`,
-                                detectedRole: retryUser.role 
-                            };
-                        }
-                        
-                        // Check status
-                        if (retryUser.status === 'inactive') {
-                            return { success: false, reason: 'Your account has been deactivated.' };
-                        }
-                        
-                        // Success - return user without password
-                        const { password: _, ...userWithoutPassword } = retryUser;
-                        console.log('✅ loginLocal: Login successful after adding admin user', { email: retryUser.email, role: retryUser.role });
-                        return { success: true, user: userWithoutPassword };
-                    }
-                }
-            } catch (addError) {
-                console.warn('⚠️ loginLocal: Failed to add admin user from fallback:', addError);
-            }
-        }
-        
         return { success: false, reason: 'Invalid credentials.' };
     }
     
-    console.log('✅ loginLocal: User found', { email: user.email, hasPassword: !!user.password });
-    
-    // SECURITY: For local storage in development, we use plain text comparison
-    // localStorage is for development/testing only - in production, use API with proper password hashing
-    let isPasswordValid = false;
-    
+    // Development localStorage uses plain-text password comparison only.
+    // Production always goes through the API with proper bcrypt hashing.
     const storedPassword = (user.password || '').trim();
-    
-    // In development mode with localStorage, passwords should be stored as plain text
-    // If password looks like a bcrypt hash, it might have been incorrectly stored
-    // We'll try bcrypt comparison first, but fall back to plain text if it fails
-    if (storedPassword.startsWith('$2')) {
-        // Password appears to be hashed - try bcrypt comparison if available
-        try {
-            // Use dynamic import for browser compatibility
-            const bcryptModule = await import('bcryptjs');
-            const bcrypt = bcryptModule.default || bcryptModule;
-            isPasswordValid = await bcrypt.compare(normalizedPassword, storedPassword);
-            console.log('🔍 loginLocal: Bcrypt comparison result', { isValid: isPasswordValid });
-        } catch (error) {
-            // Bcrypt not available or comparison failed - this is expected in browser
-            // For development localStorage, we should use plain text
-            console.warn('⚠️ loginLocal: Bcrypt unavailable in browser - this is normal for localStorage mode');
-            // Cannot compare hashed password without bcrypt, so fail
-            isPasswordValid = false;
-        }
-    } else {
-        // Plain text password - direct comparison (development mode only)
-        isPasswordValid = storedPassword === normalizedPassword;
-        console.log('🔍 loginLocal: Plain text comparison', { 
-            storedPasswordLength: storedPassword.length,
-            inputPasswordLength: normalizedPassword.length,
-            storedPassword: storedPassword.substring(0, 3) + '***', // Only show first 3 chars for security
-            match: isPasswordValid 
-        });
-    }
+    const isPasswordValid = storedPassword === normalizedPassword;
     
     if (!isPasswordValid) {
-        console.log('❌ loginLocal: Password mismatch');
-        console.warn('💡 TIP: If you recently updated the password, clear localStorage cache: localStorage.removeItem("reRideUsers")');
-        
-        // SPECIAL FIX: If password is hashed but we're in development mode, try to fix it
-        if (storedPassword.startsWith('$2') && normalizedEmail === 'admin@test.com') {
-            console.log('🔧 loginLocal: Admin password is hashed in dev mode, attempting to reset to plain text...');
-            try {
-                const adminFallback = FALLBACK_USERS.find(u => u.email.toLowerCase() === 'admin@test.com' && u.role === 'admin');
-                if (adminFallback && adminFallback.password === normalizedPassword) {
-                    // Update the user with plain text password
-                    const updatedUsers = users.map(u => 
-                        (u.email || '').trim().toLowerCase() === normalizedEmail 
-                            ? { ...u, password: normalizedPassword }
-                            : u
-                    );
-                    localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
-                    console.log('✅ loginLocal: Admin password reset to plain text, retrying...');
-                    // Retry password check
-                    const updatedUser = updatedUsers.find(u => (u.email || '').trim().toLowerCase() === normalizedEmail);
-                    if (updatedUser && (updatedUser.password || '').trim() === normalizedPassword) {
-                        // Password now matches, continue with role and status checks
-                        if (!skipRoleCheck && role && updatedUser.role !== role) {
-                            return { 
-                                success: false, 
-                                reason: `User is not a registered ${role}.`,
-                                detectedRole: updatedUser.role 
-                            };
-                        }
-                        if (updatedUser.status === 'inactive') {
-                            return { success: false, reason: 'Your account has been deactivated.' };
-                        }
-                        const { password: _, ...userWithoutPassword } = updatedUser;
-                        console.log('✅ loginLocal: Login successful after password reset', { email: updatedUser.email, role: updatedUser.role });
-                        return { success: true, user: userWithoutPassword };
-                    }
-                }
-            } catch (resetError) {
-                console.warn('⚠️ loginLocal: Failed to reset password:', resetError);
-            }
-        }
-        
-        // CRITICAL FIX: Clear localStorage cache when password validation fails
-        // This might be stale cache from before password was updated
-        console.log('🧹 Clearing localStorage cache due to password mismatch...');
-        try {
-            localStorage.removeItem('reRideUsers');
-            localStorage.removeItem('reRideUsers_prod');
-            localStorage.removeItem('reRideCurrentUser');
-            if (typeof sessionStorage !== 'undefined') {
-                sessionStorage.removeItem('currentUser');
-                sessionStorage.removeItem('accessToken');
-            }
-            console.log('✅ Cache cleared - please try logging in again');
-        } catch (cacheError) {
-            console.warn('⚠️ Failed to clear cache:', cacheError);
-        }
-        
-        return { success: false, reason: 'Invalid credentials. Cache cleared - please try again.' };
+        return { success: false, reason: 'Invalid credentials.' };
     }
     
     if (!skipRoleCheck && role && user.role !== role) {
-        console.log('❌ loginLocal: Role mismatch', { expected: role, actual: user.role });
         return { 
             success: false, 
             reason: `User is not a registered ${role}.`,
@@ -530,13 +304,10 @@ const loginLocal = async (
     }
     
     if (user.status === 'inactive') {
-        console.log('❌ loginLocal: Account inactive');
         return { success: false, reason: 'Your account has been deactivated.' };
     }
     
-    console.log('✅ loginLocal: Login successful', { email: user.email, role: user.role });
-    
-    // SECURITY: Remove password from response
+    // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
     return { success: true, user: userWithoutPassword };
 };
@@ -598,9 +369,8 @@ const updateUserApi = async (userData: Partial<User> & { email: string }): Promi
         throw new Error(result.reason || result.error || 'Failed to update user');
     }
     
-    // CRITICAL FIX: Clear cache when password is updated to force fresh login
+    // Clear cache when password is updated to force fresh login
     if (passwordWasUpdated) {
-        console.log('🔐 Password updated via API - clearing localStorage cache to force fresh authentication');
         // Clear both development and production caches
         if (typeof localStorage !== 'undefined') {
             localStorage.removeItem('reRideUsers');
@@ -758,55 +528,45 @@ const isDevelopment = (() => {
 
 export const getUsers = async (role?: 'seller' | 'customer' | 'admin'): Promise<User[]> => {
   try {
-    console.log('getUsers: Starting, isDevelopment:', isDevelopment, 'role:', role);
     // Always try API first for production, with fallback to local
     if (!isDevelopment) {
       try {
-        console.log('getUsers: Trying API...');
         const result = await getUsersApi(role);
-        console.log('getUsers: API success, loaded', result.length, role ? `${role}s` : 'users');
-        // Cache production data (not mock data) - only cache if fetching all users
+        // Cache production data — only cache when fetching all users
         if (!role && typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
           localStorage.setItem('reRideUsers_prod', JSON.stringify(result));
         }
         return result;
       } catch (error) {
-        console.error('❌ getUsers: Production API failed:', error);
-        // In production, try to use cached API data (not mock data) - only if fetching all users
+        // In production, try to use cached API data (not mock data)
         if (!role && typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
           try {
             const cachedUsersJson = localStorage.getItem('reRideUsers_prod');
             if (cachedUsersJson) {
               const cachedUsers = JSON.parse(cachedUsersJson);
               if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
-                console.warn('⚠️ getUsers: Using cached production data due to API failure');
-                // If role filter requested, filter cached data
                 if (role) {
                   return cachedUsers.filter((u: User) => u.role === role);
                 }
                 return cachedUsers;
               }
             }
-          } catch (cacheError) {
-            console.error('Failed to load cached production data:', cacheError);
+          } catch {
+            // Failed to load cached production data
           }
         }
         // If no cached data, return empty array (don't use mock data in production)
-        console.error('❌ getUsers: No cached production data available, returning empty array');
         return [];
       }
     } else {
-      // Development mode - use local storage
-      console.log('getUsers: Development mode, using local storage');
+      // Development mode — use local storage
       const users = await getUsersLocal();
-      // If role filter requested, filter local data
       if (role) {
         return users.filter(u => u.role === role);
       }
       return users;
     }
   } catch (error) {
-    console.error('getUsers: Critical error:', error);
     // In production, return empty array instead of fallback users
     if (!isDevelopment) {
       return [];
@@ -840,68 +600,38 @@ export const updateUser = async (userData: Partial<User> & { email: string }): P
   }
 };
 export const deleteUser = isDevelopment ? deleteUserLocal : deleteUserApi;
-export const login = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
-  console.log('🚀 Login attempt:', { email: credentials.email, role: credentials.role, isDevelopment, hostname: window.location.hostname, port: window.location.port });
-  
-  // Validate required fields before making API request
-  if (!credentials.email || (typeof credentials.email === 'string' && credentials.email.trim() === '')) {
+export const login = async (credentials: { email?: string; password?: string; role?: string; [key: string]: unknown }): Promise<{ success: boolean, user?: User, reason?: string, detectedRole?: string }> => {
+  // Validate required fields
+  if (!credentials.email || String(credentials.email).trim() === '') {
     return { success: false, reason: 'Email is required.' };
   }
-  if (!credentials.password || (typeof credentials.password === 'string' && credentials.password.trim() === '')) {
+  if (!credentials.password || String(credentials.password).trim() === '') {
     return { success: false, reason: 'Password is required.' };
   }
   
-  // Always use local storage in development or on localhost
-  // Only try API in true production environments
   if (!isDevelopment) {
+    // Production — use API
     try {
-      console.log('🌐 Trying API login...', { 
-        email: credentials.email, 
-        role: credentials.role,
-        endpoint: '/api/users'
-      });
       const result = await authApi({ action: 'login', ...credentials });
       
-      // Validate API response structure
       if (!result || typeof result !== 'object') {
-        console.error('❌ Invalid API response structure:', result);
         throw new Error('Invalid response from server');
       }
       
       if (!result.success) {
-        console.warn('⚠️ API login failed:', result.reason);
-        // Pass through detectedRole and isServiceProvider if API provided them
         return {
           success: result.success,
           reason: result.reason,
           detectedRole: result.detectedRole,
-          isServiceProvider: result.isServiceProvider
         };
       }
       
-      // Validate user object structure (critical for seller dashboard)
-      if (!result.user) {
-        console.error('❌ API response missing user object:', result);
-        throw new Error('User data not received from server');
-      }
-      
-      if (!result.user.email || !result.user.role) {
-        console.error('❌ API user object missing required fields:', {
-          hasEmail: !!result.user.email,
-          hasRole: !!result.user.role,
-          userObject: result.user
-        });
+      if (!result.user?.email || !result.user?.role) {
         throw new Error('Invalid user data received from server');
       }
       
       // Verify role matches requested role
       if (credentials.role && result.user.role !== credentials.role) {
-        console.warn('⚠️ Role mismatch in API response:', {
-          requested: credentials.role,
-          received: result.user.role,
-          email: result.user.email
-        });
-        // Return error with detected role for UI to auto-switch
         return { 
           success: false, 
           reason: `User is not a registered ${credentials.role}.`,
@@ -913,15 +643,8 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
       if (result.accessToken && result.refreshToken) {
         storeTokens(result.accessToken, result.refreshToken);
         localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
-        console.log('✅ Tokens stored successfully');
       }
       
-      console.log('✅ API login successful:', {
-        email: result.user.email,
-        role: result.user.role,
-        userId: result.user.id
-      });
-      // Pass through detectedRole if API provided it
       return {
         success: result.success,
         user: result.user,
@@ -929,86 +652,60 @@ export const login = async (credentials: any): Promise<{ success: boolean, user?
         detectedRole: result.detectedRole
       };
     } catch (error) {
-      // Production: do NOT fall back to local storage. Without tokens, protected APIs will 401.
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('❌ API login failed (production, no fallback):', errorMessage);
-      
-      // CRITICAL FIX: Clear localStorage cache when API login fails
-      // This ensures fresh data is fetched on next attempt
-      console.log('🧹 Clearing localStorage cache due to API login failure...');
+      // Clear stale caches on failure
       try {
         localStorage.removeItem('reRideUsers');
         localStorage.removeItem('reRideUsers_prod');
         localStorage.removeItem('reRideCurrentUser');
-        if (typeof sessionStorage !== 'undefined') {
-          sessionStorage.removeItem('currentUser');
-          sessionStorage.removeItem('accessToken');
-        }
-        console.log('✅ Cache cleared');
-      } catch (cacheError) {
-        console.warn('⚠️ Failed to clear cache:', cacheError);
+      } catch {
+        // ignore storage errors
       }
-      
       return { success: false, reason: errorMessage || 'Login failed. Please try again.' };
     }
   } else {
-    // Development mode - use local storage directly
-    console.log('💻 Development mode - using local storage directly');
-    // Only skip role check if role is not specified
-    // If role is specified (e.g., 'admin'), we should validate it
+    // Development — use local storage
     const skipRoleCheck = !credentials.role;
     return await loginLocal({ ...credentials, skipRoleCheck });
   }
 };
-export const register = async (credentials: any): Promise<{ success: boolean, user?: User, reason?: string }> => {
-  console.log('🚀 Register attempt:', { email: credentials.email, role: credentials.role, isDevelopment });
-  
-  // Validate required fields before making API request
-  if (!credentials.email || (typeof credentials.email === 'string' && credentials.email.trim() === '')) {
+export const register = async (credentials: { email?: string; password?: string; name?: string; mobile?: string; role?: string; [key: string]: unknown }): Promise<{ success: boolean, user?: User, reason?: string }> => {
+  // Validate required fields
+  if (!credentials.email || String(credentials.email).trim() === '') {
     return { success: false, reason: 'Email is required.' };
   }
-  if (!credentials.password || (typeof credentials.password === 'string' && credentials.password.trim() === '')) {
+  if (!credentials.password || String(credentials.password).trim() === '') {
     return { success: false, reason: 'Password is required.' };
   }
-  if (!credentials.name || (typeof credentials.name === 'string' && credentials.name.trim() === '')) {
+  if (!credentials.name || String(credentials.name).trim() === '') {
     return { success: false, reason: 'Name is required.' };
   }
-  if (!credentials.mobile || (typeof credentials.mobile === 'string' && credentials.mobile.trim() === '')) {
+  if (!credentials.mobile || String(credentials.mobile).trim() === '') {
     return { success: false, reason: 'Mobile number is required.' };
   }
-  if (!credentials.role || (typeof credentials.role === 'string' && credentials.role.trim() === '')) {
+  if (!credentials.role || String(credentials.role).trim() === '') {
     return { success: false, reason: 'Role is required.' };
   }
   
-  // Always try API first for production, with fallback to local
   if (!isDevelopment) {
     try {
-      console.log('🌐 Trying API registration...');
       const result = await authApi({ action: 'register', ...credentials });
       
-      // Store JWT tokens if provided
       if (result.success && result.accessToken && result.refreshToken) {
         storeTokens(result.accessToken, result.refreshToken);
         localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
       }
-      
-      console.log('✅ API registration successful');
       return result;
-    } catch (error) {
-      console.warn('⚠️  API registration failed, falling back to local storage:', error);
-      // Fallback to local storage if API fails
+    } catch {
       return await registerLocal(credentials);
     }
   } else {
-    // Development mode - use local storage
-    console.log('💻 Development mode - using local storage');
     return await registerLocal(credentials);
   }
 };
 
 export const logout = (): void => {
   clearTokens();
-  console.log('✅ User logged out and tokens cleared');
 };
 
 // Token refresh function with rate limiting protection

@@ -405,28 +405,10 @@ const AppContent: React.FC = () => {
     preloadCriticalComponents();
   }, []);
   
-  // Fix viewport zoom on mount and route changes - applies to ALL pages
+  // Fix viewport zoom on mount only — do NOT use intervals as it violates
+  // WCAG 1.4.4 (users must be able to zoom to 200% without loss of content)
   React.useEffect(() => {
-    // Reset zoom on mount
     resetViewportZoom();
-    
-    // Reset zoom after route changes
-    const handleRouteChange = () => {
-      setTimeout(() => resetViewportZoom(), 100);
-    };
-    
-    // Listen for navigation events
-    window.addEventListener('popstate', handleRouteChange);
-    
-    // Reset zoom periodically to catch any issues
-    const zoomCheckInterval = setInterval(() => {
-      resetViewportZoom();
-    }, 5000);
-    
-    return () => {
-      window.removeEventListener('popstate', handleRouteChange);
-      clearInterval(zoomCheckInterval);
-    };
   }, []);
   
   const [serviceProvider, setServiceProvider] = React.useState<ServiceProvider | null>(null);
@@ -434,16 +416,11 @@ const AppContent: React.FC = () => {
 
   // Helper function to properly close chat and clear localStorage
   const handleCloseChat = React.useCallback(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🔧 handleCloseChat called, clearing activeChat');
-    }
     // Clear localStorage first to prevent auto-restore
     try {
       localStorage.removeItem('reRideActiveChat');
     } catch (e) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to clear activeChat from localStorage:', e);
-      }
+      // ignore storage errors
     }
     // Then clear the active chat state
     setActiveChat(null);
@@ -731,30 +708,6 @@ const AppContent: React.FC = () => {
     hasRestoredChatRef.current = null;
   }, [currentUser?.email]);
 
-  // Debug: Log when activeChat changes (must be after destructuring)
-  React.useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🔧 activeChat state changed:', { 
-        hasActiveChat: !!activeChat,
-        activeChatId: activeChat?.id,
-        hasCurrentUser: !!currentUser,
-        shouldRenderChatWidget: !!(currentUser && activeChat)
-      });
-    }
-  }, [activeChat, currentUser]);
-
-  // Debug logging (only in development)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('🔧 AppContent Debug:', {
-      isMobileApp,
-      isMobile,
-      currentView,
-      userAgent: navigator.userAgent,
-      windowWidth: window.innerWidth,
-      displayMode: window.matchMedia('(display-mode: standalone)').matches
-    });
-  }
-  
   // Handle deep linking on mount and URL changes
   // Note: This works alongside the AppProvider's popstate handler
   // This handler focuses on URL parameters (deep links), while AppProvider handles history state
@@ -806,29 +759,19 @@ const AppContent: React.FC = () => {
 
       const parsedUser: User = JSON.parse(storedUser);
       
-      // CRITICAL: Enhanced validation - ensure role is valid
+      // Validate stored user has required fields
       if (!parsedUser?.email || !parsedUser?.role) {
-        console.warn('⚠️ Invalid user object in session restore - missing required fields:', { 
-          hasEmail: !!parsedUser?.email, 
-          hasRole: !!parsedUser?.role 
-        });
-        // Clear invalid data
         localStorage.removeItem('reRideCurrentUser');
         sessionStorage.removeItem('currentUser');
         return;
       }
       
-      // Validate role is a valid value
       if (!['customer', 'seller', 'admin'].includes(parsedUser.role)) {
-        console.warn('⚠️ Invalid role in session restore:', parsedUser.role);
         localStorage.removeItem('reRideCurrentUser');
         sessionStorage.removeItem('currentUser');
         return;
       }
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔄 Restoring persisted session for:', parsedUser.email, parsedUser.role);
-      }
       setCurrentUser(parsedUser);
 
       const loginViews: ViewEnum[] = [
@@ -852,20 +795,14 @@ const AppContent: React.FC = () => {
             break;
         }
       }
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('⚠️ Failed to restore persisted session:', error);
-      }
+    } catch {
+      // Failed to restore session — ignore
     }
   }, [currentUser, currentView, setCurrentUser, setCurrentView]);
 
-  // Redirect logged-in users to their appropriate dashboard (except customers who can access home)
-  // In mobile app, sellers can also access home page
+  // Redirect logged-in users to their appropriate dashboard
   useEffect(() => {
     if (currentUser && currentView === ViewEnum.HOME) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔄 User is logged in, checking dashboard redirect:', currentUser.role, 'isMobileApp:', isMobileApp);
-      }
       switch (currentUser.role) {
         case 'customer':
           // Customers can access home page - no redirect
@@ -3633,7 +3570,6 @@ const AppContent: React.FC = () => {
                   flagContent(type, id);
                 }}
                 onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-                  console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
                   onOfferResponse(conversationId, messageId, response, counterPrice);
                   addToast(`Offer ${response}`, 'success');
                 }}
@@ -3719,36 +3655,37 @@ const AppContent: React.FC = () => {
           />
         </Suspense>
         {currentUser && activeChat && (
-          <Suspense fallback={<MinimalLoader />}>
-            <ChatWidget
-            conversation={activeChat}
-            currentUserRole={currentUser.role as 'customer' | 'seller'}
-            otherUserName={currentUser?.role === 'customer' ? 
-              (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
-               users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
-               'Seller') : 
-              activeChat.customerName}
-            onClose={() => setActiveChat(null)}
-            onSendMessage={(messageText, _type, _payload) => {
-              sendMessage(activeChat.id, messageText);
-            }}
-            typingStatus={typingStatus}
-            onUserTyping={(conversationId, _userRole) => {
-              toggleTyping(conversationId, true);
-            }}
-            onMarkMessagesAsRead={(conversationId, _readerRole) => {
-              markAsRead(conversationId);
-            }}
-            onFlagContent={(type, id, _reason) => {
-              flagContent(type, id);
-            }}
-              onOfferResponse={(conversationId, messageId, response, counterPrice) => {
-              console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
-              onOfferResponse(conversationId, messageId, response, counterPrice);
-              addToast(`Offer ${response}`, 'success');
-            }}
-            />
-          </Suspense>
+          <ChatErrorBoundary>
+            <Suspense fallback={<MinimalLoader />}>
+              <ChatWidget
+                conversation={activeChat}
+                currentUserRole={currentUser.role as 'customer' | 'seller'}
+                otherUserName={currentUser?.role === 'customer' ? 
+                  (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
+                   users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
+                   'Seller') : 
+                  activeChat.customerName}
+                onClose={handleCloseChat}
+                onSendMessage={(messageText, _type, _payload) => {
+                  sendMessage(activeChat.id, messageText);
+                }}
+                typingStatus={typingStatus}
+                onUserTyping={(conversationId, _userRole) => {
+                  toggleTyping(conversationId, true);
+                }}
+                onMarkMessagesAsRead={(conversationId, _readerRole) => {
+                  markAsRead(conversationId);
+                }}
+                onFlagContent={(type, id, _reason) => {
+                  flagContent(type, id);
+                }}
+                onOfferResponse={(conversationId, messageId, response, counterPrice) => {
+                  onOfferResponse(conversationId, messageId, response, counterPrice);
+                  addToast(`Offer ${response}`, 'success');
+                }}
+              />
+            </Suspense>
+          </ChatErrorBoundary>
         )}
       </div>
     </>

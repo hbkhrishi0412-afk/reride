@@ -1,7 +1,7 @@
 import type { BuyerActivity } from '../types';
 import { queueRequest } from '../utils/requestQueue';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE_URL = '/api';
 
 // Attach JWT so buyer activity APIs that require auth work in production
 const getAuthHeaders = (): Record<string, string> => {

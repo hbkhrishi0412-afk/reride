@@ -810,9 +810,9 @@ export const isChatMessage = (obj: any): obj is ChatMessage => {
 export const isNotification = (obj: any): obj is Notification => {
   return obj &&
     typeof obj.id === 'number' &&
-    typeof obj.title === 'string' &&
     typeof obj.message === 'string' &&
-    typeof obj.type === 'string' &&
     typeof obj.recipientEmail === 'string' &&
-    typeof obj.isRead === 'boolean';
+    typeof obj.targetType === 'string' &&
+    typeof obj.isRead === 'boolean' &&
+    typeof obj.timestamp === 'string';
 };

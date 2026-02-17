@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom';
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
 import { View, VehicleCategory as CategoryEnum } from '../types';
 import { getConversations, saveConversations } from '../services/chatService';
@@ -284,6 +285,10 @@ export const useApp = () => {
 // Component export - Fast Refresh compatible with displayName
 // Note: Context providers should NOT be memoized as they need to re-render when state changes
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // React Router hooks for proper URL management
+  const routerNavigate = useRouterNavigate();
+  const location = useLocation();
+
   // Track which notifications have already shown browser notifications
   const shownNotificationIdsRef = useRef<Set<number>>(new Set());
   // Track vehicles currently being updated to prevent duplicate updates
@@ -1014,128 +1019,85 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentView(view);
     }
 
-    // Update path for friendly URLs and store view in history state
+    // Update URL via React Router (replaces manual history.pushState)
     try {
-      let newPath = window.location.pathname;
-      
-      // Map all views to their corresponding URL paths
-      if (view === View.HOME) newPath = '/';
-      else if (view === View.USED_CARS) newPath = '/used-cars';
-      else if (view === View.NEW_CARS) newPath = '/new-cars';
-      else if (view === View.CAR_SERVICES) newPath = '/car-services';
-      else if (view === View.SERVICE_DETAIL) newPath = '/car-services/detail';
-      else if (view === View.CAR_SERVICE_LOGIN) newPath = '/car-services/login';
-      else if (view === View.CAR_SERVICE_DASHBOARD) newPath = '/car-services/dashboard';
-      else if (view === View.SERVICE_CART) newPath = '/car-services/cart';
-      else if (view === View.RENTAL) newPath = '/rental';
-      else if (view === View.DEALER_PROFILES) newPath = '/dealers';
-      else if (view === View.DETAIL) {
-        // For detail view, include vehicle ID in URL if available
+      let newPath = '/';
+
+      // View-to-path mapping
+      const viewPathMap: Record<string, string> = {
+        [View.HOME]: '/',
+        [View.USED_CARS]: '/used-cars',
+        [View.NEW_CARS]: '/new-cars',
+        [View.CAR_SERVICES]: '/car-services',
+        [View.SERVICE_DETAIL]: '/car-services/detail',
+        [View.CAR_SERVICE_LOGIN]: '/car-services/login',
+        [View.CAR_SERVICE_DASHBOARD]: '/car-services/dashboard',
+        [View.SERVICE_CART]: '/car-services/cart',
+        [View.RENTAL]: '/rental',
+        [View.DEALER_PROFILES]: '/dealers',
+        [View.SELLER_DASHBOARD]: '/seller/dashboard',
+        [View.ADMIN_PANEL]: '/admin',
+        [View.ADMIN_LOGIN]: '/admin/login',
+        [View.NEW_CARS_ADMIN_LOGIN]: '/admin/new-cars',
+        [View.NEW_CARS_ADMIN_PANEL]: '/admin/new-cars/manage',
+        [View.LOGIN_PORTAL]: '/login',
+        [View.CUSTOMER_LOGIN]: '/login',
+        [View.SELLER_LOGIN]: '/login',
+        [View.COMPARISON]: '/compare',
+        [View.WISHLIST]: '/wishlist',
+        [View.PROFILE]: '/profile',
+        [View.FORGOT_PASSWORD]: '/forgot-password',
+        [View.INBOX]: '/inbox',
+        [View.PRICING]: '/pricing',
+        [View.SUPPORT]: '/support',
+        [View.FAQ]: '/faq',
+        [View.PRIVACY_POLICY]: '/privacy-policy',
+        [View.TERMS_OF_SERVICE]: '/terms-of-service',
+        [View.BUYER_DASHBOARD]: '/customer/dashboard',
+        [View.SELL_CAR]: '/sell-car',
+        [View.SELL_CAR_ADMIN]: '/admin/sell-car',
+      };
+
+      // Handle dynamic paths
+      if (view === View.DETAIL) {
         let vehicleForPath = selectedVehicle;
         if (!vehicleForPath) {
           try {
-            const storedVehicle = sessionStorage.getItem('selectedVehicle');
-            if (storedVehicle) {
-              vehicleForPath = JSON.parse(storedVehicle);
-            }
-          } catch (error) {
-            // Ignore sessionStorage errors
-          }
+            const stored = sessionStorage.getItem('selectedVehicle');
+            if (stored) vehicleForPath = JSON.parse(stored);
+          } catch { /* ignore */ }
         }
-        if (vehicleForPath && vehicleForPath.id) {
-          newPath = `/vehicle/${vehicleForPath.id}`;
-        } else {
-          newPath = '/vehicle';
-        }
-      }
-      else if (view === View.SELLER_DASHBOARD) newPath = '/seller/dashboard';
-      else if (view === View.ADMIN_PANEL) newPath = '/admin';
-      else if (view === View.ADMIN_LOGIN) newPath = '/admin/login';
-      else if (view === View.NEW_CARS_ADMIN_LOGIN) newPath = '/admin/new-cars';
-      else if (view === View.NEW_CARS_ADMIN_PANEL) newPath = '/admin/new-cars/manage';
-      else if (view === View.LOGIN_PORTAL || view === View.CUSTOMER_LOGIN || view === View.SELLER_LOGIN) newPath = '/login';
-      else if (view === View.COMPARISON) newPath = '/compare';
-      else if (view === View.WISHLIST) newPath = '/wishlist';
-      else if (view === View.PROFILE) newPath = '/profile';
-      else if (view === View.FORGOT_PASSWORD) newPath = '/forgot-password';
-      else if (view === View.INBOX) newPath = '/inbox';
-      else if (view === View.SELLER_PROFILE) {
-        // For seller profile, try to include seller email in URL if available
-        if (publicSellerProfile?.email) {
-          newPath = `/seller/${encodeURIComponent(publicSellerProfile.email)}`;
-        } else {
-          newPath = '/seller';
-        }
-      }
-      else if (view === View.PRICING) newPath = '/pricing';
-      else if (view === View.SUPPORT) newPath = '/support';
-      else if (view === View.FAQ) newPath = '/faq';
-      else if (view === View.PRIVACY_POLICY) newPath = '/privacy-policy';
-      else if (view === View.TERMS_OF_SERVICE) newPath = '/terms-of-service';
-      else if (view === View.BUYER_DASHBOARD) newPath = '/customer/dashboard';
-      else if (view === View.CITY_LANDING) {
-        // For city landing, include city in URL if available
-        if (params?.city) {
-          newPath = `/city/${encodeURIComponent(params.city.toLowerCase().replace(/\s+/g, '-'))}`;
-        } else {
-          newPath = '/city';
-        }
-      }
-      else if (view === View.SELL_CAR) newPath = '/sell-car';
-      else if (view === View.SELL_CAR_ADMIN) newPath = '/admin/sell-car';
-      
-      // Store view and previous view in history state for back button support
-      // Also store selectedVehicle ID if we're on DETAIL view
-      const historyState: HistoryState = {
-        view: view,
-        previousView: currentView,
-        timestamp: Date.now()
-      };
-      
-      // Store selectedVehicle ID for DETAIL view so we can restore it
-      // Check both state and sessionStorage (in case state hasn't updated yet)
-      let vehicleForDetail = selectedVehicle;
-      if (view === View.DETAIL && !vehicleForDetail) {
-        try {
-          const storedVehicle = sessionStorage.getItem('selectedVehicle');
-          if (storedVehicle) {
-            vehicleForDetail = JSON.parse(storedVehicle);
-          }
-        } catch (error) {
-          // Ignore sessionStorage errors
-        }
-      }
-      if (view === View.DETAIL && vehicleForDetail) {
-        historyState.selectedVehicleId = vehicleForDetail.id;
-      }
-      
-      // CRITICAL FIX: Always use pushState to create history entries for back/forward navigation
-      // Even if the path doesn't change, we need to create a new history entry so browser back/forward works
-      // Only use replaceState on initial load, not during navigation
-      if (newPath !== window.location.pathname) {
-        // Path changed, use pushState
-        window.history.pushState(historyState, '', newPath);
+        newPath = vehicleForPath?.id ? `/vehicle/${vehicleForPath.id}` : '/vehicle';
+      } else if (view === View.SELLER_PROFILE) {
+        newPath = publicSellerProfile?.email
+          ? `/seller/${encodeURIComponent(publicSellerProfile.email)}`
+          : '/seller';
+      } else if (view === View.CITY_LANDING && params?.city) {
+        newPath = `/city/${encodeURIComponent(params.city.toLowerCase().replace(/\s+/g, '-'))}`;
       } else {
-        // Path didn't change but view did - still use pushState to create history entry
-        // This ensures browser back/forward buttons work even when views share the same path
-        window.history.pushState(historyState, '', newPath);
+        newPath = viewPathMap[view] || '/';
       }
-    } catch (error) {
-      logWarn('Failed to update browser history:', error);
-    }
-  }, [currentView, currentUser, previousView, selectedVehicle, updateSelectedCity, setPreviousView, setSelectedVehicle, setPublicSellerProfile, setInitialSearchQuery, setSelectedCategory, setCurrentView]);
 
-  // Go back using browser history, with fallback to a default view
-  // This ensures app back buttons are synced with browser back button
+      // Use React Router navigate instead of manual history.pushState
+      routerNavigate(newPath, {
+        state: {
+          view,
+          previousView: currentView,
+          timestamp: Date.now(),
+          selectedVehicleId: view === View.DETAIL ? selectedVehicle?.id : undefined,
+        },
+      });
+    } catch {
+      // Fallback: at minimum the currentView state is already updated
+    }
+  }, [currentView, currentUser, previousView, selectedVehicle, updateSelectedCity, setPreviousView, setSelectedVehicle, setPublicSellerProfile, setInitialSearchQuery, setSelectedCategory, setCurrentView, routerNavigate]);
+
+  // Go back using React Router, with fallback to a default view
   const goBack = useCallback((fallbackView?: View) => {
-    // Check if there's a previous view in our tracked state
-    // If we have a previous view that's different from current, use browser history
     if (previousView && previousView !== currentView) {
-      // Use browser back button - this will trigger popstate event which restores the view
-      // This keeps app back button in sync with browser back button
-      window.history.back();
+      // Use React Router back navigation
+      routerNavigate(-1);
     } else if (fallbackView) {
-      // No tracked history, but we have a fallback view - navigate to it
       navigate(fallbackView);
     } else {
       // Ultimate fallback: go to home
@@ -1193,94 +1155,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [selectedVehicle]);
 
-  // Handle browser back/forward button navigation
+  // Sync React Router location changes with app view state
+  // This replaces the manual popstate handler — React Router manages browser history
   useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      try {
-        // Set flag to prevent navigation loops
-        isHandlingPopStateRef.current = true;
-        
-        // Restore view from history state
-        if (event.state && event.state.view) {
-          const restoredView = event.state.view as View;
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔙 Browser back/forward button pressed, restoring view:', restoredView, 'state:', event.state);
-          }
-          
-          // Update previous view
-          if (event.state.previousView) {
-            setPreviousView(event.state.previousView as View);
-          }
-          
-          // Restore selectedVehicle if we're going to DETAIL view and have the ID
-          if (restoredView === View.DETAIL && event.state.selectedVehicleId) {
-            const vehicleId = event.state.selectedVehicleId;
-            const vehicleToRestore = Array.isArray(vehicles) ? vehicles.find(v => v.id === vehicleId) : undefined;
-            if (vehicleToRestore) {
-              setSelectedVehicle(vehicleToRestore);
-              if (process.env.NODE_ENV === 'development') {
-                console.log('🔙 Restoring selectedVehicle:', vehicleToRestore.id, vehicleToRestore.make, vehicleToRestore.model);
-              }
-            } else {
-              // Vehicle not found, clear selection
-              setSelectedVehicle(null);
-            }
-          } else if (restoredView !== View.DETAIL) {
-            // Not going to DETAIL view, clear selected vehicle
-            setSelectedVehicle(null);
-          }
-          
-          // Clear public seller profile when navigating away from seller profile
-          if (restoredView !== View.SELLER_PROFILE) {
-            setPublicSellerProfile(null);
-          }
-          
-          // Restore the view - this should trigger re-render with correct state
-          setCurrentView(restoredView);
-        } else {
-          // Fallback: try to determine view from URL path
-          const path = window.location.pathname;
-          const fallbackView = pathToView(path);
-          
-          // If DETAIL view, try to restore vehicle from URL
-          if (fallbackView === View.DETAIL && path.startsWith('/vehicle/')) {
-            const vehicleIdMatch = path.match(/\/vehicle\/(\d+)/);
-            if (vehicleIdMatch) {
-              const vehicleId = parseInt(vehicleIdMatch[1], 10);
-              const vehicleToRestore = Array.isArray(vehicles) ? vehicles.find(v => v.id === vehicleId) : undefined;
-              if (vehicleToRestore) {
-                setSelectedVehicle(vehicleToRestore);
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('🔙 Restoring vehicle from URL:', vehicleToRestore.id);
-                }
-              }
-            }
-          }
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔙 No history state found, using fallback view from URL:', fallbackView);
-          }
-          setCurrentView(fallbackView);
-        }
-        
-        // Clear flag after a short delay to allow state updates to complete
-        setTimeout(() => {
-          isHandlingPopStateRef.current = false;
-        }, 100);
-      } catch (error) {
-        isHandlingPopStateRef.current = false;
-        if (process.env.NODE_ENV === 'development') {
-          console.error('❌ Error handling popstate:', error);
+    const path = location.pathname;
+    const routerState = location.state as HistoryState | null;
+    const newView = routerState?.view || pathToView(path);
+
+    // Prevent loops: only update if the view actually changed
+    if (newView === currentView) return;
+
+    isHandlingPopStateRef.current = true;
+
+    // Restore previous view from router state
+    if (routerState?.previousView) {
+      setPreviousView(routerState.previousView);
+    }
+
+    // Restore selectedVehicle for DETAIL view
+    if (newView === View.DETAIL) {
+      const vehicleId = routerState?.selectedVehicleId;
+      if (vehicleId) {
+        const vehicleToRestore = vehicles.find(v => v.id === vehicleId);
+        if (vehicleToRestore) setSelectedVehicle(vehicleToRestore);
+      } else if (path.startsWith('/vehicle/')) {
+        const idMatch = path.match(/\/vehicle\/(\d+)/);
+        if (idMatch) {
+          const parsedId = parseInt(idMatch[1], 10);
+          const found = vehicles.find(v => v.id === parsedId);
+          if (found) setSelectedVehicle(found);
         }
       }
-    };
+    } else {
+      setSelectedVehicle(null);
+    }
 
-    window.addEventListener('popstate', handlePopState);
-    
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [setCurrentView, setPreviousView, setSelectedVehicle, setPublicSellerProfile, vehicles]);
+    // Clear seller profile when navigating away
+    if (newView !== View.SELLER_PROFILE) {
+      setPublicSellerProfile(null);
+    }
+
+    setCurrentView(newView);
+
+    setTimeout(() => {
+      isHandlingPopStateRef.current = false;
+    }, 100);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.key]);
 
   // CRITICAL: Listen for force loading completion event (safety mechanism)
   useEffect(() => {
