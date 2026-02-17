@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomBytes } from 'crypto';
 import { PLAN_DETAILS } from '../constants.js';
-import type { User as UserType, Vehicle as VehicleType, SubscriptionPlan, VerificationStatus } from '../types.js';
+import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../types.js';
 // Supabase services
 import { supabaseUserService } from '../services/supabase-user-service.js';
@@ -658,6 +658,31 @@ async function mainHandler(
       return await handleNotifications(req, res, handlerOptions);
     } else if (pathname.includes('/buyer-activity') || pathname.endsWith('/buyer-activity')) {
       return await handleBuyerActivity(req, res, handlerOptions);
+    } else if (pathname.includes('/login') || pathname.endsWith('/login')) {
+      // Import and call login handler
+      const { handleLogin } = await import('./login.js');
+      return await handleLogin(req, res);
+    } else if (pathname.includes('/services') && !pathname.includes('/service-')) {
+      // Import and call services handler (exclude service-providers, service-requests)
+      const { handleServices } = await import('./services.js');
+      return await handleServices(req, res);
+    } else if (pathname.includes('/provider-services') || pathname.endsWith('/provider-services')) {
+      // Import and call provider-services handler
+      const { handleProviderServices } = await import('./provider-services.js');
+      return await handleProviderServices(req, res);
+    } else if (pathname.includes('/service-providers') || pathname.endsWith('/service-providers')) {
+      // Import and call service-providers handler
+      const { handleServiceProviders } = await import('./service-providers.js');
+      return await handleServiceProviders(req, res);
+    } else if (pathname.includes('/service-requests') || pathname.endsWith('/service-requests')) {
+      // Import and call service-requests handler
+      const { handleServiceRequests } = await import('./service-requests.js');
+      return await handleServiceRequests(req, res);
+    } else if (pathname.includes('/chat') && !pathname.includes('/chat-websocket')) {
+      // Import and call chat handler
+      // @ts-ignore - chat.js is a JavaScript file
+      const { handleChat } = await import('./chat.js');
+      return await handleChat(req, res);
     } else {
       // Default to users for backward compatibility
       // This catches any unmatched routes, especially important for PUT /api/users
@@ -1790,7 +1815,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       
       // Test the service role key by attempting to create admin client
       try {
-        const testClient = getSupabaseAdminClient();
+        getSupabaseAdminClient();
         logInfo('✅ Supabase admin client created successfully');
       } catch (clientError: any) {
         const clientErrorMessage = clientError instanceof Error ? clientError.message : String(clientError);
@@ -6780,6 +6805,14 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
       return Number.isFinite(n) ? n : fallback;
     };
 
+    const toListingLimit = (value: unknown, fallback: number | 'unlimited'): number | 'unlimited' => {
+      if (value === 'unlimited' || value === 'unlimited') {
+        return 'unlimited';
+      }
+      const n = Number(value);
+      return Number.isFinite(n) ? n : (typeof fallback === 'number' ? fallback : 0);
+    };
+
     const toPlanDetails = (id: string, row: Record<string, unknown>) => {
       const basePlan = PLAN_DETAILS[id as keyof typeof PLAN_DETAILS];
       const metadata = (row.metadata as Record<string, unknown> | undefined) || {};
@@ -6788,7 +6821,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
         name: String(row.name || basePlan?.name || 'Custom Plan'),
         price: toNumber(row.price, basePlan?.price ?? 0),
         features: Array.isArray(row.features) ? row.features.map(String) : (basePlan?.features || []),
-        listingLimit: toNumber(row.listingLimit ?? metadata.listingLimit, basePlan?.listingLimit ?? 0),
+        listingLimit: toListingLimit(row.listingLimit ?? metadata.listingLimit, basePlan?.listingLimit ?? 0),
         featuredCredits: toNumber(row.featuredCredits ?? metadata.featuredCredits, basePlan?.featuredCredits ?? 0),
         freeCertifications: toNumber(row.freeCertifications ?? metadata.freeCertifications, basePlan?.freeCertifications ?? 0),
         isMostPopular: Boolean(row.isMostPopular ?? metadata.isMostPopular ?? basePlan?.isMostPopular ?? false),
@@ -6874,7 +6907,7 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
           features: Array.isArray(updateData.features)
             ? updateData.features
             : (Array.isArray(existing?.features) ? existing?.features : (basePlan?.features || [])),
-          listingLimit: toNumber(updateData.listingLimit ?? existing?.listingLimit, basePlan?.listingLimit ?? 0),
+          listingLimit: toListingLimit(updateData.listingLimit ?? existing?.listingLimit, basePlan?.listingLimit ?? 0),
           featuredCredits: toNumber(updateData.featuredCredits ?? existing?.featuredCredits, basePlan?.featuredCredits ?? 0),
           freeCertifications: toNumber(updateData.freeCertifications ?? existing?.freeCertifications, basePlan?.freeCertifications ?? 0),
           isMostPopular: Boolean(updateData.isMostPopular ?? existing?.isMostPopular ?? basePlan?.isMostPopular ?? false),

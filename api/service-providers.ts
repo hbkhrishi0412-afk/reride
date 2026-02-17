@@ -6,7 +6,7 @@ import type { ServiceProviderPayload } from '../services/supabase-service-provid
 
 // ServiceProviderPayload is now imported from the service file
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleServiceProviders(req: VercelRequest, res: VercelResponse) {
   try {
     // CRITICAL FIX: Handle missing/invalid auth token gracefully
     // Some requests might not have auth (e.g., public endpoints, initial page loads)

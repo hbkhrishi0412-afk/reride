@@ -34,7 +34,7 @@ async function resolveProviderId(req: VercelRequest, allowDevFallback = false): 
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleProviderServices(req: VercelRequest, res: VercelResponse) {
   try {
     const scope = (req.query.scope as string) || 'mine';
     let uid: string | null = null;
