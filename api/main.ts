@@ -1805,8 +1805,42 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         });
       }
       
+      // CRITICAL: Add direct database query test before using service
+      logInfo('🔍 Testing direct database query with admin client...');
+      try {
+        const testClient = getSupabaseAdminClient();
+        const { data: testData, error: testError, count: testCount } = await testClient
+          .from('users')
+          .select('*', { count: 'exact', head: false })
+          .limit(1);
+        
+        if (testError) {
+          logError('❌ Direct query test failed:', {
+            message: testError.message,
+            details: testError.details,
+            hint: testError.hint,
+            code: testError.code
+          });
+        } else {
+          logInfo(`✅ Direct query test: Found ${testCount || 0} users in database`);
+          if (testData && testData.length > 0) {
+            logInfo('📊 Sample row from direct query:', {
+              hasId: !!testData[0].id,
+              id: testData[0].id,
+              hasEmail: !!testData[0].email,
+              email: testData[0].email,
+              hasRole: !!testData[0].role,
+              role: testData[0].role,
+              rowKeys: Object.keys(testData[0])
+            });
+          }
+        }
+      } catch (testErr) {
+        logError('❌ Direct query test exception:', testErr);
+      }
+      
       const users = await userService.findAll();
-      logInfo(`✅ Fetched ${users.length} raw users from Supabase database`);
+      logInfo(`✅ Fetched ${users.length} raw users from Supabase database via userService`);
       
       if (users.length === 0) {
         logWarn('⚠️ Supabase returned 0 users. This might indicate:');
@@ -1816,6 +1850,27 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         logWarn('   4. Table name mismatch (expected: "users")');
         logWarn('   5. Service role key might not have proper permissions');
         logWarn('   6. SUPABASE_SERVICE_ROLE_KEY might not be configured in Vercel environment variables');
+        logWarn('   7. Users might be getting filtered out during conversion');
+        
+        // CRITICAL: Try a raw count query to verify users exist
+        try {
+          const countClient = getSupabaseAdminClient();
+          const { count, error: countError } = await countClient
+            .from('users')
+            .select('*', { count: 'exact', head: true });
+          
+          if (countError) {
+            logError('❌ Count query error:', countError);
+          } else {
+            logInfo(`📊 Raw count query result: ${count || 0} users in database`);
+            if (count && count > 0) {
+              logWarn('⚠️ Users exist in database but userService.findAll() returned 0!');
+              logWarn('   This suggests an issue with the userService.findAll() method or data conversion.');
+            }
+          }
+        } catch (countErr) {
+          logError('❌ Count query exception:', countErr);
+        }
         
         // Return a warning but still return empty array (not an error)
         return res.status(200).json([]);
