@@ -1,6 +1,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -77,9 +78,8 @@ if (typeof window !== 'undefined') {
   injectCriticalCSS();
 }
 
-// Disable StrictMode in development for faster loading
-// StrictMode causes intentional double-renders which slows down initial load
-// Re-enable for production builds or when debugging
+// StrictMode is enabled in development to catch bugs (double-renders are intentional).
+// In production, StrictMode is stripped out by React — no performance impact.
 const isDev = isDevelopmentEnvironment();
 
 if (typeof window !== 'undefined') {
@@ -87,79 +87,22 @@ if (typeof window !== 'undefined') {
 }
 
 root.render(
-  isDev ? (
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
-  ) : (
-    <React.StrictMode>
+  <React.StrictMode>
+    <BrowserRouter>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
-    </React.StrictMode>
-  )
+    </BrowserRouter>
+  </React.StrictMode>
 );
 
-// Register service worker with advanced caching and update notifications
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
-      .then((registration) => {
-        logInfo('[SW] Service worker registered:', registration.scope);
-        
-        // Check for updates periodically
-        setInterval(() => {
-          registration.update();
-        }, 60000); // Check every minute
-        
-        // Handle updates with user notification
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New service worker available, show user notification
-                logInfo('[SW] New service worker available');
-                
-                // Dispatch custom event for app to show notification
-                if (window.dispatchEvent) {
-                  window.dispatchEvent(new CustomEvent('sw-update-available', {
-                    detail: {
-                      message: 'A new version is available. Click to refresh.',
-                      action: () => {
-                        // Skip waiting and reload
-                        if (newWorker.waiting) {
-                          newWorker.postMessage({ type: 'SKIP_WAITING' });
-                        }
-                        window.location.reload();
-                      }
-                    }
-                  }));
-                }
-              }
-            });
-          }
-        });
-      })
-      .catch((error) => {
-        logError('[SW] Service worker registration failed:', error);
-      });
-  });
-
-  // Listen for service worker controller changes
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    logInfo('[SW] Service worker controller changed, reloading page');
-    window.location.reload();
-  });
-  
-  // Listen for skip waiting message from service worker
-  navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-      window.location.reload();
-    }
-  });
-}
+// Service worker registration is disabled — PWA plugin is not active.
+// To re-enable, configure vite-plugin-pwa in vite.config.ts and uncomment below.
+// if ('serviceWorker' in navigator) {
+//   window.addEventListener('load', () => {
+//     navigator.serviceWorker.register('/sw.js', { scope: '/' });
+//   });
+// }
 
 // Log performance metrics after page load
 window.addEventListener('load', () => {
@@ -214,53 +157,6 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// CRITICAL: Global safety mechanism to prevent infinite loading states
-// This ensures the app never gets stuck in a loading state
-if (typeof window !== 'undefined') {
-  let loadingSafetyCheck: NodeJS.Timeout | null = null;
-  
-  const checkLoadingState = () => {
-    // Check if there's a loading indicator visible for too long
-    const loadingElements = document.querySelectorAll('[class*="loading"], [class*="spinner"], [class*="Loading"]');
-    const hasLongLoading = Array.from(loadingElements).some(el => {
-      const style = window.getComputedStyle(el);
-      return style.display !== 'none' && style.visibility !== 'hidden';
-    });
-    
-    // If loading elements are visible for more than 10 seconds, force hide them
-    if (hasLongLoading) {
-      const startTime = parseInt(sessionStorage.getItem('appLoadStartTime') || '0', 10);
-      const currentTime = Date.now();
-      const loadDuration = currentTime - startTime;
-      
-      if (loadDuration > 10000) { // 10 seconds (reduced from 20s for better UX)
-        logWarn('⚠️ Loading state exceeded 10s, forcing completion');
-        // Try to dispatch a custom event that components can listen to
-        window.dispatchEvent(new CustomEvent('forceLoadingComplete'));
-        sessionStorage.removeItem('appLoadStartTime');
-      }
-    }
-  };
-  
-  // Set start time when page loads
-  sessionStorage.setItem('appLoadStartTime', Date.now().toString());
-  
-  // Check every 5 seconds
-  loadingSafetyCheck = setInterval(checkLoadingState, 5000);
-  
-  // Clear the check when page unloads
-  window.addEventListener('beforeunload', () => {
-    if (loadingSafetyCheck) {
-      clearInterval(loadingSafetyCheck);
-    }
-    sessionStorage.removeItem('appLoadStartTime');
-  });
-  
-  // Also clear after successful load
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      sessionStorage.removeItem('appLoadStartTime');
-    }, 1000);
-  });
-}
+// Loading safety is handled by the ErrorBoundary component and
+// the 15-second timeout in index.html. No polling needed here.
 

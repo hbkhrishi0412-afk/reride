@@ -93,6 +93,9 @@ export default defineConfig({
             if (id.includes('@google/genai')) {
               return 'gemini';
             }
+            if (id.includes('react-router') || id.includes('react-router-dom')) {
+              return 'vendor'; // Keep with React in vendor chunk
+            }
             if (id.includes('react-window')) {
               return 'react-window';
             }
@@ -345,7 +348,7 @@ export default defineConfig({
   },
   // Optimize dependencies
   optimizeDeps: {
-    include: ['react', 'react-dom', 'framer-motion', 'socket.io-client', 'leaflet', 'react-leaflet'],
+    include: ['react', 'react-dom', 'react-router-dom', 'framer-motion', 'socket.io-client', 'leaflet', 'react-leaflet'],
     // Exclude heavy dependencies from pre-bundling
     exclude: ['@google/genai', 'mongodb', 'mongoose'],
     // Force optimization of specific packages

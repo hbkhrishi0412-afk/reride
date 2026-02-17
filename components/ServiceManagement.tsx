@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSession } from '../services/supabase-auth-service';
+import { getAuthHeaders as getSharedAuthHeaders } from '../utils/authenticatedFetch';
 
 interface Service {
   id: string;
@@ -23,32 +23,21 @@ const ServiceManagement: React.FC = () => {
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const getAuthHeaders = async (): Promise<Record<string, string>> => {
-    try {
-      const sessionResult = await getSession();
-      if (sessionResult.success && sessionResult.session?.access_token) {
-        return { Authorization: `Bearer ${sessionResult.session.access_token}` };
-      }
-      throw new Error('Not authenticated');
-    } catch (error) {
-      console.error('Error getting auth headers:', error);
-      throw error;
-    }
+  const getAuthHeaders = (): Record<string, string> => {
+    const headers = getSharedAuthHeaders() as Record<string, string>;
+    return headers;
+  };
+
+  const hasAuthorizationHeader = (headers: Record<string, string>): boolean => {
+    return typeof headers.Authorization === 'string' && headers.Authorization.trim().length > 0;
   };
 
   const loadServices = async () => {
     setLoading(true);
     setError(null);
     try {
-      // GET requests don't require authentication (API allows public read access)
-      // Try to get auth headers, but don't fail if not available
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...headers, ...authHeaders };
-      } catch {
-        // Auth headers are optional for GET requests
-      }
+      // GET requests are public, but include auth header if available
+      const headers = getAuthHeaders();
 
       const response = await fetch('/api/services', {
         method: 'GET',
@@ -59,8 +48,11 @@ const ServiceManagement: React.FC = () => {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.error || `Failed to load services: ${response.statusText}`;
         
+        if (response.status === 401) {
+          throw new Error('Session expired. Please log in again.');
+        }
         if (response.status === 403) {
-          throw new Error('Please ensure the development API server is running on port 3001. Run: npm run dev:api');
+          throw new Error('Admin access required. Please log in with an admin account.');
         }
         
         throw new Error(errorMessage);
@@ -71,7 +63,9 @@ const ServiceManagement: React.FC = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load services';
       if (errorMessage.includes('Admin access required') || errorMessage.includes('403')) {
-        setError('Development API server may not be running. Please start it with: npm run dev:api');
+        setError('Admin access required. Please log in with an admin account.');
+      } else if (errorMessage.includes('Session expired') || errorMessage.includes('401')) {
+        setError('Session expired. Please log in again.');
       } else {
         setError(errorMessage);
       }
@@ -94,15 +88,10 @@ const ServiceManagement: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      // Try to get auth headers, but don't fail if not available (for development)
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...headers, ...authHeaders };
-      } catch (authError) {
-        // In development, allow requests without auth (dev server will handle it)
-        // Just continue without auth header - dev server accepts it
-        console.warn('No auth token available, proceeding without authentication (development mode)');
+      const headers = getAuthHeaders();
+      if (!hasAuthorizationHeader(headers)) {
+        setError('Authentication required. Please log in again to save changes.');
+        return;
       }
 
       const response = await fetch('/api/services', {
@@ -116,8 +105,11 @@ const ServiceManagement: React.FC = () => {
         const errorMessage = errorData.error || `Failed to update service: ${response.statusText}`;
         
         // Provide more helpful error messages for common issues
+        if (response.status === 401) {
+          throw new Error('Session expired. Please log in again.');
+        }
         if (response.status === 403) {
-          throw new Error('Authentication required. Please ensure you are logged in and the development API server is running.');
+          throw new Error('Admin access required. Please log in with an admin account.');
         }
         
         throw new Error(errorMessage);
@@ -127,9 +119,10 @@ const ServiceManagement: React.FC = () => {
       setEditingService(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to save service';
-      // Check if it's an auth error and provide helpful message
       if (errorMessage.includes('Admin access required') || errorMessage.includes('403')) {
-        setError('Unable to save changes. Please ensure the development API server is running on port 3001.');
+        setError('Unable to save changes. Admin access is required.');
+      } else if (errorMessage.includes('Session expired') || errorMessage.includes('401')) {
+        setError('Session expired. Please log in again.');
       } else {
         setError(errorMessage);
       }
@@ -147,15 +140,10 @@ const ServiceManagement: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
-      // Try to get auth headers, but don't fail if not available (for development)
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      try {
-        const authHeaders = await getAuthHeaders();
-        headers = { ...headers, ...authHeaders };
-      } catch (authError) {
-        // In development, allow requests without auth (dev server will handle it)
-        // Just continue without auth header - dev server accepts it
-        console.warn('No auth token available, proceeding without authentication (development mode)');
+      const headers = getAuthHeaders();
+      if (!hasAuthorizationHeader(headers)) {
+        setError('Authentication required. Please log in again to update service status.');
+        return;
       }
 
       const response = await fetch('/api/services', {
@@ -171,8 +159,11 @@ const ServiceManagement: React.FC = () => {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.error || `Failed to update service: ${response.statusText}`;
         
+        if (response.status === 401) {
+          throw new Error('Session expired. Please log in again.');
+        }
         if (response.status === 403) {
-          throw new Error('Authentication required. Please ensure you are logged in and the development API server is running.');
+          throw new Error('Admin access required. Please log in with an admin account.');
         }
         
         throw new Error(errorMessage);
@@ -182,7 +173,7 @@ const ServiceManagement: React.FC = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update service';
       if (errorMessage.includes('Admin access required') || errorMessage.includes('403')) {
-        setError('Unable to update service. Please ensure the development API server is running on port 3001.');
+        setError('Unable to update service. Admin access is required.');
       } else {
         setError(errorMessage);
       }

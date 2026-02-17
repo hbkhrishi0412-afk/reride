@@ -464,18 +464,10 @@ class DataService {
     
     if (vehicles.length === 0) {
       try {
-        // Try to load mock data first
-        const mockVehicles = await import('../mock-vehicles.json');
-        if (mockVehicles.default && mockVehicles.default.length > 0) {
-          vehicles = mockVehicles.default as Vehicle[];
-          this.setLocalStorageData('reRideVehicles', vehicles);
-          console.log('✅ Loaded mock vehicles data:', vehicles.length, 'vehicles');
-        } else {
-          // Fallback to constants if mock data not available
-          const { MOCK_VEHICLES } = await import('../constants.js');
-          vehicles = await MOCK_VEHICLES();
-          this.setLocalStorageData('reRideVehicles', vehicles);
-        }
+        // Try to load mock data from constants
+        const { MOCK_VEHICLES } = await import('../constants');
+        vehicles = await MOCK_VEHICLES();
+        this.setLocalStorageData('reRideVehicles', vehicles);
       } catch (error) {
         console.log('⚠️ Could not load mock vehicles, using fallback:', error);
         vehicles = fallbackVehicles;

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { authenticateRequest } from './auth.js';
 
 interface Service {
   id: string;
@@ -17,32 +18,97 @@ interface Service {
   metadata?: Record<string, unknown>;
 }
 
-// Check if user is admin (you may need to adjust this based on your auth setup)
-async function isAdmin(req: VercelRequest): Promise<boolean> {
+interface AuthContext {
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  email?: string;
+  source: 'supabase' | 'legacy-jwt' | 'none';
+  error?: string;
+}
+
+async function getUserRoleByEmail(email: string, supabase: ReturnType<typeof getSupabaseAdminClient>): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (error || !data?.role) {
+      return null;
+    }
+
+    return data.role;
+  } catch {
+    return null;
+  }
+}
+
+async function getAuthContext(req: VercelRequest, supabase: ReturnType<typeof getSupabaseAdminClient>): Promise<AuthContext> {
+  // Try Supabase JWT first
   try {
     const decoded = await verifyIdTokenFromHeader(req);
-    // Check if user has admin role - adjust based on your user structure
-    // For now, we'll allow authenticated users (you should add proper role checking)
-    return !!decoded.uid;
+    const email = decoded.email?.toLowerCase().trim();
+    const metadataRole =
+      decoded.user?.app_metadata?.role ||
+      decoded.user?.user_metadata?.role;
+
+    const dbRole = email ? await getUserRoleByEmail(email, supabase) : null;
+    const resolvedRole = metadataRole || dbRole;
+
+    return {
+      isAuthenticated: true,
+      isAdmin: resolvedRole === 'admin',
+      email,
+      source: 'supabase',
+    };
   } catch {
-    return false;
+    // Fall through to legacy JWT auth
   }
+
+  // Legacy application JWT (reRideAccessToken)
+  const legacyAuth = authenticateRequest(req);
+  if (!legacyAuth.isValid || !legacyAuth.user) {
+    return {
+      isAuthenticated: false,
+      isAdmin: false,
+      source: 'none',
+      error: legacyAuth.error || 'Authentication required',
+    };
+  }
+
+  const legacyEmail = legacyAuth.user.email?.toLowerCase().trim();
+  const dbRole = legacyEmail ? await getUserRoleByEmail(legacyEmail, supabase) : null;
+  const resolvedRole = dbRole || legacyAuth.user.role;
+
+  return {
+    isAuthenticated: true,
+    isAdmin: resolvedRole === 'admin',
+    email: legacyEmail,
+    source: 'legacy-jwt',
+  };
+}
+
+function getErrorStatusCode(message: string): number {
+  const lower = message.toLowerCase();
+  if (lower.includes('auth') || lower.includes('token') || lower.includes('access')) {
+    return 403;
+  }
+  return 500;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const supabase = getSupabaseAdminClient();
+    const authContext = await getAuthContext(req, supabase);
 
     if (req.method === 'GET') {
-      // Check if user is admin for full access
-      const admin = await isAdmin(req);
-      
       let query = supabase
         .from('services')
         .select('*');
       
       // Public users only see active services, admins see all
-      if (!admin) {
+      if (!authContext.isAdmin) {
         query = query.eq('active', true);
       }
       
@@ -61,8 +127,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // For write operations, require admin authentication
-    const admin = await isAdmin(req);
-    if (!admin) {
+    if (!authContext.isAuthenticated) {
+      return res.status(401).json({ error: authContext.error || 'Authentication required' });
+    }
+
+    if (!authContext.isAdmin) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -148,7 +217,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Services API error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    const status = message.includes('access') || message.includes('auth') ? 403 : 500;
+    const status = getErrorStatusCode(message);
     return res.status(status).json({ error: message });
   }
 }

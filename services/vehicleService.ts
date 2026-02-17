@@ -54,17 +54,14 @@ const getAuthHeader = () => {
     if (!userJson) return {};
     const user: User = JSON.parse(userJson);
     
-    // Check if user has access token
+    // Use access token for authorization
     const accessToken = localStorage.getItem('reRideAccessToken') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('accessToken') : null);
     if (accessToken) {
       return { 'Authorization': `Bearer ${accessToken}` };
     }
     
-    // Fallback to email for backward compatibility (not recommended for production)
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('No access token found, using email for authorization (not secure)');
-    }
-    return { 'Authorization': user.email };
+    // No token available — return empty auth header
+    return {};
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('Failed to get auth header:', error);
