@@ -2,7 +2,7 @@
 
 ## Current Configuration ✅
 
-**Serverless Function Count: 1/10** (Maximum allowed: 10)
+**Serverless Function Count: 1/12** (Vercel Hobby plan limit: 12)
 
 ### Active Serverless Function
 - `api/main.ts` - Main API handler that routes all `/api/*` requests
@@ -52,7 +52,7 @@ Or directly:
 node scripts/verify-serverless-functions.js
 ```
 
-**Maximum Allowed: 10 functions** - The script will fail if this limit is exceeded.
+**Maximum Allowed: 12 functions** (Vercel Hobby plan limit) - The script will fail if this limit is exceeded.
 
 ## Adding New API Routes
 
@@ -66,12 +66,12 @@ When adding new API routes:
 2. **Option 2**: Create a new file with default export
    - Only if you need a completely separate function
    - **Warning**: Each default export = 1 serverless function
-   - **CRITICAL**: Current count: 1/10, so you have 9 slots remaining
-   - **DO NOT EXCEED 10 FUNCTIONS** - Always verify before adding new functions
+   - **CRITICAL**: Current count: 1/12, so you have 11 slots remaining
+   - **DO NOT EXCEED 12 FUNCTIONS** - Always verify before adding new functions
 
 ## Safeguards
 
-To prevent exceeding the 10-function limit, several safeguards are in place:
+To prevent exceeding the 12-function limit (Vercel Hobby plan), several safeguards are in place:
 
 1. **Verification Script**: Run `npm run verify:functions` to check count
 2. **Pre-commit Hook**: Automatically verifies function count before each commit (if husky is set up)
@@ -85,5 +85,5 @@ To prevent exceeding the 10-function limit, several safeguards are in place:
 - ✅ Use named exports for handler functions
 - ✅ Always run `npm run verify:functions` before adding new API files
 - ❌ Avoid creating new files with default exports unless absolutely necessary
-- ❌ Never exceed 10 serverless functions
+- ❌ Never exceed 12 serverless functions (Vercel Hobby plan limit)
 

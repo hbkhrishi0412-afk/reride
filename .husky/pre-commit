@@ -8,7 +8,7 @@ npm run verify:functions
 # If verification fails, prevent commit
 if [ $? -ne 0 ]; then
   echo "❌ Serverless function count verification failed!"
-  echo "⚠️  Commit blocked. Please reduce function count to 10 or below."
+  echo "⚠️  Commit blocked. Please reduce function count to 12 or below."
   exit 1
 fi
 
