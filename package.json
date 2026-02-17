@@ -23,6 +23,7 @@
     "perf:analyze": "node performance-optimize.js --analyze",
     "verify-deployment": "node scripts/verify-deployment.js",
     "verify-deployment:local": "node scripts/verify-deployment.js http://localhost:5173",
+    "verify:functions": "node scripts/verify-serverless-functions.js",
     "test-categories": "node scripts/test-category-sync.js",
     "test-categories:local": "node scripts/test-category-sync.js http://localhost:5173",
     "db:verify": "node verify-production-setup.js",
