@@ -332,22 +332,24 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
         cached.retryCount = 0;
         return mongooseInstance;
       })
-      .catch(async (error) => {
-        console.error(`❌ MongoDB connection error (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error.message);
+      .catch(async (error: unknown) => {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`❌ MongoDB connection error (attempt ${retryCount + 1}/${MAX_RETRIES}):`, errorMessage);
         cached.promise = null;
         cached.isConnecting = false;
 
         // Retry with exponential backoff for transient errors
         if (retryCount < MAX_RETRIES - 1) {
+          const errorObj = error instanceof Error ? error : new Error(String(error));
           const isTransientError = 
-            error.message.includes('timeout') ||
-            error.message.includes('ENOTFOUND') ||
-            error.message.includes('ECONNREFUSED') ||
-            error.message.includes('network') ||
-            error.message.includes('authentication') ||
-            error.name === 'MongoNetworkError' ||
-            error.name === 'MongoTimeoutError' ||
-            error.name === 'MongoServerSelectionError';
+            errorMessage.includes('timeout') ||
+            errorMessage.includes('ENOTFOUND') ||
+            errorMessage.includes('ECONNREFUSED') ||
+            errorMessage.includes('network') ||
+            errorMessage.includes('authentication') ||
+            errorObj.name === 'MongoNetworkError' ||
+            errorObj.name === 'MongoTimeoutError' ||
+            errorObj.name === 'MongoServerSelectionError';
 
           if (isTransientError) {
             const delay = getRetryDelay(retryCount);
