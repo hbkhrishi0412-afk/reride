@@ -109,6 +109,17 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
     const { getSupabaseClient } = await import('../lib/supabase.js');
     const supabase = getSupabaseClient();
     
+    // Check if user is authenticated (required for RLS policy)
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('❌ Authentication check failed:', authError?.message || 'User not authenticated');
+      return {
+        success: false,
+        error: 'You must be logged in to upload images. Please log in and try again.'
+      };
+    }
+    console.log(`✅ User authenticated: ${user.email}`);
+    
     // Resize image to standard dimensions before uploading
     console.log('🔄 Resizing image to fit standard dimensions...');
     const resizedFile = await resizeImage(file, 1200, 800, 0.85);
@@ -143,9 +154,15 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
       
       // Check for RLS policy errors
       if (error.message.includes('row-level security') || error.message.includes('violates row-level security policy') || error.message.includes('RLS')) {
+        console.error('❌ RLS Policy Error Details:', {
+          message: error.message,
+          statusCode: error.statusCode,
+          user: user?.email,
+          bucket: 'Images'
+        });
         return {
           success: false,
-          error: 'Storage RLS policy error. Please run the SQL script in scripts/fix-storage-rls-policies.sql to create the necessary policies.'
+          error: `Storage RLS policy error. You are authenticated (${user?.email}), but the upload was blocked by RLS policies. Please check: 1) The "Authenticated users can upload images" policy exists in Supabase, 2) The policy allows INSERT operations, 3) The bucket name matches exactly: "Images". See scripts/fix-storage-rls-policies.sql for the fix.`
         };
       }
       
