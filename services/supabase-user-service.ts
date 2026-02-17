@@ -11,8 +11,15 @@ const isServerSide = typeof window === 'undefined';
 
 // Helper to convert Supabase row to User type
 function supabaseRowToUser(row: any): User {
+  // CRITICAL FIX: Ensure id is always present - generate from email if missing
+  let userId = row.id;
+  if (!userId && row.email) {
+    userId = emailToKey(row.email);
+    console.warn(`⚠️ User row missing id, generating from email:`, { email: row.email, generatedId: userId });
+  }
+  
   return {
-    id: row.id,
+    id: userId || '', // Ensure id is never undefined
     name: row.name || '',
     email: row.email || '',
     mobile: row.mobile || '',
