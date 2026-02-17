@@ -175,5 +175,24 @@ router.get('/sessions', async (req, res) => {
   }
 });
 
-export default router;
+// Export router for use in main.ts
+export { router };
+// Also export a handler function for Vercel
+export async function handleChat(req, res) {
+  // Express router expects Express req/res, but Vercel uses its own types
+  // We need to adapt the router to work with Vercel's request/response
+  return new Promise((resolve, reject) => {
+    try {
+      router(req as any, res as any, (err?: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(undefined);
+        }
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
 

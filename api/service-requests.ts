@@ -5,7 +5,7 @@ import type { ServiceRequestPayload } from '../services/supabase-service-request
 
 // ServiceRequestPayload is now imported from the service file
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleServiceRequests(req: VercelRequest, res: VercelResponse) {
   try {
     const decoded = await verifyIdTokenFromHeader(req);
     const providerId = decoded.uid;

@@ -97,7 +97,7 @@ function getErrorStatusCode(message: string): number {
   return 500;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleServices(req: VercelRequest, res: VercelResponse) {
   try {
     const supabase = getSupabaseAdminClient();
     const authContext = await getAuthContext(req, supabase);

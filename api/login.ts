@@ -2,7 +2,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleLogin(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
