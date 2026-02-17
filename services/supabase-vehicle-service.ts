@@ -254,15 +254,53 @@ export const supabaseVehicleService = {
   async findAll(): Promise<Vehicle[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
-    const { data, error } = await supabase
-      .from('vehicles')
-      .select('*');
+    // CRITICAL FIX: Handle pagination to fetch ALL vehicles (Supabase has 1000 row limit per query)
+    // This ensures we get all vehicles even if there are more than 1000
+    const allVehicles: Vehicle[] = [];
+    const pageSize = 1000; // Supabase default limit
+    let offset = 0;
+    let hasMore = true;
     
-    if (error) {
-      throw new Error(`Failed to fetch vehicles: ${error.message}`);
+    console.log('📊 findAll: Starting to fetch all vehicles with pagination...');
+    
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*')
+        .range(offset, offset + pageSize - 1)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('❌ Supabase findAll error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          offset
+        });
+        throw new Error(`Failed to fetch vehicles: ${error.message}`);
+      }
+      
+      if (!data || data.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      const vehicles = data.map(supabaseRowToVehicle);
+      allVehicles.push(...vehicles);
+      
+      console.log(`📊 findAll: Fetched ${vehicles.length} vehicles (total so far: ${allVehicles.length})`);
+      
+      // If we got fewer than pageSize, we've reached the end
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        offset += pageSize;
+      }
     }
     
-    return (data || []).map(supabaseRowToVehicle);
+    console.log(`✅ findAll: Retrieved ${allVehicles.length} total vehicles from database`);
+    return allVehicles;
   },
 
   // Update vehicle

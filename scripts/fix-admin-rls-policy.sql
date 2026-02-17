@@ -96,3 +96,4 @@ ORDER BY policyname;
 -- This will only work if you're authenticated as an admin
 SELECT COUNT(*) as total_users FROM users;
 
+

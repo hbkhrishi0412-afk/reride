@@ -998,8 +998,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
             const fetchUsers = async () => {
                 try {
                     const { dataService } = await import('../services/dataService');
-                    const usersData = await dataService.getUsers();
-                    console.log(`✅ AdminPanel: Fetched ${usersData.length} users`);
+                    // CRITICAL FIX: Force refresh to bypass cache and get fresh data from database
+                    const usersData = await dataService.getUsers(true); // forceRefresh = true
+                    console.log(`✅ AdminPanel: Fetched ${usersData.length} users (forced refresh)`);
                     
                     // Clear any configuration errors on success
                     if (usersData.length > 0) {
@@ -1088,9 +1089,10 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         setIsRefreshing(true);
         try {
             const { dataService } = await import('../services/dataService');
+            // CRITICAL FIX: Force refresh to bypass cache and get fresh data from database
             const [vehiclesData, usersData] = await Promise.all([
-                dataService.getVehicles(true), // Pass true to get all vehicles including unpublished/sold
-                dataService.getUsers()
+                dataService.getVehicles(true, true), // includeAllStatuses=true, forceRefresh=true
+                dataService.getUsers(true) // forceRefresh=true
             ]);
             
             console.log(`🔄 Refresh: Loaded ${vehiclesData.length} vehicles and ${usersData.length} users`);

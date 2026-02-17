@@ -130,3 +130,4 @@ If users still don't appear after setting SUPABASE_SERVICE_ROLE_KEY:
 - See `PRODUCTION_USER_REGISTRATION_FIX.md` for more details on SUPABASE_SERVICE_ROLE_KEY
 - See `API_DOCUMENTATION.md` for API endpoint details
 
+

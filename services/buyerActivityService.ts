@@ -98,3 +98,4 @@ export async function updateBuyerActivityInSupabase(userId: string, updates: Par
   }
 }
 
+

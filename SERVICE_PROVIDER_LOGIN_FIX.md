@@ -124,3 +124,4 @@ return {
 - Regular sellers (without service provider profile) can still login normally
 - The check only applies to users with `role: 'seller'` to avoid unnecessary database queries
 
+

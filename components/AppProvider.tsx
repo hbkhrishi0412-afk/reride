@@ -1836,10 +1836,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         
         // Load vehicles and users in PARALLEL for faster loading (no sequential delays)
+        // CRITICAL FIX: For admin users, force refresh to bypass cache and get fresh data
         // Use Promise.allSettled to ensure both complete even if one fails
         const [vehiclesResult, usersResult] = await Promise.allSettled([
-          dataService.getVehicles(isAdmin),
-          dataService.getUsers()
+          dataService.getVehicles(isAdmin, isAdmin), // includeAllStatuses=isAdmin, forceRefresh=isAdmin
+          dataService.getUsers(isAdmin) // forceRefresh=isAdmin
         ]);
 
         if (!isSubscribed) {
