@@ -72,8 +72,13 @@ async function main() {
   const serverlessFunctions = allFiles.filter(f => f.isServerlessFunction);
   const modules = allFiles.filter(f => !f.isServerlessFunction);
 
+  // Constants
+  const MAX_FUNCTIONS = 10;
+  const currentCount = serverlessFunctions.length;
+  const statusIcon = currentCount <= MAX_FUNCTIONS ? '✅' : '❌';
+
   console.log('📊 Results:\n');
-  console.log(`✅ Serverless Functions: ${serverlessFunctions.length}/12 (Hobby plan limit)\n`);
+  console.log(`${statusIcon} Serverless Functions: ${currentCount}/${MAX_FUNCTIONS} (Maximum allowed: ${MAX_FUNCTIONS})\n`);
   
   if (serverlessFunctions.length > 0) {
     console.log('Serverless Functions (counted by Vercel):');
@@ -105,17 +110,22 @@ async function main() {
 
   // Summary
   console.log('📋 Summary:');
-  if (serverlessFunctions.length <= 12) {
-    console.log(`   ✅ You are within the Hobby plan limit (${serverlessFunctions.length}/12 functions)`);
-    if (serverlessFunctions.length === 1) {
+  // MAX_FUNCTIONS and currentCount already declared above
+  
+  if (currentCount <= MAX_FUNCTIONS) {
+    console.log(`   ✅ You are within the limit (${currentCount}/${MAX_FUNCTIONS} functions)`);
+    if (currentCount === 1) {
       console.log('   ✅ Optimal: All routes handled through single main.ts function');
+    } else if (currentCount < MAX_FUNCTIONS) {
+      console.log(`   ⚠️  Warning: ${MAX_FUNCTIONS - currentCount} function slots remaining`);
     }
   } else {
-    console.log(`   ❌ EXCEEDS LIMIT: ${serverlessFunctions.length} functions (limit: 12)`);
-    console.log('   ⚠️  You need to consolidate functions or upgrade to Pro plan');
+    console.log(`   ❌ EXCEEDS LIMIT: ${currentCount} functions (maximum: ${MAX_FUNCTIONS})`);
+    console.log('   ⚠️  You MUST consolidate functions to stay under the limit');
+    console.log('   💡 Recommendation: Move handlers to api/main.ts or api/handlers/');
   }
 
-  process.exit(serverlessFunctions.length <= 12 ? 0 : 1);
+  process.exit(currentCount <= MAX_FUNCTIONS ? 0 : 1);
 }
 
 main().catch(error => {
