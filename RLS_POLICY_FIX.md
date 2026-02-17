@@ -133,3 +133,4 @@ This mismatch causes the policy to always fail, blocking admin access.
 
 Only use Solution 2 (Fix RLS Policy) if you have a specific requirement to use RLS policies instead of service role key.
 
+

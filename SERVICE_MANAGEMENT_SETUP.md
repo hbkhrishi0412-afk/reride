@@ -141,3 +141,4 @@ If Supabase is unavailable, the app uses these fallback prices:
 - Price ranges are displayed as formatted strings
 - Services can be temporarily disabled without deleting them
 
+

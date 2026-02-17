@@ -303,37 +303,63 @@ export const supabaseUserService = {
         throw clientError;
       }
       
-      const { data, error } = await supabase
-        .from('users')
-        .select('*');
+      // CRITICAL FIX: Handle pagination to fetch ALL users (Supabase has 1000 row limit per query)
+      // This ensures we get all users even if there are more than 1000
+      const allUsers: User[] = [];
+      const pageSize = 1000; // Supabase default limit
+      let offset = 0;
+      let hasMore = true;
       
-      if (error) {
-        console.error('❌ Supabase findAll error:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
+      console.log('📊 findAll: Starting to fetch all users with pagination...');
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .range(offset, offset + pageSize - 1)
+          .order('created_at', { ascending: false });
         
-        // Provide specific guidance for RLS errors
-        if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('row-level security')) {
-          console.error('⚠️ RLS Policy Error: This indicates Row Level Security is blocking access.');
-          console.error('   Even with service role key, if RLS is misconfigured, access can be blocked.');
-          console.error('   Check if RLS is enabled and if there are SELECT policies on the users table.');
-          console.error('   Service role key should bypass RLS, but verify it is set correctly.');
+        if (error) {
+          console.error('❌ Supabase findAll error:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+            offset
+          });
+          
+          // Provide specific guidance for RLS errors
+          if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('row-level security')) {
+            console.error('⚠️ RLS Policy Error: This indicates Row Level Security is blocking access.');
+            console.error('   Even with service role key, if RLS is misconfigured, access can be blocked.');
+            console.error('   Check if RLS is enabled and if there are SELECT policies on the users table.');
+            console.error('   Service role key should bypass RLS, but verify it is set correctly.');
+          }
+          
+          throw new Error(`Failed to fetch users from Supabase: ${error.message} (Code: ${error.code || 'unknown'})`);
         }
         
-        throw new Error(`Failed to fetch users from Supabase: ${error.message} (Code: ${error.code || 'unknown'})`);
+        if (!data || data.length === 0) {
+          hasMore = false;
+          break;
+        }
+        
+        const users = data.map(supabaseRowToUser);
+        allUsers.push(...users);
+        
+        console.log(`📊 findAll: Fetched ${users.length} users (total so far: ${allUsers.length})`);
+        
+        // If we got fewer than pageSize, we've reached the end
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          offset += pageSize;
+        }
       }
       
-      if (!data) {
-        console.warn('⚠️ Supabase findAll returned null/undefined data');
-        return [];
-      }
+      console.log(`✅ Supabase findAll: Retrieved ${allUsers.length} total users from database`);
       
-      console.log(`✅ Supabase findAll: Retrieved ${data.length} raw rows from database`);
-      
-      if (data.length === 0 && isServerSide) {
+      if (allUsers.length === 0 && isServerSide) {
         console.warn('⚠️ WARNING: Admin client returned 0 users. This might indicate:');
         console.warn('   1. No users exist in the database (check Supabase dashboard)');
         console.warn('   2. RLS policies are blocking access (unlikely with service role key)');
@@ -341,10 +367,7 @@ export const supabaseUserService = {
         console.warn('   4. Service role key is not being used correctly');
       }
       
-      const users = data.map(supabaseRowToUser);
-      console.log(`✅ Supabase findAll: Converted ${users.length} rows to User objects`);
-      
-      return users;
+      return allUsers;
     } catch (error) {
       console.error('❌ findAll: Exception caught:', error);
       throw error;

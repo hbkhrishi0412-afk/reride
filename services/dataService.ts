@@ -285,17 +285,18 @@ class DataService {
   }
 
   // Vehicle operations
-  async getVehicles(includeAllStatuses: boolean = false): Promise<Vehicle[]> {
+  async getVehicles(includeAllStatuses: boolean = false, forceRefresh: boolean = false): Promise<Vehicle[]> {
     if (this.isDevelopment) {
       return this.getVehiclesLocal();
     }
 
-    // STEP 1: Check cache first for instant response
+    // STEP 1: Check cache first for instant response (unless forceRefresh is true)
     const cacheKey = 'reRideVehicles_prod';
     const cachedVehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
     
-      // If we have cached data, return it immediately and fetch fresh data in background
-      if (cachedVehicles.length > 0) {
+      // CRITICAL FIX: For admin operations, bypass cache and fetch fresh data
+      // If we have cached data and NOT forcing refresh, return it immediately and fetch fresh data in background
+      if (cachedVehicles.length > 0 && !forceRefresh) {
         // Fetch fresh data in background (don't await) - use pagination for speed
         // IMPORTANT: Refresh full dataset in background to avoid replacing cache with a partial page.
         const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0&skipExpiryCheck=true';
@@ -351,10 +352,26 @@ class DataService {
         throw new Error('Invalid response format: expected array');
       }
       
-      console.log(`✅ Loaded ${vehicles.length} vehicles from production API (response type: ${Array.isArray(response) ? 'array' : 'paginated'})`);
+      console.log(`✅ Loaded ${vehicles.length} vehicles from production API (response type: ${Array.isArray(response) ? 'array' : 'paginated'}${forceRefresh ? ', forced refresh' : ''})`);
       
       if (vehicles.length === 0) {
-        console.warn('⚠️ API returned 0 vehicles. Check if there are published vehicles in the database.');
+        console.warn('⚠️ API returned 0 vehicles. This might indicate:');
+        console.warn('   1. No vehicles exist in the database');
+        console.warn('   2. All vehicles are filtered out (check status filters)');
+        console.warn('   3. Database connection issue');
+        console.warn('   4. Authentication/authorization issue');
+        if (includeAllStatuses) {
+          console.warn('   5. Admin query might be failing - check SUPABASE_SERVICE_ROLE_KEY');
+        }
+      } else {
+        // Log breakdown by status for admin queries
+        if (includeAllStatuses) {
+          const statusCounts = vehicles.reduce((acc, v) => {
+            acc[v.status] = (acc[v.status] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          console.log(`📊 Vehicle status breakdown:`, statusCounts);
+        }
       }
       
       // Cache the API data
@@ -610,9 +627,46 @@ class DataService {
   }
 
   // User operations
-  async getUsers(): Promise<User[]> {
+  async getUsers(forceRefresh: boolean = false): Promise<User[]> {
     if (this.isDevelopment) {
       return this.getUsersLocal();
+    }
+
+    // CRITICAL FIX: For admin operations, bypass cache and fetch fresh data
+    const cacheKey = 'reRideUsers_prod';
+    const cachedUsers = this.getLocalStorageData<User[]>(cacheKey, []);
+    
+    // If we have cached data and NOT forcing refresh, return it immediately and fetch fresh data in background
+    if (cachedUsers.length > 0 && !forceRefresh) {
+      // Fetch fresh data in background (don't await)
+      this.makeApiRequest<User[] | { users?: User[]; data?: User[]; success?: boolean; reason?: string; diagnostic?: string }>('/users')
+        .then(rawResponse => {
+          // Handle response
+          if (rawResponse && typeof rawResponse === 'object' && 'success' in rawResponse && rawResponse.success === false) {
+            console.warn('⚠️ Background user refresh returned error:', rawResponse.reason);
+            return;
+          }
+          
+          const users = Array.isArray(rawResponse)
+            ? rawResponse
+            : Array.isArray(rawResponse?.users)
+              ? rawResponse.users
+              : Array.isArray(rawResponse?.data)
+                ? rawResponse.data
+                : [];
+          
+          if (Array.isArray(users) && users.length > 0) {
+            this.setLocalStorageData(cacheKey, users);
+            console.log(`✅ Background refresh: Updated cache with ${users.length} users`);
+          }
+        })
+        .catch(error => {
+          console.warn('Background user refresh failed (using cache):', error);
+        });
+      
+      // Return cached data immediately
+      console.log(`✅ Returning ${cachedUsers.length} cached users instantly`);
+      return cachedUsers;
     }
 
     try {
@@ -706,7 +760,7 @@ class DataService {
         localStorage.removeItem('reRideUsers_error');
       }
       
-      console.log(`✅ getUsers: Successfully fetched ${users.length} users from API`);
+      console.log(`✅ getUsers: Successfully fetched ${users.length} users from API${forceRefresh ? ' (forced refresh)' : ''}`);
       
       if (users.length === 0) {
         console.warn('⚠️ getUsers: API returned 0 users. This might indicate:');
