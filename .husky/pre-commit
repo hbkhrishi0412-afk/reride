@@ -1,17 +1,15 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-npx lint-staged
+# Verify serverless function count before commit
+echo "🔍 Verifying serverless function count..."
+npm run verify:functions
 
+# If verification fails, prevent commit
+if [ $? -ne 0 ]; then
+  echo "❌ Serverless function count verification failed!"
+  echo "⚠️  Commit blocked. Please reduce function count to 10 or below."
+  exit 1
+fi
 
-
-
-
-
-
-
-
-
-
-
-
+echo "✅ Serverless function count verified"

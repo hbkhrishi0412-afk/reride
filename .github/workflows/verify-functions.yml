@@ -1,0 +1,38 @@
+name: Verify Serverless Functions
+
+on:
+  pull_request:
+    paths:
+      - 'api/**'
+      - 'vercel.json'
+  push:
+    branches:
+      - main
+    paths:
+      - 'api/**'
+      - 'vercel.json'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Verify Serverless Functions
+        run: npm run verify:functions
+        
+      - name: Check Function Count
+        run: |
+          COUNT=$(node scripts/verify-serverless-functions.js 2>&1 | grep -oP 'Serverless Functions: \K\d+' | head -1)
+          if [ "$COUNT" -gt 10 ]; then
+            echo "❌ ERROR: Serverless function count ($COUNT) exceeds maximum allowed (10)"
+            exit 1
+          else
+            echo "✅ Serverless function count ($COUNT) is within limit (10)"
+          fi
+
