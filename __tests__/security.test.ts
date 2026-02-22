@@ -1,10 +1,10 @@
 import { hashPassword, validatePassword, generateAccessToken, verifyToken, sanitizeString, validateUserInput } from '../utils/security';
 import type { User } from '../types';
 
-// Mock bcrypt for testing
+// Mock bcrypt for testing. Hash must look like bcrypt (/^\$2[abxy]\$/) so validatePassword uses compare.
 jest.mock('bcryptjs', () => ({
-  hash: jest.fn().mockImplementation((password: string) => Promise.resolve(`hashed_${password}`)),
-  compare: jest.fn().mockImplementation((password: string, hash: string) => Promise.resolve(hash === `hashed_${password}`))
+  hash: jest.fn().mockImplementation((password: string) => Promise.resolve(`$2b$10$mock${password}`)),
+  compare: jest.fn().mockImplementation((password: string, hash: string) => Promise.resolve(hash === `$2b$10$mock${password}`))
 }));
 
 // Mock jsonwebtoken for testing
@@ -43,7 +43,7 @@ describe('Security Utilities', () => {
       const hash = await hashPassword(password);
       
       expect(hash).not.toBe(password);
-      expect(hash).toMatch(/^hashed_/);
+      expect(hash).toMatch(/^\$2[abxy]\$/);
     });
 
     it('should validate correct passwords', async () => {
@@ -153,35 +153,35 @@ describe('Security Utilities', () => {
   });
 
   describe('Input Sanitization', () => {
-    it('should sanitize malicious HTML', () => {
+    it('should sanitize malicious HTML', async () => {
       const maliciousInput = '<script>alert("xss")</script>Hello World';
-      const sanitized = sanitizeString(maliciousInput);
+      const sanitized = await sanitizeString(maliciousInput);
       
       expect(sanitized).not.toContain('<script>');
       expect(sanitized).toContain('Hello World');
     });
 
-    it('should escape HTML entities', () => {
+    it('should escape HTML entities', async () => {
       const input = 'Hello <world> & "quotes"';
-      const sanitized = sanitizeString(input);
+      const sanitized = await sanitizeString(input);
       
       expect(sanitized).toContain('&lt;');
       expect(sanitized).toContain('&gt;');
     });
 
-    it('should handle empty strings', () => {
-      expect(sanitizeString('')).toBe('');
+    it('should handle empty strings', async () => {
+      expect(await sanitizeString('')).toBe('');
     });
 
-    it('should handle non-string inputs', () => {
-      expect(sanitizeString(null as any)).toBe('');
-      expect(sanitizeString(undefined as any)).toBe('');
-      expect(sanitizeString(123 as any)).toBe('');
+    it('should handle non-string inputs', async () => {
+      expect(await sanitizeString(null as any)).toBe('');
+      expect(await sanitizeString(undefined as any)).toBe('');
+      expect(await sanitizeString(123 as any)).toBe('');
     });
   });
 
   describe('User Input Validation', () => {
-    it('should validate correct user input', () => {
+    it('should validate correct user input', async () => {
       const validInput = {
         email: 'test@example.com',
         password: 'SecurePass123!',
@@ -190,14 +190,14 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(validInput);
+      const result = await validateUserInput(validInput);
       
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
       expect(result.sanitizedData).toBeDefined();
     });
 
-    it('should reject invalid email', () => {
+    it('should reject invalid email', async () => {
       const invalidInput = {
         email: 'invalid-email',
         password: 'SecurePass123!',
@@ -206,13 +206,13 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(invalidInput);
+      const result = await validateUserInput(invalidInput);
       
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Valid email address is required');
     });
 
-    it('should reject weak passwords', () => {
+    it('should reject weak passwords', async () => {
       const invalidInput = {
         email: 'test@example.com',
         password: '123',
@@ -221,13 +221,13 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(invalidInput);
+      const result = await validateUserInput(invalidInput);
       
       expect(result.isValid).toBe(false);
       expect(result.errors.some(error => error.includes('Password must be at least 8 characters'))).toBe(true);
     });
 
-    it('should reject invalid mobile numbers', () => {
+    it('should reject invalid mobile numbers', async () => {
       const invalidInput = {
         email: 'test@example.com',
         password: 'SecurePass123!',
@@ -236,13 +236,13 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(invalidInput);
+      const result = await validateUserInput(invalidInput);
       
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Valid 10-digit mobile number is required');
     });
 
-    it('should reject invalid roles', () => {
+    it('should reject invalid roles', async () => {
       const invalidInput = {
         email: 'test@example.com',
         password: 'SecurePass123!',
@@ -251,13 +251,13 @@ describe('Security Utilities', () => {
         role: 'hacker'
       };
 
-      const result = validateUserInput(invalidInput);
+      const result = await validateUserInput(invalidInput);
       
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Valid role (customer, seller, admin) is required');
+      expect(result.errors.some(e => e.includes('Valid role') && e.includes('customer'))).toBe(true);
     });
 
-    it('should reject short names', () => {
+    it('should reject short names', async () => {
       const invalidInput = {
         email: 'test@example.com',
         password: 'SecurePass123!',
@@ -266,13 +266,13 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(invalidInput);
+      const result = await validateUserInput(invalidInput);
       
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Name must be at least 2 characters long');
     });
 
-    it('should reject long names', () => {
+    it('should reject long names', async () => {
       const invalidInput = {
         email: 'test@example.com',
         password: 'SecurePass123!',
@@ -281,13 +281,13 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(invalidInput);
+      const result = await validateUserInput(invalidInput);
       
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Name must be less than 100 characters');
     });
 
-    it('should detect common weak passwords', () => {
+    it('should detect common weak passwords', async () => {
       const invalidInput = {
         email: 'test@example.com',
         password: 'password',
@@ -296,13 +296,13 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(invalidInput);
+      const result = await validateUserInput(invalidInput);
       
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Password is too common, please choose a stronger password');
     });
 
-    it('should sanitize input data', () => {
+    it('should sanitize input data', async () => {
       const maliciousInput = {
         email: 'test@example.com',
         password: 'SecurePass123!',
@@ -311,7 +311,7 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(maliciousInput);
+      const result = await validateUserInput(maliciousInput);
       
       expect(result.isValid).toBe(true);
       expect(result.sanitizedData?.name).not.toContain('<script>');
@@ -319,19 +319,21 @@ describe('Security Utilities', () => {
   });
 
   describe('Security Edge Cases', () => {
-    it('should handle null and undefined inputs gracefully', () => {
-      expect(() => validateUserInput(null)).not.toThrow();
-      expect(() => validateUserInput(undefined)).not.toThrow();
+    it('should handle null and undefined inputs gracefully', async () => {
+      const nullResult = await validateUserInput(null);
+      const undefinedResult = await validateUserInput(undefined);
+      expect(nullResult.isValid).toBe(false);
+      expect(undefinedResult.isValid).toBe(false);
     });
 
-    it('should handle empty objects', () => {
-      const result = validateUserInput({});
+    it('should handle empty objects', async () => {
+      const result = await validateUserInput({});
       
       expect(result.isValid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
     });
 
-    it('should handle extremely long inputs', () => {
+    it('should handle extremely long inputs', async () => {
       const longInput = {
         email: 'test@example.com',
         password: 'SecurePass123!',
@@ -340,13 +342,13 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(longInput);
+      const result = await validateUserInput(longInput);
       
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Name must be less than 100 characters');
     });
 
-    it('should handle special characters in names', () => {
+    it('should handle special characters in names', async () => {
       const specialInput = {
         email: 'test@example.com',
         password: 'SecurePass123!',
@@ -355,7 +357,7 @@ describe('Security Utilities', () => {
         role: 'customer'
       };
 
-      const result = validateUserInput(specialInput);
+      const result = await validateUserInput(specialInput);
       
       expect(result.isValid).toBe(true);
     });

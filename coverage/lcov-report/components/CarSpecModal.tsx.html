@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/23</span>
+                <span class='fraction'>0/21</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/23</span>
+                <span class='fraction'>0/21</span>
             </div>
         
             
@@ -179,7 +179,7 @@
 <a name='L114'></a><a href='#L114'>114</a>
 <a name='L115'></a><a href='#L115'>115</a>
 <a name='L116'></a><a href='#L116'>116</a>
-<a name='L117'></a><a href='#L117'>117</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L117'></a><a href='#L117'>117</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -295,8 +295,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import React, { useEffect } from 'react';</span>
-import type { NewCarModel, NewCarVariant } from '../data/newCarsData';
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import React, { useEffect } from 'react';
+import type { NewCarModel, NewCarVariant } from '../data/newCarsData.js';
 &nbsp;
 interface CarSpecModalProps {
     car: NewCarModel;
@@ -306,7 +306,7 @@ interface CarSpecModalProps {
 &nbsp;
 const SpecSection: React.FC&lt;{ title: string, children: React.ReactNode }&gt; = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >({</span> title, children }) =&gt; (</span>
 <span class="cstat-no" title="statement not covered" >    &lt;div&gt;</span>
-        &lt;h3 className="text-lg font-bold text-spinny-text-dark dark:text-spinny-text-dark mb-2 border-b border-gray-200-200 dark:border-gray-200-200 pb-1"&gt;
+        &lt;h3 className="text-lg font-bold text-reride-text-dark dark:text-reride-text-dark mb-2 border-b border-gray-200-200 dark:border-gray-200-200 pb-1"&gt;
             {title}
         &lt;/h3&gt;
         {children}
@@ -314,18 +314,18 @@ const SpecSection: React.FC&lt;{ title: string, children: React.ReactNode }&gt; 
 );
 &nbsp;
 const SpecDetail: React.FC&lt;{ label: string, value: string | number | undefined }&gt; = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >({</span> label, value }) =&gt; (</span>
-<span class="cstat-no" title="statement not covered" >    &lt;div className="flex justify-between py-1.5 px-2 rounded hover:bg-spinny-off-white dark:hover:bg-brand-gray-700"&gt;</span>
-        &lt;dt className="text-sm text-brand-gray-600 dark:text-spinny-text"&gt;{label}&lt;/dt&gt;
-        &lt;dd className="text-sm font-semibold text-spinny-text-dark dark:text-brand-gray-200 text-right"&gt;{value || '-'}&lt;/dd&gt;
+<span class="cstat-no" title="statement not covered" >    &lt;div className="flex justify-between py-1.5 px-2 rounded hover:bg-reride-off-white dark:hover:bg-brand-gray-700"&gt;</span>
+        &lt;dt className="text-sm text-brand-gray-600 dark:text-reride-text"&gt;{label}&lt;/dt&gt;
+        &lt;dd className="text-sm font-semibold text-reride-text-dark dark:text-brand-gray-200 text-right"&gt;{value || '-'}&lt;/dd&gt;
     &lt;/div&gt;
 );
 &nbsp;
 const FeatureList: React.FC&lt;{ features: string[] }&gt; = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >({</span> features }) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (features.length === 0) {</span>
-<span class="cstat-no" title="statement not covered" >        return &lt;p className="text-sm text-spinny-text italic"&gt;No features listed for this category.&lt;/p&gt;;</span>
+<span class="cstat-no" title="statement not covered" >        return &lt;p className="text-sm text-reride-text italic"&gt;No features listed for this category.&lt;/p&gt;;</span>
     }
 <span class="cstat-no" title="statement not covered" >    return (</span>
-        &lt;ul className="list-disc list-inside space-y-1 text-sm text-spinny-text-dark dark:text-spinny-text-dark"&gt;
+        &lt;ul className="list-disc list-inside space-y-1 text-sm text-reride-text-dark dark:text-reride-text-dark"&gt;
             {features.map(<span class="fstat-no" title="function not covered" >feature </span>=&gt; <span class="cstat-no" title="statement not covered" >&lt;li key={feature}&gt;{f</span>eature}&lt;/li&gt;)}
         &lt;/ul&gt;
     );
@@ -359,12 +359,12 @@ const CarSpecModal: React.FC&lt;CarSpecModalProps&gt; = <span class="cstat-no" t
                 {/* Header */}
                 &lt;div className="p-4 border-b border-gray-200-200 dark:border-gray-200-200 flex justify-between items-center flex-shrink-0"&gt;
                     &lt;div&gt;
-                        &lt;h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark"&gt;
+                        &lt;h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark"&gt;
                             {car.brand_name} {car.model_name}
                         &lt;/h2&gt;
-                        &lt;p className="text-md text-brand-gray-600 dark:text-spinny-text-dark"&gt;{variant.variant_name}&lt;/p&gt;
+                        &lt;p className="text-md text-brand-gray-600 dark:text-reride-text-dark"&gt;{variant.variant_name}&lt;/p&gt;
                     &lt;/div&gt;
-                    &lt;button onClick={onClose} className="text-gray-400 hover:text-spinny-text-dark dark:hover:text-white text-3xl"&gt;&amp;times;&lt;/button&gt;
+                    &lt;button onClick={onClose} className="text-gray-400 hover:text-reride-text-dark dark:hover:text-white text-3xl"&gt;&amp;times;&lt;/button&gt;
                 &lt;/div&gt;
 &nbsp;
                 {/* Body */}
@@ -411,14 +411,14 @@ const CarSpecModal: React.FC&lt;CarSpecModalProps&gt; = <span class="cstat-no" t
     );
 };
 &nbsp;
-<span class="cstat-no" title="statement not covered" >export default CarSpecModal;</span></pre></td></tr></table></pre>
+export default CarSpecModal;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:57.438Z
+                at 2026-02-22T18:07:11.112Z
             </div>
         <script src="../prettify.js"></script>
         <script>

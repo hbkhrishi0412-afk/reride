@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/26</span>
+                <span class='fraction'>0/24</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/26</span>
+                <span class='fraction'>0/24</span>
             </div>
         
             
@@ -296,7 +296,21 @@
 <a name='L231'></a><a href='#L231'>231</a>
 <a name='L232'></a><a href='#L232'>232</a>
 <a name='L233'></a><a href='#L233'>233</a>
-<a name='L234'></a><a href='#L234'>234</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L234'></a><a href='#L234'>234</a>
+<a name='L235'></a><a href='#L235'>235</a>
+<a name='L236'></a><a href='#L236'>236</a>
+<a name='L237'></a><a href='#L237'>237</a>
+<a name='L238'></a><a href='#L238'>238</a>
+<a name='L239'></a><a href='#L239'>239</a>
+<a name='L240'></a><a href='#L240'>240</a>
+<a name='L241'></a><a href='#L241'>241</a>
+<a name='L242'></a><a href='#L242'>242</a>
+<a name='L243'></a><a href='#L243'>243</a>
+<a name='L244'></a><a href='#L244'>244</a>
+<a name='L245'></a><a href='#L245'>245</a>
+<a name='L246'></a><a href='#L246'>246</a>
+<a name='L247'></a><a href='#L247'>247</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -527,10 +541,23 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import React, { useState } from 'react';</span>
-import type { Vehicle, User } from '../types';
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import React, { useState } from 'react';
+import type { Vehicle, User } from '../types.js';
+import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
 &nbsp;
 interface SellerContactCardProps {
   vehicle: Vehicle;
@@ -593,7 +620,7 @@ const SellerContactCard: React.FC&lt;SellerContactCardProps&gt; = <span class="c
     &lt;div className="bg-white dark:bg-brand-gray-800 rounded-xl shadow-soft-lg p-6 sticky top-24"&gt;
       {/* Price */}
       &lt;div className="mb-6"&gt;
-        &lt;p className="text-4xl font-extrabold text-spinny-orange mb-2"&gt;
+        &lt;p className="text-4xl font-extrabold text-reride-orange mb-2"&gt;
           ₹{vehicle.price.toLocaleString('en-IN')}
         &lt;/p&gt;
         &lt;div className="flex flex-wrap gap-2"&gt;
@@ -630,12 +657,12 @@ const SellerContactCard: React.FC&lt;SellerContactCardProps&gt; = <span class="c
               className="w-12 h-12 rounded-full object-cover"
             /&gt;
           ) : (
-            &lt;div className="w-12 h-12 rounded-full bg-spinny-orange text-white flex items-center justify-center text-lg font-bold"&gt;
+            &lt;div className="w-12 h-12 rounded-full bg-reride-orange text-white flex items-center justify-center text-lg font-bold"&gt;
               {seller.name.charAt(0).toUpperCase()}
             &lt;/div&gt;
           )}
           &lt;div className="flex-1"&gt;
-            &lt;h3 className="font-bold text-spinny-text-dark dark:text-spinny-text"&gt;
+            &lt;h3 className="font-bold text-reride-text-dark dark:text-reride-text"&gt;
               {seller.dealershipName || seller.name}
             &lt;/h3&gt;
             &lt;div className="flex flex-wrap items-center gap-2 mt-1"&gt;
@@ -665,25 +692,37 @@ const SellerContactCard: React.FC&lt;SellerContactCardProps&gt; = <span class="c
         &lt;div className="grid grid-cols-2 gap-3 text-sm"&gt;
           &lt;div&gt;
             &lt;p className="text-gray-600 dark:text-gray-400"&gt;Response Time&lt;/p&gt;
-            &lt;p className="font-semibold text-spinny-text-dark dark:text-spinny-text"&gt;
+            &lt;p className="font-semibold text-reride-text-dark dark:text-reride-text"&gt;
               {responseTime}
             &lt;/p&gt;
           &lt;/div&gt;
           &lt;div&gt;
             &lt;p className="text-gray-600 dark:text-gray-400"&gt;Response Rate&lt;/p&gt;
-            &lt;p className="font-semibold text-spinny-text-dark dark:text-spinny-text"&gt;
+            &lt;p className="font-semibold text-reride-text-dark dark:text-reride-text"&gt;
               {seller.responseRate ? `${seller.responseRate}%` : 'N/A'}
             &lt;/p&gt;
           &lt;/div&gt;
           &lt;div&gt;
+            &lt;p className="text-gray-600 dark:text-gray-400"&gt;Followers&lt;/p&gt;
+            &lt;p className="font-semibold text-reride-text-dark dark:text-reride-text"&gt;
+              {getFollowersCount(seller.email)}
+            &lt;/p&gt;
+          &lt;/div&gt;
+          &lt;div&gt;
+            &lt;p className="text-gray-600 dark:text-gray-400"&gt;Following&lt;/p&gt;
+            &lt;p className="font-semibold text-reride-text-dark dark:text-reride-text"&gt;
+              {getFollowingCount(seller.email)}
+            &lt;/p&gt;
+          &lt;/div&gt;
+          &lt;div&gt;
             &lt;p className="text-gray-600 dark:text-gray-400"&gt;Member Since&lt;/p&gt;
-            &lt;p className="font-semibold text-spinny-text-dark dark:text-spinny-text"&gt;
+            &lt;p className="font-semibold text-reride-text-dark dark:text-reride-text"&gt;
               {new Date(seller.joinedDate || seller.createdAt).getFullYear()}
             &lt;/p&gt;
           &lt;/div&gt;
           &lt;div&gt;
             &lt;p className="text-gray-600 dark:text-gray-400"&gt;Active Listings&lt;/p&gt;
-            &lt;p className="font-semibold text-spinny-text-dark dark:text-spinny-text"&gt;
+            &lt;p className="font-semibold text-reride-text-dark dark:text-reride-text"&gt;
               {seller.activeListings || 0}
             &lt;/p&gt;
           &lt;/div&gt;
@@ -709,7 +748,7 @@ const SellerContactCard: React.FC&lt;SellerContactCardProps&gt; = <span class="c
             {!showPhone ? (
               &lt;button
                 onClick={handleShowPhone}
-                className="w-full bg-white border-2 border-spinny-orange text-spinny-orange font-bold py-3 px-6 rounded-lg text-lg hover:bg-spinny-orange hover:text-white transition-all flex items-center justify-center gap-2"
+                className="w-full bg-white border-2 border-reride-orange text-reride-orange font-bold py-3 px-6 rounded-lg text-lg hover:bg-reride-orange hover:text-white transition-all flex items-center justify-center gap-2"
               &gt;
                 &lt;svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;
                   &lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /&gt;
@@ -760,7 +799,7 @@ const SellerContactCard: React.FC&lt;SellerContactCardProps&gt; = <span class="c
   );
 };
 &nbsp;
-<span class="cstat-no" title="statement not covered" >export default SellerContactCard;</span>
+export default SellerContactCard;
 &nbsp;
 &nbsp;</pre></td></tr></table></pre>
 
@@ -769,7 +808,7 @@ const SellerContactCard: React.FC&lt;SellerContactCardProps&gt; = <span class="c
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:57.438Z
+                at 2026-02-22T18:07:11.112Z
             </div>
         <script src="../prettify.js"></script>
         <script>

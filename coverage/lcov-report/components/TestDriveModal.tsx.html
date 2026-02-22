@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/28</span>
+                <span class='fraction'>0/26</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/22</span>
+                <span class='fraction'>0/20</span>
             </div>
         
             
@@ -143,7 +143,7 @@
 <a name='L78'></a><a href='#L78'>78</a>
 <a name='L79'></a><a href='#L79'>79</a>
 <a name='L80'></a><a href='#L80'>80</a>
-<a name='L81'></a><a href='#L81'>81</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L81'></a><a href='#L81'>81</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -223,7 +223,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import React, { useState } from 'react';</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import React, { useState } from 'react';
 &nbsp;
 interface TestDriveModalProps {
   onClose: () =&gt; void;
@@ -256,15 +256,15 @@ const TestDriveModal: React.FC&lt;TestDriveModalProps&gt; = <span class="cstat-n
         &lt;form onSubmit={handleSubmit}&gt;
           &lt;div className="p-6"&gt;
             &lt;div className="flex justify-between items-center mb-4"&gt;
-              &lt;h2 className="text-2xl font-bold text-spinny-text-dark dark:text-spinny-text-dark"&gt;Book a Test Drive&lt;/h2&gt;
-              &lt;button type="button" onClick={onClose} className="text-gray-400 hover:text-spinny-text-dark dark:hover:text-white text-3xl"&gt;&amp;times;&lt;/button&gt;
+              &lt;h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark"&gt;Book a Test Drive&lt;/h2&gt;
+              &lt;button type="button" onClick={onClose} className="text-gray-400 hover:text-reride-text-dark dark:hover:text-white text-3xl"&gt;&amp;times;&lt;/button&gt;
             &lt;/div&gt;
-            &lt;p className="text-brand-gray-600 dark:text-spinny-text mb-6"&gt;
+            &lt;p className="text-brand-gray-600 dark:text-reride-text mb-6"&gt;
               Select your preferred date and time. The seller will confirm your request via chat.
             &lt;/p&gt;
             &lt;div className="space-y-4"&gt;
               &lt;div&gt;
-                &lt;label htmlFor="test-drive-date" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark"&gt;Preferred Date&lt;/label&gt;
+                &lt;label htmlFor="test-drive-date" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark"&gt;Preferred Date&lt;/label&gt;
                 &lt;input
                   type="date"
                   id="test-drive-date"
@@ -272,21 +272,21 @@ const TestDriveModal: React.FC&lt;TestDriveModalProps&gt; = <span class="cstat-n
                   onChange={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >setDate(e.target.value)}</span>
                   min={getTodayString()}
                   required
-                  className="mt-1 w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg bg-white dark:bg-brand-gray-700" onFocus={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >e.currentTarget.style.borderColor = 'var(--spinny-orange)'; <span class="cstat-no" title="statement not covered" ></span>e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; </span>}} onBlur={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >e.currentTarget.style.borderColor = ''; <span class="cstat-no" title="statement not covered" ></span>e.currentTarget.style.boxShadow = ''; </span>}}
+                  className="mt-1 w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg bg-white dark:bg-brand-gray-700" onFocus={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >e.currentTarget.style.borderColor = 'var(--reride-orange)'; <span class="cstat-no" title="statement not covered" ></span>e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; </span>}} onBlur={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >e.currentTarget.style.borderColor = ''; <span class="cstat-no" title="statement not covered" ></span>e.currentTarget.style.boxShadow = ''; </span>}}
                 /&gt;
               &lt;/div&gt;
               &lt;div&gt;
-                &lt;label htmlFor="test-drive-time" className="block text-sm font-medium text-spinny-text-dark dark:text-spinny-text-dark"&gt;Preferred Time&lt;/label&gt;
+                &lt;label htmlFor="test-drive-time" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark"&gt;Preferred Time&lt;/label&gt;
                 &lt;input
                   type="time"
                   id="test-drive-time"
                   value={time}
                   onChange={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >setTime(e.target.value)}</span>
                   required
-                  className="mt-1 w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg bg-white dark:bg-brand-gray-700" onFocus={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >e.currentTarget.style.borderColor = 'var(--spinny-orange)'; <span class="cstat-no" title="statement not covered" ></span>e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; </span>}} onBlur={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >e.currentTarget.style.borderColor = ''; <span class="cstat-no" title="statement not covered" ></span>e.currentTarget.style.boxShadow = ''; </span>}}
+                  className="mt-1 w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg bg-white dark:bg-brand-gray-700" onFocus={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >e.currentTarget.style.borderColor = 'var(--reride-orange)'; <span class="cstat-no" title="statement not covered" ></span>e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; </span>}} onBlur={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; { <span class="cstat-no" title="statement not covered" >e.currentTarget.style.borderColor = ''; <span class="cstat-no" title="statement not covered" ></span>e.currentTarget.style.boxShadow = ''; </span>}}
                 /&gt;
               &lt;/div&gt;
-              {error &amp;&amp; &lt;p className="text-sm text-spinny-orange"&gt;{error}&lt;/p&gt;}
+              {error &amp;&amp; &lt;p className="text-sm text-reride-orange"&gt;{error}&lt;/p&gt;}
             &lt;/div&gt;
           &lt;/div&gt;
           &lt;div className="bg-white dark:bg-white/50 px-6 py-4 flex justify-end rounded-b-xl"&gt;
@@ -303,14 +303,14 @@ const TestDriveModal: React.FC&lt;TestDriveModalProps&gt; = <span class="cstat-n
   );
 };
 &nbsp;
-<span class="cstat-no" title="statement not covered" >export default TestDriveModal;</span></pre></td></tr></table></pre>
+export default TestDriveModal;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:57.438Z
+                at 2026-02-22T18:07:11.112Z
             </div>
         <script src="../prettify.js"></script>
         <script>

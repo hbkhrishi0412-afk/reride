@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/104</span>
+                <span class='fraction'>0/101</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/92</span>
+                <span class='fraction'>0/90</span>
             </div>
         
             
@@ -255,10 +255,10 @@
 <a name='L190'></a><a href='#L190'>190</a>
 <a name='L191'></a><a href='#L191'>191</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -445,10 +445,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">&nbsp;
 &nbsp;
-<span class="cstat-no" title="statement not covered" >import React, { useState, useCallback } from 'react';</span>
+import React, { useState, useCallback } from 'react';
 import type { VehicleData } from '../types';
 import type { VehicleMake, VehicleModel } from './vehicleData';
-<span class="cstat-no" title="statement not covered" >import { VEHICLE_DATA } from './vehicleData';</span>
+import { VEHICLE_DATA } from './vehicleData';
 &nbsp;
 interface BulkUploadModalProps {
     onClose: () =&gt; void;
@@ -478,7 +478,7 @@ const parseCSV = <span class="cstat-no" title="statement not covered" ><span cla
 };
 &nbsp;
 &nbsp;
-export const <span class="cstat-no" title="statement not covered" >VehicleDataBulkUploadModal: React.FC&lt;BulkUploadModalProps&gt; = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>{</span> onClose, onUpdateData }) =&gt; {</span>
+export const VehicleDataBulkUploadModal: React.FC&lt;BulkUploadModalProps&gt; = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >({</span> onClose, onUpdateData }) =&gt; {</span>
     const [step, setStep] = <span class="cstat-no" title="statement not covered" >useState(1);</span>
     const [file, setFile] = <span class="cstat-no" title="statement not covered" >useState&lt;File | null&gt;(null);</span>
     const [parsedData, setParsedData] = <span class="cstat-no" title="statement not covered" >useState&lt;VehicleData | null&gt;(null);</span>
@@ -592,8 +592,8 @@ export const <span class="cstat-no" title="statement not covered" >VehicleDataBu
         &lt;div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}&gt;
             &lt;div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={<span class="fstat-no" title="function not covered" >e </span>=&gt; <span class="cstat-no" title="statement not covered" >e.stopPropagation()}</span>&gt;
                 &lt;div className="p-6 border-b dark:border-gray-200-200"&gt;
-                    &lt;h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark"&gt;Bulk Upload Vehicle Data&lt;/h2&gt;
-                    &lt;p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark"&gt;Upload makes, models, and variants from a CSV file.&lt;/p&gt;
+                    &lt;h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark"&gt;Bulk Upload Vehicle Data&lt;/h2&gt;
+                    &lt;p className="text-sm text-reride-text-dark dark:text-reride-text-dark"&gt;Upload makes, models, and variants from a CSV file.&lt;/p&gt;
                 &lt;/div&gt;
 &nbsp;
                 &lt;div className="p-6 overflow-y-auto"&gt;
@@ -601,11 +601,11 @@ export const <span class="cstat-no" title="statement not covered" >VehicleDataBu
                         &lt;div className="space-y-4 text-center"&gt;
                             &lt;h3 className="font-semibold"&gt;Step 1: Prepare Your CSV File&lt;/h3&gt;
                             &lt;p&gt;Download our template, fill it with your vehicle data, and upload it here.&lt;/p&gt;
-                            &lt;button onClick={downloadTemplate} className="font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--spinny-blue)'}</span> onMouseLeave={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--spinny-orange)'}</span>&gt;Download CSV Template&lt;/button&gt;
+                            &lt;button onClick={downloadTemplate} className="font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--reride-blue)'}</span> onMouseLeave={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--reride-orange)'}</span>&gt;Download CSV Template&lt;/button&gt;
                             &lt;div className="mt-4 p-6 border-2 border-dashed border-gray-200 dark:border-gray-200-300 rounded-lg"&gt;
-                                &lt;input type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-spinny-text-dark file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:text-white" style={{ ['--file-bg' as any]: 'var(--spinny-orange)' }} /&gt;
+                                &lt;input type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-reride-text-dark file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:text-white" style={{ ['--file-bg' as any]: 'var(--reride-orange)' }} /&gt;
                             &lt;/div&gt;
-                            {error &amp;&amp; &lt;p className="text-spinny-orange text-sm mt-2"&gt;{error}&lt;/p&gt;}
+                            {error &amp;&amp; &lt;p className="text-reride-orange text-sm mt-2"&gt;{error}&lt;/p&gt;}
                         &lt;/div&gt;
                     )}
                     {step === 2 &amp;&amp; (
@@ -613,21 +613,21 @@ export const <span class="cstat-no" title="statement not covered" >VehicleDataBu
                             &lt;h3 className="font-semibold"&gt;Step 2: Review and Confirm&lt;/h3&gt;
                             {parsedData &amp;&amp; (
                                 &lt;div className="p-4 bg-white rounded-lg text-sm"&gt;
-                                    &lt;p className="font-bold text-spinny-orange dark:text-spinny-orange"&gt;
+                                    &lt;p className="font-bold text-reride-orange dark:text-reride-orange"&gt;
                                         Found {Object.keys(parsedData).length} categories with a total of {Object.values(parsedData).reduce(<span class="fstat-no" title="function not covered" >(a</span>cc: number, makes) =&gt; <span class="cstat-no" title="statement not covered" >acc + (makes as VehicleMake[]).length,</span> 0)} makes.
                                     &lt;/p&gt;
-                                    &lt;p&gt;This will &lt;span className="font-bold text-spinny-orange"&gt;overwrite&lt;/span&gt; all existing vehicle dropdown data. This action cannot be undone.&lt;/p&gt;
+                                    &lt;p&gt;This will &lt;span className="font-bold text-reride-orange"&gt;overwrite&lt;/span&gt; all existing vehicle dropdown data. This action cannot be undone.&lt;/p&gt;
                                 &lt;/div&gt;
                             )}
-                            {error &amp;&amp; &lt;p className="text-spinny-orange text-sm mt-2"&gt;{error}&lt;/p&gt;}
+                            {error &amp;&amp; &lt;p className="text-reride-orange text-sm mt-2"&gt;{error}&lt;/p&gt;}
                         &lt;/div&gt;
                     )}
                 &lt;/div&gt;
 &nbsp;
                 &lt;div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg mt-auto"&gt;
-                    &lt;button onClick={onClose} className="px-4 py-2 bg-white-dark dark:bg-white text-spinny-text-dark dark:text-spinny-text-dark rounded-md hover:bg-white dark:hover:bg-white0"&gt;Cancel&lt;/button&gt;
+                    &lt;button onClick={onClose} className="px-4 py-2 bg-white-dark dark:bg-white text-reride-text-dark dark:text-reride-text-dark rounded-md hover:bg-white dark:hover:bg-white0"&gt;Cancel&lt;/button&gt;
                     {step === 1 &amp;&amp; &lt;button onClick={handleParseAndValidate} disabled={!file} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50"&gt;Next: Review&lt;/button&gt;}
-                    {step === 2 &amp;&amp; &lt;button onClick={handleConfirm} disabled={!parsedData} className="px-4 py-2 bg-spinny-orange text-white rounded-md hover:bg-spinny-orange disabled:opacity-50"&gt;Confirm &amp; Overwrite&lt;/button&gt;}
+                    {step === 2 &amp;&amp; &lt;button onClick={handleConfirm} disabled={!parsedData} className="px-4 py-2 bg-reride-orange text-white rounded-md hover:bg-reride-orange disabled:opacity-50"&gt;Confirm &amp; Overwrite&lt;/button&gt;}
                 &lt;/div&gt;
             &lt;/div&gt;
         &lt;/div&gt;
@@ -640,7 +640,7 @@ export const <span class="cstat-no" title="statement not covered" >VehicleDataBu
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:58.293Z
+                at 2026-02-22T18:07:16.958Z
             </div>
         <script src="../prettify.js"></script>
         <script>

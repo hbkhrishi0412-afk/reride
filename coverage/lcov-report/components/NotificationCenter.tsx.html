@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/40</span>
+                <span class='fraction'>0/38</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/30</span>
+                <span class='fraction'>0/28</span>
             </div>
         
             
@@ -165,7 +165,7 @@
 <a name='L100'></a><a href='#L100'>100</a>
 <a name='L101'></a><a href='#L101'>101</a>
 <a name='L102'></a><a href='#L102'>102</a>
-<a name='L103'></a><a href='#L103'>103</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L103'></a><a href='#L103'>103</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -267,7 +267,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import React, { useMemo } from 'react';</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import React, { useMemo } from 'react';
 import type { Notification } from '../types';
 &nbsp;
 interface NotificationCenterProps {
@@ -297,29 +297,29 @@ const NotificationIcon: React.FC&lt;{ type: Notification['targetType'] }&gt; = <
         case 'conversation':
 <span class="cstat-no" title="statement not covered" >            return &lt;svg xmlns="http://www.w3.org/2000/svg" className={baseClass} style={{ color: '#1E88E5' }} fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /&gt;&lt;/svg&gt;;</span>
         case 'price_drop':
-<span class="cstat-no" title="statement not covered" >             return &lt;svg xmlns="http://www.w3.org/2000/svg" className={`${baseClass} text-spinny-orange`} fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /&gt;&lt;/svg&gt;;</span>
+<span class="cstat-no" title="statement not covered" >             return &lt;svg xmlns="http://www.w3.org/2000/svg" className={`${baseClass} text-reride-orange`} fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /&gt;&lt;/svg&gt;;</span>
         case 'insurance_expiry':
         case 'general_admin':
         case 'vehicle':
-<span class="cstat-no" title="statement not covered" >             return &lt;svg xmlns="http://www.w3.org/2000/svg" className={`${baseClass} text-spinny-text-dark`} fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /&gt;&lt;/svg&gt;;</span>
+<span class="cstat-no" title="statement not covered" >             return &lt;svg xmlns="http://www.w3.org/2000/svg" className={`${baseClass} text-reride-text-dark`} fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /&gt;&lt;/svg&gt;;</span>
         default:
-<span class="cstat-no" title="statement not covered" >            return &lt;svg xmlns="http://www.w3.org/2000/svg" className={`${baseClass} text-spinny-text-dark`} fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /&gt;&lt;/svg&gt;;</span>
+<span class="cstat-no" title="statement not covered" >            return &lt;svg xmlns="http://www.w3.org/2000/svg" className={`${baseClass} text-reride-text-dark`} fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /&gt;&lt;/svg&gt;;</span>
     }
 }
 &nbsp;
 const NotificationItem: React.FC&lt;{ notification: Notification; onClick: () =&gt; void; }&gt; = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >({</span> notification, onClick }) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    return (</span>
         &lt;li className="border-b border-gray-200-200 dark:border-gray-200-200 last:border-b-0"&gt;
-            &lt;button onClick={onClick} className="w-full text-left p-3 hover:bg-spinny-off-white dark:hover:bg-brand-gray-700 transition-colors flex items-start gap-3"&gt;
+            &lt;button onClick={onClick} className="w-full text-left p-3 hover:bg-reride-off-white dark:hover:bg-brand-gray-700 transition-colors flex items-start gap-3"&gt;
                 {!notification.isRead &amp;&amp; &lt;div className="w-2 h-2 rounded-full mt-2 flex-shrink-0" style={{ backgroundColor: '#FF6B35' }}&gt;&lt;/div&gt;}
                 &lt;div className={`flex-shrink-0 ${notification.isRead ? 'ml-4' : ''}`}&gt;
                     &lt;NotificationIcon type={notification.targetType} /&gt;
                 &lt;/div&gt;
                 &lt;div className="flex-grow"&gt;
-                    &lt;p className={`text-sm ${!notification.isRead ? 'font-semibold text-spinny-text-dark dark:text-spinny-text-dark' : 'text-brand-gray-600 dark:text-spinny-text-dark'}`}&gt;
+                    &lt;p className={`text-sm ${!notification.isRead ? 'font-semibold text-reride-text-dark dark:text-reride-text-dark' : 'text-brand-gray-600 dark:text-reride-text-dark'}`}&gt;
                         {notification.message}
                     &lt;/p&gt;
-                    &lt;p className="text-xs text-spinny-text dark:text-spinny-text mt-1"&gt;
+                    &lt;p className="text-xs text-reride-text dark:text-reride-text mt-1"&gt;
                         {timeAgo(new Date(notification.timestamp))}
                     &lt;/p&gt;
                 &lt;/div&gt;
@@ -335,9 +335,9 @@ const NotificationCenter: React.FC&lt;NotificationCenterProps&gt; = <span class=
 <span class="cstat-no" title="statement not covered" >    return (</span>
         &lt;div className="absolute top-full right-0 mt-2 w-80 md:w-96 bg-white rounded-lg shadow-2xl border dark:border-gray-200-200 animate-fade-in flex flex-col max-h-[70vh]"&gt;
             &lt;header className="p-3 border-b dark:border-gray-200-200 flex justify-between items-center"&gt;
-                &lt;h3 className="font-bold text-lg text-spinny-text-dark dark:text-white"&gt;Notifications&lt;/h3&gt;
+                &lt;h3 className="font-bold text-lg text-reride-text-dark dark:text-white"&gt;Notifications&lt;/h3&gt;
                 {unreadCount &gt; 0 &amp;&amp; (
-                    &lt;button onClick={onMarkAllAsRead} className="text-sm font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--spinny-blue)'}</span> onMouseLeave={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--spinny-orange)'}</span>&gt;
+                    &lt;button onClick={onMarkAllAsRead} className="text-sm font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--reride-blue)'}</span> onMouseLeave={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--reride-orange)'}</span>&gt;
                         Mark all as read
                     &lt;/button&gt;
                 )}
@@ -352,16 +352,16 @@ const NotificationCenter: React.FC&lt;NotificationCenterProps&gt; = <span class=
                     &lt;/ul&gt;
                 ) : (
                     &lt;div className="p-8 text-center"&gt;
-                        &lt;svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-spinny-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /&gt;&lt;/svg&gt;
-                        &lt;h4 className="mt-2 text-sm font-semibold text-spinny-text-dark dark:text-spinny-text-dark"&gt;All caught up!&lt;/h4&gt;
-                        &lt;p className="mt-1 text-xs text-spinny-text-dark dark:text-spinny-text-dark"&gt;You have no new notifications.&lt;/p&gt;
+                        &lt;svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor"&gt;&lt;path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /&gt;&lt;/svg&gt;
+                        &lt;h4 className="mt-2 text-sm font-semibold text-reride-text-dark dark:text-reride-text-dark"&gt;All caught up!&lt;/h4&gt;
+                        &lt;p className="mt-1 text-xs text-reride-text-dark dark:text-reride-text-dark"&gt;You have no new notifications.&lt;/p&gt;
                     &lt;/div&gt;
                 )}
             &lt;/div&gt;
             
             &lt;footer className="p-2 border-t dark:border-gray-200-200 text-center"&gt;
                 {/* This could eventually link to a full notifications page */}
-                &lt;button className="text-sm font-semibold hover:underline w-full p-1 rounded transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--spinny-blue)'}</span> onMouseLeave={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--spinny-orange)'}</span>&gt;
+                &lt;button className="text-sm font-semibold hover:underline w-full p-1 rounded transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--reride-blue)'}</span> onMouseLeave={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--reride-orange)'}</span>&gt;
                     View All
                 &lt;/button&gt;
             &lt;/footer&gt;
@@ -369,14 +369,14 @@ const NotificationCenter: React.FC&lt;NotificationCenterProps&gt; = <span class=
     );
 };
 &nbsp;
-<span class="cstat-no" title="statement not covered" >export default NotificationCenter;</span></pre></td></tr></table></pre>
+export default NotificationCenter;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:57.438Z
+                at 2026-02-22T18:07:11.112Z
             </div>
         <script src="../prettify.js"></script>
         <script>

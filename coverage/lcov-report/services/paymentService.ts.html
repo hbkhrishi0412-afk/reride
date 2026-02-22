@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/62</span>
+                <span class='fraction'>0/57</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/25</span>
+                <span class='fraction'>0/34</span>
             </div>
         
             
@@ -213,7 +213,8 @@
 <a name='L148'></a><a href='#L148'>148</a>
 <a name='L149'></a><a href='#L149'>149</a>
 <a name='L150'></a><a href='#L150'>150</a>
-<a name='L151'></a><a href='#L151'>151</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L151'></a><a href='#L151'>151</a>
+<a name='L152'></a><a href='#L152'>152</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -273,6 +274,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -366,7 +368,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { PaymentRequest, SubscriptionPlan } from '../types';
 &nbsp;
 // Create a payment request for plan upgrade
-export const <span class="cstat-no" title="statement not covered" >createPaymentRequest = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >a</span>sync </span>(</span>
+export const createPaymentRequest = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >async </span>(</span>
   sellerEmail: string,
   planId: SubscriptionPlan,
   amount: number,
@@ -375,7 +377,7 @@ export const <span class="cstat-no" title="statement not covered" >createPayment
   transactionId?: string
 ): Promise&lt;PaymentRequest&gt; =&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    const response = <span class="cstat-no" title="statement not covered" >await fetch('/api/payment-requests?action=create', {</span>
+    const response = <span class="cstat-no" title="statement not covered" >await fetch('/api/payments?action=create', {</span>
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -404,9 +406,9 @@ export const <span class="cstat-no" title="statement not covered" >createPayment
 };
 &nbsp;
 // Get payment request status for a seller
-export const <span class="cstat-no" title="statement not covered" >getPaymentRequestStatus = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >a</span>sync </span>(sellerEmail: string): Promise&lt;PaymentRequest | null&gt; =&gt; {</span>
+export const getPaymentRequestStatus = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >async </span>(sellerEmail: string): Promise&lt;PaymentRequest | null&gt; =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    const response = <span class="cstat-no" title="statement not covered" >await fetch(`/api/payment-requests?action=status&amp;sellerEmail=${encodeURIComponent(sellerEmail)}`);</span>
+    const response = <span class="cstat-no" title="statement not covered" >await fetch(`/api/payments?action=status&amp;sellerEmail=${encodeURIComponent(sellerEmail)}`);</span>
     
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!response.ok) {</span>
       // Check if response is JSON
@@ -423,7 +425,8 @@ export const <span class="cstat-no" title="statement not covered" >getPaymentReq
     const contentType = <span class="cstat-no" title="statement not covered" >response.headers.get('content-type');</span>
 <span class="cstat-no" title="statement not covered" >    if (contentType &amp;&amp; contentType.includes('application/json')) {</span>
       const data = <span class="cstat-no" title="statement not covered" >await response.json();</span>
-<span class="cstat-no" title="statement not covered" >      return data.paymentRequest;</span>
+      // Backend returns { paymentStatus }, normalize to PaymentRequest-like object if present
+<span class="cstat-no" title="statement not covered" >      return data.paymentRequest || data.paymentStatus || null;</span>
     } else {
 <span class="cstat-no" title="statement not covered" >      throw new Error('API returned non-JSON response');</span>
     }
@@ -434,9 +437,9 @@ export const <span class="cstat-no" title="statement not covered" >getPaymentReq
 };
 &nbsp;
 // Admin functions
-export const <span class="cstat-no" title="statement not covered" >getPaymentRequests = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >a</span>sync </span>(adminEmail: string, status?: string): Promise&lt;PaymentRequest[]&gt; =&gt; {</span>
+export const getPaymentRequests = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >async </span>(adminEmail: string, status?: string): Promise&lt;PaymentRequest[]&gt; =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    const url = <span class="cstat-no" title="statement not covered" >`/api/payment-requests?action=list&amp;adminEmail=${encodeURIComponent(adminEmail)}${status ? `&amp;status=${status}` : ''}`;</span>
+    const url = <span class="cstat-no" title="statement not covered" >`/api/payments?action=list&amp;adminEmail=${encodeURIComponent(adminEmail)}${status ? `&amp;status=${status}` : ''}`;</span>
     const response = <span class="cstat-no" title="statement not covered" >await fetch(url);</span>
     
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (!response.ok) {</span>
@@ -445,21 +448,21 @@ export const <span class="cstat-no" title="statement not covered" >getPaymentReq
     }
 &nbsp;
     const data = <span class="cstat-no" title="statement not covered" >await response.json();</span>
-<span class="cstat-no" title="statement not covered" >    return data.paymentRequests;</span>
+<span class="cstat-no" title="statement not covered" >    return data.paymentRequests || [];</span>
   } catch (error) {
 <span class="cstat-no" title="statement not covered" >    console.error('Error getting payment requests:', error);</span>
 <span class="cstat-no" title="statement not covered" >    throw error;</span>
   }
 };
 &nbsp;
-export const <span class="cstat-no" title="statement not covered" >approvePaymentRequest = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >a</span>sync </span>(</span>
+export const approvePaymentRequest = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >async </span>(</span>
   paymentRequestId: string,
   adminEmail: string,
   notes?: string
 ): Promise&lt;PaymentRequest&gt; =&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    const response = <span class="cstat-no" title="statement not covered" >await fetch('/api/payment-requests?action=approve', {</span>
-      method: 'PUT',
+    const response = <span class="cstat-no" title="statement not covered" >await fetch('/api/payments?action=approve', {</span>
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -476,21 +479,21 @@ export const <span class="cstat-no" title="statement not covered" >approvePaymen
     }
 &nbsp;
     const data = <span class="cstat-no" title="statement not covered" >await response.json();</span>
-<span class="cstat-no" title="statement not covered" >    return data.paymentRequest;</span>
+<span class="cstat-no" title="statement not covered" >    return data.paymentRequest || { id: paymentRequestId } as unknown as PaymentRequest;</span>
   } catch (error) {
 <span class="cstat-no" title="statement not covered" >    console.error('Error approving payment request:', error);</span>
 <span class="cstat-no" title="statement not covered" >    throw error;</span>
   }
 };
 &nbsp;
-export const <span class="cstat-no" title="statement not covered" >rejectPaymentRequest = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >a</span>sync </span>(</span>
+export const rejectPaymentRequest = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >async </span>(</span>
   paymentRequestId: string,
   adminEmail: string,
   rejectionReason?: string
 ): Promise&lt;PaymentRequest&gt; =&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    const response = <span class="cstat-no" title="statement not covered" >await fetch('/api/payment-requests?action=reject', {</span>
-      method: 'PUT',
+    const response = <span class="cstat-no" title="statement not covered" >await fetch('/api/payments?action=reject', {</span>
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -507,7 +510,7 @@ export const <span class="cstat-no" title="statement not covered" >rejectPayment
     }
 &nbsp;
     const data = <span class="cstat-no" title="statement not covered" >await response.json();</span>
-<span class="cstat-no" title="statement not covered" >    return data.paymentRequest;</span>
+<span class="cstat-no" title="statement not covered" >    return data.paymentRequest || { id: paymentRequestId } as unknown as PaymentRequest;</span>
   } catch (error) {
 <span class="cstat-no" title="statement not covered" >    console.error('Error rejecting payment request:', error);</span>
 <span class="cstat-no" title="statement not covered" >    throw error;</span>
@@ -520,7 +523,7 @@ export const <span class="cstat-no" title="statement not covered" >rejectPayment
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:57.438Z
+                at 2026-02-22T18:07:11.112Z
             </div>
         <script src="../prettify.js"></script>
         <script>

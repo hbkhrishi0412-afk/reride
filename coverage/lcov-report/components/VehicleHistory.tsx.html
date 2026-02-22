@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/16</span>
+                <span class='fraction'>0/14</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/16</span>
+                <span class='fraction'>0/14</span>
             </div>
         
             
@@ -135,7 +135,7 @@
 <a name='L70'></a><a href='#L70'>70</a>
 <a name='L71'></a><a href='#L71'>71</a>
 <a name='L72'></a><a href='#L72'>72</a>
-<a name='L73'></a><a href='#L73'>73</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L73'></a><a href='#L73'>73</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -207,7 +207,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import React from 'react';</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import React from 'react';
 import type { ServiceRecord, AccidentRecord } from '../types';
 &nbsp;
 interface VehicleHistoryProps {
@@ -228,7 +228,7 @@ const TimelineIcon: React.FC&lt;{ type: 'service' | 'accident' }&gt; = <span cla
     );
   }
 <span class="cstat-no" title="statement not covered" >  return (</span>
-    &lt;div className={`${baseClasses} bg-spinny-orange-light text-spinny-orange`}&gt;
+    &lt;div className={`${baseClasses} bg-reride-orange-light text-reride-orange`}&gt;
       &lt;svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"&gt;
         &lt;path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 3.001-1.742 3.001H4.42c-1.53 0-2.493-1.667-1.743-3.001l5.58-9.92zM10 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /&gt;
       &lt;/svg&gt;
@@ -245,15 +245,15 @@ const VehicleHistory: React.FC&lt;VehicleHistoryProps&gt; = <span class="cstat-n
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (combinedHistory.length === 0) {</span>
 <span class="cstat-no" title="statement not covered" >    return (</span>
       &lt;div className="p-6 bg-white rounded-xl shadow-soft"&gt;
-        &lt;h3 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-4 border-b dark:border-gray-200-200 pb-2"&gt;Vehicle History&lt;/h3&gt;
-        &lt;p className="text-center text-spinny-text dark:text-spinny-text py-8"&gt;No service or accident history available for this vehicle.&lt;/p&gt;
+        &lt;h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4 border-b dark:border-gray-200-200 pb-2"&gt;Vehicle History&lt;/h3&gt;
+        &lt;p className="text-center text-reride-text dark:text-reride-text py-8"&gt;No service or accident history available for this vehicle.&lt;/p&gt;
       &lt;/div&gt;
     );
   }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  return (</span>
     &lt;div className="p-6 bg-white rounded-xl shadow-soft"&gt;
-      &lt;h3 className="text-xl font-semibold text-spinny-text-dark dark:text-spinny-text-dark mb-6 border-b dark:border-gray-200-200 pb-2"&gt;Vehicle History&lt;/h3&gt;
+      &lt;h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-6 border-b dark:border-gray-200-200 pb-2"&gt;Vehicle History&lt;/h3&gt;
       &lt;ol className="relative border-l border-gray-200 dark:border-gray-200-200 ml-5"&gt;
         {combinedHistory.map(<span class="fstat-no" title="function not covered" >(i</span>tem, index) =&gt; (
 <span class="cstat-no" title="statement not covered" >          &lt;li key={index} c</span>lassName="mb-10 ml-8"&gt;
@@ -262,13 +262,13 @@ const VehicleHistory: React.FC&lt;VehicleHistoryProps&gt; = <span class="cstat-n
             &lt;/span&gt;
             &lt;div className="p-4 bg-white dark:bg-white/50 border border-gray-200-200 dark:border-gray-200-200 rounded-lg shadow-sm"&gt;
                 &lt;div className="flex justify-between items-center mb-2"&gt;
-                    &lt;time className="text-sm font-normal leading-none text-spinny-text-dark dark:text-spinny-text-dark"&gt;{new Date(item.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}&lt;/time&gt;
-                    {item.type === 'accident' &amp;&amp; &lt;span className="bg-spinny-orange-light text-spinny-orange text-xs font-semibold px-2.5 py-0.5 rounded dark:bg-spinny-orange dark:text-spinny-orange"&gt;{item.severity}&lt;/span&gt;}
+                    &lt;time className="text-sm font-normal leading-none text-reride-text-dark dark:text-reride-text-dark"&gt;{new Date(item.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}&lt;/time&gt;
+                    {item.type === 'accident' &amp;&amp; &lt;span className="bg-reride-orange-light text-reride-orange text-xs font-semibold px-2.5 py-0.5 rounded dark:bg-reride-orange dark:text-reride-orange"&gt;{item.severity}&lt;/span&gt;}
                 &lt;/div&gt;
-                &lt;h4 className="text-lg font-semibold text-spinny-text-dark dark:text-white"&gt;
+                &lt;h4 className="text-lg font-semibold text-reride-text-dark dark:text-white"&gt;
                     {item.type === 'service' ? item.service : 'Accident Reported'}
                 &lt;/h4&gt;
-                &lt;p className="text-base font-normal text-spinny-text-dark dark:text-spinny-text-dark"&gt;
+                &lt;p className="text-base font-normal text-reride-text-dark dark:text-reride-text-dark"&gt;
                     {item.type === 'service' ? `At ${item.mileage.toLocaleString('en-IN')} kms in ${item.location}` : item.description}
                 &lt;/p&gt;
             &lt;/div&gt;
@@ -279,14 +279,14 @@ const VehicleHistory: React.FC&lt;VehicleHistoryProps&gt; = <span class="cstat-n
   );
 };
 &nbsp;
-<span class="cstat-no" title="statement not covered" >export default VehicleHistory;</span></pre></td></tr></table></pre>
+export default VehicleHistory;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:57.438Z
+                at 2026-02-22T18:07:11.112Z
             </div>
         <script src="../prettify.js"></script>
         <script>

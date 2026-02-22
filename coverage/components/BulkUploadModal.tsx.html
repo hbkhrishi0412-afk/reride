@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/72</span>
+                <span class='fraction'>0/70</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/67</span>
+                <span class='fraction'>0/65</span>
             </div>
         
             
@@ -252,7 +252,7 @@
 <a name='L187'></a><a href='#L187'>187</a>
 <a name='L188'></a><a href='#L188'>188</a>
 <a name='L189'></a><a href='#L189'>189</a>
-<a name='L190'></a><a href='#L190'>190</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
+<a name='L190'></a><a href='#L190'>190</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -441,7 +441,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import React, { useState, useCallback } from 'react';</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import React, { useState, useCallback } from 'react';
 import type { Vehicle } from '../types';
 import { VehicleCategory } from '../types';
 &nbsp;
@@ -585,8 +585,8 @@ const BulkUploadModal: React.FC&lt;BulkUploadModalProps&gt; = <span class="cstat
         &lt;div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}&gt;
             &lt;div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={<span class="fstat-no" title="function not covered" >e </span>=&gt; <span class="cstat-no" title="statement not covered" >e.stopPropagation()}</span>&gt;
                 &lt;div className="p-6 border-b dark:border-gray-200-200"&gt;
-                    &lt;h2 className="text-xl font-bold text-spinny-text-dark dark:text-spinny-text-dark"&gt;Bulk Upload Vehicles&lt;/h2&gt;
-                    &lt;p className="text-sm text-spinny-text-dark dark:text-spinny-text-dark"&gt;Upload multiple listings at once using a CSV file.&lt;/p&gt;
+                    &lt;h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark"&gt;Bulk Upload Vehicles&lt;/h2&gt;
+                    &lt;p className="text-sm text-reride-text-dark dark:text-reride-text-dark"&gt;Upload multiple listings at once using a CSV file.&lt;/p&gt;
                 &lt;/div&gt;
 &nbsp;
                 &lt;div className="p-6 overflow-y-auto"&gt;
@@ -594,9 +594,9 @@ const BulkUploadModal: React.FC&lt;BulkUploadModalProps&gt; = <span class="cstat
                         &lt;div className="space-y-4 text-center"&gt;
                             &lt;h3 className="font-semibold"&gt;Step 1: Prepare Your CSV File&lt;/h3&gt;
                             &lt;p&gt;Download our template, fill it with your vehicle data, and upload it here.&lt;/p&gt;
-                            &lt;button onClick={downloadTemplate} className="font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--spinny-blue)'}</span> onMouseLeave={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--spinny-orange)'}</span>&gt;Download CSV Template&lt;/button&gt;
+                            &lt;button onClick={downloadTemplate} className="font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--reride-blue)'}</span> onMouseLeave={<span class="fstat-no" title="function not covered" >(e</span>) =&gt; <span class="cstat-no" title="statement not covered" >e.currentTarget.style.color = 'var(--reride-orange)'}</span>&gt;Download CSV Template&lt;/button&gt;
                             &lt;div className="mt-4 p-6 border-2 border-dashed border-gray-200 dark:border-gray-200-300 rounded-lg"&gt;
-                                &lt;input type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-spinny-text-dark file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:text-white" style={{ ['--file-bg' as any]: 'var(--spinny-orange)', ['--file-hover-bg' as any]: 'var(--spinny-blue)' }} /&gt;
+                                &lt;input type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-reride-text-dark file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:text-white" style={{ ['--file-bg' as any]: 'var(--reride-orange)', ['--file-hover-bg' as any]: 'var(--reride-blue)' }} /&gt;
                             &lt;/div&gt;
                         &lt;/div&gt;
                     )}
@@ -604,13 +604,13 @@ const BulkUploadModal: React.FC&lt;BulkUploadModalProps&gt; = <span class="cstat
                         &lt;div className="space-y-4"&gt;
                             &lt;h3 className="font-semibold"&gt;Step 2: Review and Confirm&lt;/h3&gt;
                             &lt;div className="p-4 bg-white rounded-lg"&gt;
-                                &lt;p className="font-bold text-spinny-orange dark:text-spinny-orange"&gt;{parsedData.length} vehicles ready for upload.&lt;/p&gt;
-                                {errors.length &gt; 0 &amp;&amp; &lt;p className="font-bold text-spinny-orange dark:text-spinny-orange mt-2"&gt;{errors.length} rows have errors and will be skipped.&lt;/p&gt;}
+                                &lt;p className="font-bold text-reride-orange dark:text-reride-orange"&gt;{parsedData.length} vehicles ready for upload.&lt;/p&gt;
+                                {errors.length &gt; 0 &amp;&amp; &lt;p className="font-bold text-reride-orange dark:text-reride-orange mt-2"&gt;{errors.length} rows have errors and will be skipped.&lt;/p&gt;}
                             &lt;/div&gt;
                             {errors.length &gt; 0 &amp;&amp; (
                                 &lt;details className="max-h-48 overflow-y-auto p-2 border rounded-lg"&gt;
                                     &lt;summary className="cursor-pointer font-semibold text-sm"&gt;View Errors&lt;/summary&gt;
-                                    &lt;ul className="text-xs text-spinny-orange list-disc list-inside mt-2"&gt;
+                                    &lt;ul className="text-xs text-reride-orange list-disc list-inside mt-2"&gt;
                                         {errors.map(<span class="fstat-no" title="function not covered" >(e</span>rr, i) =&gt; <span class="cstat-no" title="statement not covered" >&lt;li key={i}&gt;{e</span>rr}&lt;/li&gt;)}
                                     &lt;/ul&gt;
                                 &lt;/details&gt;
@@ -621,23 +621,23 @@ const BulkUploadModal: React.FC&lt;BulkUploadModalProps&gt; = <span class="cstat
                 &lt;/div&gt;
 &nbsp;
                 &lt;div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg"&gt;
-                    &lt;button onClick={onClose} className="px-4 py-2 bg-white-dark text-spinny-text-dark rounded-md hover:bg-white"&gt;Cancel&lt;/button&gt;
+                    &lt;button onClick={onClose} className="px-4 py-2 bg-white-dark text-reride-text-dark rounded-md hover:bg-white"&gt;Cancel&lt;/button&gt;
                     {step === 1 &amp;&amp; &lt;button onClick={handleParseAndValidate} disabled={!file} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50"&gt;Next: Review&lt;/button&gt;}
-                    {step === 2 &amp;&amp; &lt;button onClick={handleConfirm} className="px-4 py-2 bg-spinny-orange text-white rounded-md hover:bg-spinny-orange"&gt;Confirm &amp; Upload&lt;/button&gt;}
+                    {step === 2 &amp;&amp; &lt;button onClick={handleConfirm} className="px-4 py-2 bg-reride-orange text-white rounded-md hover:bg-reride-orange"&gt;Confirm &amp; Upload&lt;/button&gt;}
                 &lt;/div&gt;
             &lt;/div&gt;
         &lt;/div&gt;
     );
 };
 &nbsp;
-<span class="cstat-no" title="statement not covered" >export default BulkUploadModal;</span></pre></td></tr></table></pre>
+export default BulkUploadModal;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:58.293Z
+                at 2026-02-22T18:07:16.958Z
             </div>
         <script src="../prettify.js"></script>
         <script>
