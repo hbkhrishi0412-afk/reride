@@ -29,10 +29,10 @@ jobs:
       - name: Check Function Count
         run: |
           COUNT=$(node scripts/verify-serverless-functions.js 2>&1 | grep -oP 'Serverless Functions: \K\d+' | head -1)
-          if [ "$COUNT" -gt 12 ]; then
-            echo "❌ ERROR: Serverless function count ($COUNT) exceeds maximum allowed (12)"
+          if [ "$COUNT" -gt 8 ]; then
+            echo "❌ ERROR: Serverless function count ($COUNT) exceeds maximum allowed (8, must be below 10)"
             exit 1
           else
-            echo "✅ Serverless function count ($COUNT) is within limit (12)"
+            echo "✅ Serverless function count ($COUNT) is within limit (8, below 10)"
           fi
 

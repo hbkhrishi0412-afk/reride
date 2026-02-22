@@ -72,8 +72,8 @@ async function main() {
   const serverlessFunctions = allFiles.filter(f => f.isServerlessFunction);
   const modules = allFiles.filter(f => !f.isServerlessFunction);
 
-  // Constants - Vercel Hobby plan limit is 12
-  const MAX_FUNCTIONS = 12;
+  // Constants - Keep API count below 10 (max 8 serverless functions)
+  const MAX_FUNCTIONS = 8;
   const currentCount = serverlessFunctions.length;
   const statusIcon = currentCount <= MAX_FUNCTIONS ? '✅' : '❌';
 
