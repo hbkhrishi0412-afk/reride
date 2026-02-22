@@ -195,9 +195,6 @@ const serviceDefinitions: Record<string, Omit<Service, 'icon'>> = {
   },
 };
 
-// Import service pricing service
-import { fetchServices, getServicePricing, fallbackPricing } from '../services/servicePricingService';
-
 const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [servicePricingData, setServicePricingData] = useState<Record<string, Service['pricing']>>({});

@@ -192,6 +192,9 @@ export interface User {
   logoUrl?: string;
   averageRating?: number;
   ratingCount?: number;
+  /** Seller profile display (alias for averageRating when in seller context) */
+  sellerAverageRating?: number;
+  sellerRatingCount?: number;
   badges?: Badge[];
   // New monetization fields for sellers
   subscriptionPlan?: SubscriptionPlan;
@@ -268,6 +271,9 @@ export interface ChatMessage {
     time?: string;
     // for offer
     offerPrice?: number;
+    price?: number;
+    message?: string;
+    originalMessageId?: number | string;
     /** If this message is a counter-offer, this field holds the price of the offer it is countering. */
     counterPrice?: number;
     status?: 'pending' | 'accepted' | 'rejected' | 'countered' | 'confirmed';
@@ -385,8 +391,13 @@ export interface Notification {
   id: number;
   recipientEmail: string;
   message: string;
+  /** Optional title for display */
+  title?: string;
   targetId: string | number;
+  /** Vehicle ID when targetType is vehicle or price_drop */
+  vehicleId?: number;
   targetType: 'vehicle' | 'conversation' | 'price_drop' | 'insurance_expiry' | 'general_admin';
+  type?: string;
   isRead: boolean;
   timestamp: string; // ISO String
 }
@@ -526,7 +537,11 @@ export interface CityStats {
   stateCode: string;
   totalListings: number;
   averagePrice: number;
+  /** @deprecated use averagePrice */
+  avgPrice?: number;
   popularMakes: string[];
+  /** Optional list of brand names (alias or extended) */
+  brands?: string[];
   popularCategories: VehicleCategory[];
 }
 
@@ -602,11 +617,11 @@ export interface VehicleView {
 // TRUST & SAFETY
 // ============================================
 export interface VerificationStatus {
-  phoneVerified: boolean;
+  phoneVerified?: boolean;
   phoneVerifiedAt?: string;
-  emailVerified: boolean;
+  emailVerified?: boolean;
   emailVerifiedAt?: string;
-  govtIdVerified: boolean;
+  govtIdVerified?: boolean;
   govtIdVerifiedAt?: string;
   govtIdType?: 'aadhaar' | 'pan' | 'driving_license';
   govtIdNumber?: string; // Encrypted/hashed

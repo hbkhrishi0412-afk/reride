@@ -111,13 +111,18 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
     role = 'customer';
   }
   
-  // Ensure email is present and normalized
-  const email = user.email ? user.email.toLowerCase().trim() : '';
+  // Ensure email is present and normalized (derive from id if missing for backwards compatibility)
+  let email = user.email ? String(user.email).toLowerCase().trim() : '';
+  if (!email && id && typeof id === 'string') {
+    // Some legacy rows use id as email key; use provided lookup email when available in caller
+    logWarn('⚠️ User object missing email field, id present:', id);
+    email = id.includes('@') ? id : '';
+  }
   if (!email) {
     logWarn('⚠️ User object missing email field');
     return null;
   }
-  
+
   // Build normalized user object (exclude password)
   const { password, ...userWithoutPassword } = user;
   const normalized: NormalizedUser = {
@@ -126,7 +131,7 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
     email,
     role,
   };
-  
+
   return normalized;
 }
 
@@ -806,10 +811,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
     // LOGIN
     if (action === 'login') {
+      try {
       if (!email || !password) {
         return res.status(400).json({ success: false, reason: 'Email and password are required.' });
       }
-      
+
       // Sanitize input
       const sanitizedData = await sanitizeObject({ email, password, role });
       
@@ -828,7 +834,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       try {
         // CRITICAL: Use normalized email for lookup
         user = await userService.findByEmail(normalizedEmail);
-        
         // If user not found, log for debugging (but don't reveal to user for security)
         if (!user) {
           logWarn('⚠️ Login attempt - user not found:', {
@@ -850,7 +855,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         if (!isProduction) {
           const testUsers = {
             'admin@test.com': {
-              password: 'password',
+              password: 'password123',
               name: 'Admin User',
               mobile: '9876543210',
               location: 'Mumbai, Maharashtra',
@@ -959,9 +964,16 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         }
       }
       
-      // Verify password using bcrypt
-      let isPasswordValid = await validatePassword(sanitizedData.password, user.password);
-      
+      // Verify password using bcrypt (wrap to avoid 500 on invalid hash/corrupt data)
+      let isPasswordValid = false;
+      try {
+        isPasswordValid = user.password
+          ? await validatePassword(sanitizedData.password, user.password)
+          : false;
+      } catch (pwErr) {
+        logWarn('⚠️ Password validation error (treating as invalid):', pwErr);
+      }
+
       // CRITICAL FIX: Handle plain text passwords (migration from old system)
       // If password validation fails and the stored password is not a bcrypt hash,
       // check if it's a plain text password that matches, then rehash it
@@ -1037,51 +1049,77 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(403).json({ success: false, reason: 'Your account has been deactivated.' });
       }
 
-      // Generate JWT tokens
-      const accessToken = generateAccessToken(user);
-      const refreshToken = generateRefreshToken(user);
-
-      // Normalize user object for frontend (ensure role is present)
-      const normalizedUser = normalizeUser(user);
-      
-          if (!normalizedUser || !normalizedUser.role) {
-        logError('❌ Failed to normalize user object:', { 
-          email: user.email, 
-          hasRole: !!user.role,
-          userObject: {
-            id: user.id,
-            email: user.email,
-            role: user.role,
-            hasId: !!user.id
-          }
-        });
-        return res.status(500).json({ 
-          success: false, 
-          reason: 'Failed to process user data. Please try again.' 
+      // Ensure JWT_SECRET is set before generating tokens (prevents 500 in production)
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+      if (isProduction && !process.env.JWT_SECRET) {
+        logError('❌ JWT_SECRET is not set in production - cannot issue tokens');
+        return res.status(503).json({
+          success: false,
+          reason: 'Server configuration error. Please try again later.',
+          error: 'JWT_SECRET is not configured.'
         });
       }
-      
+
+      // Generate JWT tokens (wrap in try/catch so config/jwt errors return 503, not 500)
+      let accessToken: string;
+      let refreshToken: string;
+      try {
+        accessToken = generateAccessToken(user);
+        refreshToken = generateRefreshToken(user);
+      } catch (tokenError) {
+        const msg = tokenError instanceof Error ? tokenError.message : 'Token generation failed';
+        logError('❌ Login token generation failed:', tokenError);
+        return res.status(503).json({
+          success: false,
+          reason: 'Server configuration error. Please try again later.',
+          error: msg.includes('JWT') || msg.includes('secret') ? 'JWT not configured.' : 'Token error'
+        });
+      }
+
+      // Normalize user object for frontend (ensure role is present)
+      let normalizedUser = normalizeUser(user);
+      if (!normalizedUser || !normalizedUser.role) {
+        logWarn('⚠️ Normalize returned null/invalid, building fallback from raw user:', {
+          email: user.email,
+          hasRole: !!user.role,
+          id: user.id
+        });
+        const fallbackId = user.id || normalizedEmail.replace(/[.#$[\]]/g, '_');
+        const fallbackEmail = (user.email && String(user.email).trim()) || normalizedEmail;
+        const fallbackRole = (user.role && ['customer', 'seller', 'admin'].includes(user.role))
+          ? user.role as 'customer' | 'seller' | 'admin'
+          : 'customer';
+        normalizedUser = {
+          id: fallbackId,
+          email: fallbackEmail.toLowerCase().trim(),
+          role: fallbackRole,
+          name: user.name || '',
+          mobile: user.mobile || '',
+          status: (user.status || 'active') as 'active' | 'inactive',
+          createdAt: user.createdAt || new Date().toISOString(),
+          isVerified: user.isVerified ?? false,
+          subscriptionPlan: (user.subscriptionPlan || 'free') as 'free' | 'pro' | 'premium',
+          featuredCredits: user.featuredCredits ?? 0,
+          usedCertifications: user.usedCertifications ?? 0,
+          location: user.location || '',
+          authProvider: (user.authProvider || 'email') as 'email' | 'google' | 'phone',
+        };
+      }
+
       // Validate role matches requested role (critical for seller dashboard access)
       if (sanitizedData.role && normalizedUser.role !== sanitizedData.role) {
-        logWarn('⚠️ Role mismatch in login response:', { 
-          userRole: normalizedUser.role, 
+        logWarn('⚠️ Role mismatch in login response:', {
+          userRole: normalizedUser.role,
           requestedRole: sanitizedData.role,
           email: normalizedUser.email
         });
         // Don't fail the login, but log the warning
         // The frontend will handle role validation
       }
-      
+
       // Ensure email is present (critical for seller dashboard)
       if (!normalizedUser.email) {
-        logError('❌ Normalized user missing email:', { 
-          userId: normalizedUser.id,
-          role: normalizedUser.role
-        });
-        return res.status(500).json({ 
-          success: false, 
-          reason: 'Failed to process user data. Please try again.' 
-        });
+        normalizedUser = { ...normalizedUser, email: normalizedEmail };
       }
       
       logInfo('✅ Login successful:', { 
@@ -1090,12 +1128,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         userId: normalizedUser.id
       });
       
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         user: normalizedUser,
         accessToken,
         refreshToken
       });
+      } catch (loginError) {
+        logError('❌ Login handler error:', loginError);
+        const message = loginError instanceof Error ? loginError.message : 'Unknown error';
+        return res.status(500).json({
+          success: false,
+          reason: 'Server error. Please try again later.',
+          ...(process.env.NODE_ENV !== 'production' && { hint: message })
+        });
+      }
     }
 
     // REGISTER
@@ -2541,6 +2588,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
     }
     
+    // Check for server configuration errors (e.g. JWT_SECRET missing)
+    const isConfigError = error instanceof Error && (
+      error.message.includes('JWT_SECRET') ||
+      error.message.includes('JWT secret') ||
+      error.message.includes('environment variables')
+    );
+    if (isConfigError) {
+      console.error('❌ Server configuration error in handleUsers:', error instanceof Error ? error.message : 'Unknown error');
+      return res.status(503).json({
+        success: false,
+        reason: 'Server configuration error. Please try again later.',
+        error: error instanceof Error ? error.message : 'Configuration error'
+      });
+    }
+
     // Check for Supabase database errors
     const isDbError = error instanceof Error && (
       error.message.includes('Supabase') ||
@@ -2593,13 +2655,13 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     
     // For other errors on non-GET requests, return 500 with error details
     // But log the full error for debugging
+    const errMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error('❌ Unexpected error in handleUsers:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: errMsg,
       stack: error instanceof Error ? error.stack : undefined,
       method: req.method,
       url: req.url
     });
-    
     return res.status(500).json({
       success: false,
       reason: 'An error occurred while processing the request',

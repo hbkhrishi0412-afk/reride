@@ -64,7 +64,7 @@ export async function getBuyerActivityFromSupabase(userId: string): Promise<{ su
         const result = await response.json();
         return result.data;
       },
-      `buyer-activity-${userId}`
+      { id: `buyer-activity-${userId}` }
     );
 
     return { success: true, data: result };

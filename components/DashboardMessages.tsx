@@ -148,7 +148,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
               conversation={selectedConversation}
               currentUserRole="seller"
               otherUserName={selectedConversation.customerName}
-              onSendMessage={onSellerSendMessage}
+              onSendMessage={(messageText, type?, payload?) => selectedConversation && onSellerSendMessage(selectedConversation.id, messageText, type, payload)}
               typingStatus={typingStatus}
               onUserTyping={onUserTyping}
               onMarkMessagesAsRead={onMarkMessagesAsRead}

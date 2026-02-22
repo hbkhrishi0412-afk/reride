@@ -495,7 +495,7 @@ class RealtimeChatService {
       if (!this.socket.connected) {
         console.warn('⚠️ Cannot join conversation - socket not connected, queueing:', conversationId);
         // Queue the join request for when connection is established
-        this.socket.once('connect', () => {
+        (this.socket as any).once('connect', () => {
           console.log('🔧 Joining conversation after connection:', conversationId);
           this.socket?.emit('conversation:join', { conversationId });
           resolve();

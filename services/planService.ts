@@ -38,7 +38,7 @@ const getPlanModel = async () => {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 const normalizePlan = (raw: any): PlanDetails => ({
-    id: String(raw?.id || raw?.planId || `custom_${Date.now()}`),
+    id: (String(raw?.id || raw?.planId || 'free') as SubscriptionPlan),
     name: String(raw?.name || 'Custom Plan'),
     price: Number(raw?.price || 0),
     features: Array.isArray(raw?.features) ? raw.features.map(String) : [],

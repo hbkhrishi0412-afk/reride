@@ -7,7 +7,6 @@ class DataService {
   private apiBaseUrl: string;
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-  private readonly RATE_LIMIT_CACHE_DURATION = 60 * 1000; // 1 minute cache for rate-limited responses
 
   constructor() {
     this.isDevelopment = this.detectDevelopment();
@@ -56,17 +55,17 @@ class DataService {
     
     return queueRequest(
       async () => {
-        const headers: HeadersInit = {
+        const headersRecord: Record<string, string> = {
           Accept: 'application/json',
           ...(shouldSendJson ? { 'Content-Type': 'application/json' } : {}),
           ...this.getAuthHeaders(),
-          ...(options.headers || {})
+          ...((options.headers || {}) as Record<string, string>)
         };
 
         const fetchOptions: RequestInit = {
           ...options,
           method,
-          headers,
+          headers: headersRecord,
           credentials: 'include'
         };
 
@@ -122,7 +121,7 @@ class DataService {
             const { refreshAccessToken } = await import('./userService');
             const refreshResult = await refreshAccessToken();
             if (refreshResult.success && refreshResult.accessToken) {
-              headers['Authorization'] = `Bearer ${refreshResult.accessToken}`;
+              headersRecord['Authorization'] = `Bearer ${refreshResult.accessToken}`;
               response = await performFetch();
             }
           } catch (authError) {

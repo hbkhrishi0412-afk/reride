@@ -68,7 +68,7 @@ export const MobileCityLandingPage: React.FC<MobileCityLandingPageProps> = ({
             <p className="text-sm text-white/80">Avg Price</p>
           </div>
           <div>
-            <p className="text-2xl font-bold">{cityStats.brands.length}</p>
+            <p className="text-2xl font-bold">{cityStats.brands?.length ?? 0}</p>
             <p className="text-sm text-white/80">Brands</p>
           </div>
         </div>

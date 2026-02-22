@@ -37,7 +37,6 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
     seller,
     sellerVehicles,
     conversations,
-    onUpdateVehicle,
     onDeleteVehicle,
     onMarkAsSold,
     onFeatureListing,
@@ -48,7 +47,8 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
     typingStatus,
     onUserTyping,
     onMarkMessagesAsRead,
-    onOfferResponse
+    onOfferResponse,
+    onAddMultipleVehicles
   } = props;
 
   const [activeView, setActiveView] = useState<DashboardView>('overview');

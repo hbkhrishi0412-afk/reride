@@ -36,7 +36,7 @@ export const getExpiryStatus = (vehicle: Vehicle): 'active' | 'near_expiry' | 'e
 export const refreshListing = (vehicle: Vehicle): Vehicle => {
   return {
     ...vehicle,
-    lastRefreshedAt: new Date().toISOString(),
+    listingLastRefreshed: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 };
@@ -46,8 +46,8 @@ export const renewListing = (vehicle: Vehicle): Vehicle => {
   return {
     ...vehicle,
     createdAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + LISTING_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString(),
-    lastRefreshedAt: new Date().toISOString(),
+    listingExpiresAt: new Date(Date.now() + LISTING_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+    listingLastRefreshed: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     listingStatus: 'active',
   };

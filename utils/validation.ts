@@ -284,7 +284,7 @@ export const handleApiError = (error: unknown, operation: string): DataServiceEr
     message = `${operation} failed: ${error}`;
   }
 
-  return new DataServiceError(message, operation, error);
+  return new DataServiceError(message, operation, error instanceof Error ? error : undefined);
 };
 
 export const logError = (error: Error, context: string): void => {

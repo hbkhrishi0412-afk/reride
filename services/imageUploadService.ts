@@ -200,7 +200,7 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
       if (error.message.includes('row-level security') || error.message.includes('violates row-level security policy') || error.message.includes('RLS')) {
         console.error('❌ RLS Policy Error Details:', {
           message: error.message,
-          statusCode: error.statusCode,
+          statusCode: (error as { statusCode?: number }).statusCode,
           user: user?.email,
           bucket: 'Images'
         });

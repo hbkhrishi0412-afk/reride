@@ -22,20 +22,21 @@ export async function initErrorTracking(): Promise<void> {
   }
 
   try {
-    // Dynamic import to avoid bundling Sentry in development
-    const Sentry = await import('@sentry/react');
-    
+    // Dynamic import to avoid bundling Sentry in development (optional dependency)
+    const Sentry = await import('@sentry/react').catch(() => null);
+    if (!Sentry?.init) return;
+
     Sentry.init({
       dsn: process.env.VITE_SENTRY_DSN,
       environment: process.env.NODE_ENV,
       tracesSampleRate: 0.1, // 10% of transactions
-      beforeSend(event) {
-        // Sanitize sensitive data before sending
+      beforeSend(event: { request?: { headers?: Record<string, string> } }) {
         if (event.request?.headers) {
-          delete event.request.headers['Authorization'];
-          delete event.request.headers['Cookie'];
+          const h = event.request.headers as Record<string, string>;
+          delete h['Authorization'];
+          delete h['Cookie'];
         }
-        return event;
+        return event as any;
       },
     });
 
@@ -68,7 +69,8 @@ export function trackMessage(message: string, level: 'info' | 'warning' | 'error
   if (errorTracker) {
     errorTracker.captureMessage(message, level);
   } else {
-    console[level](message);
+    const method = level === 'warning' ? 'warn' : level;
+    (console as unknown as Record<string, (m: string) => void>)[method](message);
   }
 }
 

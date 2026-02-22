@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import type { User } from '../types';
+import type { User, SubscriptionPlan } from '../types';
 
 interface ImportUsersModalProps {
     onClose: () => void;
@@ -155,13 +155,13 @@ const ImportUsersModal: React.FC<ImportUsersModalProps> = ({ onClose, onImportUs
                         email: email,
                         mobile: row.mobile.trim(),
                         role: role as 'customer' | 'seller' | 'admin',
-                        location: row.location?.trim() || 'Mumbai',
+        location: row.location?.trim() || 'Mumbai',
                         status: status as 'active' | 'inactive',
                         createdAt: row.createdAt?.trim() || now,
                         joinedDate: row.joinedDate?.trim() || now,
                         dealershipName: row.dealershipName?.trim(),
                         bio: row.bio?.trim(),
-                        subscriptionPlan: subscriptionPlan as 'free' | 'basic' | 'premium' | 'enterprise',
+                        subscriptionPlan: (subscriptionPlan === 'basic' ? 'free' : subscriptionPlan === 'enterprise' ? 'premium' : subscriptionPlan) as SubscriptionPlan | undefined,
                         isVerified: row.isVerified?.toLowerCase() === 'true' || false,
                         phoneVerified: row.phoneVerified?.toLowerCase() === 'true' || false,
                         emailVerified: row.emailVerified?.toLowerCase() === 'true' || false,
