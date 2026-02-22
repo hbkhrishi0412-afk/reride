@@ -1,5 +1,5 @@
 /**
- * api/handlers/index.ts — Barrel exports for all API handlers
+ * server/handlers/index.ts — Barrel exports for all API handlers
  *
  * Extracted handlers are imported from their own files.
  * Remaining large handlers are still in main.ts and will be

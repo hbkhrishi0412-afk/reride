@@ -1,5 +1,5 @@
 /**
- * api/handlers/shared.ts — Shared utilities for all API handlers
+ * server/handlers/shared.ts — Shared utilities for all API handlers
  *
  * Contains authentication, rate limiting, normalization helpers,
  * and common types used by every handler module.
@@ -278,4 +278,3 @@ export function calculateDistance(
 // ── Security config re-export ───────────────────────────────────────────────
 
 export { config as securityConfig };
-
