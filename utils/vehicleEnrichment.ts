@@ -69,7 +69,7 @@ export const enrichVehicleWithSellerInfo = (vehicle: Vehicle, users: User[]): Ve
       sellerBadges: [],
       sellerAverageRating: 0,
       sellerRatingCount: 0
-    } as Vehicle;
+    } as unknown as Vehicle;
   }
   
   if (!users || !Array.isArray(users) || !vehicle.sellerEmail) {

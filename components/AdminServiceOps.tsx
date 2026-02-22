@@ -6,9 +6,12 @@ type Provider = {
   email: string;
   phone: string;
   city: string;
+  state?: string;
+  district?: string;
   availability?: string;
   skills?: string[];
   workshops?: string[];
+  serviceCategories?: string[];
 };
 
 type ProviderService = {

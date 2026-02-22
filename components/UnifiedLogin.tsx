@@ -342,7 +342,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                             displayText = 'Admin';
                             break;
                           default:
-                            displayText = roleConfig[role].title;
+                            displayText = (roleConfig as Record<string, { title: string }>)[role]?.title ?? role;
                         }
                       }
                       return (
@@ -636,7 +636,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                           displayText = 'Admin';
                           break;
                         default:
-                          displayText = roleConfig[role].title;
+                          displayText = (roleConfig as Record<string, { title: string }>)[role]?.title ?? role;
                       }
                     }
                     return (

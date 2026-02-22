@@ -428,16 +428,18 @@ const authApi = async (body: any): Promise<any> => {
                 throw new Error('Too many requests. Please wait a moment and try again.');
             }
             
-            // Handle service unavailable (503) - use fallback, don't retry
-            if (response.status === 503) {
-                console.warn('⚠️ Service unavailable (503). Using fallback mechanism.');
-                throw new Error('Service temporarily unavailable. Please try again later.');
-            }
-            
-            // Handle other 5xx errors - use fallback
+            // For 5xx, parse body and surface server reason/error so user sees the real message
             if (response.status >= 500 && response.status < 600) {
-                console.warn(`⚠️ Server error (${response.status}). Using fallback mechanism.`);
-                throw new Error(`Server error (${response.status}). Please try again later.`);
+                let errorMessage = `Server error (${response.status}). Please try again later.`;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        errorMessage = errorData.reason || errorData.error || errorMessage;
+                    }
+                } catch (_) { /* use fallback message */ }
+                console.warn(`⚠️ Server ${response.status}:`, errorMessage);
+                throw new Error(errorMessage);
             }
             
             // Check if response is ok first

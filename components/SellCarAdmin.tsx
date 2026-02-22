@@ -3,7 +3,7 @@ import { View as ViewEnum } from '../types';
 import { sellCarAPI } from '../services/sellCarService';
 
 interface SellCarSubmission {
-  _id: string;
+  _id?: string;
   registration: string;
   make: string;
   model: string;
@@ -69,7 +69,8 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate }) => {
     }
   };
 
-  const updateSubmission = async (id: string, updates: Partial<SellCarSubmission>) => {
+  const updateSubmission = async (id: string | undefined, updates: Partial<SellCarSubmission>) => {
+    if (!id) return;
     try {
       const result = await sellCarAPI.updateSubmission(id, {
         status: updates.status,
@@ -282,7 +283,7 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate }) => {
                           View
                         </button>
                         <button
-                          onClick={() => deleteSubmission(submission._id)}
+                          onClick={() => submission._id && deleteSubmission(submission._id)}
                           className="text-red-600 hover:text-red-900"
                         >
                           Delete

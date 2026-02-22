@@ -142,11 +142,11 @@ export const LazyImage: React.FC<LazyImageProps> = ({
               ];
               
               for (const path of pathAttempts) {
-                const { data, error } = supabase.storage
+                const { data } = supabase.storage
                   .from('Images')
                   .getPublicUrl(path);
                 
-                if (data?.publicUrl && data.publicUrl !== src && !error) {
+                if (data?.publicUrl && data.publicUrl !== src) {
                   console.log('✅ LazyImage: Converted storage path to URL:', { original: src, path, url: data.publicUrl });
                   target.src = data.publicUrl;
                   return; // Don't set error if we can convert it

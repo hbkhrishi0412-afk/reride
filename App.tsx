@@ -27,13 +27,15 @@ import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
-import { logWarn, logInfo, logError, logDebug } from './utils/logger';
+import { logWarn, logDebug } from './utils/logger';
 // Firebase removed - using Supabase
 
 // PERFORMANCE: Proper typing improves tree-shaking and prevents runtime errors
 interface ServiceProvider {
-  id: string;
+  id?: string;
   name: string;
+  email?: string;
+  phone?: string;
   city: string;
   state?: string;
   district?: string;
@@ -104,6 +106,10 @@ interface ApiResponse<T = unknown> {
   reason?: string;
   vehicle?: Vehicle;
   remainingCredits?: number;
+  alreadyFeatured?: boolean;
+  alreadyRequested?: boolean;
+  usedCertifications?: number;
+  remainingCertifications?: number;
 }
 
 // Window extension for service worker properties
@@ -207,7 +213,6 @@ const MobilePrivacyPolicyPage = React.lazy(() => import('./components/MobilePriv
 const TermsOfServicePage = React.lazy(() => import('./components/TermsOfServicePage'));
 const MobileTermsOfServicePage = React.lazy(() => import('./components/MobileTermsOfServicePage'));
 const MobileBuyerDashboard = React.lazy(() => import('./components/MobileBuyerDashboard'));
-const MobileRentalPage = React.lazy(() => import('./components/MobileRentalPage'));
 const MobileDealerProfilesPage = React.lazy(() => import('./components/MobileDealerProfilesPage'));
 const MobileCityLandingPage = React.lazy(() => import('./components/MobileCityLandingPage'));
 const MobileHomePage = React.lazy(() => import('./components/MobileHomePage'));
@@ -268,7 +273,7 @@ const preloadCriticalComponents = () => {
 
 const AppContent: React.FC = () => {
   // Detect if running as mobile app (standalone/installed PWA)
-  const { isMobileApp, isMobile } = useIsMobileApp();
+  const { isMobileApp } = useIsMobileApp();
   
   // Get all app context values in a single hook call
   const { 
@@ -597,7 +602,7 @@ const AppContent: React.FC = () => {
           );
 
           if (!cancelled) {
-            setServiceProviderOptions(enriched);
+            setServiceProviderOptions(enriched.filter(p => !!p.id).map(p => ({ id: p.id!, name: p.name, city: p.city, distanceKm: p.distanceKm, serviceCategories: p.serviceCategories })));
           }
           return;
         }
@@ -629,7 +634,7 @@ const AppContent: React.FC = () => {
         })
       );
 
-      if (!cancelled) setServiceProviderOptions(enriched);
+      if (!cancelled) setServiceProviderOptions(enriched.filter(p => !!p.id).map(p => ({ id: p.id!, name: p.name, city: p.city, distanceKm: p.distanceKm, serviceCategories: p.serviceCategories })));
     };
     run();
     return () => {
@@ -1481,7 +1486,6 @@ const AppContent: React.FC = () => {
 
       case ViewEnum.RENTAL:
         // Rental vehicles feature not currently used - redirect to used cars page
-        // Create a redirect component inline
         const RentalRedirect: React.FC = () => {
           React.useEffect(() => {
             navigate(ViewEnum.USED_CARS);
@@ -2620,7 +2624,7 @@ const AppContent: React.FC = () => {
       case ViewEnum.CAR_SERVICE_DASHBOARD:
         return (
           <CarServiceDashboard
-            provider={serviceProvider}
+            provider={serviceProvider as { name: string; email: string; phone: string; city: string } | null}
           />
         );
 
@@ -3319,14 +3323,14 @@ const AppContent: React.FC = () => {
                     return activeChat.customerName;
                   })()}
                   callTargetPhone={(() => {
-                    const isCustomer = currentUser.role === 'customer';
+                    const isCustomer = (currentUser.role as string) === 'customer';
                     const lookupEmail = isCustomer ? activeChat.sellerId : activeChat.customerId;
                     const contact = lookupEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === lookupEmail.toLowerCase().trim()) : undefined;
                     // User interface has 'mobile' field, not 'phone'
                     return contact?.mobile || '';
                   })()}
                   callTargetName={(() => {
-                    const isCustomer = currentUser.role === 'customer';
+                    const isCustomer = (currentUser.role as string) === 'customer';
                     const lookupEmail = isCustomer ? activeChat.sellerId : activeChat.customerId;
                     const contact = lookupEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === lookupEmail.toLowerCase().trim()) : undefined;
                     return contact?.name || contact?.dealershipName || (isCustomer ? 'Seller' : activeChat.customerName);

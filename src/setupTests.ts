@@ -37,7 +37,7 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 // Mock IntersectionObserver
-global.IntersectionObserver = class IntersectionObserver {
+(global as any).IntersectionObserver = class MockIntersectionObserver {
   constructor() {}
   disconnect() {}
   observe() {}
@@ -54,8 +54,8 @@ global.ResizeObserver = class ResizeObserver {
 
 // Mock import.meta for Vite compatibility
 // This needs to be done before any modules that use import.meta are loaded
-if (typeof globalThis.import === 'undefined') {
-  Object.defineProperty(globalThis, 'import', {
+if (typeof (globalThis as any).import === 'undefined') {
+  Object.defineProperty(globalThis as any, 'import', {
     value: {
       meta: {
         env: {

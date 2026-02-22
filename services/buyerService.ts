@@ -196,13 +196,13 @@ export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> 
   }
 };
 
-// Track price drops
-export const trackPriceDrop = (userId: string, vehicleId: number, oldPrice: number, newPrice: number): void => {
+// Track price drops (uses sync get so we can update and save without awaiting)
+export const trackPriceDrop = (userId: string, vehicleId: number, _oldPrice: number, _newPrice: number): void => {
   try {
-    const activity = getBuyerActivity(userId);
+    const activity = getBuyerActivitySync(userId);
     if (!activity.notifications.priceDrops.includes(vehicleId)) {
       activity.notifications.priceDrops.push(vehicleId);
-      saveBuyerActivity(activity);
+      void saveBuyerActivity(activity);
     }
   } catch (error) {
     console.error('Failed to track price drop:', error);
@@ -274,20 +274,20 @@ export const updatePriceHistory = (vehicleId: number, price: number): void => {
 // Clear old price drops
 export const clearPriceDropNotifications = (userId: string, vehicleIds: number[]): void => {
   try {
-    const activity = getBuyerActivity(userId);
+    const activity = getBuyerActivitySync(userId);
     activity.notifications.priceDrops = activity.notifications.priceDrops.filter(
-      id => !vehicleIds.includes(id)
+      (id: number) => !vehicleIds.includes(id)
     );
-    saveBuyerActivity(activity);
+    void saveBuyerActivity(activity);
   } catch (error) {
     console.error('Failed to clear price drop notifications:', error);
   }
 };
 
-// Get recently viewed vehicles
+// Get recently viewed vehicles (sync - uses localStorage only for immediate return)
 export const getRecentlyViewed = (userId: string): number[] => {
   try {
-    const activity = getBuyerActivity(userId);
+    const activity = getBuyerActivitySync(userId);
     return activity.recentlyViewed || [];
   } catch (error) {
     return [];

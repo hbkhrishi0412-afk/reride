@@ -148,8 +148,8 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
               style={{ 
                 touchAction: 'pan-x pan-y pinch-zoom',
                 userSelect: 'none',
-                WebkitUserDrag: 'none',
-                WebkitTouchCallout: 'none'
+                WebkitTouchCallout: 'none',
+                ...({ WebkitUserDrag: 'none' } as React.CSSProperties)
               }}
               draggable={false}
             />

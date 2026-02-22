@@ -8,7 +8,7 @@ import CityDropdown from './CityDropdown';
 import SellerDropdown from './SellerDropdown';
 
 interface HeaderProps {
-    onNavigate: (view: ViewEnum) => void;
+    onNavigate: (view: ViewEnum, params?: { city?: string }) => void;
     currentUser: User | null;
     serviceProvider?: {
         name?: string;
