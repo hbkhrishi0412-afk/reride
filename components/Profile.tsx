@@ -10,6 +10,7 @@ interface ProfileProps {
 }
 
 interface FormErrors {
+  general?: string;
   name?: string;
   email?: string;
   mobile?: string;

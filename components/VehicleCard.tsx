@@ -127,7 +127,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
       {/* Premium Image Section - Top 50-60% of card */}
       <div className="relative overflow-hidden flex-shrink-0 bg-gradient-to-br from-gray-100 to-gray-200" style={{ height: '55%', minHeight: '200px' }}>
         <LazyImage
-          src={getFirstValidImage(vehicle.images)}
+          src={getFirstValidImage(vehicle.images, vehicle.id)}
           alt={`${vehicle.make} ${vehicle.model}`}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           width={800}

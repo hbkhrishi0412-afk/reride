@@ -35,6 +35,10 @@ interface VehicleListProps {
   onSaveSearch?: (search: SavedSearch) => void;
   selectedCity?: string;
   onCityChange?: (city: string) => void;
+  /** Total vehicles from source (before filters). When 0, show load-error state with Retry. */
+  sourceVehicleCount?: number;
+  /** Called when user taps Retry in the "Unable to load vehicles" state. */
+  onRetryLoadVehicles?: () => void | Promise<void>;
 }
 
 // Base items per page - optimized for performance (10-12 vehicles per load)
@@ -97,7 +101,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   currentUser, 
   onSaveSearch,
   selectedCity,
-  onCityChange
+  onCityChange,
+  sourceVehicleCount,
+  onRetryLoadVehicles
 }) => {
   const [aiSearchQuery, setAiSearchQuery] = useState(initialSearchQuery);
   const [isAiSearching, setIsAiSearching] = useState(false);
@@ -1618,13 +1624,35 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
                 }}
               >
-                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No Vehicles Found</h3>
-                <p className="text-gray-600 text-sm">Try adjusting your filters or search query</p>
+                {sourceVehicleCount === 0 && onRetryLoadVehicles ? (
+                  <>
+                    <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-10 h-10 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Unable to load vehicles</h3>
+                    <p className="text-gray-600 text-sm mb-4">Check your connection and try again.</p>
+                    <button
+                      type="button"
+                      onClick={() => onRetryLoadVehicles()}
+                      className="px-5 py-2.5 rounded-xl font-semibold text-white transition-all active:scale-95"
+                      style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
+                    >
+                      Retry
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">No Vehicles Found</h3>
+                    <p className="text-gray-600 text-sm">Try adjusting your filters or search query</p>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1863,8 +1891,25 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               </>
             ) : (
               <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
-                <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">No Vehicles Found</h3>
-                <p className="text-reride-text dark:text-reride-text mt-2">Try adjusting your filters or using the AI search to find your perfect vehicle.</p>
+                {sourceVehicleCount === 0 && onRetryLoadVehicles ? (
+                  <>
+                    <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">Unable to load vehicles</h3>
+                    <p className="text-reride-text dark:text-reride-text mt-2">Check your connection and try again.</p>
+                    <button
+                      type="button"
+                      onClick={() => onRetryLoadVehicles()}
+                      className="mt-4 px-5 py-2.5 rounded-xl font-semibold text-white transition-all hover:opacity-90"
+                      style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
+                    >
+                      Retry
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">No Vehicles Found</h3>
+                    <p className="text-reride-text dark:text-reride-text mt-2">Try adjusting your filters or using the AI search to find your perfect vehicle.</p>
+                  </>
+                )}
               </div>
             )}
           </div>

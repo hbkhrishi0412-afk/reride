@@ -73,11 +73,14 @@ jobs:
       - name: Install Playwright browsers
         run: npm run test:e2e:install
       
+      # Set Supabase env (use vars or secrets in repo Settings; vars avoid linter warnings)
+      - name: Set Supabase env for E2E
+        run: |
+          echo "VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}" >> $GITHUB_ENV
+          echo "VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}" >> $GITHUB_ENV
+      
       - name: Run E2E tests
         run: npm run test:e2e
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       
       - name: Upload test results
         if: always()
@@ -102,11 +105,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      # Set Supabase env (use vars or secrets in repo Settings; vars avoid linter warnings)
+      - name: Set Supabase env for build
+        run: |
+          echo "VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}" >> $GITHUB_ENV
+          echo "VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}" >> $GITHUB_ENV
+      
       - name: Build
         run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       
       - name: Check bundle size
         run: |

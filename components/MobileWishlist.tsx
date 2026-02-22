@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import type { Vehicle, User } from '../types';
 import { View as ViewEnum } from '../types';
+import { getFirstValidImage } from '../utils/imageUtils';
 
 interface MobileWishlistProps {
   vehicles: Vehicle[];
@@ -129,7 +130,7 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
             >
               <div className="flex gap-4">
                 <img
-                  src={vehicle.images?.[0] || 'https://via.placeholder.com/150'}
+                  src={getFirstValidImage(vehicle.images ?? [], vehicle.id)}
                   alt={`${vehicle.make} ${vehicle.model}`}
                   className="w-24 h-24 rounded-xl object-cover flex-shrink-0"
                 />
@@ -206,7 +207,7 @@ export const MobileWishlist: React.FC<MobileWishlistProps> = ({
             >
               <div className="relative">
                 <img
-                  src={vehicle.images?.[0] || 'https://via.placeholder.com/150'}
+                  src={getFirstValidImage(vehicle.images ?? [], vehicle.id)}
                   alt={`${vehicle.make} ${vehicle.model}`}
                   className="w-full h-32 object-cover"
                 />

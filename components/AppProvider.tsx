@@ -225,6 +225,7 @@ interface AppContextType {
   handleRegister: (user: User) => void;
   navigate: (view: View, params?: { city?: string }) => void;
   goBack: (fallbackView?: View) => void;
+  refreshVehicles: () => Promise<void>;
   
   // Admin functions
   onCreateUser: (userData: Omit<User, 'status'>) => Promise<{ success: boolean, reason: string }>;
@@ -1105,6 +1106,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [previousView, currentView, navigate]);
 
+  const refreshVehicles = useCallback(async () => {
+    const isAdmin = currentUser?.role === 'admin';
+    try {
+      const list = await dataService.getVehicles(isAdmin, true);
+      setVehicles(Array.isArray(list) ? list : []);
+      if (list.length > 0) {
+        addToast(`Loaded ${list.length} vehicles`, 'success');
+      }
+    } catch (err) {
+      logWarn('Refresh vehicles failed:', err);
+      addToast('Could not load vehicles. Check your connection and try again.', 'error');
+    }
+  }, [currentUser?.role, setVehicles, addToast]);
+
   // Auto-navigate to appropriate dashboard after login/registration
   // This ensures the view is set correctly even if state updates are async
   useEffect(() => {
@@ -1968,10 +1983,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
+    // When dataService background refresh completes, update UI so new published vehicles appear without page refresh
+    const handleVehiclesCacheUpdated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && Array.isArray(detail.vehicles)) {
+        setVehicles(detail.vehicles);
+        console.log('✅ Vehicle list updated from background refresh');
+      }
+    };
+
+    // When user data background refresh completes, keep UI in sync with Supabase/API
+    const handleUsersCacheUpdated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && Array.isArray(detail.users)) {
+        setUsers(detail.users);
+        console.log('✅ User list updated from background refresh');
+      }
+    };
+
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('vehicleDataUpdated', handleVehicleDataUpdate as EventListener);
+    window.addEventListener('vehiclesCacheUpdated', handleVehiclesCacheUpdated);
+    window.addEventListener('usersCacheUpdated', handleUsersCacheUpdated);
 
-    // Periodic refresh of vehicle data from API (every 5 minutes)
+    // Periodic refresh of vehicle list so newly published vehicles appear on home within ~1 min
+    const isAdmin = (() => {
+      try {
+        const savedUser = localStorage.getItem('reRideCurrentUser');
+        if (savedUser) {
+          const user = JSON.parse(savedUser);
+          return user?.role === 'admin';
+        }
+      } catch { /* ignore */ }
+      return false;
+    })();
+    const vehicleListRefreshInterval = setInterval(() => {
+      dataService.getVehicles(isAdmin, false)
+        .then((freshVehicles) => {
+          if (Array.isArray(freshVehicles) && freshVehicles.length >= 0) {
+            setVehicles(freshVehicles);
+            console.log('✅ Vehicle list refreshed from API');
+          }
+        })
+        .catch((err) => {
+          console.warn('Periodic vehicle list refresh failed:', err);
+        });
+    }, 60 * 1000); // 1 minute
+
+    // Periodic refresh of vehicle data (makes/models etc) from API (every 5 minutes)
     const refreshInterval = setInterval(() => {
       dataService.getVehicleData()
         .then((freshData) => {
@@ -1988,6 +2047,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('vehicleDataUpdated', handleVehicleDataUpdate as EventListener);
+      window.removeEventListener('vehiclesCacheUpdated', handleVehiclesCacheUpdated);
+      window.removeEventListener('usersCacheUpdated', handleUsersCacheUpdated);
+      clearInterval(vehicleListRefreshInterval);
       clearInterval(refreshInterval);
     };
   }, []);
@@ -2850,7 +2912,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     handleRegister,
     navigate,
     goBack,
-    
+    refreshVehicles,
+
     // Admin functions
       onAdminUpdateUser: async (email: string, details: Partial<User>) => {
         // Separate null values (to be removed) from regular updates
@@ -4590,7 +4653,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActiveChat, setIsAnnouncementVisible, setInitialSearchQuery,
     setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
-    setNotifications, addToast, removeToast, navigate, goBack, handleLogin, handleLogout,
+    setNotifications, addToast, removeToast, navigate, goBack, refreshVehicles, handleLogin, handleLogout,
     updateVehicleHandler
   ]);
 

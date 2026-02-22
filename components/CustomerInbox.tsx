@@ -39,7 +39,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
 
   const getSellerPhone = useCallback((sellerId: string) => {
     const seller = users.find(u => u.email === sellerId);
-    return seller?.mobile || seller?.phone || '';
+    return seller?.mobile || '';
   }, [users]);
 
   const handleStartCall = useCallback((phone: string) => {

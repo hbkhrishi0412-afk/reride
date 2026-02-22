@@ -58,7 +58,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
     }
   }, [vehicle.price]);
 
-  const imageSrc = useMemo(() => getFirstValidImage(vehicle.images), [vehicle.images]);
+  const imageSrc = useMemo(() => getFirstValidImage(vehicle.images, vehicle.id), [vehicle.images, vehicle.id]);
 
   return (
     <div

@@ -1,14 +1,8 @@
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
-import crypto from 'crypto';
-import { createRequire } from 'module';
 import type { User } from '../types.js';
 import { getSecurityConfig } from './security-config.js';
-
-// Use createRequire for CommonJS module compatibility in ESM (Vercel serverless)
-// This ensures jsonwebtoken works correctly in Vercel's serverless environment
-const require = createRequire(import.meta.url);
-const jwt = require('jsonwebtoken') as typeof import('jsonwebtoken');
+import { jwt } from './jwt-loader.js';
 
 // Get security configuration
 const config = getSecurityConfig();

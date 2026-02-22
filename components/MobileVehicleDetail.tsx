@@ -140,7 +140,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
       {/* Image Gallery Header */}
       <div className="relative w-full" style={{ height: '50vh', minHeight: '300px' }}>
         <img
-          src={getFirstValidImage(safeVehicle.images)}
+          src={getFirstValidImage(safeVehicle.images, safeVehicle.id)}
           alt={`${safeVehicle.make} ${safeVehicle.model}`}
           className="w-full h-full object-cover"
           onClick={() => setShowGallery(true)}
@@ -422,7 +422,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                   className="bg-gray-50 rounded-xl p-4 flex gap-4 active:scale-[0.98] transition-transform"
                 >
                   <img
-                    src={getFirstValidImage(rec.images)}
+                    src={getFirstValidImage(rec.images, rec.id)}
                     alt={`${rec.make} ${rec.model}`}
                     className="w-24 h-24 rounded-lg object-cover"
                   />
@@ -442,7 +442,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
       {/* Modals */}
       {showGallery && (
         <MobileImageGallery
-          images={getValidImages(safeVehicle.images)}
+          images={getValidImages(safeVehicle.images, safeVehicle.id)}
           alt={`${safeVehicle.make} ${safeVehicle.model}`}
           onClose={() => setShowGallery(false)}
         />

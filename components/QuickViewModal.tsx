@@ -21,11 +21,11 @@ interface QuickViewModalProps {
 }
 
 const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSelectVehicle, onToggleCompare, onToggleWishlist, comparisonList, wishlist }) => {
-  const [mainImage, setMainImage] = useState(() => vehicle ? getFirstValidImage(vehicle.images) : '');
+  const [mainImage, setMainImage] = useState(() => vehicle ? getFirstValidImage(vehicle.images, vehicle.id) : '');
 
   useEffect(() => {
     if (vehicle) {
-      setMainImage(getFirstValidImage(vehicle.images));
+      setMainImage(getFirstValidImage(vehicle.images, vehicle.id));
     } else {
       setMainImage('');
     }
@@ -97,7 +97,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSel
           </div>
           {vehicle.images && vehicle.images.length > 1 && (
             <div className="grid grid-cols-5 gap-3">
-              {getValidImages(vehicle.images).slice(0, 5).map((img, index) => (
+              {getValidImages(vehicle.images, vehicle.id).slice(0, 5).map((img, index) => (
                 <img
                   key={index}
                   src={img}

@@ -230,7 +230,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                       className="bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform"
                     >
                       <img
-                        src={getFirstValidImage(vehicle.images)}
+                        src={getFirstValidImage(vehicle.images, vehicle.id)}
                         alt={`${vehicle.make} ${vehicle.model}`}
                         className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
                       />
@@ -345,7 +345,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                       className="bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform"
                     >
                       <img
-                        src={getFirstValidImage(vehicle.images)}
+                        src={getFirstValidImage(vehicle.images, vehicle.id)}
                         alt={`${vehicle.make} ${vehicle.model}`}
                         className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
                       />

@@ -83,8 +83,10 @@ test.describe('Accessibility Tests', () => {
   test('should have sufficient color contrast', async ({ page }) => {
     // This is a basic check - full contrast testing requires more complex setup
     await checkA11y(page, undefined, {
-      rules: {
-        'color-contrast': { enabled: true },
+      axeOptions: {
+        rules: {
+          'color-contrast': { enabled: true },
+        },
       },
     });
   });

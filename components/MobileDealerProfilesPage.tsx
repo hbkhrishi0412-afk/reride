@@ -151,14 +151,14 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
                         <span>•</span>
                         <span>{followersCount} followers</span>
                       </div>
-                      {seller.sellerAverageRating && (
+                      {seller.averageRating != null && (
                         <div className="flex items-center gap-1">
                           <span className="text-yellow-500">★</span>
                           <span className="text-sm font-semibold text-gray-900">
-                            {seller.sellerAverageRating.toFixed(1)}
+                            {seller.averageRating.toFixed(1)}
                           </span>
                           <span className="text-xs text-gray-600">
-                            ({seller.sellerRatingCount || 0} reviews)
+                            ({seller.ratingCount ?? 0} reviews)
                           </span>
                         </div>
                       )}

@@ -535,7 +535,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                               >
                                 <div className="flex items-center gap-4">
                                   <LazyImage
-                                    src={getFirstValidImage(vehicle.images)}
+                                    src={getFirstValidImage(vehicle.images, vehicle.id)}
                                     alt={`${vehicle.make} ${vehicle.model}`}
                                     className="w-24 h-20 object-cover rounded-lg"
                                     width={200}

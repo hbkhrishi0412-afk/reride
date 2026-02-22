@@ -21,6 +21,16 @@ function validateCategory(category: unknown): VehicleCategory {
   return VehicleCategory.FOUR_WHEELER;
 }
 
+const SUPABASE_IMAGES_BUCKET = 'Images';
+
+/** Build public storage URL from base URL and path (no Supabase client needed) */
+function buildStoragePublicUrl(filePath: string): string | null {
+  const baseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  if (!baseUrl || !baseUrl.startsWith('https://') || !baseUrl.includes('.supabase.co')) return null;
+  const normalized = filePath.trim().replace(/^\//, '');
+  return `${baseUrl}/storage/v1/object/public/${SUPABASE_IMAGES_BUCKET}/${normalized}`;
+}
+
 /**
  * Converts image paths/URLs to public URLs
  * Handles both Supabase Storage paths and full URLs
@@ -30,66 +40,40 @@ function processImageUrls(images: string[] | null | undefined, vehicleId?: numbe
     return [];
   }
 
+  const resolvePath = (image: string): string => {
+    if (!image || typeof image !== 'string' || image.trim() === '') return '';
+    let filePath = image.trim();
+    if (!filePath.includes('/')) {
+      filePath = vehicleId != null ? `vehicles/${vehicleId}/${filePath}` : `vehicles/${filePath}`;
+    }
+    return filePath;
+  };
+
+  const toPublicUrl = (image: string): string => {
+    if (image && (image.startsWith('http://') || image.startsWith('https://'))) return image;
+    if (!image || typeof image !== 'string' || image.trim() === '') return '';
+    const filePath = resolvePath(image);
+    if (!filePath) return '';
+
+    try {
+      const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+      const { data } = supabase.storage.from(SUPABASE_IMAGES_BUCKET).getPublicUrl(filePath);
+      if (data?.publicUrl) return data.publicUrl;
+    } catch (_) {
+      // Admin/client not available (e.g. serverless without keys)
+    }
+    const fallback = buildStoragePublicUrl(filePath);
+    return fallback || image;
+  };
+
   try {
-    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
-    return images.map((image) => {
-      // If already a full URL (http/https), return as-is
-      if (image && (image.startsWith('http://') || image.startsWith('https://'))) {
-        return image;
-      }
-      
-      // If it's a Supabase Storage path (e.g., "vehicles/123/image.jpg" or just "image.jpg")
-      if (image && typeof image === 'string' && image.trim() !== '') {
-        // If it's already a full path, use it directly
-        // Otherwise, construct path from vehicleId if available
-        let filePath = image.trim();
-        
-        // Handle different path formats:
-        // 1. Full path: "vehicles/123/image.jpg" -> use as-is
-        // 2. Relative with vehicleId: "image.jpg" + vehicleId -> "vehicles/123/image.jpg"
-        // 3. Relative without vehicleId: "image.jpg" -> "vehicles/image.jpg"
-        if (!filePath.includes('/')) {
-          if (vehicleId) {
-            filePath = `vehicles/${vehicleId}/${filePath}`;
-          } else {
-            filePath = `vehicles/${filePath}`;
-          }
-        }
-        
-        // Get public URL from Supabase Storage
-        // Note: getPublicUrl doesn't return an error - it always returns a URL
-        const { data } = supabase.storage
-          .from('Images')
-          .getPublicUrl(filePath);
-        
-        if (data?.publicUrl) {
-          // Log successful conversion in development
-          if (process.env.NODE_ENV !== 'production' && !isServerSide) {
-            console.log('✅ Image URL converted:', {
-              original: image,
-              path: filePath,
-              publicUrl: data.publicUrl
-            });
-          }
-          return data.publicUrl;
-        } else {
-          console.warn('⚠️ No public URL generated for image:', {
-            original: image,
-            constructedPath: filePath,
-            vehicleId
-          });
-          return image; // Return original if no URL generated
-        }
-      }
-      
-      // Invalid image, return empty string (will be filtered out)
-      return '';
-    }).filter(img => img && img.trim() !== ''); // Remove empty strings
+    return images.map(toPublicUrl).filter(img => img && img.trim() !== '');
   } catch (error) {
     console.error('❌ Error processing image URLs:', error);
-    // Return original images if processing fails
-    return images.filter(img => img && typeof img === 'string' && img.trim() !== '');
+    return images
+      .filter(img => img && typeof img === 'string' && img.trim() !== '')
+      .map(img => buildStoragePublicUrl(resolvePath(img)) || img)
+      .filter(Boolean);
   }
 }
 

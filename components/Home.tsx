@@ -41,7 +41,7 @@ const Home: React.FC<HomeProps> = ({
     useEffect(() => {
         if (featuredVehicles.length > 0) {
             const firstVehicle = featuredVehicles[0];
-            const firstImage = getFirstValidImage(firstVehicle.images);
+            const firstImage = getFirstValidImage(firstVehicle.images, firstVehicle.id);
             if (firstImage && !firstImage.startsWith('data:')) {
                 const optimizedImage = optimizeImageUrl(firstImage, 800, 85);
                 // Check if preload link already exists to avoid duplicates
@@ -536,7 +536,7 @@ const Home: React.FC<HomeProps> = ({
                                     >
                                         <div className="relative h-56 overflow-hidden">
                                             <LazyImage
-                                                src={getFirstValidImage(vehicle.images)}
+                                                src={getFirstValidImage(vehicle.images, vehicle.id)}
                                                 alt={`${vehicle.make} ${vehicle.model}`}
                                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                                                 width={400}
@@ -667,7 +667,7 @@ const Home: React.FC<HomeProps> = ({
                                 >
                                     <div className="relative h-48 overflow-hidden">
                                         <LazyImage
-                                            src={getFirstValidImage(vehicle.images)}
+                                            src={getFirstValidImage(vehicle.images, vehicle.id)}
                                             alt={`${vehicle.make} ${vehicle.model}`}
                                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                                             width={380}

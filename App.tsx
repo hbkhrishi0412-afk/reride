@@ -357,6 +357,7 @@ const AppContent: React.FC = () => {
     onDeleteFaq,
     onCertificationApproval,
     onOfferResponse,
+    refreshVehicles,
   } = useApp();
   
   // Handle service worker update notifications
@@ -1072,6 +1073,8 @@ const AppContent: React.FC = () => {
               onCityChange={(city) => {
                 setSelectedCity(city);
               }}
+              sourceVehicleCount={vehicles.length}
+              onRetryLoadVehicles={refreshVehicles}
             />
           </VehicleListErrorBoundary>
         );
