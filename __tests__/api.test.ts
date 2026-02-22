@@ -18,9 +18,17 @@ jest.mock('../utils/security', () => ({
     return { isValid, score: isValid ? 4 : 0, feedback: [] };
   },
   validateUserInput: (data: any) => {
-    const errors = [];
+    const errors: string[] = [];
     if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.push('Valid email address is required');
-    // Simplified logic for testing the API handler logic, not the validation logic itself
+    if (data.password !== undefined) {
+      if (data.password.length < 8) errors.push('Password must be at least 8 characters long');
+      if (!/[A-Z]/.test(data.password)) errors.push('Password must contain at least one uppercase letter');
+      if (!/[a-z]/.test(data.password)) errors.push('Password must contain at least one lowercase letter');
+      if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(data.password)) errors.push('Password must contain at least one special character');
+    }
+    if (!data.name || data.name.trim().length < 2) errors.push('Name must be at least 2 characters long');
+    if (!data.mobile || !/^[0-9]{10}$/.test(String(data.mobile).replace(/\D/g, ''))) errors.push('Valid 10-digit mobile number is required');
+    if (!data.role || !['customer', 'seller', 'admin'].includes(data.role)) errors.push('Valid role (customer, seller, admin) is required');
     return { isValid: errors.length === 0, errors };
   }
 }));

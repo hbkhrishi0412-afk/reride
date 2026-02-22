@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/181</span>
+                <span class='fraction'>0/162</span>
             </div>
         
             
@@ -624,11 +624,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { Vehicle, ListingStats } from '../types';
 &nbsp;
 // Listing expiry configuration (60 days)
-export const <span class="cstat-no" title="statement not covered" >LISTING_EXPIRY_DAYS = 60;</span>
-export const <span class="cstat-no" title="statement not covered" >LISTING_WARNING_DAYS = 7; </span>// Warn 7 days before expiry
+export const LISTING_EXPIRY_DAYS = <span class="cstat-no" title="statement not covered" >60;</span>
+export const LISTING_WARNING_DAYS = <span class="cstat-no" title="statement not covered" >7;</span> // Warn 7 days before expiry
 &nbsp;
 // Calculate days until expiry
-export const <span class="cstat-no" title="statement not covered" >getDaysUntilExpiry = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): number =&gt; {</span>
+export const getDaysUntilExpiry = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): number =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (!vehicle.createdAt) <span class="cstat-no" title="statement not covered" >return LISTING_EXPIRY_DAYS;</span></span>
   
   const created = <span class="cstat-no" title="statement not covered" >new Date(vehicle.createdAt);</span>
@@ -638,25 +638,25 @@ export const <span class="cstat-no" title="statement not covered" >getDaysUntilE
 };
 &nbsp;
 // Check if listing is expired
-export const <span class="cstat-no" title="statement not covered" >isListingExpired = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): boolean =&gt; {</span>
+export const isListingExpired = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): boolean =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  return getDaysUntilExpiry(vehicle) &lt;= 0;</span>
 };
 &nbsp;
 // Check if listing is near expiry
-export const <span class="cstat-no" title="statement not covered" >isListingNearExpiry = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): boolean =&gt; {</span>
+export const isListingNearExpiry = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): boolean =&gt; {</span>
   const daysLeft = <span class="cstat-no" title="statement not covered" >getDaysUntilExpiry(vehicle);</span>
 <span class="cstat-no" title="statement not covered" >  return daysLeft &gt; 0 &amp;&amp; daysLeft &lt;= LISTING_WARNING_DAYS;</span>
 };
 &nbsp;
 // Get expiry status
-export const <span class="cstat-no" title="statement not covered" >getExpiryStatus = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): 'active' | 'near_expiry' | 'expired' =&gt; {</span>
+export const getExpiryStatus = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): 'active' | 'near_expiry' | 'expired' =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (isListingExpired(vehicle)) <span class="cstat-no" title="statement not covered" >return 'expired';</span></span>
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (isListingNearExpiry(vehicle)) <span class="cstat-no" title="statement not covered" >return 'near_expiry';</span></span>
 <span class="cstat-no" title="statement not covered" >  return 'active';</span>
 };
 &nbsp;
 // Refresh listing (bump to top)
-export const <span class="cstat-no" title="statement not covered" >refreshListing = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): Vehicle =&gt; {</span>
+export const refreshListing = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): Vehicle =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  return {</span>
     ...vehicle,
     lastRefreshedAt: new Date().toISOString(),
@@ -665,7 +665,7 @@ export const <span class="cstat-no" title="statement not covered" >refreshListin
 };
 &nbsp;
 // Renew listing (extend expiry)
-export const <span class="cstat-no" title="statement not covered" >renewListing = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): Vehicle =&gt; {</span>
+export const renewListing = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): Vehicle =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  return {</span>
     ...vehicle,
     createdAt: new Date().toISOString(),
@@ -677,7 +677,7 @@ export const <span class="cstat-no" title="statement not covered" >renewListing 
 };
 &nbsp;
 // Auto-expire listings
-export const <span class="cstat-no" title="statement not covered" >autoExpireListings = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicles: Vehicle[]): Vehicle[] =&gt; {</span>
+export const autoExpireListings = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicles: Vehicle[]): Vehicle[] =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  return vehicles.map(<span class="fstat-no" title="function not covered" >vehicle </span>=&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (vehicle.status === 'published' &amp;&amp; isListingExpired(vehicle)) {</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
@@ -691,7 +691,7 @@ export const <span class="cstat-no" title="statement not covered" >autoExpireLis
 };
 &nbsp;
 // Calculate days active
-export const <span class="cstat-no" title="statement not covered" >getDaysActive = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): number =&gt; {</span>
+export const getDaysActive = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): number =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (vehicle.daysActive !== undefined) <span class="cstat-no" title="statement not covered" >return vehicle.daysActive;</span></span>
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (!vehicle.createdAt) <span class="cstat-no" title="statement not covered" >return 0;</span></span>
   
@@ -701,7 +701,7 @@ export const <span class="cstat-no" title="statement not covered" >getDaysActive
 };
 &nbsp;
 // Format listing age
-export const <span class="cstat-no" title="statement not covered" >formatListingAge = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): string =&gt; {</span>
+export const formatListingAge = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): string =&gt; {</span>
   const days = <span class="cstat-no" title="statement not covered" >getDaysActive(vehicle);</span>
   
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (days === 0) <span class="cstat-no" title="statement not covered" >return 'Posted today';</span></span>
@@ -716,7 +716,7 @@ export const <span class="cstat-no" title="statement not covered" >formatListing
 };
 &nbsp;
 // Track phone view
-export const <span class="cstat-no" title="statement not covered" >trackPhoneView = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicleId: number): void =&gt; {</span>
+export const trackPhoneView = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicleId: number): void =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const key = <span class="cstat-no" title="statement not covered" >`phoneViews_${vehicleId}`;</span>
     const currentViews = <span class="cstat-no" title="statement not covered" >parseInt(localStorage.getItem(key) || '0', 10);</span>
@@ -727,7 +727,7 @@ export const <span class="cstat-no" title="statement not covered" >trackPhoneVie
 };
 &nbsp;
 // Get phone views count
-export const <span class="cstat-no" title="statement not covered" >getPhoneViews = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicleId: number): number =&gt; {</span>
+export const getPhoneViews = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicleId: number): number =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const key = <span class="cstat-no" title="statement not covered" >`phoneViews_${vehicleId}`;</span>
 <span class="cstat-no" title="statement not covered" >    return parseInt(localStorage.getItem(key) || '0', 10);</span>
@@ -737,7 +737,7 @@ export const <span class="cstat-no" title="statement not covered" >getPhoneViews
 };
 &nbsp;
 // Track vehicle share
-export const <span class="cstat-no" title="statement not covered" >trackShare = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicleId: number, platform: 'whatsapp' | 'facebook' | 'twitter' | 'copy'): void =&gt; {</span>
+export const trackShare = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicleId: number, platform: 'whatsapp' | 'facebook' | 'twitter' | 'copy'): void =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const key = <span class="cstat-no" title="statement not covered" >`shares_${vehicleId}`;</span>
     const sharesJson = <span class="cstat-no" title="statement not covered" >localStorage.getItem(key);</span>
@@ -751,7 +751,7 @@ export const <span class="cstat-no" title="statement not covered" >trackShare = 
 };
 &nbsp;
 // Get share count
-export const <span class="cstat-no" title="statement not covered" >getShareCount = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicleId: number): number =&gt; {</span>
+export const getShareCount = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicleId: number): number =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const key = <span class="cstat-no" title="statement not covered" >`shares_${vehicleId}`;</span>
     const sharesJson = <span class="cstat-no" title="statement not covered" >localStorage.getItem(key);</span>
@@ -764,7 +764,7 @@ export const <span class="cstat-no" title="statement not covered" >getShareCount
 };
 &nbsp;
 // Calculate best price indicator
-export const <span class="cstat-no" title="statement not covered" >calculateBestPrice = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle, allVehicles: Vehicle[]): boolean =&gt; {</span>
+export const calculateBestPrice = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle, allVehicles: Vehicle[]): boolean =&gt; {</span>
   // Find similar vehicles (same make, model, similar year)
   const similarVehicles = <span class="cstat-no" title="statement not covered" >allVehicles.filter(<span class="fstat-no" title="function not covered" >v </span>=&gt; </span>
 <span class="cstat-no" title="statement not covered" >    v.id !== vehicle.id &amp;&amp;</span>
@@ -784,7 +784,7 @@ export const <span class="cstat-no" title="statement not covered" >calculateBest
 };
 &nbsp;
 // Quality score calculation
-export const <span class="cstat-no" title="statement not covered" >calculateListingQuality = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicle: Vehicle): number =&gt; {</span>
+export const calculateListingQuality = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicle: Vehicle): number =&gt; {</span>
   let score = <span class="cstat-no" title="statement not covered" >0;</span>
 &nbsp;
   // Images (30 points)
@@ -828,14 +828,14 @@ export const <span class="cstat-no" title="statement not covered" >calculateList
 };
 &nbsp;
 // Get listing quality level
-export const <span class="cstat-no" title="statement not covered" >getListingQualityLevel = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>s</span>core: number): 'low' | 'medium' | 'high' =&gt; {</span>
+export const getListingQualityLevel = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(s</span>core: number): 'low' | 'medium' | 'high' =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (score &gt;= 75) <span class="cstat-no" title="statement not covered" >return 'high';</span></span>
 <span class="cstat-no" title="statement not covered" >  <span class="missing-if-branch" title="if path not taken" >I</span>if (score &gt;= 50) <span class="cstat-no" title="statement not covered" >return 'medium';</span></span>
 <span class="cstat-no" title="statement not covered" >  return 'low';</span>
 };
 &nbsp;
 // Listing stats aggregation
-export const <span class="cstat-no" title="statement not covered" >aggregateListingStats = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicleId: number): ListingStats =&gt; {</span>
+export const aggregateListingStats = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicleId: number): ListingStats =&gt; {</span>
   const today = <span class="cstat-no" title="statement not covered" >new Date().toISOString().split('T')[0];</span>
   
 <span class="cstat-no" title="statement not covered" >  return {</span>
@@ -851,7 +851,7 @@ export const <span class="cstat-no" title="statement not covered" >aggregateList
 };
 &nbsp;
 // Sort vehicles by various criteria
-export const <span class="cstat-no" title="statement not covered" >sortVehicles = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span></span></span>
+export const sortVehicles = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span></span>
   vehicles: Vehicle[],
   sortBy: 'newest' | 'oldest' | 'price_low' | 'price_high' | 'most_viewed'
 ): Vehicle[] =&gt; {
@@ -887,7 +887,7 @@ export const <span class="cstat-no" title="statement not covered" >sortVehicles 
 };
 &nbsp;
 // Filter by budget presets
-export const <span class="cstat-no" title="statement not covered" >BUDGET_PRESETS = [</span>
+export const BUDGET_PRESETS = <span class="cstat-no" title="statement not covered" >[</span>
   { label: 'Under ₹3 Lakh', min: 0, max: 300000 },
   { label: '₹3-5 Lakh', min: 300000, max: 500000 },
   { label: '₹5-8 Lakh', min: 500000, max: 800000 },
@@ -896,7 +896,7 @@ export const <span class="cstat-no" title="statement not covered" >BUDGET_PRESET
   { label: 'Above ₹20 Lakh', min: 2000000, max: Infinity },
 ];
 &nbsp;
-export const <span class="cstat-no" title="statement not covered" >filterByBudget = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(</span>v</span>ehicles: Vehicle[], budgetRange: { min: number; max: number }): Vehicle[] =&gt; {</span>
+export const filterByBudget = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >(v</span>ehicles: Vehicle[], budgetRange: { min: number; max: number }): Vehicle[] =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  return vehicles.filter(<span class="fstat-no" title="function not covered" >v </span>=&gt; <span class="cstat-no" title="statement not covered" >v.price &gt;= budgetRange.min &amp;&amp; v.price &lt;= budgetRange.max)</span>;</span>
 };
 &nbsp;
@@ -907,7 +907,7 @@ export const <span class="cstat-no" title="statement not covered" >filterByBudge
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:57.438Z
+                at 2026-02-22T18:07:11.112Z
             </div>
         <script src="../prettify.js"></script>
         <script>

@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/27</span>
+                <span class='fraction'>0/24</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/26</span>
+                <span class='fraction'>0/23</span>
             </div>
         
             
@@ -131,20 +131,15 @@
 <a name='L66'></a><a href='#L66'>66</a>
 <a name='L67'></a><a href='#L67'>67</a>
 <a name='L68'></a><a href='#L68'>68</a>
-<a name='L69'></a><a href='#L69'>69</a></td><td class="line-coverage quiet"><span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<a name='L69'></a><a href='#L69'>69</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -152,6 +147,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -163,6 +159,10 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -199,9 +199,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js"><span class="cstat-no" title="statement not covered" >import React, { useState, useCallback } from 'react';</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import React, { useState, useCallback } from 'react';
 import type { Vehicle } from '../types';
-<span class="cstat-no" title="statement not covered" >import { getSellerPriceSuggestion } from '../services/geminiService';</span>
+import { getSellerPriceSuggestion } from '../services/geminiService';
 &nbsp;
 interface PricingGuidanceProps {
   vehicleDetails: Partial&lt;Vehicle&gt;;
@@ -248,15 +248,15 @@ const PricingGuidance: React.FC&lt;PricingGuidanceProps&gt; = <span class="cstat
                 type="button"
                 onClick={handleAnalysis}
                 disabled={isLoading}
-                className="font-semibold text-spinny-orange disabled:opacity-50 flex items-center gap-1 hover:text-spinny-orange"
+                className="font-semibold text-reride-orange disabled:opacity-50 flex items-center gap-1 hover:text-reride-orange"
             &gt;
                 {isLoading ? (
                     &lt;&gt;&lt;div className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-current"&gt;&lt;/div&gt;&lt;span&gt;Analyzing...&lt;/span&gt;&lt;/&gt;
                 ) : (
-                    &lt;&gt;✨ Get AI Price Suggestion&lt;/&gt;
+                    &lt;&gt;✨ Get AI Price&lt;/&gt;
                 )}
             &lt;/button&gt;
-            {error &amp;&amp; &lt;div className="mt-2 p-3 bg-spinny-orange-light dark:bg-spinny-orange/20 text-spinny-orange dark:text-spinny-orange rounded-lg"&gt;{error}&lt;/div&gt;}
+            {error &amp;&amp; &lt;div className="mt-2 p-3 bg-reride-orange-light dark:bg-reride-orange/20 text-reride-orange dark:text-reride-orange rounded-lg"&gt;{error}&lt;/div&gt;}
             {result &amp;&amp; (
                 &lt;div className="mt-2 p-3 rounded-lg animate-fade-in" style={{ backgroundColor: 'rgba(30, 136, 229, 0.1)', color: '#1A1A1A' }}&gt;
                     &lt;p className="font-bold"&gt;Suggested Range: {formatCurrency(result.min)} - {formatCurrency(result.max)}&lt;/p&gt;
@@ -267,14 +267,14 @@ const PricingGuidance: React.FC&lt;PricingGuidanceProps&gt; = <span class="cstat
     );
 };
 &nbsp;
-<span class="cstat-no" title="statement not covered" >export default PricingGuidance;</span></pre></td></tr></table></pre>
+export default PricingGuidance;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
             </div><!-- /wrapper -->
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-26T19:58:58.293Z
+                at 2026-02-22T18:07:16.958Z
             </div>
         <script src="../prettify.js"></script>
         <script>
