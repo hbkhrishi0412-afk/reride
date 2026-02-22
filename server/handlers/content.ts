@@ -1,5 +1,5 @@
 /**
- * api/handlers/content.ts — FAQ & Support Ticket handlers
+ * server/handlers/content.ts — FAQ & Support Ticket handlers
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
@@ -144,4 +144,3 @@ async function handleSupportTickets(req: VercelRequest, res: VercelResponse) {
     default: return res.status(405).json({ error: 'Method not allowed' });
   }
 }
-

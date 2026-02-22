@@ -1,5 +1,5 @@
 /**
- * api/handlers/system.ts — System, health, AI/Gemini, test-connection, and utility handlers
+ * server/handlers/system.ts — System, health, AI/Gemini, test-connection, and utility handlers
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { logError } from '../../utils/logger.js';
@@ -206,4 +206,3 @@ async function handleTestFirebaseWrites(req: VercelRequest, res: VercelResponse)
     return res.status(500).json({ success: false, message: 'Write test failed', error: error instanceof Error ? error.message : 'Unknown', timestamp: new Date().toISOString() });
   }
 }
-

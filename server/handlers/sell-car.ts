@@ -1,5 +1,5 @@
 /**
- * api/handlers/sell-car.ts — Sell car submission handler
+ * server/handlers/sell-car.ts — Sell car submission handler
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { USE_SUPABASE, adminRead, adminReadAll, adminCreate, adminUpdate, adminDelete, HandlerOptions, sanitizeObject, sanitizeString } from './shared';
@@ -83,4 +83,3 @@ export async function handleSellCar(req: VercelRequest, res: VercelResponse, _op
     return res.status(500).json({ error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' });
   }
 }
-

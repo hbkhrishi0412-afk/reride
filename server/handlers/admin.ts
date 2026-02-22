@@ -1,5 +1,5 @@
 /**
- * api/handlers/admin.ts — Admin endpoint handler
+ * server/handlers/admin.ts — Admin endpoint handler
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
@@ -183,4 +183,3 @@ export async function seedVehicles(): Promise<VehicleType[]> {
   }
   return vehicles;
 }
-
