@@ -11,10 +11,8 @@ export * from './shared';
 
 // ── Extracted handlers ──────────────────────────────────────────────────────
 
-export { handleHealth } from './health';
-export { handleAI } from './ai';
 export { handleAdmin, seedUsers, seedVehicles } from './admin';
-export { handleSystem, handleUtils } from './system';
+export { handleHealth, handleAI, handleSystem, handleUtils } from './system';
 export { handleContent } from './content';
 export { handleSellCar } from './sell-car';
 
