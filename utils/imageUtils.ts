@@ -188,27 +188,47 @@ const isPlaceholderService = (url: string): boolean => {
 };
 
 /**
- * Validates an array of image sources and returns only valid ones
- * Filters out placeholder services that return random images
- * @param images - Array of image sources
- * @returns Array of valid image sources
+ * Validates an array of image sources and returns only valid ones.
+ * Converts Supabase Storage paths to public URLs so images load correctly.
+ * @param images - Array of image sources (URLs or storage paths)
+ * @param vehicleId - Optional vehicle id to resolve relative paths like "image.jpg"
+ * @returns Array of valid image URLs
  */
-export const getValidImages = (images: string[]): string[] => {
+export const getValidImages = (images: string[], vehicleId?: number): string[] => {
   if (!Array.isArray(images)) {
     return [DEFAULT_PLACEHOLDER];
   }
-  
+
+  const toUrl = (img: string) =>
+    isSupabaseStoragePath(img) ? convertStoragePathToUrl(img, vehicleId) : img;
+
   const validImages = images
     .filter(img => {
       if (!img || img.trim() === '') return false;
-      // Filter out placeholder services that return random images
       if (isPlaceholderService(img)) return false;
       return true;
     })
-    .map(img => getSafeImageSrc(img));
+    .map(img => getSafeImageSrc(toUrl(img)));
   
-  // Return at least one placeholder if no valid images
   return validImages.length > 0 ? validImages : [DEFAULT_PLACEHOLDER];
+};
+
+/** Supabase Storage bucket used for vehicle images */
+const SUPABASE_IMAGES_BUCKET = 'Images';
+
+/**
+ * Builds a Supabase Storage public URL from a path (no client required).
+ * Works in both browser and SSR when VITE_SUPABASE_URL is set.
+ */
+const buildSupabasePublicUrl = (path: string): string | null => {
+  if (!path || typeof path !== 'string' || path.trim() === '') return null;
+  const baseUrl =
+    typeof import.meta !== 'undefined' && import.meta.env && typeof (import.meta.env as Record<string, string>).VITE_SUPABASE_URL === 'string'
+      ? (import.meta.env as Record<string, string>).VITE_SUPABASE_URL.replace(/\/$/, '')
+      : typeof process !== 'undefined' && process.env && (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL)?.replace?.(/\/$/, '');
+  if (!baseUrl || !baseUrl.startsWith('https://') || !baseUrl.includes('.supabase.co')) return null;
+  const normalizedPath = path.trim().replace(/^\//, '');
+  return `${baseUrl}/storage/v1/object/public/${SUPABASE_IMAGES_BUCKET}/${normalizedPath}`;
 };
 
 /**
@@ -219,80 +239,62 @@ export const getValidImages = (images: string[]): string[] => {
 const isSupabaseStoragePath = (url: string): boolean => {
   if (!url || typeof url !== 'string') return false;
   // Check if it looks like a storage path (no http/https, contains path separators or is just a filename)
-  return !url.startsWith('http://') && 
-         !url.startsWith('https://') && 
+  return !url.startsWith('http://') &&
+         !url.startsWith('https://') &&
          !url.startsWith('data:') &&
          !url.startsWith('blob:') &&
          url.trim() !== '';
 };
 
 /**
- * Converts a Supabase Storage path to a public URL (synchronous version)
+ * Converts a Supabase Storage path to a public URL (synchronous).
+ * Uses VITE_SUPABASE_URL so it works without Supabase client (reliable in ESM/Vite).
  * @param path - The storage path (e.g., "vehicles/123/image.jpg")
+ * @param vehicleId - Optional vehicle id to build path when path is just a filename
  * @returns Public URL or original path if conversion fails
  */
-const convertStoragePathToUrl = (path: string): string => {
+const convertStoragePathToUrl = (path: string, vehicleId?: number): string => {
   try {
-    // Try to get Supabase client (only works in browser/client context)
-    if (typeof window !== 'undefined') {
-      // Try synchronous conversion if Supabase client is available
-      try {
-        // Check if we can access Supabase client synchronously
-        const supabaseModule = require('../lib/supabase.js');
-        if (supabaseModule && supabaseModule.getSupabaseClient) {
-          const supabase = supabaseModule.getSupabaseClient();
-          const { data } = supabase.storage
-            .from('Images')
-            .getPublicUrl(path);
-          if (data?.publicUrl) {
-            return data.publicUrl;
-          }
-        }
-      } catch {
-        // If synchronous access fails, return path as-is
-        // The LazyImage component will handle async conversion on error
-      }
+    let filePath = path.trim();
+    if (!filePath) return path;
+    // Build path if we only have a filename
+    if (!filePath.includes('/') && vehicleId != null) {
+      filePath = `vehicles/${vehicleId}/${filePath}`;
+    } else if (!filePath.includes('/')) {
+      filePath = `vehicles/${filePath}`;
     }
-    // If we can't convert, return original path
-    return path;
-  } catch (error) {
-    console.warn('⚠️ Error converting storage path to URL:', error);
+    const url = buildSupabasePublicUrl(filePath);
+    return url || path;
+  } catch {
     return path;
   }
 };
 
 /**
  * Gets the first valid image from an array
- * @param images - Array of image sources
- * @returns First valid image source or placeholder
+ * @param images - Array of image sources (URLs or Supabase Storage paths)
+ * @param vehicleId - Optional vehicle id to resolve relative paths like "image.jpg"
+ * @returns First valid image URL or placeholder
  */
-export const getFirstValidImage = (images: string[]): string => {
+export const getFirstValidImage = (images: string[], vehicleId?: number): string => {
   if (!Array.isArray(images) || images.length === 0) {
     return DEFAULT_PLACEHOLDER;
   }
-  
-  // Find first valid image (not a placeholder service, not empty)
+
   for (const img of images) {
     if (!img || img.trim() === '') continue;
-    
-    // If it's a Supabase Storage path, try to convert it
+    if (isPlaceholderService(img)) continue;
+
     if (isSupabaseStoragePath(img)) {
-      // For now, return it as-is - the conversion should happen in supabaseRowToVehicle
-      // But if it still comes through, we'll try to handle it
-      const converted = convertStoragePathToUrl(img);
+      const converted = convertStoragePathToUrl(img, vehicleId);
       if (converted && converted !== img && !isPlaceholderService(converted)) {
         return converted;
       }
+    } else {
+      return getSafeImageSrc(img);
     }
-    
-    // Skip placeholder services
-    if (isPlaceholderService(img)) continue;
-    
-    // Valid image URL
-    return getSafeImageSrc(img);
   }
-  
-  // No valid images found, return placeholder
+
   return DEFAULT_PLACEHOLDER;
 };
 

@@ -272,7 +272,7 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
               >
                 <div className="flex gap-4 p-4">
                   <img
-                    src={getFirstValidImage(vehicle.images)}
+                    src={getFirstValidImage(vehicle.images, vehicle.id)}
                     alt={`${vehicle.make} ${vehicle.model}`}
                     className="w-24 h-24 rounded-lg object-cover flex-shrink-0"
                   />

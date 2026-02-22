@@ -291,7 +291,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                   <div className="bg-white rounded-2xl shadow-xl overflow-hidden active:scale-[0.98] transition-all duration-300 hover:shadow-2xl border border-gray-100 cursor-pointer">
                   <div className="relative h-52 overflow-hidden">
                     <img
-                      src={optimizeImageUrl(getFirstValidImage(vehicle.images), 800, 85)}
+                      src={optimizeImageUrl(getFirstValidImage(vehicle.images, vehicle.id), 800, 85)}
                       alt={`${vehicle.make} ${vehicle.model}`}
                       className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
                     />

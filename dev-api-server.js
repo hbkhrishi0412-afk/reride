@@ -20,6 +20,14 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { WebSocketServer } from 'ws';
+import { config } from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+config({ path: join(__dirname, '.env.local') });
+config({ path: join(__dirname, '.env') });
 
 const app = express();
 const server = createServer(app);
@@ -293,27 +301,107 @@ app.get('/api/admin', (req, res) => {
   });
 });
 
+// Build Supabase Storage public URL for vehicle images (no client needed)
+function buildStoragePublicUrl(filePath) {
+  const baseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  if (!baseUrl || !baseUrl.startsWith('https://')) return null;
+  const normalized = (filePath || '').trim().replace(/^\//, '');
+  return `${baseUrl}/storage/v1/object/public/Images/${normalized}`;
+}
+
+// Fetch vehicles from Supabase when env is set (so local dev shows real images)
+async function fetchVehiclesFromSupabase() {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey) return null;
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data: rows, error } = await supabase
+      .from('vehicles')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error || !rows?.length) return null;
+    const vehicles = rows.map((r) => {
+      const id = Number(r.id) || 0;
+      const images = Array.isArray(r.images) ? r.images : [];
+      const imageUrls = images.map((img) => {
+        if (typeof img !== 'string' || !img.trim()) return null;
+        if (img.startsWith('http://') || img.startsWith('https://')) return img;
+        const path = img.includes('/') ? img : (id ? `vehicles/${id}/${img}` : `vehicles/${img}`);
+        return buildStoragePublicUrl(path) || img;
+      }).filter(Boolean);
+      return {
+        id,
+        make: r.make || '',
+        model: r.model || '',
+        variant: r.variant,
+        year: r.year || 0,
+        price: Number(r.price) || 0,
+        mileage: Number(r.mileage) || 0,
+        images: imageUrls,
+        features: r.features || [],
+        description: r.description || '',
+        sellerEmail: r.seller_email || '',
+        sellerName: r.seller_name,
+        engine: r.engine || '',
+        transmission: r.transmission || '',
+        fuelType: r.fuel_type || '',
+        fuelEfficiency: r.fuel_efficiency || '',
+        color: r.color || '',
+        status: (r.status || 'published'),
+        isFeatured: !!r.is_featured,
+        views: r.views || 0,
+        inquiriesCount: r.inquiries_count || 0,
+        registrationYear: r.registration_year,
+        insuranceValidity: r.insurance_validity,
+        insuranceType: r.insurance_type,
+        rto: r.rto,
+        city: r.city,
+        state: r.state,
+        location: r.location,
+        noOfOwners: r.no_of_owners,
+        displacement: r.displacement,
+        groundClearance: r.ground_clearance,
+        bootSpace: r.boot_space,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        category: r.category || 'FOUR_WHEELER',
+      };
+    });
+    return vehicles;
+  } catch (e) {
+    console.warn('Supabase vehicles fetch failed, using mock:', e?.message || e);
+    return null;
+  }
+}
+
 // Vehicle Data API endpoints
-app.get('/api/vehicles', (req, res) => {
+app.get('/api/vehicles', async (req, res) => {
   const { type } = req.query;
   
   if (type === 'data') {
     console.log('🚗 GET /api/vehicles?type=data - Returning vehicle data');
     res.json(mockVehicleData);
   } else {
-    console.log('🚗 GET /api/vehicles - Returning mock vehicles list');
-    // Auto-disable expired listings
-    const now = new Date();
-    for (const vehicle of mockVehicles) {
-      if (vehicle.listingExpiresAt && vehicle.status === 'published') {
-        const expiryDate = new Date(vehicle.listingExpiresAt);
-        if (expiryDate < now) {
-          vehicle.status = 'unpublished';
-          vehicle.listingStatus = 'expired';
+    const supabaseVehicles = await fetchVehiclesFromSupabase();
+    if (supabaseVehicles && supabaseVehicles.length > 0) {
+      console.log('🚗 GET /api/vehicles - Returning', supabaseVehicles.length, 'vehicles from Supabase');
+      res.json(supabaseVehicles);
+    } else {
+      console.log('🚗 GET /api/vehicles - Returning mock vehicles list');
+      const now = new Date();
+      for (const vehicle of mockVehicles) {
+        if (vehicle.listingExpiresAt && vehicle.status === 'published') {
+          const expiryDate = new Date(vehicle.listingExpiresAt);
+          if (expiryDate < now) {
+            vehicle.status = 'unpublished';
+            vehicle.listingStatus = 'expired';
+          }
         }
       }
+      res.json(mockVehicles);
     }
-    res.json(mockVehicles);
   }
 });
 

@@ -2876,6 +2876,83 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         });
       }
 
+      // ADMIN: Fetch and save a single vehicle image by make/model/year, then update DB
+      if (action === 'fetch-vehicle-image') {
+        const adminAuth = authenticateRequest(req);
+        if (!adminAuth.isValid || adminAuth.user?.role !== 'admin') {
+          return res.status(adminAuth.isValid ? 403 : 401).json({
+            success: false,
+            reason: adminAuth.isValid ? 'Admin required' : (adminAuth.error || 'Unauthorized')
+          });
+        }
+        const vehicleId = parseInt(String(req.query.id || req.query.vehicleId || '0'), 10);
+        if (!vehicleId) {
+          return res.status(400).json({ success: false, reason: 'Query param id or vehicleId required' });
+        }
+        try {
+          const vehicle = await vehicleService.findById(vehicleId);
+          if (!vehicle) {
+            return res.status(404).json({ success: false, reason: 'Vehicle not found' });
+          }
+          const { fetchImageAndUpdateVehicle } = await import('../services/vehicleImageFetchService.js');
+          const result = await fetchImageAndUpdateVehicle({
+            id: vehicle.id,
+            make: vehicle.make || '',
+            model: vehicle.model || '',
+            year: vehicle.year || 0,
+            images: vehicle.images
+          });
+          if (!result.success) {
+            return res.status(500).json({ success: false, reason: result.error });
+          }
+          return res.status(200).json({ success: true, path: result.path });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return res.status(500).json({ success: false, reason: msg });
+        }
+      }
+
+      // ADMIN: Fetch and save images for all vehicles that have no images
+      if (action === 'fetch-all-vehicle-images') {
+        const adminAuth = authenticateRequest(req);
+        if (!adminAuth.isValid || adminAuth.user?.role !== 'admin') {
+          return res.status(adminAuth.isValid ? 403 : 401).json({
+            success: false,
+            reason: adminAuth.isValid ? 'Admin required' : (adminAuth.error || 'Unauthorized')
+          });
+        }
+        try {
+          const allVehicles = await vehicleService.findAll();
+          const needImages = allVehicles.filter(
+            (v) => !Array.isArray(v.images) || v.images.length === 0
+          );
+          const { fetchImageAndUpdateVehicle } = await import('../services/vehicleImageFetchService.js');
+          const results: { id: number; success: boolean; path?: string; error?: string }[] = [];
+          for (const v of needImages) {
+            const r = await fetchImageAndUpdateVehicle({
+              id: v.id,
+              make: v.make || '',
+              model: v.model || '',
+              year: v.year || 0,
+              images: v.images
+            });
+            results.push({ id: v.id, success: r.success, path: r.path, error: r.error });
+            await new Promise((r) => setTimeout(r, 400));
+          }
+          const ok = results.filter((r) => r.success).length;
+          return res.status(200).json({
+            success: true,
+            total: needImages.length,
+            updated: ok,
+            failed: results.length - ok,
+            results
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return res.status(500).json({ success: false, reason: msg });
+        }
+      }
+
       // PERFORMANCE OPTIMIZATION: Check cache first, then query only published vehicles
       // This dramatically reduces the amount of data fetched and processed
       cleanupVehicleCache();

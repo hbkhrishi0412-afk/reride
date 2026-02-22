@@ -101,7 +101,9 @@ class CacheManager {
     // Remove oldest entries if cache is full
     if (this.memoryCache.size >= this.maxMemorySize) {
       const firstKey = this.memoryCache.keys().next().value;
-      this.memoryCache.delete(firstKey);
+      if (firstKey !== undefined) {
+        this.memoryCache.delete(firstKey);
+      }
     }
     this.memoryCache.set(key, entry);
   }

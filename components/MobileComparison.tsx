@@ -106,7 +106,7 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
                 className="cursor-pointer"
               >
                 <img
-                  src={getFirstValidImage(vehicle.images)}
+                  src={getFirstValidImage(vehicle.images, vehicle.id)}
                   alt={`${vehicle.make} ${vehicle.model}`}
                   className="w-full h-32 object-cover rounded-lg mb-3"
                 />

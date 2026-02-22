@@ -330,7 +330,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   }, []);
   
   // ✅ FIX: Use valid images for navigation to prevent index errors
-  const validImages = useMemo(() => getValidImages(safeVehicle.images), [safeVehicle.images]);
+  const validImages = useMemo(() => getValidImages(safeVehicle.images, safeVehicle.id), [safeVehicle.images, safeVehicle.id]);
   
   const handlePrevImage = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -522,7 +522,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 <img 
                                   key={currentIndex} 
                                   className="w-full h-[500px] object-contain rounded-xl shadow-lg animate-fade-in bg-white" 
-                                  src={validImages[currentIndex] || getFirstValidImage(safeVehicle.images)} 
+                                  src={validImages[currentIndex] || getFirstValidImage(safeVehicle.images, safeVehicle.id)} 
                                   alt={`${safeVehicle.make} ${safeVehicle.model} - Image ${currentIndex + 1}`}
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement;

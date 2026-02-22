@@ -286,17 +286,24 @@ class DataService {
 
   // Vehicle operations
   async getVehicles(includeAllStatuses: boolean = false, forceRefresh: boolean = false): Promise<Vehicle[]> {
-    if (this.isDevelopment) {
+    // In development, use API when Supabase is configured so real vehicle images from Storage load
+    const useApiInDev =
+      this.isDevelopment &&
+      typeof import.meta !== 'undefined' &&
+      (import.meta as any).env?.VITE_SUPABASE_URL;
+
+    if (this.isDevelopment && !useApiInDev) {
       return this.getVehiclesLocal();
     }
 
-    // STEP 1: Check cache first for instant response (unless forceRefresh is true)
+    // STEP 1: Check cache first for instant response (unless forceRefresh or dev with Supabase)
     const cacheKey = 'reRideVehicles_prod';
     const cachedVehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
     
+      // In dev with Supabase, skip cache so we always get fresh vehicles with correct image URLs
       // CRITICAL FIX: For admin operations, bypass cache and fetch fresh data
       // If we have cached data and NOT forcing refresh, return it immediately and fetch fresh data in background
-      if (cachedVehicles.length > 0 && !forceRefresh) {
+      if (cachedVehicles.length > 0 && !forceRefresh && !useApiInDev) {
         // Fetch fresh data in background (don't await) - use pagination for speed
         // IMPORTANT: Refresh full dataset in background to avoid replacing cache with a partial page.
         const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0&skipExpiryCheck=true';
@@ -313,9 +320,13 @@ class DataService {
               return;
             }
             
-            if (Array.isArray(vehicles) && vehicles.length > 0) {
+            if (Array.isArray(vehicles) && vehicles.length >= 0) {
               this.setLocalStorageData(cacheKey, vehicles);
               console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
+              // Notify UI so published vehicles appear without page refresh
+              if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles } }));
+              }
             } else if (vehicles.length === 0) {
               console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');
             }
@@ -647,9 +658,13 @@ class DataService {
                 ? rawResponse.data
                 : [];
           
-          if (Array.isArray(users) && users.length > 0) {
+          if (Array.isArray(users) && users.length >= 0) {
             this.setLocalStorageData(cacheKey, users);
             console.log(`✅ Background refresh: Updated cache with ${users.length} users`);
+            // Notify UI so user data stays in sync (e.g. after Supabase/API updates)
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+              window.dispatchEvent(new CustomEvent('usersCacheUpdated', { detail: { users } }));
+            }
           }
         })
         .catch(error => {
