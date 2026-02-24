@@ -96,6 +96,53 @@ function getCurrentUserEmail(): string | null {
 }
 
 /**
+ * Upload image via server API when Supabase session is missing (e.g. admin or API-only login).
+ * Uses app JWT for auth; server uploads to Storage with service role.
+ */
+async function uploadViaApi(file: File, folder: string): Promise<UploadResult> {
+  try {
+    const resizedFile = await resizeImage(file, 1200, 800, 0.85);
+    const dataUrl = await convertFileToBase64(resizedFile);
+    const fileBase64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+    const { getAuthHeaders } = await import('../utils/authenticatedFetch.js');
+    const headers = getAuthHeaders() as Record<string, string>;
+    const res = await fetch('/api/upload-image', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileBase64,
+        fileName: resizedFile.name,
+        mimeType: resizedFile.type || 'image/jpeg',
+        folder,
+      }),
+      credentials: 'include',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const reason = (data.reason || data.error || `Upload failed (${res.status})`).toString();
+      if (res.status === 401) {
+        return {
+          success: false,
+          error: 'Your session may have expired. Please log out and log back in, then try uploading again.',
+        };
+      }
+      return { success: false, error: reason };
+    }
+    if (data.success && data.url) {
+      return { success: true, url: data.url, imageId: data.imageId };
+    }
+    return {
+      success: false,
+      error: (data.reason || 'Upload failed').toString(),
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('❌ API image upload error:', err);
+    return { success: false, error: msg };
+  }
+}
+
+/**
  * Uploads image to Supabase Storage
  * Stores image as a file in Supabase Storage bucket
  * @param file - The image file to upload
@@ -141,20 +188,8 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
       if (appUser) {
         console.warn('⚠️ User is logged into app but Supabase session is missing/expired');
         console.warn('   App user:', appUser.email);
-        console.warn('   Attempting to restore Supabase session...');
-        
-        // Try to restore session by checking if there's a stored session
-        const { data: { session: storedSession } } = await supabase.auth.getSession();
-        if (storedSession) {
-          console.log('✅ Found stored session, retrying upload...');
-          // Retry with the stored session
-          user = storedSession.user;
-        } else {
-          return {
-            success: false,
-            error: 'Your Supabase session has expired. Please log out and log back in to upload images. The app session and Supabase session need to be in sync.'
-          };
-        }
+        console.warn('   Using server upload API (no Supabase session required)...');
+        return await uploadViaApi(file, folder);
       } else {
         return {
           success: false,

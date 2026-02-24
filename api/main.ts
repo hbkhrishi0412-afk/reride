@@ -575,6 +575,8 @@ async function mainHandler(
         } else if (checkPath.includes('/content') || checkPath.endsWith('/content')) {
           logInfo(`✅ Routing ${req.method} request from /api/main to handleContent (original: ${checkPath})`);
           return await handleContent(req, res, handlerOptions);
+        } else if (checkPath.includes('/upload-image') || checkPath.endsWith('/upload-image')) {
+          return await handleUploadImage(req, res);
         }
       }
       
@@ -677,6 +679,8 @@ async function mainHandler(
       // Import and call login handler
       const { handleLogin } = await import('./login.js');
       return await handleLogin(req, res);
+    } else if (pathname.includes('/upload-image') || pathname.endsWith('/upload-image')) {
+      return await handleUploadImage(req, res);
     } else if (pathname.includes('/services') && !pathname.includes('/service-')) {
       // Import and call services handler (exclude service-providers, service-requests)
       const { handleServices } = await import('./services.js');
@@ -4359,6 +4363,74 @@ async function handleHealth(_req: VercelRequest, res: VercelResponse) {
       error: error instanceof Error ? error.message : 'Unknown error',
       timestamp: new Date().toISOString()
     });
+  }
+}
+
+// Image upload handler - uses service role so app-authenticated users (e.g. admin) can upload without Supabase session
+async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, reason: 'Method not allowed' });
+  }
+  const auth = authenticateRequest(req);
+  if (!auth.isValid) {
+    return res.status(401).json({
+      success: false,
+      reason: auth.error || 'Authentication required to upload images.',
+    });
+  }
+  if (!USE_SUPABASE) {
+    return res.status(503).json({
+      success: false,
+      reason: 'Storage is not available. Configure Supabase environment variables.',
+    });
+  }
+  try {
+    let body = req.body as { fileBase64?: string; fileName?: string; mimeType?: string; folder?: string } | undefined;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body) as typeof body;
+      } catch {
+        return res.status(400).json({ success: false, reason: 'Invalid JSON body.' });
+      }
+    }
+    const { fileBase64, fileName, mimeType, folder = 'vehicles' } = body || {};
+    if (!fileBase64 || !fileName) {
+      return res.status(400).json({
+        success: false,
+        reason: 'Missing fileBase64 or fileName in request body.',
+      });
+    }
+    const buffer = Buffer.from(fileBase64, 'base64');
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 9);
+    const ext = (fileName.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '');
+    const storageFileName = `${timestamp}_${randomStr}.${ext}`;
+    const filePath = `${folder}/${storageFileName}`;
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase.storage
+      .from('Images')
+      .upload(filePath, buffer, {
+        contentType: mimeType || 'image/jpeg',
+        cacheControl: '3600',
+        upsert: false,
+      });
+    if (error) {
+      logError('Upload image API error:', error);
+      return res.status(500).json({
+        success: false,
+        reason: error.message || 'Storage upload failed.',
+      });
+    }
+    const { data: urlData } = supabase.storage.from('Images').getPublicUrl(filePath);
+    return res.status(200).json({
+      success: true,
+      url: urlData.publicUrl,
+      imageId: filePath,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    logError('handleUploadImage error:', msg);
+    return res.status(500).json({ success: false, reason: msg });
   }
 }
 
