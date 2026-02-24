@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { User, Vehicle } from '../types.js';
@@ -28,105 +27,179 @@ interface CompanyLocation {
   lng: number;
 }
 
-// Component to handle map bounds updates
-const MapBoundsUpdater: React.FC<{ bounds: L.LatLngBounds | null }> = ({ bounds }) => {
-  const map = useMap();
-  
+// Imperative Leaflet map: create/destroy in useEffect to avoid "Map container is already initialized"
+const DealerMap: React.FC<{
+  center: [number, number];
+  zoom: number;
+  bounds: L.LatLngBounds | null;
+  selectedCenter: [number, number] | null;
+  filteredSellersWithCoords: Array<{ seller: User; coords: CompanyLocation | null }>;
+  selectedDealerEmail: string | null;
+  onDealerSelect: (sellerEmail: string, coords: CompanyLocation) => void;
+  onViewProfile: (sellerEmail: string) => void;
+}> = ({
+  center,
+  zoom,
+  bounds,
+  selectedCenter,
+  filteredSellersWithCoords,
+  selectedDealerEmail,
+  onDealerSelect,
+  onViewProfile,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+
+  // Create map once when container is mounted
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el || mapRef.current) return;
+
+    const map = L.map(el, {
+      center,
+      zoom: bounds ? undefined : zoom,
+      zoomControl: true,
+      scrollWheelZoom: true,
+    });
     if (bounds && bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+    }
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    mapRef.current = map;
+    markersLayerRef.current = L.layerGroup().addTo(map);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markersLayerRef.current = null;
+    };
+  }, []);
+
+  // Update view when bounds or selected center change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (selectedCenter) {
+      map.setView(selectedCenter, 13, { animate: true, duration: 0.5 });
+    } else if (bounds && bounds.isValid()) {
       try {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-      } catch (error) {
-        console.warn('Error fitting map bounds:', error);
-      }
+      } catch (_) {}
     }
-  }, [bounds, map]);
-  
-  return null;
-};
+  }, [bounds, selectedCenter]);
 
-// Component to center map on selected dealer
-const MapCenterUpdater: React.FC<{ center: [number, number] | null; zoom?: number }> = ({ center, zoom = 13 }) => {
-  const map = useMap();
-  
+  // Map click: find nearest dealer
   useEffect(() => {
-    if (center) {
-      map.setView(center, zoom, {
-        animate: true,
-        duration: 0.5
-      });
-    }
-  }, [center, zoom, map]);
-  
-  return null;
-};
+    const map = mapRef.current;
+    if (!map) return;
 
-// Component to handle map clicks and find nearest dealer
-const MapClickHandler: React.FC<{
-  sellersWithCoords: Array<{ seller: User; coords: CompanyLocation | null }>;
-  onDealerSelect: (sellerEmail: string, coords: CompanyLocation) => void;
-}> = ({ sellersWithCoords, onDealerSelect }) => {
-  const map = useMap();
-  
-  useEffect(() => {
-    const handleMapClick = (e: L.LeafletMouseEvent) => {
-      // Don't process if clicking on a marker (markers handle their own clicks)
+    const handleClick = (e: L.LeafletMouseEvent) => {
       const target = e.originalEvent?.target as HTMLElement;
-      if (target?.closest('.leaflet-marker-icon')) {
-        return;
-      }
-      
+      if (target?.closest('.leaflet-marker-icon')) return;
+
+      const dealersWithCoords = filteredSellersWithCoords.filter(item => item.coords !== null);
+      if (dealersWithCoords.length === 0) return;
+
       const clickedLat = e.latlng.lat;
       const clickedLng = e.latlng.lng;
-      
-      // Only proceed if we have dealers with coordinates
-      const dealersWithCoords = sellersWithCoords.filter(item => item.coords !== null);
-      if (dealersWithCoords.length === 0) {
-        return;
-      }
-      
-      // Find the nearest dealer to the clicked location
-      let nearestDealer: { seller: User; coords: CompanyLocation } | null = null;
-      let minDistance = Infinity;
-      
+      let nearest: { seller: User; coords: CompanyLocation } | null = null;
+      let minDist = Infinity;
+      const R = 6371;
       for (const item of dealersWithCoords) {
-        if (item.coords) {
-          // Calculate distance using Haversine formula
-          const R = 6371; // Earth's radius in km
-          const dLat = (clickedLat - item.coords.lat) * Math.PI / 180;
-          const dLng = (clickedLng - item.coords.lng) * Math.PI / 180;
-          const a = 
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(item.coords.lat * Math.PI / 180) * Math.cos(clickedLat * Math.PI / 180) *
-            Math.sin(dLng / 2) * Math.sin(dLng / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          const distance = R * c;
-          
-          if (distance < minDistance) {
-            minDistance = distance;
-            nearestDealer = { seller: item.seller, coords: item.coords };
-          }
+        if (!item.coords) continue;
+        const dLat = (clickedLat - item.coords.lat) * Math.PI / 180;
+        const dLng = (clickedLng - item.coords.lng) * Math.PI / 180;
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(item.coords.lat * Math.PI / 180) * Math.cos(clickedLat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const dist = R * c;
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = { seller: item.seller, coords: item.coords };
         }
       }
-      
-      // Always show the nearest dealer's details when clicking on the map
-      if (nearestDealer !== null) {
-        const dealer = nearestDealer;
-        onDealerSelect(dealer.seller.email, dealer.coords);
-      }
+      if (nearest) onDealerSelect(nearest.seller.email, nearest.coords);
     };
-    
-    map.on('click', handleMapClick);
-    
-    return () => {
-      map.off('click', handleMapClick);
-    };
-  }, [map, sellersWithCoords, onDealerSelect]);
-  
-  return null;
+
+    map.on('click', handleClick);
+    return () => { map.off('click', handleClick); };
+  }, [filteredSellersWithCoords, onDealerSelect]);
+
+  const iconDefault = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-marker',
+        html: `<div style="width:25px;height:25px;background:#2563eb;border:2px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
+        iconSize: [25, 25],
+        iconAnchor: [12, 25],
+        popupAnchor: [0, -25],
+      }),
+    []
+  );
+  const iconSelected = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-marker-selected',
+        html: `<div style="width:30px;height:30px;background:#ef4444;border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30],
+      }),
+    []
+  );
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = markersLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+    const items = filteredSellersWithCoords.filter(item => item.coords !== null);
+    for (const item of items) {
+      if (!item.coords) continue;
+      const isSelected = selectedDealerEmail === item.seller.email;
+      const marker = L.marker([item.coords.lat, item.coords.lng], {
+        icon: isSelected ? iconSelected : iconDefault,
+      });
+      const name = item.seller.dealershipName || item.seller.name;
+      const location = item.seller.location || '';
+      marker.bindPopup(
+        `<div class="p-2">
+          <h3 class="font-semibold text-blue-600 mb-1">${escapeHtml(name)}</h3>
+          <p class="text-sm text-gray-600">${escapeHtml(location)}</p>
+          <button type="button" class="mt-2 text-sm text-blue-600 hover:text-blue-700 dealer-popup-view">View Profile</button>
+        </div>`,
+        { className: 'dealer-popup' }
+      );
+      marker.on('popupopen', () => {
+        const el = marker.getPopup()?.getElement();
+        el?.querySelector('.dealer-popup-view')?.addEventListener('click', () => {
+          onDealerSelect(item.seller.email, item.coords!);
+          onViewProfile(item.seller.email);
+        });
+      });
+      marker.on('click', () => {
+        onViewProfile(item.seller.email);
+      });
+      layer.addLayer(marker);
+    }
+  }, [filteredSellersWithCoords, selectedDealerEmail, iconDefault, iconSelected, onDealerSelect, onViewProfile]);
+
+  return <div ref={containerRef} className="h-full w-full" style={{ minHeight: 300 }} />;
 };
 
-// Company Card Component matching the image design
+function escapeHtml(s: string): string {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
 const CompanyCard: React.FC<{
   seller: User;
   onViewProfile: (sellerEmail: string) => void;
@@ -147,22 +220,17 @@ const CompanyCard: React.FC<{
   const getStatus = () => {
     const now = new Date();
     const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-    const day = istTime.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const day = istTime.getDay();
     const hour = istTime.getHours();
-    
-    // Assume business hours: Monday-Saturday, 8:30 AM - 8:00 PM
-    const isWeekend = day === 0 || day === 6; // Sunday or Saturday
+    const isWeekend = day === 0 || day === 6;
     const isBusinessHours = hour >= 8 && hour < 20;
-    
     const isOpen = !isWeekend && isBusinessHours;
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const statusText = isOpen ? 'Open' : 'Closed';
-    const statusTime = `${dayNames[day]} at ${hour.toString().padStart(2, '0')}:${istTime.getMinutes().toString().padStart(2, '0')}`;
-    
-    return { isOpen, statusText, statusTime };
+    const statusText = isOpen ? 'Open now' : 'Closed';
+    const statusSubtext = isOpen ? '· Closes 8:00 PM' : '· Opens Monday 8:30 AM';
+    return { isOpen, statusText, statusSubtext };
   };
   
-  const { isOpen, statusText, statusTime } = getStatus();
+  const { isOpen, statusText, statusSubtext } = getStatus();
   
   // Get address - prefer address field, fallback to location
   const address = seller.address || seller.location || 'Address not available';
@@ -202,13 +270,21 @@ const CompanyCard: React.FC<{
         
         {/* Company Details */}
         <div className="flex-1 min-w-0">
-          {/* Company Name - Clickable to show on map */}
+          {/* Company Name - Clickable to show on map when location available */}
           <h3 
-            className="text-blue-600 font-semibold text-base mb-1 hover:underline cursor-pointer"
+            className="text-blue-600 font-semibold text-base mb-1 hover:underline cursor-pointer inline-flex items-center gap-1.5"
             onClick={handleDealerNameClick}
-            title="Click to show location on map"
+            title={coords ? 'Show location on map' : undefined}
           >
             {seller.dealershipName || seller.name}
+            {coords && (
+              <span className="text-gray-400 hover:text-blue-500" title="Show on map">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </span>
+            )}
           </h3>
           
           {/* Company Type */}
@@ -216,9 +292,9 @@ const CompanyCard: React.FC<{
           
           {/* Status */}
           <div className="flex items-center gap-2 mb-2">
-            <span className={`w-2 h-2 rounded-full ${isOpen ? 'bg-green-500' : 'bg-red-500'}`}></span>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${isOpen ? 'bg-green-500' : 'bg-red-500'}`} aria-hidden />
             <span className="text-sm text-gray-600">
-              {statusText} {statusTime}
+              {statusText} <span className="text-gray-500">{statusSubtext}</span>
             </span>
           </div>
           
@@ -283,6 +359,7 @@ const CompanyCard: React.FC<{
 
 const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, onViewProfile }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [companyTypeFilter, setCompanyTypeFilter] = useState<CompanyType>('all');
   const [sellers, setSellers] = useState<User[]>(propSellers || []);
   const [isLoadingSellers, setIsLoadingSellers] = useState(!propSellers || propSellers.length === 0);
@@ -292,6 +369,8 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
   const [selectedDealerCenter, setSelectedDealerCenter] = useState<[number, number] | null>(null);
   const [selectedDealerEmail, setSelectedDealerEmail] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Fetch sellers
   useEffect(() => {
@@ -412,7 +491,6 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
   const filteredSellers = useMemo(() => {
     let filtered = sellers;
 
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(seller => {
@@ -422,20 +500,25 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
       });
     }
 
-    // Apply company type filter
+    if (mapSearchQuery.trim()) {
+      const query = mapSearchQuery.toLowerCase();
+      filtered = filtered.filter(seller => {
+        const location = (seller.location || '').toLowerCase();
+        const address = (seller.address || '').toLowerCase();
+        return location.includes(query) || address.includes(query);
+      });
+    }
+
     if (companyTypeFilter !== 'all') {
       filtered = filtered.filter(seller => {
         const isShowroom = seller.badges?.some(b => b.type === 'top_seller');
-        if (companyTypeFilter === 'showroom') {
-          return isShowroom;
-        } else {
-          return !isShowroom;
-        }
+        if (companyTypeFilter === 'showroom') return isShowroom;
+        return !isShowroom;
       });
     }
 
     return filtered;
-  }, [sellers, searchQuery, companyTypeFilter]);
+  }, [sellers, searchQuery, mapSearchQuery, companyTypeFilter]);
 
   // Get filtered sellers with coordinates
   const filteredSellersWithCoords = useMemo(() => {
@@ -448,11 +531,15 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
     window.location.href = `tel:${phone}`;
   };
 
-  // Handle dealer selection - center map on selected dealer
+  // Handle dealer selection - center map on selected dealer and scroll card into view
   const handleDealerSelect = (sellerEmail: string, coords: CompanyLocation | null) => {
     if (coords) {
       setSelectedDealerEmail(sellerEmail);
       setSelectedDealerCenter([coords.lat, coords.lng]);
+      setTimeout(() => {
+        const el = cardRefs.current[sellerEmail];
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
     }
   };
 
@@ -464,44 +551,51 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {/* Main Content Area - Split Layout */}
-      <div className="flex-1 flex overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
+      {/* Main Content Area - Split Layout: stack on small screens, side-by-side on lg+ */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left Sidebar */}
-        <div className="w-1/3 border-r border-gray-300 flex flex-col overflow-hidden bg-white">
+        <div className="w-full lg:w-[380px] xl:w-[420px] shrink-0 border-r border-gray-200 flex flex-col overflow-hidden bg-white shadow-sm">
           {/* Sidebar Header */}
-          <div className="p-4 border-b border-gray-300">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">
-              Dealers in Selected Region
+          <div className="p-4 border-b border-gray-200">
+            <h1 className="text-xl font-bold text-gray-900 mb-1">
+              Dealers in selected region
             </h1>
+            <p className="text-sm text-gray-500 mb-4">
+              {!isLoadingSellers && !sellerLoadError && (
+                <>
+                  Showing <span className="font-medium text-gray-700">{filteredSellers.length}</span>
+                  {filteredSellers.length !== sellers.length
+                    ? ` of ${sellers.length}`
+                    : ''}{' '}
+                  dealers
+                </>
+              )}
+            </p>
             
             {/* Search Bar */}
             <div className="flex gap-2 mb-4">
               <div className="flex-1 relative">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </div>
                 <input
                   ref={searchInputRef}
-                  type="text"
-                  placeholder="Search by name"
+                  type="search"
+                  placeholder="Search by name or location"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  aria-label="Search dealers by name or location"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
                 />
               </div>
-              <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                Parameters
-              </button>
             </div>
             
             {/* Filter Options */}
-            <div className="flex gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-gray-600">Type:</span>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -509,9 +603,9 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
                   value="all"
                   checked={companyTypeFilter === 'all'}
                   onChange={(e) => setCompanyTypeFilter(e.target.value as CompanyType)}
-                  className="w-4 h-4 text-blue-600"
+                  className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm font-medium text-gray-700">All</span>
+                <span className="text-sm text-gray-700">All</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -520,9 +614,9 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
                   value="car-service"
                   checked={companyTypeFilter === 'car-service'}
                   onChange={(e) => setCompanyTypeFilter(e.target.value as CompanyType)}
-                  className="w-4 h-4 text-blue-600"
+                  className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm font-medium text-gray-700">Car Service</span>
+                <span className="text-sm text-gray-700">Car Service</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -531,174 +625,121 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
                   value="showroom"
                   checked={companyTypeFilter === 'showroom'}
                   onChange={(e) => setCompanyTypeFilter(e.target.value as CompanyType)}
-                  className="w-4 h-4 text-blue-600"
+                  className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-sm font-medium text-gray-700">Showroom</span>
+                <span className="text-sm text-gray-700">Showroom</span>
               </label>
-              <button className="text-sm text-blue-600 hover:text-blue-700 font-medium ml-auto">
-                More
-              </button>
             </div>
+            <p className="text-xs text-gray-400 mt-2">Click a dealer name to locate on map</p>
           </div>
           
           {/* Company List */}
           <div className="flex-1 overflow-y-auto">
             {isLoadingSellers ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading companies...</p>
-                </div>
+              <div className="flex flex-col items-center justify-center min-h-[280px] p-6">
+                <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+                <p className="text-gray-600 font-medium">Loading dealers...</p>
+                <p className="text-sm text-gray-400 mt-1">Finding dealers in your region</p>
               </div>
             ) : sellerLoadError ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center p-4">
-                  <p className="text-red-600 mb-4">{sellerLoadError}</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    Retry
-                  </button>
+              <div className="flex flex-col items-center justify-center min-h-[280px] p-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
                 </div>
+                <p className="text-gray-900 font-medium mb-1">Couldn't load dealers</p>
+                <p className="text-sm text-gray-600 mb-4 max-w-xs">{sellerLoadError}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Retry
+                </button>
               </div>
             ) : filteredSellers.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center p-4">
-                  <p className="text-gray-600">
-                    {searchQuery ? 'No companies found matching your search' : 'No companies available'}
-                  </p>
+              <div className="flex flex-col items-center justify-center min-h-[280px] p-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                  <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
                 </div>
+                <p className="text-gray-900 font-medium mb-1">
+                  {searchQuery || companyTypeFilter !== 'all' ? 'No matching dealers' : 'No dealers yet'}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {searchQuery ? 'Try a different search or filter' : 'Check back later for dealers in this region'}
+                </p>
               </div>
             ) : (
-              filteredSellers.map((seller, index) => {
-                const sellerWithCoords = sellersWithCoords.find(item => item.seller.email === seller.email);
-                return (
-                  <CompanyCard
-                    key={seller.email}
-                    seller={seller}
-                    onViewProfile={onViewProfile}
-                    onSelect={handleDealerSelect}
-                    onCall={handleCall}
-                    isRecommended={index === 0} // First company is recommended
-                    coords={sellerWithCoords?.coords || null}
-                    isSelected={selectedDealerEmail === seller.email}
-                  />
-                );
-              })
+              <div ref={listRef} className="divide-y divide-gray-100">
+                {filteredSellers.map((seller, index) => {
+                  const sellerWithCoords = sellersWithCoords.find(item => item.seller.email === seller.email);
+                  return (
+                    <div
+                      key={seller.email}
+                      ref={(el) => { cardRefs.current[seller.email] = el; }}
+                    >
+                      <CompanyCard
+                        seller={seller}
+                        onViewProfile={onViewProfile}
+                        onSelect={handleDealerSelect}
+                        onCall={handleCall}
+                        isRecommended={index === 0}
+                        coords={sellerWithCoords?.coords || null}
+                        isSelected={selectedDealerEmail === seller.email}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
         
         {/* Right Map Section */}
-        <div className="flex-1 relative">
-          {/* Map Search */}
+        <div className="flex-1 relative min-h-[300px] lg:min-h-0">
+          {/* Map Search - filter by city/location */}
           <div className="absolute top-4 left-4 z-[1000] w-64">
             <div className="relative">
-              <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
               <input
-                type="text"
-                placeholder="City or district"
-                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg shadow-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                type="search"
+                placeholder="Filter by city or area"
+                value={mapSearchQuery}
+                onChange={(e) => setMapSearchQuery(e.target.value)}
+                aria-label="Filter dealers by city or area"
+                className="w-full pl-10 pr-4 py-2.5 bg-white/95 backdrop-blur border border-gray-300 rounded-lg shadow-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
               />
             </div>
           </div>
           
-          {/* Map */}
-          <MapContainer
+          {/* Empty map state when no dealer locations */}
+          {filteredSellersWithCoords.filter(item => item.coords !== null).length === 0 && !isLoadingSellers && (
+            <div className="absolute inset-0 z-[500] flex items-center justify-center bg-gray-100/80 backdrop-blur-[1px] pointer-events-none">
+              <div className="bg-white/90 rounded-xl shadow-lg px-6 py-4 text-center max-w-xs">
+                <p className="text-gray-700 font-medium">No dealer locations on map</p>
+                <p className="text-sm text-gray-500 mt-1">Locations appear when dealers have address data</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Map - imperative Leaflet (no react-leaflet MapContainer) to avoid "already initialized" */}
+          <DealerMap
             center={mapCenter}
-            zoom={mapBounds ? undefined : 5}
-            style={{ height: '100%', width: '100%' }}
-            scrollWheelZoom={true}
-            key={`map-${mapCenter[0]}-${mapCenter[1]}`}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <MapBoundsUpdater bounds={mapBounds} />
-            <MapCenterUpdater center={selectedDealerCenter} />
-            <MapClickHandler 
-              sellersWithCoords={filteredSellersWithCoords}
-              onDealerSelect={handleMapClickDealerSelect}
-            />
-            {/* Markers for each company */}
-            {filteredSellersWithCoords
-              .filter(item => item.coords !== null)
-              .map((item) => {
-                const isSelected = selectedDealerEmail === item.seller.email;
-                // Create custom icon for selected marker (red) vs default (blue)
-                const customIcon = isSelected 
-                  ? L.divIcon({
-                      className: 'custom-marker-selected',
-                      html: `<div style="
-                        width: 30px;
-                        height: 30px;
-                        background-color: #ef4444;
-                        border: 3px solid white;
-                        border-radius: 50% 50% 50% 0;
-                        transform: rotate(-45deg);
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                      "></div>`,
-                      iconSize: [30, 30],
-                      iconAnchor: [15, 30],
-                      popupAnchor: [0, -30]
-                    })
-                  : L.divIcon({
-                      className: 'custom-marker',
-                      html: `<div style="
-                        width: 25px;
-                        height: 25px;
-                        background-color: #2563eb;
-                        border: 2px solid white;
-                        border-radius: 50% 50% 50% 0;
-                        transform: rotate(-45deg);
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                      "></div>`,
-                      iconSize: [25, 25],
-                      iconAnchor: [12, 25],
-                      popupAnchor: [0, -25]
-                    });
-                
-                return (
-                  <Marker
-                    key={item.seller.email}
-                    position={[item.coords!.lat, item.coords!.lng]}
-                    icon={customIcon}
-                    eventHandlers={{
-                      click: () => {
-                        setSelectedDealerEmail(item.seller.email);
-                        setSelectedDealerCenter([item.coords!.lat, item.coords!.lng]);
-                        onViewProfile(item.seller.email);
-                      },
-                    }}
-                  >
-                    <Popup>
-                      <div className="p-2">
-                        <h3 className="font-semibold text-blue-600 mb-1">
-                          {item.seller.dealershipName || item.seller.name}
-                        </h3>
-                        <p className="text-sm text-gray-600">{item.seller.location}</p>
-                        <button
-                          onClick={() => {
-                            setSelectedDealerEmail(item.seller.email);
-                            setSelectedDealerCenter([item.coords!.lat, item.coords!.lng]);
-                            onViewProfile(item.seller.email);
-                          }}
-                          className="mt-2 text-sm text-blue-600 hover:text-blue-700"
-                        >
-                          View Profile
-                        </button>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
-          </MapContainer>
+            zoom={5}
+            bounds={mapBounds}
+            selectedCenter={selectedDealerCenter}
+            filteredSellersWithCoords={filteredSellersWithCoords}
+            selectedDealerEmail={selectedDealerEmail}
+            onDealerSelect={handleMapClickDealerSelect}
+            onViewProfile={onViewProfile}
+          />
         </div>
       </div>
     </div>
