@@ -412,7 +412,7 @@ class DataService {
         return cachedVehicles;
       }
       
-      // If no cached data, log detailed error and return empty array
+      // If no cached data, log detailed error
       console.error('❌ No cached production data available. API error details:', {
         message: errorMessage,
         endpoint: includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles',
@@ -430,6 +430,11 @@ class DataService {
         console.error('   6. Run diagnostic: node scripts/diagnose-issues.js');
       }
       
+      // Rethrow 503 so caller (e.g. refreshVehicles) can show a specific "check Supabase env" message
+      const status = (error as any)?.status ?? (error as any)?.code;
+      if (status === 503) {
+        throw error;
+      }
       return [];
     }
   }

@@ -539,6 +539,26 @@ npm run dev:api
 vercel logs [deployment-url]
 ```
 
+### Used-cars page shows "Unable to load vehicles"
+
+The used-cars (Buy Car) page shows this when the vehicles API fails or returns no data.
+
+**Likely cause:** `/api/vehicles` returns **503** because Supabase is not configured in production.
+
+**Fix:**
+1. In **Vercel** → your project → **Settings** → **Environment Variables**
+2. For **Production**, add:
+   - `SUPABASE_URL` = your Supabase project URL (same as `VITE_SUPABASE_URL`, e.g. `https://xxxx.supabase.co`)
+   - `SUPABASE_SERVICE_ROLE_KEY` = from Supabase Dashboard → Project Settings → API → **service_role** (secret)
+3. **Redeploy** the project (Deployments → … → Redeploy, or push a new commit).
+
+After redeploying, open the used-cars page and click **Retry** if it still shows the error. If the API still returns 503, the toast will show a reminder to set these variables.
+
+**Also check:**
+- Vercel logs (Logs tab) for `GET /api/vehicles` — if you see "Returning 0 published vehicles" or 503, the above env vars are required.
+- **Routing:** If `x-vercel-original-path` is not set, the API uses `req.url` as fallback so `/api/vehicles` still reaches the vehicles handler. If you see vehicles requests returning user-list or wrong JSON, routing may have failed (check Vercel runtime and that `api/main.ts` receives the correct path).
+- **Timeouts:** Initial load waits up to 4.5s; if the serverless function is cold or slow, click **Retry** to fetch again.
+
 ### Database Connection Issues
 
 **Check:**

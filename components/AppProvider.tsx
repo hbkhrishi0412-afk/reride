@@ -1116,7 +1116,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (err) {
       logWarn('Refresh vehicles failed:', err);
-      addToast('Could not load vehicles. Check your connection and try again.', 'error');
+      const msg = err instanceof Error ? err.message : String(err);
+      const is503OrSupabase = (err as any)?.status === 503 || (err as any)?.code === 503 || /supabase|503|service temporarily unavailable/i.test(msg);
+      const toastMsg = is503OrSupabase
+        ? 'Service unavailable. If you manage this site, set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel → Environment Variables (Production), then redeploy.'
+        : (msg && msg.length < 120 ? msg : 'Could not load vehicles. Check your connection and try again.');
+      addToast(toastMsg, 'error');
     }
   }, [currentUser?.role, setVehicles, addToast]);
 
@@ -1364,6 +1369,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }).catch((lateError) => {
               logWarn('Late vehicle response failed:', lateError);
+              if (isMounted) setVehicles(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
             });
           } else {
             logError('❌ API returned non-array vehicles data:', typeof vehiclesData);
