@@ -169,10 +169,17 @@ export const getSecurityConfig = () => {
         })()
       : SECURITY_CONFIG.JWT.SECRET; // Dev fallback
 
+  // Build JWT without spreading SECURITY_CONFIG.JWT - spreading would invoke the SECRET getter
+  // and crash in production when JWT_SECRET is missing (500 FUNCTION_INVOCATION_FAILED).
+  const jwtStatic = SECURITY_CONFIG.JWT;
   return {
     ...SECURITY_CONFIG,
     JWT: {
-      ...SECURITY_CONFIG.JWT,
+      ACCESS_TOKEN_EXPIRES_IN: jwtStatic.ACCESS_TOKEN_EXPIRES_IN,
+      REFRESH_TOKEN_EXPIRES_IN: jwtStatic.REFRESH_TOKEN_EXPIRES_IN,
+      CLOCK_TOLERANCE_SECONDS: jwtStatic.CLOCK_TOLERANCE_SECONDS,
+      ISSUER: jwtStatic.ISSUER,
+      AUDIENCE: jwtStatic.AUDIENCE,
       SECRET: secret
     },
     LOGGING: {
