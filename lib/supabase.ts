@@ -133,8 +133,13 @@ export function getSupabaseAdminClient(): SupabaseClient {
   return supabaseAdminClient;
 }
 
-// Export a default client instance for convenience
-export const supabase = getSupabaseClient();
+/**
+ * Lazy default client - only initializes when first accessed.
+ * Use getSupabaseClient() in code; this getter avoids throwing at module load when env is missing.
+ */
+export function getSupabase(): SupabaseClient {
+  return getSupabaseClient();
+}
 
 
 

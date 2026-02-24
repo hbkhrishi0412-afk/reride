@@ -152,14 +152,28 @@ export const SECURITY_CONFIG = {
 };
 
 // Environment-specific overrides
+// CRITICAL: Never read SECURITY_CONFIG.JWT.SECRET in production when JWT_SECRET is missing,
+// or the getter throws and the entire API module fails to load (500 FUNCTION_INVOCATION_FAILED).
 export const getSecurityConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
-  
+  const envSecret = process.env.JWT_SECRET;
+  const secret = envSecret
+    ? envSecret
+    : isProduction
+      ? (() => {
+          if (typeof process !== 'undefined' && process.env && !(process.env as any).__JWT_SECRET_WARNED) {
+            console.warn('JWT_SECRET is not set in production. Auth (login/tokens) will not work. Set JWT_SECRET in Vercel → Environment Variables.');
+            (process.env as any).__JWT_SECRET_WARNED = '1';
+          }
+          return '';
+        })()
+      : SECURITY_CONFIG.JWT.SECRET; // Dev fallback
+
   return {
     ...SECURITY_CONFIG,
     JWT: {
       ...SECURITY_CONFIG.JWT,
-      SECRET: (process.env.JWT_SECRET ?? SECURITY_CONFIG.JWT.SECRET)
+      SECRET: secret
     },
     LOGGING: {
       ...SECURITY_CONFIG.LOGGING,
