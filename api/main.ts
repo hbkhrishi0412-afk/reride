@@ -467,6 +467,12 @@ async function mainHandler(
       logInfo(`📍 Fallback pathname: ${pathname}, req.url: ${req.url}`);
     }
 
+    // Vercel rewrite: when all paths go to /api/main.ts, req.url can still hold the original path
+    if ((pathname === '/api/main' || pathname === '/main') && req.url && req.url.startsWith('/api/') && req.url !== '/api/main') {
+      pathname = req.url.split('?')[0];
+      logInfo(`📍 Using pathname from req.url (Vercel rewrite): ${pathname}`);
+    }
+
   try {
     // Check if this is a health check endpoint or HEAD request (exempt from rate limiting)
     const isHealthEndpoint = pathname.includes('/db-health') || 
@@ -783,14 +789,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       return res.status(200).end();
     }
 
-    // Check Firebase availability
+    // Check Supabase availability (required for vehicles, users, etc.)
     if (!USE_SUPABASE) {
       const errorMsg = getSupabaseErrorMessage();
-      logWarn('⚠️ Firebase not available:', errorMsg);
+      logWarn('⚠️ Supabase not available:', errorMsg);
       return res.status(503).json({
         success: false,
         reason: errorMsg,
-        details: 'Please check your Firebase configuration. Server-side requires FIREBASE_* environment variables (without VITE_ prefix).',
+        details: 'Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel → Project → Settings → Environment Variables (Production), then redeploy.',
         fallback: true
       });
     }
@@ -2679,14 +2685,14 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       return res.status(200).end();
     }
 
-    // Check Firebase availability
+    // Check Supabase availability (required for vehicles, users, etc.)
     if (!USE_SUPABASE) {
       const errorMsg = getSupabaseErrorMessage();
-      logWarn('⚠️ Firebase not available:', errorMsg);
+      logWarn('⚠️ Supabase not available:', errorMsg);
       return res.status(503).json({
         success: false,
         reason: errorMsg,
-        details: 'Please check your Firebase configuration. Server-side requires FIREBASE_* environment variables (without VITE_ prefix).',
+        details: 'Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel → Project → Settings → Environment Variables (Production), then redeploy.',
         fallback: true
       });
     }
