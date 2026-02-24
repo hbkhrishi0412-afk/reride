@@ -548,7 +548,11 @@ async function mainHandler(
     if (pathname === '/api/main' || pathname === '/main') {
       const originalPath = req.headers['x-vercel-original-path'] as string;
       const invokePath = req.headers['x-invoke-path'] as string;
-      const checkPath = originalPath || invokePath;
+      // Fallback: some runtimes pass original path in req.url (e.g. /api/vehicles?limit=0)
+      const pathOnly = typeof req.url === 'string' ? req.url.split('?')[0] : '';
+      const isRewrittenDest = pathOnly === '/api/main' || pathOnly === '/api/main.ts' || pathOnly.endsWith('/main');
+      const urlPath = (pathOnly.startsWith('/api/') && !isRewrittenDest) ? pathOnly : '';
+      const checkPath = originalPath || invokePath || urlPath;
       
       if (checkPath) {
         // Extract the actual path from the original path
@@ -3028,9 +3032,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       const cached = vehicleCache.get(cacheKey);
       
       // PAGINATION SUPPORT: Parse pagination parameters early
-      // Default to pagination (50 per page) for better performance
+      // Default to pagination (50 per page) for better performance. limit=0 means return all (no pagination).
       const page = parseInt(String(req.query.page || '1'), 10) || 1;
-      const limit = parseInt(String(req.query.limit || '50'), 10) || 50; // Default 50, 0 means no limit (return all)
+      const rawLimit = req.query.limit;
+      const parsedLimit = rawLimit === undefined || rawLimit === '' ? 50 : parseInt(String(rawLimit), 10);
+      const limit = (Number.isNaN(parsedLimit) || parsedLimit < 0) ? 50 : parsedLimit;
       const skipExpiryCheck = req.query.skipExpiryCheck === 'true'; // Skip expensive expiry checks for fast initial load
       
       let vehicles: VehicleType[];
