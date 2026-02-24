@@ -112,14 +112,26 @@ const SECURITY_CONFIG = {
   }
 };
 
+// CRITICAL: Do not spread SECURITY_CONFIG.JWT - it invokes the SECRET getter and can crash in production.
 export const getSecurityConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
+  const envSecret = process.env.JWT_SECRET;
+  const secret = envSecret
+    ? envSecret
+    : isProduction
+      ? ''
+      : SECURITY_CONFIG.JWT.SECRET;
 
+  const jwtStatic = SECURITY_CONFIG.JWT;
   return {
     ...SECURITY_CONFIG,
     JWT: {
-      ...SECURITY_CONFIG.JWT,
-      SECRET: process.env.JWT_SECRET ?? SECURITY_CONFIG.JWT.SECRET
+      ACCESS_TOKEN_EXPIRES_IN: jwtStatic.ACCESS_TOKEN_EXPIRES_IN,
+      REFRESH_TOKEN_EXPIRES_IN: jwtStatic.REFRESH_TOKEN_EXPIRES_IN,
+      CLOCK_TOLERANCE_SECONDS: jwtStatic.CLOCK_TOLERANCE_SECONDS,
+      ISSUER: jwtStatic.ISSUER,
+      AUDIENCE: jwtStatic.AUDIENCE,
+      SECRET: secret
     },
     LOGGING: {
       ...SECURITY_CONFIG.LOGGING,
