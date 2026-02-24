@@ -186,3 +186,5 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
   }
 }
 
+// Vercel serverless expects a default export when the module is loaded directly
+export default handleServiceProviders;
