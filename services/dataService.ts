@@ -796,6 +796,16 @@ class DataService {
         console.error('   This usually means SUPABASE_SERVICE_ROLE_KEY is missing or misconfigured.');
         console.error('   Check Vercel environment variables and ensure the key is set for Production environment.');
         
+        // Store error so AdminPanel can show the configuration banner (getUsers returns [] so fetchUsers doesn't catch)
+        const errorInfo = { reason, diagnostic, timestamp: Date.now() };
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('reRideUsers_error', JSON.stringify(errorInfo));
+          } catch (e) {
+            // Ignore storage errors
+          }
+        }
+        
         // Don't use cached data for 503 errors - they indicate a configuration problem
         // Return empty array so the UI shows 0 users, which will prompt admin to check configuration
         return [];

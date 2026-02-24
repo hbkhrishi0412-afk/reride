@@ -1020,6 +1020,18 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         console.warn('   → Check Vercel Dashboard → Settings → Environment Variables');
                         console.warn('   → Ensure SUPABASE_SERVICE_ROLE_KEY is set for Production environment');
                         console.warn('   → After setting, redeploy the application');
+                        // Show config banner when 0 users and a stored error (e.g. 503 from missing service role key)
+                        if (typeof window !== 'undefined') {
+                            try {
+                                const errRaw = localStorage.getItem('reRideUsers_error');
+                                if (errRaw) {
+                                    const err = JSON.parse(errRaw);
+                                    if (err.reason && (!err.timestamp || Date.now() - err.timestamp < 3600000)) {
+                                        setConfigError({ reason: err.reason, diagnostic: err.diagnostic });
+                                    }
+                                }
+                            } catch (_) { /* ignore */ }
+                        }
                         hasFetchedUsersRef.current = false; // Allow retry
                         return;
                     }
