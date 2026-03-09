@@ -176,13 +176,15 @@ export const supabaseConversationService = {
     return supabaseRowToConversation(data);
   },
 
-  // Get all conversations
-  async findAll(): Promise<Conversation[]> {
+  // Get all conversations (used by admin; limit to avoid slow loads)
+  async findAll(limitCount: number = 1000): Promise<Conversation[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
     const { data, error } = await supabase
       .from('conversations')
-      .select('*');
+      .select('*')
+      .order('last_message_at', { ascending: false })
+      .limit(Math.max(1, Math.min(limitCount, 5000)));
     
     if (error) {
       // Check for connection/network errors
@@ -341,20 +343,8 @@ export const supabaseConversationService = {
       }
     }
     
-    // If still no results, try case-insensitive search by fetching all and filtering
-    if (!error && (!data || data.length === 0)) {
-      const { data: allData, error: allError } = await supabase
-        .from('conversations')
-        .select('*');
-      
-      if (!allError && allData) {
-        // Filter in memory with case-insensitive matching
-        data = allData.filter((row: any) => {
-          const rowCustomerId = row.customer_id || row.customerId || '';
-          return rowCustomerId.toLowerCase().trim() === normalizedCustomerId;
-        });
-      }
-    }
+    // PERFORMANCE: Removed "fetch all and filter in memory" fallback - it caused very slow
+    // page loads when the first two queries returned no rows. Return empty if no match.
     
     if (error) {
       // Check for connection/network errors
@@ -424,49 +414,8 @@ export const supabaseConversationService = {
       }
     }
     
-    // If still no results, try case-insensitive search by fetching all and filtering
-    // This is a fallback for databases that don't support case-insensitive queries
-    if (!error && (!data || data.length === 0)) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔍 Trying fallback: fetch all and filter in memory');
-      }
-      
-      const { data: allData, error: allError } = await supabase
-        .from('conversations')
-        .select('*');
-      
-      if (!allError && allData) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔍 Fetched all conversations:', {
-            totalCount: allData.length,
-            uniqueSellerIds: [...new Set(allData.map((row: any) => row.seller_id))].slice(0, 5)
-          });
-        }
-        
-        // Filter in memory with case-insensitive matching
-        data = allData.filter((row: any) => {
-          const rowSellerId = row.seller_id || row.sellerId || '';
-          const matches = rowSellerId.toLowerCase().trim() === normalizedSellerId;
-          
-          if (process.env.NODE_ENV === 'development' && matches) {
-            console.log('✅ Found matching conversation:', {
-              id: row.id,
-              sellerId: row.seller_id,
-              normalized: rowSellerId.toLowerCase().trim(),
-              target: normalizedSellerId
-            });
-          }
-          
-          return matches;
-        });
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.log('🔍 Filtered results:', {
-            matchedCount: data.length
-          });
-        }
-      }
-    }
+    // PERFORMANCE: Removed "fetch all and filter in memory" fallback - it caused very slow
+    // page loads when the first two queries returned no rows. Return empty if no match.
     
     if (error) {
       // Check for connection/network errors
