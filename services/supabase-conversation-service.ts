@@ -41,7 +41,7 @@ export interface Conversation {
 const isServerSide = typeof window === 'undefined';
 
 // Helper to convert Supabase row to Conversation type
-function supabaseRowToConversation(row: any): Conversation {
+export function supabaseRowToConversation(row: any): Conversation {
   return {
     id: row.id,
     customerId: row.customer_id || '',

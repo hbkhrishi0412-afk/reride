@@ -24,6 +24,8 @@ import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
 import { deduplicateRequest } from '../utils/requestDeduplication';
 import * as buyerService from '../services/buyerService';
+import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
+import { supabaseRowToConversation } from '../services/supabase-conversation-service';
 
 // PERFORMANCE: Helper function for user-friendly error messages
 // Improves UX by converting technical errors to actionable messages
@@ -1741,6 +1743,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Use optional chaining in dependency to handle null/undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addToast, currentUser?.role]);
+
+  // Supabase Realtime: sync conversation updates so when the other party sends a message we see it without refetch
+  useSupabaseRealtime({
+    table: 'conversations',
+    enabled: !!currentUser?.email,
+    onUpdate: (row: any) => {
+      const email = (currentUser?.email || '').toLowerCase().trim();
+      const cid = (row.customer_id || '').toLowerCase().trim();
+      const sid = (row.seller_id || '').toLowerCase().trim();
+      if (cid !== email && sid !== email) return;
+      try {
+        const conv = supabaseRowToConversation(row);
+        setConversations(prev => {
+          const next = prev.findIndex(c => c.id === conv.id) < 0
+            ? [...prev, conv]
+            : prev.map(c => c.id === conv.id ? conv : c);
+          try {
+            saveConversations(next);
+          } catch (_) {}
+          return next;
+        });
+      } catch (e) {
+        console.warn('Realtime conversation update error:', e);
+      }
+    },
+  });
+
+  // Supabase Realtime: when a new notification is created for this user, add it to state and show browser notification
+  const userEmailForNotif = currentUser?.email?.toLowerCase().trim() ?? '';
+  useSupabaseRealtime({
+    table: 'notifications',
+    enabled: !!userEmailForNotif,
+    filter: userEmailForNotif ? `recipient_email=eq.${userEmailForNotif}` : undefined,
+    onInsert: (row: any) => {
+      const recipient = (row.recipient_email || row.user_id || '').toString().toLowerCase().trim();
+      if (recipient !== userEmailForNotif) return;
+      const notif: Notification = {
+        id: row.id,
+        recipientEmail: recipient,
+        message: row.message || '',
+        title: row.title,
+        targetId: row.metadata?.targetId ?? row.id,
+        targetType: (row.type === 'conversation' ? 'conversation' : row.type === 'vehicle' ? 'vehicle' : 'general') as Notification['targetType'],
+        isRead: row.read ?? false,
+        timestamp: row.created_at || new Date().toISOString(),
+      };
+      setNotifications(prev => [notif, ...prev]);
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        showNotification(notif.title || 'New message', { body: notif.message });
+      }
+    },
+  });
 
   // Refresh server-sourced data whenever the authenticated user changes
   // Only runs when user changes, not on initial load (to avoid duplicate fetches)
