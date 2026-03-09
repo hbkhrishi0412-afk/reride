@@ -309,7 +309,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Flag to prevent navigation loops when handling popstate
   const isHandlingPopStateRef = useRef(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     // Check for existing logged-in user on app startup
     try {

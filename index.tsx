@@ -86,15 +86,27 @@ if (typeof window !== 'undefined') {
   (window as any).__APP_DEV__ = isDev;
 }
 
-root.render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+try {
+  root.render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </BrowserRouter>
+    </React.StrictMode>
+  );
+} catch (mountError) {
+  if (rootElement && typeof window !== 'undefined') {
+    const msg = mountError instanceof Error ? mountError.message : String(mountError);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('React mount failed:', mountError);
+    }
+    rootElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The app failed to start. Please refresh the page.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh</button></div></div>';
+  } else {
+    throw mountError;
+  }
+}
 
 // Service worker registration is disabled — PWA plugin is not active.
 // To re-enable, configure vite-plugin-pwa in vite.config.ts and uncomment below.

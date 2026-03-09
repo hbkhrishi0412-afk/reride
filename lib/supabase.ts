@@ -66,27 +66,75 @@ const validateSupabaseConfig = (config: { url: string; anonKey: string; serviceR
 
 // Get Supabase client for client-side operations (uses anon key)
 let supabaseClient: SupabaseClient | null = null;
+let supabaseConfigInvalid = false;
+let stubClientInstance: SupabaseClient | null = null;
+
+/** Stub client when config is missing - prevents app from crashing on load (e.g. production env not set) */
+function createStubClient(): SupabaseClient {
+  if (stubClientInstance) return stubClientInstance;
+  const noop = () => {};
+  const stubChannel = {
+    on: () => stubChannel,
+    subscribe: (cb?: (status: string) => void) => {
+      if (cb) setTimeout(() => cb('CHANNEL_ERROR'), 0);
+      return { unsubscribe: noop };
+    },
+    unsubscribe: noop,
+  };
+  stubClientInstance = {
+    auth: { getSession: async () => ({ data: { session: null }, error: null }), signOut: async () => ({ error: null }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: noop } } }), signInWithPassword: async () => ({ data: null, error: new Error('Supabase not configured') }), setSession: async () => ({ data: null, error: null }), getUser: async () => ({ data: { user: null }, error: null }), persistSession: true, autoRefreshToken: true } as any,
+    channel: () => stubChannel as any,
+    removeChannel: noop,
+    from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }), order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }), insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }), update: () => ({ eq: () => Promise.resolve({ data: null, error: null }) }), delete: () => ({ eq: () => ({ select: () => Promise.resolve({ data: null, error: null }) }) }) }) } as any,
+  } as unknown as SupabaseClient;
+  return stubClientInstance;
+}
 
 export function getSupabaseClient(): SupabaseClient {
-  if (!supabaseClient) {
-    const config = getSupabaseConfig();
-    validateSupabaseConfig(config);
-    
-    try {
-      supabaseClient = createClient(config.url, config.anonKey, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-        },
-      });
-    } catch (error) {
-      console.error('❌ Supabase client initialization error:', error);
-      throw new Error(
-        `Supabase client initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+  if (supabaseClient) {
+    return supabaseClient;
   }
-  
+  if (supabaseConfigInvalid) {
+    return createStubClient();
+  }
+  const config = getSupabaseConfig();
+  const missing =
+    !config.url || config.url.trim() === '' || config.url.includes('your-project-ref') ||
+    !config.anonKey || config.anonKey.trim() === '' || config.anonKey.includes('your_supabase');
+  if (!isServerSide && missing) {
+    supabaseConfigInvalid = true;
+    console.warn(
+      'Supabase is not configured (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY missing or placeholder). ReRide will load without real-time features. Set env vars and rebuild to enable.'
+    );
+    return createStubClient();
+  }
+  try {
+    validateSupabaseConfig(config);
+  } catch (e) {
+    if (!isServerSide) {
+      supabaseConfigInvalid = true;
+      console.warn('Supabase config invalid:', e instanceof Error ? e.message : e);
+      return createStubClient();
+    }
+    throw e;
+  }
+  try {
+    supabaseClient = createClient(config.url, config.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Supabase client initialization error:', error);
+    if (!isServerSide) {
+      supabaseConfigInvalid = true;
+      return createStubClient();
+    }
+    throw new Error(
+      `Supabase client initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
   return supabaseClient;
 }
 
