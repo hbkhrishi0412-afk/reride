@@ -249,9 +249,14 @@ export default defineConfig({
     assetsInlineLimit: 8192,
     // Optimize for faster loading
     reportCompressedSize: false,
-    // Improve build performance
+    // Only preload critical path chunks so the app can paint quickly (avoids pulling
+    // admin, dashboard, mobile-components, charts, leaflet, etc. before first paint).
     modulePreload: {
-      polyfill: false, // Modern browsers don't need polyfill
+      polyfill: false,
+      resolveDependencies: (_filename, deps) => {
+        const critical = ['vendor-', 'app-provider-', 'supabase-', 'services-', 'utils-'];
+        return deps.filter((dep) => critical.some((p) => dep.includes(p)));
+      },
     },
     // Additional optimizations
     assetsDir: 'assets',
