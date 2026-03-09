@@ -79,7 +79,7 @@
       "destination": "/api/main.ts"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }
   ]
