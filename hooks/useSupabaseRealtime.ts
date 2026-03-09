@@ -45,8 +45,12 @@ export function useSupabaseRealtime({
     if (!enabled) {
       // Cleanup if disabled
       if (channelRef.current) {
-        const supabase = getSupabaseClient();
-        supabase.removeChannel(channelRef.current);
+        try {
+          const supabase = getSupabaseClient();
+          supabase.removeChannel(channelRef.current);
+        } catch (_e) {
+          // Supabase may not be configured; ignore
+        }
         channelRef.current = null;
       }
       return;
@@ -129,8 +133,8 @@ export function useSupabaseRealtime({
           if (process.env.NODE_ENV === 'development') {
             console.log(`🔌 Unsubscribed from ${table} real-time updates`);
           }
-        } catch (error) {
-          console.error(`Error unsubscribing from ${table} real-time updates:`, error);
+        } catch (_e) {
+          // Supabase may not be configured; ignore
         }
         channelRef.current = null;
       }
