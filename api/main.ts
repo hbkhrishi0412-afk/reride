@@ -6458,6 +6458,40 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           return res.status(500).json({ success: false, reason: 'Failed to retrieve updated conversation' });
         }
         
+        // Create notification for the recipient (other party) so they get notified even when app is closed
+        const recipientEmail = normalizedAuthEmail === normalizedCustomerId
+          ? normalizedSellerId
+          : normalizedCustomerId;
+        const senderName = normalizedAuthEmail === normalizedCustomerId
+          ? (conversation.customerName || 'Customer')
+          : (conversation.sellerName || 'Seller');
+        const messageText = typeof message.text === 'string' ? message.text : '';
+        const notificationMessage = messageText.length > 50
+          ? `New message from ${senderName}: ${messageText.substring(0, 50)}...`
+          : `New message from ${senderName}: ${messageText}`;
+        const notificationId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        try {
+          const supabase = getSupabaseAdminClient();
+          const record: Record<string, unknown> = {
+            user_id: recipientEmail,
+            recipient_email: recipientEmail,
+            type: 'conversation',
+            title: 'New message',
+            message: notificationMessage,
+            read: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            metadata: { conversationId: String(conversationId), targetType: 'conversation', targetId: String(conversationId) },
+          };
+          let inserted = await supabase.from('notifications').insert({ ...record, id: notificationId }).select('id').single();
+          if (inserted.error) {
+            const retry = await supabase.from('notifications').insert(record).select('id').single();
+            if (retry.error) console.warn('⚠️ API: Failed to create message notification (non-fatal):', retry.error.message);
+          }
+        } catch (notifErr) {
+          console.warn('⚠️ API: Failed to create message notification (non-fatal):', notifErr);
+        }
+        
         console.log('✅ API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
         return res.status(200).json({ success: true, data: updatedConversation });
       } catch (error) {
