@@ -81,11 +81,30 @@ function createStubClient(): SupabaseClient {
     },
     unsubscribe: noop,
   };
+  const stubFromChain = () =>
+    Promise.resolve({ data: null, error: null });
+  const stubFrom = () => ({
+    select: () => ({
+      eq: () => ({ single: () => stubFromChain(), order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }),
+      insert: () => ({ select: () => ({ single: () => stubFromChain() }) }),
+      update: () => ({ eq: () => stubFromChain() }),
+      delete: () => ({ eq: () => ({ select: () => stubFromChain() }) }),
+    }),
+  });
   stubClientInstance = {
-    auth: { getSession: async () => ({ data: { session: null }, error: null }), signOut: async () => ({ error: null }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: noop } } }), signInWithPassword: async () => ({ data: null, error: new Error('Supabase not configured') }), setSession: async () => ({ data: null, error: null }), getUser: async () => ({ data: { user: null }, error: null }), persistSession: true, autoRefreshToken: true } as any,
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      signOut: async () => ({ error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: noop } } }),
+      signInWithPassword: async () => ({ data: null, error: new Error('Supabase not configured') }),
+      setSession: async () => ({ data: null, error: null }),
+      getUser: async () => ({ data: { user: null }, error: null }),
+      persistSession: true,
+      autoRefreshToken: true,
+    } as any,
     channel: () => stubChannel as any,
     removeChannel: noop,
-    from: () => ({ select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: null, error: null }), order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }), insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }), update: () => ({ eq: () => Promise.resolve({ data: null, error: null }) }), delete: () => ({ eq: () => ({ select: () => Promise.resolve({ data: null, error: null }) }) }) }) } as any,
+    from: stubFrom as any,
   } as unknown as SupabaseClient;
   return stubClientInstance;
 }
