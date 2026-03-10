@@ -226,7 +226,7 @@
         }, true);
       })();
     </script>
-    <!-- Safety timeout: If React doesn't mount within 15 seconds, show error message -->
+    <!-- Safety timeout: If React doesn't mount within 10 seconds, show error message -->
     <script>
       (function() {
         let timeoutId;
@@ -252,7 +252,7 @@
               root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The application is taking longer than expected to load. Please try refreshing the page.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:background 0.2s;" onmouseover="this.style.background=\'#E55A2B\'" onmouseout="this.style.background=\'#FF6B35\'">Refresh Page</button></div></div>';
             }
           }
-        }, 15000); // Increased to 15 seconds to allow for slower networks
+        }, 10000);
         
         // Check if React has mounted
         const startChecking = function() {
