@@ -46,13 +46,13 @@ export default defineConfig({
         }
         
         // Exclude server-side service files that import supabase-admin-db
-        // These should only be used in API routes, not in client code
+        // These should only be used in API routes, not in client code.
+        // NOTE: supabase-conversation-service is NOT excluded - AppProvider dynamically
+        // imports it in the client; it uses getSupabaseClient() in the browser so it's safe to bundle.
         if (id.includes('/services/supabase-user-service') ||
             id.includes('/services/supabase-vehicle-service') ||
-            id.includes('/services/supabase-conversation-service') ||
             id.includes('\\services\\supabase-user-service') ||
-            id.includes('\\services\\supabase-vehicle-service') ||
-            id.includes('\\services\\supabase-conversation-service')) {
+            id.includes('\\services\\supabase-vehicle-service')) {
           return true;
         }
         
