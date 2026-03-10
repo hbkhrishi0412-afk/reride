@@ -204,6 +204,28 @@
     </div>
     <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      // Detect if the app script failed to load (e.g. 404 in production)
+      (function() {
+        function showLoadError() {
+          if (window.__APP_SCRIPT_LOAD_FAILED__) return;
+          window.__APP_SCRIPT_LOAD_FAILED__ = true;
+          var root = document.getElementById('root');
+          if (root) {
+            root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The app script could not be loaded. Please refresh the page or try again later.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button></div></div>';
+          }
+        }
+        var scriptEl = document.querySelector('script[src="/index.tsx"], script[src^="/assets/index-"]');
+        if (scriptEl) {
+          scriptEl.addEventListener('error', showLoadError);
+        }
+        window.addEventListener('error', function(e) {
+          if (e.target && e.target.tagName === 'SCRIPT' && (e.target.src || '').indexOf('/assets/') !== -1) {
+            showLoadError();
+          }
+        }, true);
+      })();
+    </script>
     <!-- Safety timeout: If React doesn't mount within 15 seconds, show error message -->
     <script>
       (function() {
@@ -215,16 +237,10 @@
         const checkReactMounted = function() {
           const root = document.getElementById('root');
           if (!root) return false;
-          
-          // React 18+ creates a root with data-reactroot or specific structure
-          // Check if root has been modified by React (not just the initial HTML)
-          const hasReactContent = root.children.length > 0 && (
-            root.querySelector('[data-reactroot]') !== null ||
-            root.getAttribute('data-reactroot') !== null ||
-            root.innerHTML !== '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;"><div style="text-align:center;"><div style="width:50px;height:50px;border:4px solid #F5F5F5;border-top-color:#FF6B35;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px;"></div><p style="color:#2C2C2C;font-size:16px;font-weight:600;">Loading ReRide...</p></div></div>'
-          );
-          
-          return hasReactContent;
+          // React 18 does not use data-reactroot; rely on content change from initial loading HTML
+          var loadingHtml = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;"><div style="text-align:center;"><div style="width:50px;height:50px;border:4px solid #F5F5F5;border-top-color:#FF6B35;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px;"></div><p style="color:#2C2C2C;font-size:16px;font-weight:600;">Loading ReRide...</p></div></div>';
+          if (root.innerHTML === loadingHtml) return false;
+          return root.children.length > 0;
         };
         
         // Set timeout to show error if React doesn't mount
