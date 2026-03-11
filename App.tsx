@@ -3077,6 +3077,8 @@ const AppContent: React.FC = () => {
         return 'Reset Password';
       case ViewEnum.CAR_SERVICES:
         return 'Car Services';
+      case ViewEnum.DEALER_PROFILES:
+        return 'Dealer Profiles';
       case ViewEnum.CAR_SERVICE_LOGIN:
         return 'Car Service Login';
       case ViewEnum.CAR_SERVICE_DASHBOARD:

@@ -203,7 +203,8 @@ export interface User {
   planActivatedDate?: string; // ISO String - when the current plan was activated
   planExpiryDate?: string; // ISO String - when the current plan expires
   
-  // NEW: Trust & Verification for Listing Platform
+  /** If true, show "Reride Recommends" on dealer page (admin-controlled) */
+  rerideRecommended?: boolean;
   phoneVerified?: boolean;
   emailVerified?: boolean;
   govtIdVerified?: boolean;

@@ -1469,6 +1469,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                             {roleFilter === 'seller' || roleFilter === 'all' ? (
                                               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Finance Partners</th>
                                             ) : null}
+                                            {roleFilter === 'seller' || roleFilter === 'all' ? (
+                                              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Recommended</th>
+                                            ) : null}
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Documents</th>
                                             <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-700 whitespace-nowrap">Actions</th>
                                         </tr>
@@ -1538,6 +1541,19 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                       </div>
                                                     ) : user.role === 'seller' ? (
                                                       <span className="text-xs text-gray-400">No partners</span>
+                                                    ) : (
+                                                      <span className="text-xs text-gray-400">-</span>
+                                                    )}
+                                                  </td>
+                                                )}
+                                                {(roleFilter === 'seller' || roleFilter === 'all') && (
+                                                  <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    {user.role === 'seller' ? (
+                                                      <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded-full ${
+                                                        user.rerideRecommended ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
+                                                      }`}>
+                                                        {user.rerideRecommended ? 'Yes' : 'No'}
+                                                      </span>
                                                     ) : (
                                                       <span className="text-xs text-gray-400">-</span>
                                                     )}
