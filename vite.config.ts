@@ -1,13 +1,28 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/',
   plugins: [
-    react()
-    // PWA plugin disabled to prevent service worker caching issues
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*\.(supabase\.co)/,
+            handler: 'NetworkFirst',
+            options: { cacheName: 'api-cache', networkTimeoutSeconds: 10 },
+          },
+        ],
+      },
+      manifest: false,
+      devOptions: { enabled: true },
+    }),
   ],
   // Exclude API files and server-side dependencies from client bundling
   define: {
@@ -25,6 +40,7 @@ export default defineConfig({
       transformMixedEsModules: true
     },
     rollupOptions: {
+      plugins: process.env.ANALYZE ? [visualizer({ open: false, filename: 'dist/stats.html', gzipSize: true })] : [],
       // Exclude API files from client build
       external: (id) => {
         // More performant and specific check for API files

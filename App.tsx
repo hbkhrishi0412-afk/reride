@@ -2,6 +2,8 @@ import React, { Suspense, useEffect } from 'react';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageTransition from './components/PageTransition';
+import SEO from './components/SEO';
+import CookieConsentBanner from './components/CookieConsentBanner';
 import { 
   VehicleListErrorBoundary, 
   ChatErrorBoundary, 
@@ -3705,7 +3707,9 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <AppProvider>
+        <SEO />
         <AppContent />
+        <CookieConsentBanner />
       </AppProvider>
     </ErrorBoundary>
   );

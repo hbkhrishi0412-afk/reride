@@ -7,6 +7,7 @@ const DEFAULT_PLACEHOLDER = 'https://via.placeholder.com/800x600?text=Car+Image'
 import StarRating from './StarRating';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
+import VerificationBadge from './VerificationBadge';
 import QuickViewModal from './QuickViewModal';
 import VehicleHistory from './VehicleHistory';
 import { getFollowersCount } from '../services/buyerEngagementService';
@@ -873,7 +874,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             </svg>
                           </button>
                         </div>
-                        
+                        <VerificationBadge vehicle={safeVehicle} className="mt-2" />
                         {/* Key Specs */}
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">
                           <span className="font-semibold">{typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'} km</span>

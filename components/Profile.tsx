@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { User } from '../types.js';
 import PasswordInput from './PasswordInput.js';
-import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetch.js';
+import { isTokenLikelyValid, refreshAuthToken, getAuthHeaders } from '../utils/authenticatedFetch.js';
 
 interface ProfileProps {
   currentUser: User;
@@ -1320,6 +1320,40 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                   </div>
                 </div>
               )}
+
+              {/* Data & Privacy - Request data deletion (DPDP) */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-1">Data &amp; Privacy</h3>
+                  <p className="text-sm text-gray-500 mb-4">You can request deletion of your personal data. This will anonymize your account and you will need to sign up again to use the service.</p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm('Are you sure? Your profile data will be permanently anonymized and you will be logged out.')) return;
+                      try {
+                        const res = await fetch('/api/users', {
+                          method: 'POST',
+                          headers: getAuthHeaders(),
+                          credentials: 'include',
+                          body: JSON.stringify({ action: 'request-data-deletion' }),
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          alert(data.message || 'Data deletion request completed.');
+                          window.location.href = '/';
+                        } else {
+                          alert(data.reason || 'Request failed.');
+                        }
+                      } catch (e) {
+                        alert('Request failed. Please try again.');
+                      }
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  >
+                    Request data deletion
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -80,7 +80,7 @@ export const SECURITY_CONFIG = {
           'https://reride.co.in'
         ],
     ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
     CREDENTIALS: true,
     MAX_AGE: 86400 // 24 hours
   },
