@@ -15,6 +15,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
         role: 'customer' as User['role'],
         location: '',
         address: '',
+        rerideRecommended: false,
     });
     const [showPasswordReset, setShowPasswordReset] = useState(false);
     const [newPassword, setNewPassword] = useState('');
@@ -30,6 +31,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                 role: user.role,
                 location: user.location || '',
                 address: user.address || '',
+                rerideRecommended: !!user.rerideRecommended,
             });
         }
     }, [user]);
@@ -72,7 +74,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(user.email, formData);
+        const { rerideRecommended, ...rest } = formData;
+        onSave(user.email, { ...rest, rerideRecommended });
     };
 
     if (!user) return null;
@@ -179,6 +182,20 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 cursor-not-allowed shadow-sm"
                                 />
                             </div>
+                            {user.role === 'seller' && (
+                                <div className="space-y-2 md:col-span-2 flex items-center gap-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                                    <input
+                                        type="checkbox"
+                                        id="rerideRecommended"
+                                        checked={formData.rerideRecommended}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, rerideRecommended: e.target.checked }))}
+                                        className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500"
+                                    />
+                                    <label htmlFor="rerideRecommended" className="text-sm font-medium text-gray-900 cursor-pointer">
+                                        Reride Recommended — show this dealer with the &quot;Reride Recommends&quot; badge on the Dealers page
+                                    </label>
+                                </div>
+                            )}
                         </section>
 
                         <div className="flex justify-between items-center mb-4">

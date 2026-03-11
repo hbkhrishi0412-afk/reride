@@ -59,7 +59,8 @@ function userToSupabaseRow(user: Partial<User>): any {
     'joinedDate', 'lastActiveAt', 'activeListings', 'soldListings', 'totalViews',
     'reportedCount', 'isBanned', 'alternatePhone', 'preferredContactHours',
     'showEmailPublicly', 'partnerBanks', 'verificationStatus', 'aadharCard',
-    'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade'
+    'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade',
+    'rerideRecommended'
   ];
   
   metadataFields.forEach(field => {

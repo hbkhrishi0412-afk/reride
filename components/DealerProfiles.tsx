@@ -22,13 +22,13 @@ interface DealerProfilesProps {
 
 type CompanyType = 'all' | 'car-service' | 'showroom';
 
-interface CompanyLocation {
+export interface CompanyLocation {
   lat: number;
   lng: number;
 }
 
 // Imperative Leaflet map: create/destroy in useEffect to avoid "Map container is already initialized"
-const DealerMap: React.FC<{
+export const DealerMap: React.FC<{
   center: [number, number];
   zoom: number;
   bounds: L.LatLngBounds | null;
@@ -153,43 +153,136 @@ const DealerMap: React.FC<{
       }),
     []
   );
+  // Showroom: green pin (Car Service stays blue)
+  const iconShowroomDefault = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-marker-showroom',
+        html: `<div style="width:25px;height:25px;background:#16a34a;border:2px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
+        iconSize: [25, 25],
+        iconAnchor: [12, 25],
+        popupAnchor: [0, -25],
+      }),
+    []
+  );
+  const iconShowroomSelected = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-marker-showroom-selected',
+        html: `<div style="width:30px;height:30px;background:#ea580c;border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30],
+      }),
+    []
+  );
 
   useEffect(() => {
     const map = mapRef.current;
     const layer = markersLayerRef.current;
     if (!map || !layer) return;
 
+    const isShowroom = (s: User) => s.badges?.some(b => b.type === 'top_seller') ?? false;
+
     layer.clearLayers();
-    const items = filteredSellersWithCoords.filter(item => item.coords !== null);
-    for (const item of items) {
-      if (!item.coords) continue;
-      const isSelected = selectedDealerEmail === item.seller.email;
-      const marker = L.marker([item.coords.lat, item.coords.lng], {
-        icon: isSelected ? iconSelected : iconDefault,
+    const items = filteredSellersWithCoords.filter(item => item.coords !== null) as Array<{ seller: User; coords: CompanyLocation }>;
+
+    const createCountIcon = (count: number, type: 'car-service' | 'showroom' | 'mixed') => {
+      const bg = type === 'showroom' ? '#16a34a' : type === 'car-service' ? '#2563eb' : '#7c3aed';
+      return L.divIcon({
+        className: 'dealer-count-marker',
+        html: `<div style="width:36px;height:36px;background:${bg};border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:white;font-family:system-ui,sans-serif">${count}</div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18],
       });
-      const name = item.seller.dealershipName || item.seller.name;
-      const location = item.seller.location || '';
-      marker.bindPopup(
-        `<div class="p-2">
-          <h3 class="font-semibold text-blue-600 mb-1">${escapeHtml(name)}</h3>
-          <p class="text-sm text-gray-600">${escapeHtml(location)}</p>
-          <button type="button" class="mt-2 text-sm text-blue-600 hover:text-blue-700 dealer-popup-view">View Profile</button>
-        </div>`,
-        { className: 'dealer-popup' }
-      );
-      marker.on('popupopen', () => {
-        const el = marker.getPopup()?.getElement();
-        el?.querySelector('.dealer-popup-view')?.addEventListener('click', () => {
-          onDealerSelect(item.seller.email, item.coords!);
+    };
+
+    const groupKey = (c: CompanyLocation) => `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`;
+    const groups = new Map<string, Array<{ seller: User; coords: CompanyLocation }>>();
+    for (const item of items) {
+      const key = groupKey(item.coords);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(item);
+    }
+
+    for (const [, groupItems] of groups) {
+      const first = groupItems[0];
+      const { lat, lng } = first.coords;
+      const count = groupItems.length;
+      const showroomCount = groupItems.filter(i => isShowroom(i.seller)).length;
+      const clusterType: 'car-service' | 'showroom' | 'mixed' =
+        showroomCount === 0 ? 'car-service' : showroomCount === count ? 'showroom' : 'mixed';
+
+      if (count === 1) {
+        const item = first;
+        const isSelected = selectedDealerEmail === item.seller.email;
+        const showroom = isShowroom(item.seller);
+        const icon = isSelected
+          ? (showroom ? iconShowroomSelected : iconSelected)
+          : (showroom ? iconShowroomDefault : iconDefault);
+        const marker = L.marker([lat, lng], { icon });
+        const name = item.seller.dealershipName || item.seller.name;
+        const location = item.seller.location || '';
+        const typeLabel = showroom ? 'Showroom' : 'Car Service';
+        marker.bindPopup(
+          `<div class="p-2">
+            <h3 class="font-semibold text-blue-600 mb-1">${escapeHtml(name)}</h3>
+            <p class="text-sm text-gray-600">${escapeHtml(location)}</p>
+            <p class="text-xs text-gray-500 mt-1">${typeLabel} · 1 dealer in this area</p>
+            <button type="button" class="mt-2 text-sm text-blue-600 hover:text-blue-700 dealer-popup-view">View Profile</button>
+          </div>`,
+          { className: 'dealer-popup' }
+        );
+        marker.on('popupopen', () => {
+          const el = marker.getPopup()?.getElement();
+          el?.querySelector('.dealer-popup-view')?.addEventListener('click', () => {
+            onDealerSelect(item.seller.email, item.coords);
+            onViewProfile(item.seller.email);
+          });
+        });
+        marker.on('click', () => {
           onViewProfile(item.seller.email);
         });
-      });
-      marker.on('click', () => {
-        onViewProfile(item.seller.email);
-      });
-      layer.addLayer(marker);
+        layer.addLayer(marker);
+      } else {
+        const marker = L.marker([lat, lng], { icon: createCountIcon(count, clusterType) });
+        const namesList = groupItems
+          .map(
+            (i) =>
+              `<button type="button" class="dealer-popup-item block w-full text-left text-sm text-blue-600 hover:text-blue-800 py-1 px-0 border-0 bg-transparent cursor-pointer" data-email="${escapeHtml(i.seller.email)}">${escapeHtml(i.seller.dealershipName || i.seller.name)}</button>`
+          )
+          .join('');
+        const typeLabel = clusterType === 'mixed' ? 'Car showrooms & services' : clusterType === 'showroom' ? 'Car showrooms' : 'Car services';
+        marker.bindPopup(
+          `<div class="p-2 dealer-cluster-popup">
+            <h3 class="font-semibold text-gray-900 mb-1">${count} dealers in this area</h3>
+            <p class="text-xs text-gray-500 mb-2">${typeLabel}</p>
+            <div class="space-y-0.5">${namesList}</div>
+          </div>`,
+          { className: 'dealer-popup' }
+        );
+        marker.on('popupopen', () => {
+          const el = marker.getPopup()?.getElement();
+          el?.querySelectorAll('.dealer-popup-item').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const email = (btn as HTMLElement).getAttribute('data-email');
+              const item = groupItems.find((i) => i.seller.email === email);
+              if (item) {
+                onDealerSelect(item.seller.email, item.coords);
+                onViewProfile(item.seller.email);
+              }
+            });
+          });
+        });
+        marker.on('click', () => {
+          const item = groupItems[0];
+          if (item) onViewProfile(item.seller.email);
+        });
+        layer.addLayer(marker);
+      }
     }
-  }, [filteredSellersWithCoords, selectedDealerEmail, iconDefault, iconSelected, onDealerSelect, onViewProfile]);
+  }, [filteredSellersWithCoords, selectedDealerEmail, iconDefault, iconSelected, iconShowroomDefault, iconShowroomSelected, onDealerSelect, onViewProfile]);
 
   return <div ref={containerRef} className="h-full w-full" style={{ minHeight: 300 }} />;
 };
@@ -214,7 +307,7 @@ const CompanyCard: React.FC<{
   
   // Check if seller has pro or premium plan - show yellow button for pro/premium plan sellers
   const hasProPlan = seller.subscriptionPlan === 'pro' || seller.subscriptionPlan === 'premium';
-  const shouldShowRecommendButton = isRecommended || hasProPlan;
+  const shouldShowRecommendButton = isRecommended || hasProPlan || !!seller.rerideRecommended;
   
   // Determine status based on current time (Indian Standard Time)
   const getStatus = () => {
@@ -716,6 +809,11 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
                 aria-label="Filter dealers by city or area"
                 className="w-full pl-10 pr-4 py-2.5 bg-white/95 backdrop-blur border border-gray-300 rounded-lg shadow-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
               />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-600 bg-white/90 rounded-lg px-2 py-1.5 shadow-sm">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#2563eb]" aria-hidden /> Car Service</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#16a34a]" aria-hidden /> Showroom</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#7c3aed]" aria-hidden /> Both</span>
             </div>
           </div>
           
