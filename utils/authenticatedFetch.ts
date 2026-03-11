@@ -1,6 +1,6 @@
 /**
  * Centralized authenticated fetch helper
- * Handles JWT tokens, token refresh, and session cookies
+ * Handles JWT tokens, token refresh, CSRF token, and session cookies
  */
 
 import { logInfo, logWarn, logError } from './logger';
@@ -11,19 +11,49 @@ interface FetchOptions extends RequestInit {
   retryOn401?: boolean; // Retry request after token refresh (default: true)
 }
 
+// CSRF token: fetched once and sent with state-changing requests
+let csrfToken: string | null = null;
+let csrfTokenPromise: Promise<string | null> | null = null;
+
+export async function ensureCsrfToken(): Promise<string | null> {
+  if (csrfToken) return csrfToken;
+  if (csrfTokenPromise) return csrfTokenPromise;
+  csrfTokenPromise = (async () => {
+    try {
+      const res = await fetch('/api/csrf-token', { credentials: 'include' });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data?.token) {
+        csrfToken = data.token;
+        return csrfToken;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      csrfTokenPromise = null;
+    }
+  })();
+  return csrfTokenPromise;
+}
+
 // Track token refresh state to prevent duplicate refresh attempts
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
 let refreshTokenKnownInvalid = false; // Track if refresh token is known to be invalid
 
 /**
- * Get authentication headers with JWT token
+ * Get authentication headers with JWT token and CSRF token when available
  * Tries Supabase session first, then falls back to custom token
  */
 export const getAuthHeaders = (): HeadersInit => {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
+
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
 
   try {
     // Try to get Supabase session token first (synchronous check)
@@ -252,6 +282,12 @@ export const authenticatedFetch = async (
 ): Promise<Response> => {
   try {
     const { skipAuth = false, retryOn401 = true, ...fetchOptions } = options;
+
+    // For state-changing methods, ensure CSRF token is present
+    const method = (fetchOptions.method || 'GET').toUpperCase();
+    if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && !csrfToken) {
+      await ensureCsrfToken();
+    }
 
     // Proactively refresh token if it's likely expired (for critical operations like password updates)
     // Only if refresh token is not known to be invalid

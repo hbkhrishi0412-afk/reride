@@ -28,6 +28,11 @@ class ErrorBoundary extends Component<Props, State> {
       error,
       errorInfo
     });
+    if (typeof window !== 'undefined') {
+      import('../utils/monitoring').then(({ trackError }) => {
+        trackError(error, { componentStack: errorInfo.componentStack });
+      }).catch(() => {});
+    }
   }
 
   public render() {

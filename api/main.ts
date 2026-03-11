@@ -67,6 +67,8 @@ import {
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
+import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../utils/csrf.js';
+import { checkUpstashRateLimit } from '../lib/rate-limit-upstash.js';
 
 // Type for normalized user (without password)
 interface NormalizedUser extends Omit<UserType, 'password'> {
@@ -473,6 +475,14 @@ async function mainHandler(
       logInfo(`📍 Using pathname from req.url (Vercel rewrite): ${pathname}`);
     }
 
+    // CSRF token endpoint: GET /api/csrf-token (no rate limit, no CSRF check)
+    if (req.method === 'GET' && (pathname.includes('/csrf-token') || pathname.endsWith('/csrf-token'))) {
+      const token = generateCsrfToken();
+      const cookieName = getCsrfCookieName();
+      res.setHeader('Set-Cookie', `${cookieName}=${token}; Path=/; SameSite=Strict; Max-Age=86400`);
+      return res.status(200).json({ token });
+    }
+
   try {
     // Check if this is a health check endpoint or HEAD request (exempt from rate limiting)
     const isHealthEndpoint = pathname.includes('/db-health') || 
@@ -501,8 +511,19 @@ async function mainHandler(
         // If auth fails or throws, fall back to IP-based limiting
         // This is fine for unauthenticated requests
       }
-      
-      const rateLimitResult = await checkRateLimit(rateLimitIdentifier);
+
+      // Use Upstash Redis when configured (serverless-safe); otherwise in-memory
+      let rateLimitResult: { allowed: boolean; remaining: number };
+      try {
+        const upstashResult = await checkUpstashRateLimit(rateLimitIdentifier);
+        if (upstashResult.remaining !== 999) {
+          rateLimitResult = upstashResult;
+        } else {
+          rateLimitResult = await checkRateLimit(rateLimitIdentifier);
+        }
+      } catch (rlError) {
+        rateLimitResult = await checkRateLimit(rateLimitIdentifier);
+      }
       
       if (!rateLimitResult.allowed) {
         // Only log in development to avoid information leakage
@@ -522,6 +543,26 @@ async function mainHandler(
       // Set rate limit headers even for exempted requests (with max values)
       res.setHeader('X-RateLimit-Remaining', config.RATE_LIMIT.MAX_REQUESTS.toString());
       res.setHeader('X-RateLimit-Limit', config.RATE_LIMIT.MAX_REQUESTS.toString());
+    }
+
+    // CSRF validation for state-changing methods (POST, PUT, DELETE)
+    const isStateChanging = req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE';
+    const isCsrfExempt = pathname.includes('/login') || pathname.includes('/csrf-token') ||
+      pathname.includes('/health') || pathname.includes('/db-health');
+    if (isStateChanging && !isCsrfExempt) {
+      const headerToken = (req.headers['x-csrf-token'] || req.headers['X-CSRF-Token']) as string | undefined;
+      const cookieToken = (req.headers.cookie || '')
+        .split(';')
+        .map((c: string) => c.trim())
+        .find((c: string) => c.startsWith(getCsrfCookieName() + '='));
+      const cookieValue = cookieToken ? cookieToken.split('=')[1]?.trim() : undefined;
+      if (!validateCsrfToken(headerToken, cookieValue)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Invalid or missing CSRF token',
+          reason: 'Please refresh the page and try again.',
+        });
+      }
     }
 
     // Early detection: If this is a PUT/POST request and we can't determine the route,
@@ -1528,6 +1569,45 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           reason: 'Invalid or expired refresh token. Please log in again.',
           error: errorMessage
         });
+      }
+    }
+
+    // REQUEST DATA DELETION (DPDP / Right to be Forgotten)
+    if (action === 'request-data-deletion') {
+      const auth = authenticateRequest(req);
+      if (!auth.isValid || !auth.user?.email) {
+        return res.status(401).json({ success: false, reason: 'Authentication required to request data deletion.' });
+      }
+      try {
+        const email = auth.user.email.toLowerCase().trim();
+        const supabase = getSupabaseAdminClient();
+        const { data: existing } = await supabase.from('users').select('id').eq('email', email).single();
+        if (!existing) {
+          return res.status(404).json({ success: false, reason: 'User not found.' });
+        }
+        const deletedId = `deleted_${existing.id}_${Date.now()}`;
+        await supabase.from('users').update({
+          name: 'Deleted User',
+          email: deletedId,
+          mobile: null,
+          dealershipName: null,
+          bio: null,
+          avatar: null,
+          logo: null,
+          aadharCard: null,
+          panCard: null,
+          aadharNumber: null,
+          panNumber: null,
+          updatedAt: new Date().toISOString(),
+        }).eq('email', email);
+        return res.status(200).json({
+          success: true,
+          message: 'Your data has been anonymized. You may need to log out and create a new account to use the service again.',
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        logError('request-data-deletion error:', msg);
+        return res.status(500).json({ success: false, reason: msg });
       }
     }
 
@@ -4401,6 +4481,15 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
       });
     }
     const buffer = Buffer.from(fileBase64, 'base64');
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (buffer.length > MAX_FILE_SIZE) {
+      return res.status(400).json({ success: false, reason: 'Image must be under 10MB.' });
+    }
+    const allowedMime = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    const mime = (mimeType || 'image/jpeg').toLowerCase().split(';')[0].trim();
+    if (!allowedMime.includes(mime)) {
+      return res.status(400).json({ success: false, reason: 'Only JPEG, PNG and WebP images are allowed.' });
+    }
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 9);
     const ext = (fileName.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '');

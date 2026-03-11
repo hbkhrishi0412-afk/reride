@@ -1,0 +1,34 @@
+# ReRide - Vehicle Marketplace
+# https://www.reride.co.in / https://reride.co.in
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://www.reride.co.in/sitemap.xml
+Sitemap: https://reride.co.in/sitemap.xml
+
+# Disallow admin and API from crawling (optional - keep API private)
+Disallow: /api/
+Disallow: /admin/
+Disallow: /seller/dashboard
+Disallow: /buyer/dashboard
+Disallow: /inbox
+Disallow: /profile
+
+# Allow public listing and landing pages
+Allow: /used-cars
+Allow: /new-cars
+Allow: /rental
+Allow: /vehicle/
+Allow: /seller/
+Allow: /city/
+Allow: /car-services
+Allow: /compare
+Allow: /pricing
+Allow: /support
+Allow: /faq
+Allow: /privacy-policy
+Allow: /terms-of-service
+Allow: /dealers
+Allow: /sell-car
