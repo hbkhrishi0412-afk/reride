@@ -9,6 +9,7 @@ build/
 
 # TypeScript build
 dist/
+dev-dist/
 
 # Env files (do NOT commit secrets)
 .env
