@@ -226,15 +226,17 @@
         }, true);
       })();
     </script>
-    <!-- Safety timeout: If React doesn't mount within 15 seconds, show error (helps on slow mobile networks) -->
+    <!-- Safety timeout: If React doesn't mount within 30 seconds, show error (helps on slow mobile networks) -->
     <script>
       (function() {
         let timeoutId;
         let checkInterval;
         let reactMounted = false;
+        var TIMEOUT_MS = 30000; // 30 seconds for slow mobile/cellular connections
         
-        // Better detection: Check if React has mounted by looking for React root attributes
+        // Better detection: Check if React has mounted (flag set by app or content change)
         const checkReactMounted = function() {
+          if (window.__RERIDE_MOUNTED__) return true;
           const root = document.getElementById('root');
           if (!root) return false;
           // React 18 does not use data-reactroot; rely on content change from initial loading HTML
@@ -243,33 +245,38 @@
           return root.children.length > 0;
         };
         
+        const clearMountTimeout = function() {
+          reactMounted = true;
+          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+          if (checkInterval) { clearInterval(checkInterval); checkInterval = null; }
+        };
+        
         // Set timeout to show error if React doesn't mount
         timeoutId = setTimeout(function() {
           if (!reactMounted) {
             const root = document.getElementById('root');
             if (root && !checkReactMounted()) {
               // React hasn't mounted yet, show error message (helpful for slow mobile networks)
-              root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Taking Longer Than Usual</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">ReRide is still loading. If you\'re on a slow connection, wait a moment or tap Refresh to try again.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:background 0.2s;" onmouseover="this.style.background=\'#E55A2B\'" onmouseout="this.style.background=\'#FF6B35\'">Refresh</button></div></div>';
+              root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The application is taking longer than expected to load. Please try refreshing the page.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button></div></div>';
             }
           }
-        }, 15000);
+        }, TIMEOUT_MS);
         
-        // Check if React has mounted
+        // Check if React has mounted (flag from index.tsx or DOM change)
         const startChecking = function() {
           checkInterval = setInterval(function() {
             if (checkReactMounted()) {
-              reactMounted = true;
-              clearTimeout(timeoutId);
-              clearInterval(checkInterval);
+              clearMountTimeout();
             }
           }, 500); // Check every 500ms for faster detection
           
-          // Clear check interval after 20 seconds
+          // Clear check interval after timeout + buffer
           setTimeout(function() {
             if (checkInterval) {
               clearInterval(checkInterval);
+              checkInterval = null;
             }
-          }, 20000);
+          }, TIMEOUT_MS + 5000);
         };
         
         // Start checking immediately and on DOMContentLoaded
