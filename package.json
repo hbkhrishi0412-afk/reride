@@ -12,6 +12,7 @@
     "dev:clean": "npm run clean && vite",
     "dev:fast": "npm run clean && vite --force",
     "build": "vite build && node scripts/verify-build-output.cjs",
+    "build:android": "cross-env CAPACITOR_BUILD=1 NODE_ENV=production npm run build",
     "build:analyze": "ANALYZE=true vite build",
     "build:stats": "ANALYZE=true vite build",
     "preview": "vite preview",
@@ -47,8 +48,8 @@
     "cap:sync": "npx cap sync",
     "cap:sync:android": "npx cap sync android",
     "cap:open:android": "npx cap open android",
-    "cap:build": "npm run build && npx cap sync",
-    "cap:build:android": "npm run build && npx cap sync android"
+    "cap:build": "npm run build:android && npx cap sync",
+    "cap:build:android": "npm run build:android && npx cap sync android"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -113,6 +114,7 @@
     "axe-playwright": "^2.2.2",
     "baseline-browser-mapping": "^2.9.11",
     "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-jsx-a11y": "^6.8.0",

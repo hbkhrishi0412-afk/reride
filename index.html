@@ -215,34 +215,32 @@
             root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The app script could not be loaded. Please refresh the page or try again later.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button></div></div>';
           }
         }
-        var scriptEl = document.querySelector('script[src="/index.tsx"], script[src^="/assets/index-"]');
+        var scriptEl = document.querySelector('script[src="/index.tsx"], script[src^="/assets/index-"], script[src^="./assets/index-"]');
         if (scriptEl) {
           scriptEl.addEventListener('error', showLoadError);
         }
         window.addEventListener('error', function(e) {
-          if (e.target && e.target.tagName === 'SCRIPT' && (e.target.src || '').indexOf('/assets/') !== -1) {
+          if (e.target && e.target.tagName === 'SCRIPT' && (e.target.src || '').indexOf('assets/') !== -1) {
             showLoadError();
           }
         }, true);
       })();
     </script>
-    <!-- Safety timeout: If React doesn't mount within 30 seconds, show error (helps on slow mobile networks) -->
+    <!-- Safety timeout: If React doesn't mount within 60 seconds, show error (helps on slow mobile networks) -->
     <script>
       (function() {
         let timeoutId;
         let checkInterval;
         let reactMounted = false;
-        var TIMEOUT_MS = 30000; // 30 seconds for slow mobile/cellular connections
+        var TIMEOUT_MS = 60000; // 60 seconds for slow mobile/cellular and first load of many chunks
         
-        // Better detection: Check if React has mounted (flag set by app or content change)
         const checkReactMounted = function() {
           if (window.__RERIDE_MOUNTED__) return true;
           const root = document.getElementById('root');
           if (!root) return false;
-          // React 18 does not use data-reactroot; rely on content change from initial loading HTML
-          var loadingHtml = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;"><div style="text-align:center;"><div style="width:50px;height:50px;border:4px solid #F5F5F5;border-top-color:#FF6B35;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px;"></div><p style="color:#2C2C2C;font-size:16px;font-weight:600;">Loading ReRide...</p></div></div>';
-          if (root.innerHTML === loadingHtml) return false;
-          return root.children.length > 0;
+          // Fallback: if loading text is gone, React has likely replaced the content
+          if (!root.innerHTML.includes('Loading ReRide')) return true;
+          return false;
         };
         
         const clearMountTimeout = function() {
@@ -256,21 +254,18 @@
           if (!reactMounted) {
             const root = document.getElementById('root');
             if (root && !checkReactMounted()) {
-              // React hasn't mounted yet, show error message (helpful for slow mobile networks)
               root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The application is taking longer than expected to load. Please try refreshing the page.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button></div></div>';
             }
           }
         }, TIMEOUT_MS);
         
-        // Check if React has mounted (flag from index.tsx or DOM change)
         const startChecking = function() {
           checkInterval = setInterval(function() {
             if (checkReactMounted()) {
               clearMountTimeout();
             }
-          }, 500); // Check every 500ms for faster detection
+          }, 500);
           
-          // Clear check interval after timeout + buffer
           setTimeout(function() {
             if (checkInterval) {
               clearInterval(checkInterval);
@@ -279,7 +274,6 @@
           }, TIMEOUT_MS + 5000);
         };
         
-        // Start checking immediately and on DOMContentLoaded
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', startChecking);
         } else {

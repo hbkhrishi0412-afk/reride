@@ -130,11 +130,9 @@ try {
       </HelmetProvider>
     </React.StrictMode>
   );
-  // Signal to index.html timeout script that React has mounted (clears 30s loading timeout)
+  // Signal to index.html timeout script that React has mounted (clears loading timeout)
   if (typeof window !== 'undefined') {
-    setTimeout(() => {
-      (window as any).__RERIDE_MOUNTED__ = true;
-    }, 0);
+    (window as any).__RERIDE_MOUNTED__ = true;
   }
 } catch (mountError) {
   if (rootElement && typeof window !== 'undefined') {
