@@ -3,27 +3,33 @@ import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Build for Capacitor Android/iOS: use relative base so WebView resolves assets correctly
+const isCapacitorBuild = process.env.CAPACITOR_BUILD === '1'
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/',
+  base: isCapacitorBuild ? './' : '/',
   plugins: [
     react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\.(supabase\.co)/,
-            handler: 'NetworkFirst',
-            options: { cacheName: 'api-cache', networkTimeoutSeconds: 10 },
-          },
-        ],
-      },
-      manifest: false,
-      devOptions: { enabled: true },
-    }),
+    // Disable PWA/Service Worker for Capacitor builds (WebView can have issues with SW)
+    ...(isCapacitorBuild ? [] : [
+      VitePWA({
+        registerType: 'autoUpdate',
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/.*\.(supabase\.co)/,
+              handler: 'NetworkFirst',
+              options: { cacheName: 'api-cache', networkTimeoutSeconds: 10 },
+            },
+          ],
+        },
+        manifest: false,
+        devOptions: { enabled: true },
+      }),
+    ]),
   ],
   // Exclude API files and server-side dependencies from client bundling
   define: {
