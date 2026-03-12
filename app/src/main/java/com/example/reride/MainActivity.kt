@@ -19,11 +19,11 @@ class MainActivity : ComponentActivity() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.White),
+                    .background(Color.Yellow),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "RE-RIDE APP IS ACTIVE",
+                    text = "RE-RIDE APP IS READY",
                     color = Color.Black,
                     fontSize = 24.sp
                 )
