@@ -49,7 +49,9 @@
     "cap:sync:android": "npx cap sync android",
     "cap:open:android": "npx cap open android",
     "cap:build": "npm run build:android && npx cap sync",
-    "cap:build:android": "npm run build:android && npx cap sync android"
+    "cap:build:android": "npm run build:android && npx cap sync android",
+    "android": "npm run cap:build:android && npx cap open android",
+    "env:copy": "node -e \"const fs=require('fs'); const p='.env'; if(!fs.existsSync(p)){ fs.copyFileSync('.env.example', p); console.log('Created .env from .env.example – edit .env and add your keys.'); } else { console.log('.env already exists.'); }\""
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
