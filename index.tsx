@@ -130,6 +130,12 @@ try {
       </HelmetProvider>
     </React.StrictMode>
   );
+  // Signal to index.html timeout script that React has mounted (clears 30s loading timeout)
+  if (typeof window !== 'undefined') {
+    setTimeout(() => {
+      (window as any).__RERIDE_MOUNTED__ = true;
+    }, 0);
+  }
 } catch (mountError) {
   if (rootElement && typeof window !== 'undefined') {
     const msg = mountError instanceof Error ? mountError.message : String(mountError);
@@ -221,5 +227,5 @@ if (typeof window !== 'undefined') {
 }
 
 // Loading safety is handled by the ErrorBoundary component and
-// the 15-second timeout in index.html. No polling needed here.
+// the 30-second timeout in index.html. No polling needed here.
 
