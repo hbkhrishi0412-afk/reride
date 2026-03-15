@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomBytes } from 'crypto';
-import { PLAN_DETAILS } from '../constants.js';
+import { PLAN_DETAILS } from '../constants/plans.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../types.js';
 // Supabase services

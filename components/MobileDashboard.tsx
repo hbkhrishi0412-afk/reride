@@ -147,8 +147,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     name: currentUser.name,
     email: currentUser.email,
     mobile: currentUser.mobile || '',
-    dealershipName: (currentUser as any).dealershipName || '',
-    bio: (currentUser as any).bio || '',
+    dealershipName: currentUser?.dealershipName || '',
+    bio: currentUser?.bio || '',
   });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -169,8 +169,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       name: currentUser.name,
       email: currentUser.email,
       mobile: currentUser.mobile || '',
-      dealershipName: (currentUser as any).dealershipName || '',
-      bio: (currentUser as any).bio || '',
+      dealershipName: currentUser?.dealershipName || '',
+      bio: currentUser?.bio || '',
     });
   }, [currentUser]);
   
@@ -215,7 +215,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
   // Initialize bank partners
   useEffect(() => {
-    const banks = (currentUser as any).partnerBanks;
+    const banks = currentUser?.partnerBanks;
     if (isSeller && banks != null && Array.isArray(banks)) {
       setSelectedBanks([...banks]);
     }
@@ -1149,8 +1149,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   name: currentUser.name,
                   email: currentUser.email,
                   mobile: currentUser.mobile || '',
-                  dealershipName: (currentUser as any).dealershipName || '',
-                  bio: (currentUser as any).bio || '',
+                  dealershipName: currentUser?.dealershipName || '',
+                  bio: currentUser?.bio || '',
                 });
               }}
               className="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1257,8 +1257,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     name: currentUser.name,
                     email: currentUser.email,
                     mobile: currentUser.mobile || '',
-                    dealershipName: (currentUser as any).dealershipName || '',
-                    bio: (currentUser as any).bio || '',
+                    dealershipName: currentUser?.dealershipName || '',
+                    bio: currentUser?.bio || '',
                   });
                 }}
                 className="flex-1 native-button native-button-secondary"
@@ -1291,8 +1291,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <h3 className="text-lg font-bold text-gray-900 truncate">{currentUser.name}</h3>
               <p className="text-sm text-gray-500 truncate">{currentUser.email}</p>
               <p className="text-xs text-orange-600 font-semibold uppercase mt-1">{currentUser.role}</p>
-              {isSeller && (currentUser as any).dealershipName && (
-                <p className="text-sm text-gray-700 font-medium mt-1">{(currentUser as any).dealershipName}</p>
+              {isSeller && currentUser?.dealershipName && (
+                <p className="text-sm text-gray-700 font-medium mt-1">{currentUser?.dealershipName}</p>
               )}
           </div>
         </div>
@@ -2478,9 +2478,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       setIsSavingBanks(true);
       try {
         await onUpdateSellerProfile({
-          dealershipName: (currentUser as any).dealershipName || '',
-          bio: (currentUser as any).bio || '',
-          logoUrl: (currentUser as any).logoUrl || '',
+          dealershipName: currentUser?.dealershipName || '',
+          bio: currentUser?.bio || '',
+          logoUrl: currentUser?.logoUrl || '',
           partnerBanks: selectedBanks
         });
         setSaveSuccess(true);

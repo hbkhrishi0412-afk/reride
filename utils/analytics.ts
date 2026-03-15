@@ -3,7 +3,7 @@
  * Set VITE_GA_MEASUREMENT_ID for Google Analytics 4.
  */
 
-const GA_ID = typeof import.meta !== 'undefined' ? (import.meta as any).env?.VITE_GA_MEASUREMENT_ID : undefined;
+const GA_ID = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GA_MEASUREMENT_ID : undefined;
 
 export function initAnalytics(): void {
   if (typeof window === 'undefined' || !GA_ID) return;

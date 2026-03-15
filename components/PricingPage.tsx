@@ -8,7 +8,7 @@ import CarValuation from './CarValuation';
 
 interface PricingPageProps {
     currentUser: User | null;
-    onSelectPlan: (planId: 'free' | 'pro' | 'premium') => void;
+    onSelectPlan: (planId: SubscriptionPlan) => void;
 }
 
 const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan }) => {

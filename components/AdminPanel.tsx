@@ -2438,6 +2438,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         const [planFilter, setPlanFilter] = useState<'all' | SubscriptionPlan>('all');
         const [planStats, setPlanStats] = useState<Record<SubscriptionPlan, number>>({
             free: 0,
+            basic: 0,
             pro: 0,
             premium: 0
         });
@@ -2721,11 +2722,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
         useEffect(() => {
             // Only count sellers for plan statistics
             const sellerUsers = users.filter(user => user.role === 'seller');
+            const initial: Record<SubscriptionPlan, number> = { free: 0, basic: 0, pro: 0, premium: 0 };
             const stats = sellerUsers.reduce((acc, user) => {
-            const plan = user.subscriptionPlan || 'free';
-            acc[plan] = (acc[plan] || 0) + 1;
-            return acc;
-            }, {} as Record<SubscriptionPlan, number>);
+                const plan = user.subscriptionPlan || 'free';
+                acc[plan] = (acc[plan] ?? 0) + 1;
+                return acc;
+            }, { ...initial });
             setPlanStats(stats);
         }, [users]);
 
@@ -2819,6 +2821,12 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         onClick={() => setPlanFilter('free')}
                     />
                     <StatCard 
+                        title="Basic Sellers" 
+                        value={planStats.basic} 
+                        icon={<span className="text-2xl">📋</span>} 
+                        onClick={() => setPlanFilter('basic')}
+                    />
+                    <StatCard 
                         title="Pro Sellers" 
                         value={planStats.pro} 
                         icon={<span className="text-2xl">⭐</span>} 
@@ -2890,6 +2898,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         >
                             <option value="all">All Plans</option>
                             <option value="free">Free</option>
+                            <option value="basic">Basic</option>
                             <option value="pro">Pro</option>
                             <option value="premium">Premium</option>
                     </select>
@@ -2959,8 +2968,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                     }
                                     updateData.planExpiryDate = dateObj.toISOString();
                                 } else {
-                                    // Remove expiry date by setting to null
-                                    updateData.planExpiryDate = null as any;
+                                    // Remove expiry date
+                                    updateData.planExpiryDate = undefined;
                                 }
                                 
                                 console.log('Updating user expiry date:', {

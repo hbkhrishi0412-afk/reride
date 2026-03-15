@@ -14,6 +14,19 @@ export const PLAN_DETAILS: Record<SubscriptionPlan, PlanDetails> = {
       'Standard Support',
     ],
   },
+  basic: {
+    id: 'basic',
+    name: 'Basic',
+    price: 0,
+    listingLimit: 1,
+    featuredCredits: 0,
+    freeCertifications: 0,
+    features: [
+      '1 Active Listing',
+      'Basic Seller Profile',
+      'Standard Support',
+    ],
+  },
   pro: {
     id: 'pro',
     name: 'Pro',

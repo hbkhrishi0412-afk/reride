@@ -90,7 +90,7 @@ const PaymentManagement: React.FC<PaymentManagementProps> = ({ currentUser }) =>
           {['all', 'pending', 'approved', 'rejected'].map((status) => (
             <button
               key={status}
-              onClick={() => setFilter(status as any)}
+              onClick={() => setFilter(status as 'all' | 'pending' | 'approved' | 'rejected')}
               className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
                 filter === status
                   ? 'bg-orange-500 text-white'
