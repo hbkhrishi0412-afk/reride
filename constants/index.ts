@@ -2,6 +2,7 @@
 // This allows lazy loading of heavy data when needed
 
 // Core constants (always loaded; single static import for plans avoids Vite chunking warnings)
+import { PLAN_DETAILS } from './plans.js';
 export { FUEL_TYPES, SAFETY_TIPS } from './fallback.js';
 export {
   INSPECTION_SERVICE_FEE,

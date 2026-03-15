@@ -148,7 +148,6 @@ export const planService = {
             }
         }
 
-        const { PLAN_DETAILS } = await import('../constants.js');
         const basePlans = await Promise.all(
             Object.keys(PLAN_DETAILS).map(planId => 
                 planService.getPlanDetails(planId as SubscriptionPlan)
