@@ -70,19 +70,18 @@ export const SECURITY_CONFIG = {
           'https://reride.co.in',
           'https://reride-app.vercel.app', // Keep for backward compatibility
           'https://localhost',             // REQUIRED FOR CAPACITOR ANDROID APP
-          'capacitor://localhost'          // REQUIRED FOR CAPACITOR IOS APP (just in case)
+          'capacitor://localhost'          // REQUIRED FOR CAPACITOR IOS APP
         ]
       : [
           'http://localhost:3000',
           'http://localhost:5173',
           'http://localhost:5174',
-          'https://localhost',
-          'https://localhost:443',
-          'https://localhost:8080',
           'https://reride-app.vercel.app',
           'https://reride--2-.vercel.app',
           'https://www.reride.co.in',
-          'https://reride.co.in'
+          'https://reride.co.in',
+          'https://localhost',             // Add here too just to be safe
+          'capacitor://localhost'
         ],
     ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
