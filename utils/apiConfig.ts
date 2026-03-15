@@ -39,7 +39,7 @@ export function isCapacitorNative(): boolean {
 export function getApiBaseUrl(): string {
   const envOverride =
     typeof import.meta !== 'undefined'
-      ? (import.meta as any).env?.VITE_API_URL
+      ? import.meta.env?.VITE_API_URL
       : undefined;
   if (envOverride) return envOverride.replace(/\/+$/, '');
 

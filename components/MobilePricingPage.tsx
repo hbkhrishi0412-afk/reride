@@ -4,7 +4,7 @@ import { planService } from '../services/planService';
 
 interface MobilePricingPageProps {
   currentUser: User | null;
-  onSelectPlan: (planId: 'free' | 'pro' | 'premium') => void;
+  onSelectPlan: (planId: SubscriptionPlan) => void;
   onNavigate?: (view: any) => void;
 }
 

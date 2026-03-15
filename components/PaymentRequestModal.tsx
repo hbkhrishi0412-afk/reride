@@ -105,7 +105,7 @@ const PaymentRequestModal: React.FC<PaymentRequestModalProps> = ({
               </label>
               <select
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
+                onChange={(e) => setPaymentMethod(e.target.value as 'upi' | 'bank_transfer' | 'card' | 'other')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               >
                 <option value="upi">UPI Payment</option>

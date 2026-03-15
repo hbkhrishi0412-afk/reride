@@ -243,8 +243,8 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate }) => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {submissions.map((submission) => (
-                  <tr key={submission._id} className="hover:bg-gray-50">
+                {submissions.map((submission, index) => (
+                  <tr key={submission._id ?? `sub-${index}-${submission.registration}-${submission.submittedAt}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {submission.registration}
@@ -423,7 +423,7 @@ const SellCarAdmin: React.FC<SellCarAdminProps> = ({ onNavigate }) => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Update Status</label>
                   <select
                     value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value as any)}
+                    onChange={(e) => setNewStatus(e.target.value as 'pending' | 'contacted' | 'completed' | 'rejected')}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="pending">Pending</option>

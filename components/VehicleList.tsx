@@ -1282,7 +1282,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             switch(name) {
                 case 'categoryFilter': 
                     // Reset make, model, fuel type, year, and color when category changes
-                    setCategoryFilter(value as any);
+                    setCategoryFilter(value as VehicleCategory | 'ALL');
                     setMakeFilter('');
                     setModelFilter('');
                     setFuelTypeFilter('');

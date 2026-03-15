@@ -1,6 +1,6 @@
 import type { PlanDetails, SubscriptionPlan } from '../types';
 import { getApiBaseUrl } from '../utils/apiConfig';
-import { PLAN_DETAILS } from '../constants.js';
+import { PLAN_DETAILS } from '../constants/plans.js';
 
 // Lazy-load Plan model only when needed (server-side only)
 let PlanModel: any = null;

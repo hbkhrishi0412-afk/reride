@@ -1,10 +1,12 @@
+type GlobalApp = typeof globalThis & { __APP_DEV__?: boolean; __APP_ENV__?: Record<string, string> };
+
 export const isDevelopmentEnvironment = (): boolean => {
   if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV) {
     return process.env.NODE_ENV !== 'production';
   }
 
-  if (typeof globalThis !== 'undefined' && typeof (globalThis as any).__APP_DEV__ === 'boolean') {
-    return Boolean((globalThis as any).__APP_DEV__);
+  if (typeof globalThis !== 'undefined' && typeof (globalThis as GlobalApp).__APP_DEV__ === 'boolean') {
+    return Boolean((globalThis as GlobalApp).__APP_DEV__);
   }
 
   return false;
@@ -14,10 +16,8 @@ export const getEnvValue = (key: string, fallback: string = ''): string => {
   // Vite requires static references to environment variables for them to be included in the bundle
   // We need to directly access import.meta.env properties, not use dynamic keys
   try {
-    // @ts-ignore - import.meta is a Vite-specific feature
     if (typeof import.meta !== 'undefined' && import.meta.env) {
-      // @ts-ignore
-      const env = import.meta.env;
+      const env = import.meta.env as ImportMetaEnv & Record<string, string | undefined>;
       
       // Direct static access for Firebase variables (Vite will include these at build time)
       let viteValue: string | undefined;
@@ -60,7 +60,7 @@ export const getEnvValue = (key: string, fallback: string = ''): string => {
     return process.env[key] as string;
   }
 
-  const globalEnv = (globalThis as any).__APP_ENV__;
+  const globalEnv = (globalThis as GlobalApp).__APP_ENV__;
   if (globalEnv && globalEnv[key]) {
     return globalEnv[key];
   }

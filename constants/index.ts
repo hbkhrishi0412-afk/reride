@@ -1,8 +1,16 @@
 // Lightweight constants index - re-exports from split modules
-// This allows lazy loading of heavy data when needed
+// Use a single import style per file to avoid Vite chunking warnings (no mixing static + dynamic for same file)
 
-// Core constants (always loaded; single static import for plans avoids Vite chunking warnings)
+// Core constants (static imports only)
 import { PLAN_DETAILS } from './plans.js';
+import {
+  FUEL_TYPES,
+  SAFETY_TIPS,
+  FALLBACK_VEHICLES,
+  FALLBACK_USERS,
+  FALLBACK_FAQS,
+  FALLBACK_SUPPORT_TICKETS,
+} from './fallback.js';
 export { FUEL_TYPES, SAFETY_TIPS } from './fallback.js';
 export {
   INSPECTION_SERVICE_FEE,
@@ -13,7 +21,7 @@ export {
   PLAN_DETAILS,
 } from './plans.js';
 
-// Lazy-loaded constants (loaded on demand)
+// Lazy-loaded constants (dynamic import only for these modules — no static import of same file)
 export const loadLocationData = async () => {
   const module = await import('./location.js');
   return module;
@@ -27,15 +35,13 @@ export const loadBoostPackages = async () => {
   return module.BOOST_PACKAGES;
 };
 
-export const loadFallbackData = async () => {
-  const module = await import('./fallback.js');
-  return {
-    vehicles: module.FALLBACK_VEHICLES,
-    users: module.FALLBACK_USERS,
-    faqs: module.FALLBACK_FAQS,
-    supportTickets: module.FALLBACK_SUPPORT_TICKETS
-  };
-};
+/** Returns fallback data (uses statically imported constants to avoid mixing import styles). */
+export const loadFallbackData = async () => ({
+  vehicles: FALLBACK_VEHICLES,
+  users: FALLBACK_USERS,
+  faqs: FALLBACK_FAQS,
+  supportTickets: FALLBACK_SUPPORT_TICKETS,
+});
 
 // For backward compatibility - these will be loaded lazily
 export const INDIAN_STATES = [] as any; // Will be populated when needed

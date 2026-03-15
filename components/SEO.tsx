@@ -6,8 +6,8 @@
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
 
-const BASE_URL = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_APP_URL
-  ? (import.meta as any).env.VITE_APP_URL
+const BASE_URL = typeof import.meta !== 'undefined' && import.meta.env?.VITE_APP_URL
+  ? import.meta.env.VITE_APP_URL
   : 'https://www.reride.co.in';
 
 export interface SEOProps {

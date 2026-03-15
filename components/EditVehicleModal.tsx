@@ -273,10 +273,11 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         </div>
     );
 
-    const TabButton = ({ tab, label, icon }: { tab: string, label: string, icon: string }) => (
+    type TabId = 'basic' | 'specs' | 'media' | 'quality';
+    const TabButton = ({ tab, label, icon }: { tab: TabId; label: string; icon: string }) => (
         <button
             type="button"
-            onClick={() => setActiveTab(tab as any)}
+            onClick={() => setActiveTab(tab)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                 activeTab === tab
                     ? 'bg-reride-orange text-white shadow-md'

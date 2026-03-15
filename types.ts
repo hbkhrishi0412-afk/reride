@@ -156,7 +156,7 @@ export interface Vehicle {
   hideExactLocation?: boolean;
 }
 
-export type SubscriptionPlan = 'free' | 'pro' | 'premium';
+export type SubscriptionPlan = 'free' | 'pro' | 'premium' | 'basic';
 
 export interface PlanDetails {
     id: SubscriptionPlan;
@@ -401,6 +401,33 @@ export interface Notification {
   type?: string;
   isRead: boolean;
   timestamp: string; // ISO String
+}
+
+/** Service provider / workshop (used by service dashboards and APIs) */
+export interface Provider {
+  id?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  city?: string;
+  location?: string;
+  state?: string;
+  district?: string;
+  serviceCategories?: string[];
+  availability?: string;
+  skills?: string[];
+  workshops?: string[];
+}
+
+/** Generic API response shape (certification and feature endpoints) */
+export interface ApiResponse<T = unknown> {
+  success?: boolean;
+  data?: T;
+  error?: string;
+  reason?: string;
+  alreadyRequested?: boolean;
+  usedCertifications?: number;
+  remainingCertifications?: number;
 }
 
 export interface Command {
