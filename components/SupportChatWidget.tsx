@@ -59,13 +59,10 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
   useEffect(() => {
     if (!isOpen) return;
 
-    // WebSocket connection - use same origin for simplicity
-    // In production, you may need to configure WebSocket proxy
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = process.env.NODE_ENV === 'production' 
-      ? window.location.host 
+    const wsHost = process.env.NODE_ENV === 'production'
+      ? 'www.reride.co.in'
       : 'localhost:3001';
-    // CRITICAL FIX: Server WebSocket is at /chat path (see dev-api-server.js line 1620)
     const wsUrl = `${wsProtocol}//${wsHost}/chat`;
 
     const newSocket = new WebSocket(wsUrl);

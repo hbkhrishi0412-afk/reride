@@ -15,6 +15,10 @@ import { validateEnvironmentVariablesSafe } from './utils/envValidation';
 import { logInfo, logWarn, logError } from './utils/logger';
 import { ensureCsrfToken } from './utils/authenticatedFetch';
 import { initAnalytics, trackPageView } from './utils/analytics';
+import { patchFetchForCapacitor } from './utils/apiConfig';
+
+// Rewrite /api/* requests to production origin when running inside Capacitor
+patchFetchForCapacitor();
 
 // i18n - must run before any component that uses useTranslation
 import './lib/i18n';
@@ -137,10 +141,14 @@ try {
 } catch (mountError) {
   if (rootElement && typeof window !== 'undefined') {
     const msg = mountError instanceof Error ? mountError.message : String(mountError);
-    if (process.env.NODE_ENV === 'development') {
-      console.error('React mount failed:', mountError);
+    const stack = mountError instanceof Error ? mountError.stack || '' : '';
+    (window as any).__RERIDE_ERRORS__ = (window as any).__RERIDE_ERRORS__ || [];
+    (window as any).__RERIDE_ERRORS__.push('Mount: ' + msg + '\n' + stack);
+    if (typeof (window as any).showLoadError === 'function') {
+      (window as any).showLoadError('React mount failed: ' + msg);
+    } else {
+      rootElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to load ReRide</h1><p style="color:#666;font-size:14px;margin-bottom:24px;line-height:1.6;word-break:break-all;">' + msg + '</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh</button></div></div>';
     }
-    rootElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The app failed to start. Please refresh the page.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh</button></div></div>';
   } else {
     throw mountError;
   }

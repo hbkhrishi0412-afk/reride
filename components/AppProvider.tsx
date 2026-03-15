@@ -3,8 +3,13 @@ import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom'
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
 import { View, VehicleCategory as CategoryEnum } from '../types';
 import { getConversations, saveConversations } from '../services/chatService';
-import { saveConversationWithSync, addMessageWithSync } from '../services/syncService';
-import { saveNotificationWithSync } from '../services/syncService';
+import {
+  saveConversationWithSync,
+  addMessageWithSync,
+  saveNotificationWithSync,
+  getSyncQueueStatus,
+  processSyncQueue,
+} from '../services/syncService';
 import { realtimeChatService } from '../services/realtimeChatService';
 import { getSettings } from '../services/settingsService';
 import { getAuditLog, logAction, saveAuditLog } from '../services/auditLogService';
@@ -1973,13 +1978,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       try {
         isProcessing = true;
-        const { getSyncQueueStatus } = await import('../services/syncService');
         const queueStatus = getSyncQueueStatus();
         
         if (queueStatus.pending > 0) {
           console.log(`🔄 Processing sync queue: ${queueStatus.pending} items pending`);
           
-          const { processSyncQueue } = await import('../services/syncService');
           const result = await processSyncQueue();
           
           if (result.success > 0) {

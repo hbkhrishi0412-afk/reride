@@ -1,5 +1,6 @@
 import type { Vehicle, User, VehicleData } from '../types';
 import { queueRequest } from '../utils/requestQueue';
+import { getApiBaseUrl } from '../utils/apiConfig';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
@@ -10,7 +11,7 @@ class DataService {
 
   constructor() {
     this.isDevelopment = this.detectDevelopment();
-    this.apiBaseUrl = '/api';
+    this.apiBaseUrl = `${getApiBaseUrl()}/api`;
   }
 
   private detectDevelopment(): boolean {

@@ -205,61 +205,76 @@
     <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
     <script type="module" src="/index.tsx"></script>
     <script>
+      // Collect all JS errors so we can display them if React never mounts
+      window.__RERIDE_ERRORS__ = [];
+
+      window.addEventListener('error', function(e) {
+        var msg = (e.message || '') + ' at ' + (e.filename || '?') + ':' + (e.lineno || '?');
+        window.__RERIDE_ERRORS__.push(msg);
+
+        // Script load failure
+        if (e.target && e.target.tagName === 'SCRIPT' && (e.target.src || '').indexOf('assets/') !== -1) {
+          showLoadError('Script failed to load: ' + (e.target.src || 'unknown'));
+        }
+      }, true);
+
+      window.addEventListener('unhandledrejection', function(e) {
+        var reason = e.reason;
+        var msg = (reason instanceof Error) ? reason.message + '\n' + (reason.stack || '') : String(reason);
+        window.__RERIDE_ERRORS__.push('Promise: ' + msg);
+      });
+
+      function showLoadError(detail) {
+        if (window.__APP_SCRIPT_LOAD_FAILED__) return;
+        window.__APP_SCRIPT_LOAD_FAILED__ = true;
+        var root = document.getElementById('root');
+        if (!root) return;
+        var errors = (window.__RERIDE_ERRORS__ || []).join('<br><br>');
+        var extra = detail ? '<p style="color:#c00;font-size:12px;margin-top:16px;text-align:left;word-break:break-all;">' + detail + '</p>' : '';
+        var errBlock = errors ? '<details style="margin-top:16px;text-align:left;"><summary style="cursor:pointer;color:#666;font-size:13px;">Error details</summary><pre style="background:#f5f5f5;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto;margin-top:8px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;">' + errors + '</pre></details>' : '';
+        root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The app could not start.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button>' + extra + errBlock + '</div></div>';
+      }
+
       // Detect if the app script failed to load (e.g. 404 in production)
       (function() {
-        function showLoadError() {
-          if (window.__APP_SCRIPT_LOAD_FAILED__) return;
-          window.__APP_SCRIPT_LOAD_FAILED__ = true;
-          var root = document.getElementById('root');
-          if (root) {
-            root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The app script could not be loaded. Please refresh the page or try again later.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button></div></div>';
-          }
-        }
         var scriptEl = document.querySelector('script[src="/index.tsx"], script[src^="/assets/index-"], script[src^="./assets/index-"]');
         if (scriptEl) {
-          scriptEl.addEventListener('error', showLoadError);
+          scriptEl.addEventListener('error', function() { showLoadError('Entry script load failed'); });
         }
-        window.addEventListener('error', function(e) {
-          if (e.target && e.target.tagName === 'SCRIPT' && (e.target.src || '').indexOf('assets/') !== -1) {
-            showLoadError();
-          }
-        }, true);
       })();
     </script>
-    <!-- Safety timeout: If React doesn't mount within 60 seconds, show error (helps on slow mobile networks) -->
+    <!-- Safety timeout: If React doesn't mount within 15 seconds, show error with diagnostics -->
     <script>
       (function() {
-        let timeoutId;
-        let checkInterval;
-        let reactMounted = false;
-        var TIMEOUT_MS = 60000; // 60 seconds for slow mobile/cellular and first load of many chunks
+        var timeoutId;
+        var checkInterval;
+        var reactMounted = false;
+        var TIMEOUT_MS = 15000;
         
-        const checkReactMounted = function() {
+        var checkReactMounted = function() {
           if (window.__RERIDE_MOUNTED__) return true;
-          const root = document.getElementById('root');
+          var root = document.getElementById('root');
           if (!root) return false;
-          // Fallback: if loading text is gone, React has likely replaced the content
           if (!root.innerHTML.includes('Loading ReRide')) return true;
           return false;
         };
         
-        const clearMountTimeout = function() {
+        var clearMountTimeout = function() {
           reactMounted = true;
           if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
           if (checkInterval) { clearInterval(checkInterval); checkInterval = null; }
         };
         
-        // Set timeout to show error if React doesn't mount
         timeoutId = setTimeout(function() {
           if (!reactMounted) {
-            const root = document.getElementById('root');
+            var root = document.getElementById('root');
             if (root && !checkReactMounted()) {
-              root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to Load ReRide</h1><p style="color:#666;font-size:16px;margin-bottom:24px;line-height:1.6;">The application is taking longer than expected to load. Please try refreshing the page.</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh Page</button></div></div>';
+              showLoadError('React did not mount within ' + (TIMEOUT_MS/1000) + 's');
             }
           }
         }, TIMEOUT_MS);
         
-        const startChecking = function() {
+        var startChecking = function() {
           checkInterval = setInterval(function() {
             if (checkReactMounted()) {
               clearMountTimeout();

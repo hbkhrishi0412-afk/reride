@@ -326,10 +326,12 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                             type="button"
                                             onClick={() => {
                                                 const newStatus = !(user.verificationStatus?.phoneVerified || user.phoneVerified);
+                                                const vs = user.verificationStatus || {};
                                                 onSave(user.email, {
                                                     verificationStatus: {
-                                                        ...(user.verificationStatus || {}),
-                                                        phoneVerified: newStatus
+                                                        emailVerified: !!vs.emailVerified,
+                                                        phoneVerified: newStatus,
+                                                        govtIdVerified: !!vs.govtIdVerified
                                                     },
                                                     phoneVerified: newStatus
                                                 });
@@ -365,10 +367,12 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                             type="button"
                                             onClick={() => {
                                                 const newStatus = !(user.verificationStatus?.emailVerified || user.emailVerified);
+                                                const vs = user.verificationStatus || {};
                                                 onSave(user.email, {
                                                     verificationStatus: {
-                                                        ...(user.verificationStatus || {}),
-                                                        emailVerified: newStatus
+                                                        emailVerified: newStatus,
+                                                        phoneVerified: !!vs.phoneVerified,
+                                                        govtIdVerified: !!vs.govtIdVerified
                                                     },
                                                     emailVerified: newStatus
                                                 });
@@ -404,9 +408,11 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                                             type="button"
                                             onClick={() => {
                                                 const newStatus = !(user.verificationStatus?.govtIdVerified || user.govtIdVerified);
+                                                const vs = user.verificationStatus || {};
                                                 onSave(user.email, {
                                                     verificationStatus: {
-                                                        ...(user.verificationStatus || {}),
+                                                        emailVerified: !!vs.emailVerified,
+                                                        phoneVerified: !!vs.phoneVerified,
                                                         govtIdVerified: newStatus
                                                     },
                                                     govtIdVerified: newStatus

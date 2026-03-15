@@ -233,73 +233,36 @@ type HandlerOptions = {
   // Supabase-only - no additional options needed
 };
 
-// Extract client IP from request headers (handles proxies and Vercel)
-// Improved for Vercel to prevent all requests from being counted as the same user
+// Extract client IP for rate limiting. Only trust server-set identifiers to prevent IP spoofing.
+// Client-spoofable headers (x-forwarded-for, x-real-ip, cf-connecting-ip) are NOT used for rate limiting.
 const getClientIP = (req: VercelRequest): string => {
-  // Vercel-specific headers (check these first for better IP detection)
+  // 1) x-vercel-forwarded-for: Set by Vercel edge; not client-spoofable when request is served by Vercel.
   const vercelForwardedFor = req.headers['x-vercel-forwarded-for'];
   if (vercelForwardedFor) {
     const ips = Array.isArray(vercelForwardedFor) ? vercelForwardedFor[0] : vercelForwardedFor;
-    // Take the first IP (original client IP) from the comma-separated list
-    const clientIP = ips.split(',')[0].trim();
+    const clientIP = String(ips).split(',')[0].trim();
     if (clientIP && clientIP !== '::1' && clientIP !== '127.0.0.1') {
       return clientIP;
     }
   }
-  
-  // Cloudflare header (if behind Cloudflare)
-  const cfConnectingIP = req.headers['cf-connecting-ip'];
-  if (cfConnectingIP) {
-    const ip = Array.isArray(cfConnectingIP) ? cfConnectingIP[0] : cfConnectingIP;
-    if (ip && ip !== '::1' && ip !== '127.0.0.1') {
-      return ip;
-    }
-  }
-  
-  // Standard x-forwarded-for header
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (forwardedFor) {
-    const ips = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-    // x-forwarded-for can contain multiple IPs: client, proxy1, proxy2
-    // The first IP is usually the original client IP
-    const clientIP = ips.split(',')[0].trim();
-    if (clientIP && clientIP !== '::1' && clientIP !== '127.0.0.1') {
-      return clientIP;
-    }
-  }
-  
-  // x-real-ip header (some proxies use this)
-  const realIP = req.headers['x-real-ip'];
-  if (realIP) {
-    const ip = Array.isArray(realIP) ? realIP[0] : realIP;
-    if (ip && ip !== '::1' && ip !== '127.0.0.1') {
-      return ip;
-    }
-  }
-  
-  // Fallback to socket remote address
+
+  // 2) Socket remote address: Set by the runtime; safe when not behind a proxy.
   const socketIP = req.socket?.remoteAddress;
   if (socketIP && socketIP !== '::1' && socketIP !== '127.0.0.1') {
     return socketIP;
   }
-  
-  // Last resort: use a combination of headers to create a unique identifier
-  // This helps when all requests appear to come from the same IP (Vercel edge)
+
+  // 3) Fallback: Do NOT use x-forwarded-for, x-real-ip, or cf-connecting-ip here—
+  //    clients can spoof those and bypass rate limiting. Use a stable non-spoofable fallback.
   const userAgentHeader = req.headers['user-agent'];
   const acceptLanguageHeader = req.headers['accept-language'];
-  
-  // Handle arrays properly (headers can be string | string[] | undefined)
-  // Also handle empty arrays by defaulting to 'unknown'
-  const userAgent = Array.isArray(userAgentHeader) 
+  const userAgent = Array.isArray(userAgentHeader)
     ? (userAgentHeader[0] || 'unknown')
     : (userAgentHeader || 'unknown');
   const acceptLanguage = Array.isArray(acceptLanguageHeader)
     ? (acceptLanguageHeader[0] || 'unknown')
     : (acceptLanguageHeader || 'unknown');
-  
-  // Create a hash-like identifier from headers (not perfect but better than 'unknown')
-  const fallbackId = `${socketIP || 'fallback'}-${userAgent.substring(0, 20)}-${acceptLanguage.substring(0, 10)}`;
-  return fallbackId;
+  return `fallback-${(socketIP || 'unknown')}-${String(userAgent).substring(0, 20)}-${String(acceptLanguage).substring(0, 10)}`;
 };
 
 // In-memory rate limit cache for fallback (with TTL)
@@ -1650,7 +1613,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         
         // Hash OTP for storage (use simple hash for now, or use crypto for better security)
         const crypto = await import('crypto');
-        const otpHash = crypto.createHash('sha256').update(otp + process.env.JWT_SECRET || 'default-secret').digest('hex');
+        const jwtSecret = getSecurityConfig().JWT.SECRET;
+        if (!jwtSecret) {
+          return res.status(503).json({ success: false, reason: 'Server configuration error. Please try again later.' });
+        }
+        const otpHash = crypto.createHash('sha256').update(otp + jwtSecret).digest('hex');
         
         // Store OTP in a temporary table (create if doesn't exist)
         // Using Supabase's admin client to insert into a table
