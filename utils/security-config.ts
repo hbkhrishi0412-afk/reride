@@ -80,7 +80,7 @@ export const SECURITY_CONFIG = {
           'https://reride--2-.vercel.app',
           'https://www.reride.co.in',
           'https://reride.co.in',
-          'https://localhost',             // Add here too just to be safe
+          'https://localhost',
           'capacitor://localhost'
         ],
     ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
