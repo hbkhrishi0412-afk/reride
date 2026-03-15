@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { User, Vehicle, SavedSearch, Conversation } from '../types';
 import { View } from '../types';
 import * as buyerService from '../services/buyerService';
@@ -36,38 +36,28 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(
     () => buyerService.getSavedSearches(currentUser?.email || '')
   );
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
 
-  // Add safety checks for currentUser
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-brand-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text mb-4">
-            Please log in to view your dashboard
-          </h2>
-          <button
-            onClick={() => onNavigate(View.LOGIN_PORTAL)}
-            className="btn-brand-primary text-white px-6 py-2 rounded-lg"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Load recently viewed in useEffect to avoid infinite re-renders (async getRecentlyViewed)
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    const fetchRecentlyViewed = async () => {
+      try {
+        const ids = await buyerService.getRecentlyViewed(currentUser.email);
+        setRecentlyViewedIds(ids);
+      } catch (error) {
+        console.error('Failed to fetch recently viewed', error);
+      }
+    };
+    fetchRecentlyViewed();
+  }, [currentUser?.email]);
 
-  // Get buyer activity - use sync version for immediate access
-  const buyerActivity = useMemo(
-    () => buyerService.getBuyerActivitySync(currentUser.email),
-    [currentUser.email]
-  );
-
-  // Get recently viewed vehicles
+  // Get recently viewed vehicles from loaded IDs
   const recentlyViewed = useMemo(() => {
     if (!vehicles || !Array.isArray(vehicles)) return [];
-    const viewedIds = buyerActivity.recentlyViewed.slice(0, 6);
+    const viewedIds = recentlyViewedIds.slice(0, 6);
     return vehicles.filter(v => v && viewedIds.includes(v.id));
-  }, [buyerActivity.recentlyViewed, vehicles]);
+  }, [recentlyViewedIds, vehicles]);
 
   // Get wishlist vehicles
   const wishlistVehicles = useMemo(
@@ -80,14 +70,16 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
 
   // Check for price drops
   const priceDrops = useMemo(() => {
+    if (!currentUser?.email) return [];
     return buyerService.checkPriceDrops(currentUser.email, wishlist, vehicles);
-  }, [currentUser.email, wishlist, vehicles]);
+  }, [currentUser?.email, wishlist, vehicles]);
 
   // Find new matches for saved searches
   const newMatches = useMemo(() => {
+    if (!currentUser?.email) return [];
     return buyerService.findNewMatches(currentUser.email, vehicles)
       .filter(result => result.matches.length > 0);
-  }, [currentUser.email, vehicles]);
+  }, [currentUser?.email, vehicles]);
 
   const handleDeleteSearch = useCallback((searchId: string) => {
     buyerService.deleteSavedSearch(currentUser.email, searchId);
@@ -125,6 +117,25 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
       action: () => setActiveTab('activity'),
     },
   ];
+
+  // Safety check: show login prompt when no currentUser (after all hooks)
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-brand-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text mb-4">
+            Please log in to view your dashboard
+          </h2>
+          <button
+            onClick={() => onNavigate(View.LOGIN_PORTAL)}
+            className="btn-brand-primary text-white px-6 py-2 rounded-lg"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 relative overflow-hidden">

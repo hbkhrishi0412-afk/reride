@@ -195,13 +195,13 @@ export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> 
   }
 };
 
-// Track price drops (uses sync get so we can update and save without awaiting)
-export const trackPriceDrop = (userId: string, vehicleId: number, _oldPrice: number, _newPrice: number): void => {
+// Track price drops (async: load activity, update, then save)
+export const trackPriceDrop = async (userId: string, vehicleId: number, _oldPrice: number, _newPrice: number): Promise<void> => {
   try {
-    const activity = getBuyerActivitySync(userId);
+    const activity = await getBuyerActivity(userId);
     if (!activity.notifications.priceDrops.includes(vehicleId)) {
       activity.notifications.priceDrops.push(vehicleId);
-      void saveBuyerActivity(activity);
+      await saveBuyerActivity(activity);
     }
   } catch (error) {
     console.error('Failed to track price drop:', error);
@@ -230,7 +230,7 @@ export const checkPriceDrops = (
           newPrice: vehicle.price,
         });
         // Track the drop
-        trackPriceDrop(userId, vehicleId, historicalPrice, vehicle.price);
+        void trackPriceDrop(userId, vehicleId, historicalPrice, vehicle.price);
       }
 
       // Update price history
@@ -283,8 +283,19 @@ export const clearPriceDropNotifications = (userId: string, vehicleIds: number[]
   }
 };
 
-// Get recently viewed vehicles (sync - uses localStorage only for immediate return)
-export const getRecentlyViewed = (userId: string): number[] => {
+// Get recently viewed vehicle IDs (async - loads from DB first, then returns array)
+export const getRecentlyViewed = async (userId: string): Promise<number[]> => {
+  try {
+    const activity = await getBuyerActivity(userId);
+    return activity?.recentlyViewed ?? [];
+  } catch (error) {
+    console.error('Failed to get recently viewed:', error);
+    return [];
+  }
+};
+
+// Sync version for immediate localStorage-only access (e.g. when you already have activity)
+export const getRecentlyViewedSync = (userId: string): number[] => {
   try {
     const activity = getBuyerActivitySync(userId);
     return activity.recentlyViewed || [];
