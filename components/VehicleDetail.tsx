@@ -844,7 +844,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     {/* EMI Calculator - Shown at bottom when clicked */}
                     {showEMICalculator && (
                         <div ref={emiCalculatorRef} className="mt-8">
-                            <EMICalculator price={safeVehicle.price} />
+                            <EMICalculator principal={safeVehicle.price} />
                         </div>
                     )}
                   </div>

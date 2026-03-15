@@ -169,10 +169,9 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
-// Get VAPID public key (should be in environment or config)
+// Get VAPID public key for web push (required for push notifications to work)
 function getVapidPublicKey(): string {
-  // TODO: Replace with actual VAPID public key from your push service
-  // For now, return a placeholder
+  // Set VITE_VAPID_PUBLIC_KEY in .env (e.g. from Firebase Cloud Messaging or web-push generate-vapid-keys)
   return process.env.VITE_VAPID_PUBLIC_KEY || '';
 }
 

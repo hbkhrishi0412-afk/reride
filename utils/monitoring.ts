@@ -99,7 +99,7 @@ export function initWebVitals(onPerfEntry?: (metric: WebVitals) => void): void {
     return;
   }
 
-  import('web-vitals').then(({ onCLS, onFID, onFCP, onLCP, onTTFB }) => {
+  import('web-vitals').then(({ onCLS, onINP, onFCP, onLCP, onTTFB }) => {
     const reportMetric = (metric: WebVitals) => {
       // Send to analytics endpoint
       if (onPerfEntry) {
@@ -113,7 +113,7 @@ export function initWebVitals(onPerfEntry?: (metric: WebVitals) => void): void {
     };
 
     onCLS(reportMetric);
-    onFID(reportMetric);
+    onINP(reportMetric); // Replaces deprecated onFID in web-vitals v3
     onFCP(reportMetric);
     onLCP(reportMetric);
     onTTFB(reportMetric);
