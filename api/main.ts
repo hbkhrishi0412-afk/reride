@@ -341,13 +341,15 @@ async function mainHandler(
   const origin = req.headers.origin;
   const isProduction = process.env.NODE_ENV === 'production';
   const isLocalhost = origin && (
-    origin.includes('localhost') || 
+    origin.includes('localhost') ||
     origin.includes('127.0.0.1') ||
     origin.includes('::1')
   );
-  
-  // Allow requests from allowed origins or localhost in development
-  if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost)) {
+  // Capacitor Android/iOS WebView always uses these origins (androidScheme: 'https' or capacitor://)
+  const isCapacitorApp = origin === 'https://localhost' || origin === 'capacitor://localhost' || origin === 'http://localhost';
+
+  // Allow: config whitelist, dev localhost, OR Capacitor mobile app (in prod too)
+  if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost) || isCapacitorApp) {
     res.setHeader('Access-Control-Allow-Origin', origin as string);
   } else if (isProduction && origin) {
     // In production, check if origin matches any allowed production domain
