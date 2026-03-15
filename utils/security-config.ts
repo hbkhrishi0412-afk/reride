@@ -61,16 +61,16 @@ export const SECURITY_CONFIG = {
     LOGIN_LOCKOUT_TIME: 30 * 60 * 1000 // 30 minutes
   },
 
-  // CORS Configuration (include https://localhost for Capacitor Android with androidScheme: 'https')
+  // CORS Configuration
   CORS: {
     ALLOWED_ORIGINS: process.env.NODE_ENV === 'production'
       ? [
           process.env.ALLOWED_ORIGIN || 'https://www.reride.co.in',
           'https://www.reride.co.in',
-          'https://reride-app.vercel.app',
-          'https://localhost',
-          'https://localhost:443',
-          'https://localhost:8080'
+          'https://reride.co.in',
+          'https://reride-app.vercel.app', // Keep for backward compatibility
+          'https://localhost',             // REQUIRED FOR CAPACITOR ANDROID APP
+          'capacitor://localhost'          // REQUIRED FOR CAPACITOR IOS APP (just in case)
         ]
       : [
           'http://localhost:3000',
