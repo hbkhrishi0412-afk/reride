@@ -1,8 +1,9 @@
 import type { SupportTicket } from '../types';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import { getApiBaseUrl } from '../utils/apiConfig';
 
 const SUPPORT_TICKET_STORAGE_KEY = 'reRideSupportTickets';
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 export const getSupportTickets = (): SupportTicket[] | null => {
   try {

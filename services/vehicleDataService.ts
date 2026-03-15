@@ -3,9 +3,10 @@ import { VEHICLE_DATA } from '../components/vehicleData';
 import { safeGetItem, safeSetItem, isStorageAvailable } from '../utils/safeStorage';
 import { logInfo, logWarn, logError } from '../utils/logger';
 import { queueRequest } from '../utils/requestQueue';
+import { getApiBaseUrl } from '../utils/apiConfig';
 
 const VEHICLE_DATA_STORAGE_KEY = 'reRideVehicleData';
-const API_BASE_URL = '/api';
+const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 /**
  * Fetches vehicle data from the admin database API.

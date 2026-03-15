@@ -1,7 +1,8 @@
 import type { Notification } from '../types';
 import { queueRequest } from '../utils/requestQueue';
+import { getApiBaseUrl } from '../utils/apiConfig';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 // Attach JWT so notification APIs that require auth work in production
 const getAuthHeaders = (): Record<string, string> => {

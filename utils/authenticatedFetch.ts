@@ -5,6 +5,7 @@
 
 import { logInfo, logWarn, logError } from './logger';
 import { formatSupabaseError } from './errorUtils';
+import { resolveApiUrl } from './apiConfig';
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean; // Skip authentication for public endpoints
@@ -20,7 +21,7 @@ export async function ensureCsrfToken(): Promise<string | null> {
   if (csrfTokenPromise) return csrfTokenPromise;
   csrfTokenPromise = (async () => {
     try {
-      const res = await fetch('/api/csrf-token', { credentials: 'include' });
+      const res = await fetch(resolveApiUrl('/api/csrf-token'), { credentials: 'include' });
       if (!res.ok) return null;
       const data = await res.json();
       if (data?.token) {
@@ -109,10 +110,10 @@ const refreshToken = async (): Promise<string | null> => {
         return null;
       }
 
-      const response = await fetch('/api/users', {
+      const response = await fetch(resolveApiUrl('/api/users'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Include cookies for session-based auth
+        credentials: 'include',
         body: JSON.stringify({ action: 'refresh-token', refreshToken: refreshTokenValue }),
       });
 
@@ -281,6 +282,7 @@ export const authenticatedFetch = async (
   options: FetchOptions = {}
 ): Promise<Response> => {
   try {
+    const resolvedUrl = resolveApiUrl(url);
     const { skipAuth = false, retryOn401 = true, ...fetchOptions } = options;
 
     // For state-changing methods, ensure CSRF token is present
@@ -318,10 +320,10 @@ export const authenticatedFetch = async (
     // First attempt - wrap in try-catch to handle network errors
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await fetch(resolvedUrl, {
         ...fetchOptions,
         headers: mergedHeaders,
-        credentials: 'include', // Always include cookies for session-based auth
+        credentials: 'include',
       });
     } catch (fetchError) {
       // Network error, CORS error, or other fetch failures
@@ -388,7 +390,7 @@ export const authenticatedFetch = async (
           logInfo('✅ Token refreshed, retrying request...');
           // Retry with new token - wrap in try-catch
           try {
-            response = await fetch(url, {
+            response = await fetch(resolvedUrl, {
               ...fetchOptions,
               headers: {
                 ...mergedHeaders,

@@ -1,5 +1,6 @@
 // Client-side API service for sell car submissions
 // This file should only contain client-side code, not server-side MongoDB imports
+import { getApiBaseUrl } from '../utils/apiConfig';
 
 interface SellCarSubmission {
   registration: string;
@@ -24,8 +25,7 @@ class SellCarAPI {
   private baseURL: string;
 
   constructor() {
-    // Use relative URL for API calls
-    this.baseURL = '/api';
+    this.baseURL = `${getApiBaseUrl()}/api`;
   }
 
   async submitCarData(data: Omit<SellCarSubmission, 'submittedAt' | 'status' | '_id'>): Promise<{ success: boolean; id?: string; message: string; error?: string }> {

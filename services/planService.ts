@@ -1,4 +1,6 @@
 import type { PlanDetails, SubscriptionPlan } from '../types';
+import { getApiBaseUrl } from '../utils/apiConfig';
+import { PLAN_DETAILS } from '../constants.js';
 
 // Lazy-load Plan model only when needed (server-side only)
 let PlanModel: any = null;
@@ -35,7 +37,7 @@ const getPlanModel = async () => {
   return planModelPromise;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 const normalizePlan = (raw: any): PlanDetails => ({
     id: (String(raw?.id || raw?.planId || 'free') as SubscriptionPlan),
@@ -51,7 +53,6 @@ const normalizePlan = (raw: any): PlanDetails => ({
 export const planService = {
     // Get plan details with any updates applied
     getPlanDetails: async (planId: SubscriptionPlan): Promise<PlanDetails> => {
-        const { PLAN_DETAILS } = await import('../constants.js');
         const basePlan = PLAN_DETAILS[planId];
         if (typeof window !== 'undefined') {
             try {
@@ -143,7 +144,6 @@ export const planService = {
                 return data.map(normalizePlan).slice(0, 4);
             } catch (error) {
                 console.warn('Failed to fetch plans from API:', error);
-                const { PLAN_DETAILS } = await import('../constants.js');
                 return Object.keys(PLAN_DETAILS).map((planId) => PLAN_DETAILS[planId as SubscriptionPlan]).slice(0, 4);
             }
         }
@@ -199,7 +199,6 @@ export const planService = {
             throw new Error('Plan updates are only available server-side');
         }
         try {
-            const { PLAN_DETAILS } = await import('../constants.js');
             const basePlan = PLAN_DETAILS[planId as SubscriptionPlan];
             const isCustom = !basePlan;
             
@@ -289,7 +288,6 @@ export const planService = {
             return false;
         }
         try {
-            const { PLAN_DETAILS } = await import('../constants.js');
             if (PLAN_DETAILS[planId as SubscriptionPlan]) {
                 // Cannot delete base plans
                 return false;
@@ -325,7 +323,6 @@ export const planService = {
 
     // Get original plan details without updates
     getOriginalPlanDetails: async (planId: SubscriptionPlan): Promise<PlanDetails> => {
-        const { PLAN_DETAILS } = await import('../constants.js');
         return PLAN_DETAILS[planId];
     },
 

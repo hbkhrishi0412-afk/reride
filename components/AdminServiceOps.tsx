@@ -454,7 +454,7 @@ const AdminServiceOps: React.FC = () => {
                 <td className="py-2 pr-4 text-gray-700">
                   {p.serviceCategories && p.serviceCategories.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {p.serviceCategories.map((cat, idx) => (
+                      {p.serviceCategories.map((cat: string, idx: number) => (
                         <span key={idx} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
                           {cat}
                         </span>

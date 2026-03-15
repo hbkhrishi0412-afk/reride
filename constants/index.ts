@@ -1,9 +1,16 @@
 // Lightweight constants index - re-exports from split modules
 // This allows lazy loading of heavy data when needed
 
-// Core constants (always loaded)
+// Core constants (always loaded; single static import for plans avoids Vite chunking warnings)
 export { FUEL_TYPES, SAFETY_TIPS } from './fallback.js';
-export { INSPECTION_SERVICE_FEE, LISTING_EXPIRY_DAYS, AUTO_REFRESH_DAYS, MAX_FREE_LISTINGS, MAX_PRO_LISTINGS } from './plans.js';
+export {
+  INSPECTION_SERVICE_FEE,
+  LISTING_EXPIRY_DAYS,
+  AUTO_REFRESH_DAYS,
+  MAX_FREE_LISTINGS,
+  MAX_PRO_LISTINGS,
+  PLAN_DETAILS,
+} from './plans.js';
 
 // Lazy-loaded constants (loaded on demand)
 export const loadLocationData = async () => {
@@ -11,10 +18,8 @@ export const loadLocationData = async () => {
   return module;
 };
 
-export const loadPlanDetails = async () => {
-  const module = await import('./plans.js');
-  return module.PLAN_DETAILS;
-};
+/** Returns PLAN_DETAILS (static import only — avoids Vite chunking warning). */
+export const loadPlanDetails = async () => PLAN_DETAILS;
 
 export const loadBoostPackages = async () => {
   const module = await import('./boost.js');
@@ -32,7 +37,6 @@ export const loadFallbackData = async () => {
 };
 
 // For backward compatibility - these will be loaded lazily
-export const PLAN_DETAILS = {} as any; // Will be populated when needed
 export const INDIAN_STATES = [] as any; // Will be populated when needed
 export const CITIES_BY_STATE = {} as any; // Will be populated when needed
 export const BOOST_PACKAGES = [] as any; // Will be populated when needed

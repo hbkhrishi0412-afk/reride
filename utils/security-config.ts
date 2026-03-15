@@ -61,19 +61,24 @@ export const SECURITY_CONFIG = {
     LOGIN_LOCKOUT_TIME: 30 * 60 * 1000 // 30 minutes
   },
 
-  // CORS Configuration
+  // CORS Configuration (include https://localhost for Capacitor Android with androidScheme: 'https')
   CORS: {
     ALLOWED_ORIGINS: process.env.NODE_ENV === 'production'
       ? [
           process.env.ALLOWED_ORIGIN || 'https://www.reride.co.in',
           'https://www.reride.co.in',
-          'https://reride.co.in',
-          'https://reride-app.vercel.app' // Keep for backward compatibility
+          'https://reride-app.vercel.app',
+          'https://localhost',
+          'https://localhost:443',
+          'https://localhost:8080'
         ]
       : [
           'http://localhost:3000',
           'http://localhost:5173',
-          'http://localhost:5174',  // FIXED: Added port 5174 for consistency
+          'http://localhost:5174',
+          'https://localhost',
+          'https://localhost:443',
+          'https://localhost:8080',
           'https://reride-app.vercel.app',
           'https://reride--2-.vercel.app',
           'https://www.reride.co.in',
@@ -151,26 +156,24 @@ export const SECURITY_CONFIG = {
   }
 };
 
-// Environment-specific overrides
-// CRITICAL: Never read SECURITY_CONFIG.JWT.SECRET in production when JWT_SECRET is missing,
-// or the getter throws and the entire API module fails to load (500 FUNCTION_INVOCATION_FAILED).
+// Environment-specific overrides.
+// In production, JWT_SECRET is required: missing secret causes getSecurityConfig() to throw so the app fails fast.
 export const getSecurityConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
   const envSecret = process.env.JWT_SECRET;
-  const secret = envSecret
-    ? envSecret
-    : isProduction
-      ? (() => {
-          if (typeof process !== 'undefined' && process.env && !(process.env as any).__JWT_SECRET_WARNED) {
-            console.warn('JWT_SECRET is not set in production. Auth (login/tokens) will not work. Set JWT_SECRET in Vercel → Environment Variables.');
-            (process.env as any).__JWT_SECRET_WARNED = '1';
-          }
-          return '';
-        })()
-      : SECURITY_CONFIG.JWT.SECRET; // Dev fallback
+  let secret: string;
+  if (envSecret) {
+    secret = envSecret;
+  } else if (isProduction) {
+    throw new Error(
+      'JWT_SECRET is required in production but is not set. ' +
+      'Configure JWT_SECRET in your environment (e.g. Vercel → Environment Variables). ' +
+      'The application will not start without it.'
+    );
+  } else {
+    secret = SECURITY_CONFIG.JWT.SECRET; // Dev fallback
+  }
 
-  // Build JWT without spreading SECURITY_CONFIG.JWT - spreading would invoke the SECRET getter
-  // and crash in production when JWT_SECRET is missing (500 FUNCTION_INVOCATION_FAILED).
   const jwtStatic = SECURITY_CONFIG.JWT;
   return {
     ...SECURITY_CONFIG,
@@ -185,7 +188,7 @@ export const getSecurityConfig = () => {
     LOGGING: {
       ...SECURITY_CONFIG.LOGGING,
       LOG_AUTHENTICATION_ATTEMPTS: !isProduction,
-      LOG_SENSITIVE_DATA: false // Never log sensitive data
+      LOG_SENSITIVE_DATA: false
     }
   };
 };

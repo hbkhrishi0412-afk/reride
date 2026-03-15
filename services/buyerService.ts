@@ -1,5 +1,6 @@
 import type { SavedSearch, BuyerActivity, Vehicle } from '../types';
 import { saveBuyerActivityToSupabase, getBuyerActivityFromSupabase } from './buyerActivityService';
+import { saveBuyerActivityWithSync } from './syncService';
 
 // Save search
 export const saveSearch = (userId: string, search: Omit<SavedSearch, 'id' | 'createdAt'>): SavedSearch => {
@@ -181,14 +182,12 @@ export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> 
     } else {
       console.warn('⚠️ Failed to sync buyer activity to database:', result.error);
       // Add to sync queue for retry
-      const { saveBuyerActivityWithSync } = await import('./syncService');
       await saveBuyerActivityWithSync(activity);
     }
   } catch (error) {
     console.warn('⚠️ Error syncing buyer activity to database:', error);
     // Add to sync queue for retry
     try {
-      const { saveBuyerActivityWithSync } = await import('./syncService');
       await saveBuyerActivityWithSync(activity);
     } catch (syncError) {
       console.error('Failed to queue buyer activity for sync:', syncError);

@@ -1,7 +1,8 @@
 import type { Conversation } from '../types';
 import { queueRequest } from '../utils/requestQueue';
+import { getApiBaseUrl } from '../utils/apiConfig';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 // Attach JWT if it exists so protected conversation routes succeed
 const getAuthHeaders = (): Record<string, string> => {

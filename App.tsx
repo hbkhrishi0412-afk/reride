@@ -25,6 +25,7 @@ import MobilePushNotificationManager from './components/MobilePushNotificationMa
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates } from './types';
 import { parseDeepLink } from './utils/mobileFeatures';
 import { planService } from './services/planService';
+import { saveConversationWithSync } from './services/syncService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
@@ -1239,8 +1240,6 @@ const AppContent: React.FC = () => {
                   // Save to Supabase with proper error handling (async, non-blocking)
                   try {
                     const { saveConversationToSupabase } = await import('./services/conversationService');
-                    const { saveConversationWithSync } = await import('./services/syncService');
-                    
                     // Try direct save first
                     const saveResult = await saveConversationToSupabase(newConversation);
                     
@@ -1271,7 +1270,6 @@ const AppContent: React.FC = () => {
                   } catch (error) {
                     console.error('❌ Failed to save conversation:', error);
                     // Still continue - conversation is in local state and activeChat is set
-                    const { saveConversationWithSync } = await import('./services/syncService');
                     await saveConversationWithSync(newConversation);
                   }
                   
@@ -1408,8 +1406,6 @@ const AppContent: React.FC = () => {
                 // Save to Supabase with proper error handling (async, non-blocking)
                 try {
                   const { saveConversationToSupabase } = await import('./services/conversationService');
-                  const { saveConversationWithSync } = await import('./services/syncService');
-                  
                   // Try direct save first
                   const saveResult = await saveConversationToSupabase(newConversation);
                   
@@ -1440,7 +1436,6 @@ const AppContent: React.FC = () => {
                 } catch (error) {
                   console.error('❌ Failed to save conversation:', error);
                   // Still continue - conversation is in local state and activeChat is set
-                  const { saveConversationWithSync } = await import('./services/syncService');
                   await saveConversationWithSync(newConversation);
                 }
                 
