@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { User, Vehicle, Conversation } from '../types';
 import { View as ViewEnum } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
@@ -40,23 +40,32 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   onLogout
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity'>('overview');
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
   const savedSearches = useMemo(
     () => buyerService.getSavedSearches(currentUser?.email || ''),
     [currentUser?.email]
   );
 
-  // Get buyer activity for recently viewed - use sync version for immediate access
-  const buyerActivity = useMemo(
-    () => buyerService.getBuyerActivitySync(currentUser?.email || ''),
-    [currentUser?.email]
-  );
+  // Load recently viewed in useEffect to avoid infinite re-renders (async getRecentlyViewed)
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    const fetchRecentlyViewed = async () => {
+      try {
+        const ids = await buyerService.getRecentlyViewed(currentUser.email);
+        setRecentlyViewedIds(ids);
+      } catch (error) {
+        console.error('Failed to fetch recently viewed', error);
+      }
+    };
+    fetchRecentlyViewed();
+  }, [currentUser?.email]);
 
-  // Get recently viewed vehicles
+  // Get recently viewed vehicles from loaded IDs
   const recentlyViewed = useMemo(() => {
     if (!vehicles || !Array.isArray(vehicles)) return [];
-    const viewedIds = buyerActivity.recentlyViewed.slice(0, 6);
+    const viewedIds = recentlyViewedIds.slice(0, 6);
     return vehicles.filter(v => v && viewedIds.includes(v.id));
-  }, [buyerActivity.recentlyViewed, vehicles]);
+  }, [recentlyViewedIds, vehicles]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
