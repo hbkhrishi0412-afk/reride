@@ -1,5 +1,7 @@
 import type { Vehicle, User, FAQItem, SupportTicket } from '../types';
-import { VehicleCategory } from '../types';
+
+// Use string literal to avoid undefined VehicleCategory when this chunk loads before types (fixes "Cannot read properties of undefined (reading 'FOUR_WHEELER')")
+const FOUR_WHEELER_CATEGORY = 'four-wheeler' as Vehicle['category'];
 
 // Helper to generate past dates
 const daysAgo = (days: number): string => {
@@ -28,7 +30,7 @@ export const FALLBACK_VEHICLES: Vehicle[] = [
     views: 150,
     inquiriesCount: 8,
     certificationStatus: "none",
-    category: VehicleCategory.FOUR_WHEELER,
+    category: FOUR_WHEELER_CATEGORY,
     features: ["Power Steering", "Air Conditioning"],
     engine: "1.2L Petrol",
     fuelEfficiency: "20 KMPL",
