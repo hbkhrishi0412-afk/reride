@@ -7,6 +7,7 @@ const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 export const getSupportTickets = (): SupportTicket[] | null => {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return null;
     const ticketsJson = localStorage.getItem(SUPPORT_TICKET_STORAGE_KEY);
     return ticketsJson ? JSON.parse(ticketsJson) : null;
   } catch (error) {

@@ -60,11 +60,36 @@ const SECURITY_CONFIG = {
 
   // CORS Configuration
   CORS: {
+    // IMPORTANT:
+    // - Vercel API runs on https://www.reride.co.in (or preview domains)
+    // - Capacitor WebView origin is https://localhost (androidScheme: 'https')
+    // If https://localhost is not allowed, Android WebView fetch() will be blocked by CORS.
     ALLOWED_ORIGINS: process.env.NODE_ENV === 'production'
-      ? [process.env.ALLOWED_ORIGIN || 'https://reride-app.vercel.app']
+      ? (() => {
+          const fromEnv = (process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGIN || '').trim();
+          const envList = fromEnv
+            ? fromEnv.split(',').map(s => s.trim()).filter(Boolean)
+            : [];
+          // Always include canonical production domains + Capacitor origins.
+          const defaults = [
+            'https://www.reride.co.in',
+            'https://reride.co.in',
+            'https://localhost',
+            'capacitor://localhost',
+            'http://localhost'
+          ];
+          // Keep historical Vercel domains as a fallback.
+          const vercelDefaults = [
+            'https://reride-app.vercel.app',
+            'https://reride--2-.vercel.app'
+          ];
+          return Array.from(new Set([...envList, ...defaults, ...vercelDefaults]));
+        })()
       : [
           'http://localhost:3000',
           'http://localhost:5173',
+          'https://localhost',
+          'capacitor://localhost',
           'https://reride-app.vercel.app',
           'https://reride--2-.vercel.app'
         ],
