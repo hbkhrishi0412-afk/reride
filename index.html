@@ -249,7 +249,8 @@
         var timeoutId;
         var checkInterval;
         var reactMounted = false;
-        var TIMEOUT_MS = 15000;
+        var isCapacitor = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+        var TIMEOUT_MS = isCapacitor ? 30000 : 15000;
         
         var checkReactMounted = function() {
           if (window.__RERIDE_MOUNTED__) return true;
