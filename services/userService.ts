@@ -729,9 +729,8 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
       return { success: false, reason: 'No refresh token available' };
     }
 
-    const response = await fetch('/api/users', {
+    const response = await authenticatedFetch('/api/users', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'refresh-token', refreshToken }),
     });
 
@@ -759,7 +758,11 @@ export const refreshAccessToken = async (): Promise<{ success: boolean; accessTo
       throw new Error('Token refresh failed');
     }
 
-    const result = await response.json();
+    const parsed = await handleApiResponse<any>(response);
+    if (!parsed.success) {
+      return { success: false, reason: parsed.reason || parsed.error || 'Token refresh failed' };
+    }
+    const result = parsed.data || {};
     
     if (result.success && result.accessToken) {
       localStorage.setItem('reRideAccessToken', result.accessToken);

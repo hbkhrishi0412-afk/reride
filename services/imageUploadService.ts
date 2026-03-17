@@ -11,16 +11,6 @@ interface UploadResult {
   imageId?: string; // ID/path of the image in Supabase Storage
 }
 
-interface ImageData extends Record<string, unknown> {
-  base64: string;
-  fileName: string;
-  contentType: string;
-  folder: string;
-  uploadedAt: string;
-  size: number;
-  uploadedBy?: string; // User email who uploaded the image
-}
-
 /**
  * Uploads a single image file to Supabase Storage
  * @param file - The image file to upload
@@ -63,39 +53,6 @@ export const uploadImages = async (files: File[], folder: string = 'vehicles', u
 };
 
 /**
- * Helper function to get current user email from localStorage as fallback
- * @returns User email or null if not found
- */
-function getCurrentUserEmail(): string | null {
-  try {
-    if (typeof window === 'undefined') return null;
-    
-    // Try localStorage first
-    const localUserJson = localStorage.getItem('reRideCurrentUser');
-    if (localUserJson) {
-      const user = JSON.parse(localUserJson);
-      if (user?.email) {
-        return user.email;
-      }
-    }
-    
-    // Try sessionStorage as fallback
-    const sessionUserJson = sessionStorage.getItem('currentUser');
-    if (sessionUserJson) {
-      const user = JSON.parse(sessionUserJson);
-      if (user?.email) {
-        return user.email;
-      }
-    }
-    
-    return null;
-  } catch (error) {
-    console.warn('⚠️ Failed to get current user email from storage:', error);
-    return null;
-  }
-}
-
-/**
  * Upload image via server API when Supabase session is missing (e.g. admin or API-only login).
  * Uses app JWT for auth; server uploads to Storage with service role.
  */
@@ -104,11 +61,9 @@ async function uploadViaApi(file: File, folder: string): Promise<UploadResult> {
     const resizedFile = await resizeImage(file, 1200, 800, 0.85);
     const dataUrl = await convertFileToBase64(resizedFile);
     const fileBase64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
-    const { getAuthHeaders } = await import('../utils/authenticatedFetch.js');
-    const headers = getAuthHeaders() as Record<string, string>;
-    const res = await fetch('/api/upload-image', {
+    const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+    const res = await authenticatedFetch('/api/upload-image', {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fileBase64,
         fileName: resizedFile.name,
@@ -149,7 +104,7 @@ async function uploadViaApi(file: File, folder: string): Promise<UploadResult> {
  * @param folder - Folder path in storage bucket (e.g., 'vehicles', 'users')
  * @param userEmail - Optional email of the user uploading the image (for ownership tracking)
  */
-async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: string): Promise<UploadResult> {
+async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: string): Promise<UploadResult> {
   try {
     console.log(`📤 Uploading image to Supabase Storage: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
     
@@ -158,7 +113,8 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
     
     // Check if user is authenticated (required for RLS policy)
     // First try to get the session (more reliable than getUser)
-    let { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    let session = sessionData.session;
     
     // If no session, try to refresh it
     if (!session && !sessionError) {
@@ -213,7 +169,7 @@ async function uploadToSupabaseStorage(file: File, folder: string, userEmail?: s
     
     // Upload to Supabase Storage
     console.log(`💾 Uploading to Supabase Storage: ${filePath}`);
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('Images') // Bucket name - must match exact case in Supabase (Images with capital I)
       .upload(filePath, resizedFile, {
         cacheControl: '3600',

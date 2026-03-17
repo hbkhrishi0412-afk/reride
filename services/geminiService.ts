@@ -3,6 +3,7 @@
 import { SchemaType } from "@google/generative-ai";
 import type { Vehicle, ProsAndCons, Conversation, Suggestion } from '../types';
 import type { SearchFilters } from "../types";
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 
 /**
  * A helper function to call our secure backend proxy for the Gemini API.
@@ -11,11 +12,8 @@ import type { SearchFilters } from "../types";
  */
 async function callGeminiAPI(payload: any): Promise<string> {
     try {
-        const response = await fetch('/api/gemini', {
+        const response = await authenticatedFetch('/api/gemini', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
             body: JSON.stringify({ payload }),
         });
 

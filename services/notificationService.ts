@@ -1,44 +1,22 @@
 import type { Notification } from '../types';
 import { queueRequest } from '../utils/requestQueue';
-import { getApiBaseUrl } from '../utils/apiConfig';
-
-const API_BASE_URL = `${getApiBaseUrl()}/api`;
-
-// Attach JWT so notification APIs that require auth work in production
-const getAuthHeaders = (): Record<string, string> => {
-  try {
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-      return { 'Content-Type': 'application/json' };
-    }
-    const token = localStorage.getItem('reRideAccessToken');
-    if (!token) return { 'Content-Type': 'application/json' };
-    return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    };
-  } catch {
-    return { 'Content-Type': 'application/json' };
-  }
-};
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 /**
  * Save notification to Supabase
  */
 export async function saveNotificationToSupabase(notification: Notification): Promise<{ success: boolean; data?: Notification; error?: string }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/notifications`, {
+    const response = await authenticatedFetch('/api/notifications', {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: JSON.stringify(notification),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      return { success: false, error: errorData.reason || 'Failed to save notification' };
+    const result = await handleApiResponse<{ data?: Notification; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to save notification' };
     }
-
-    const result = await response.json();
-    return { success: true, data: result.data };
+    return { success: true, data: result.data?.data };
   } catch (error) {
     console.error('Error saving notification to Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -59,23 +37,21 @@ export async function getNotificationsFromSupabase(recipientEmail?: string, isRe
         // Only add query string if there are params
         const queryString = params.toString();
         const url = queryString 
-          ? `${API_BASE_URL}/notifications?${queryString}`
-          : `${API_BASE_URL}/notifications`;
+          ? `/api/notifications?${queryString}`
+          : `/api/notifications`;
 
-        const response = await fetch(url, { headers: getAuthHeaders() });
+        const response = await authenticatedFetch(url);
 
         // Handle 404 gracefully - silently fall back (expected in dev)
         if (response.status === 404) {
           return { success: false, error: 'API route not available' };
         }
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-          return { success: false, error: errorData.reason || 'Failed to get notifications' };
+        const parsed = await handleApiResponse<{ data?: Notification[]; reason?: string; error?: string }>(response);
+        if (!parsed.success) {
+          return { success: false, error: parsed.reason || parsed.error || 'Failed to get notifications' };
         }
-
-        const result = await response.json();
-        return { success: true, data: result.data || [] };
+        return { success: true, data: parsed.data?.data || [] };
       },
       { priority: 5, id: 'notifications', maxRetries: 2 }
     );
@@ -96,19 +72,16 @@ export async function getNotificationsFromSupabase(recipientEmail?: string, isRe
  */
 export async function updateNotificationInSupabase(notificationId: number, updates: Partial<Notification>): Promise<{ success: boolean; data?: Notification; error?: string }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/notifications`, {
+    const response = await authenticatedFetch('/api/notifications', {
       method: 'PUT',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ notificationId, updates }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      return { success: false, error: errorData.reason || 'Failed to update notification' };
+    const result = await handleApiResponse<{ data?: Notification; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to update notification' };
     }
-
-    const result = await response.json();
-    return { success: true, data: result.data };
+    return { success: true, data: result.data?.data };
   } catch (error) {
     console.error('Error updating notification in Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

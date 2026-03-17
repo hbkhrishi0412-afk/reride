@@ -9,6 +9,7 @@ import { getSupabaseClient } from '../lib/supabase.js';
 import type { User as SupabaseAuthUser, Session } from '@supabase/supabase-js';
 import type { User } from '../types.js';
 import { formatSupabaseError } from '../utils/errorUtils.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 // ── Shared result types ─────────────────────────────────────────────────────
 
@@ -332,9 +333,8 @@ export const syncWithBackend = async (
       (metadata.mobile as string) ||
       '';
 
-    const response = await fetch('/api/main', {
+    const response = await authenticatedFetch('/api/main', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'oauth-login',
         firebaseUid: supabaseUser.id, // API field name kept for backward compat
@@ -349,34 +349,18 @@ export const syncWithBackend = async (
         authProvider,
       }),
     });
-
-    if (response.status === 429) {
-      return {
-        success: false,
-        reason: 'Too many requests. Please wait a moment and try again.',
-      };
+    const parsed = await handleApiResponse<BackendSyncResult>(response);
+    if (!parsed.success) {
+      // Preserve prior user-facing messages for common statuses
+      if (response.status === 429) {
+        return { success: false, reason: 'Too many requests. Please wait a moment and try again.' };
+      }
+      if (response.status === 503) {
+        return { success: false, reason: 'Service temporarily unavailable. Please try again later.' };
+      }
+      return { success: false, reason: parsed.reason || parsed.error || 'Failed to sync with backend' };
     }
-
-    if (response.status === 503) {
-      return {
-        success: false,
-        reason: 'Service temporarily unavailable. Please try again later.',
-      };
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({
-        error: `HTTP ${response.status}: ${response.statusText}`,
-      }));
-      return {
-        success: false,
-        reason:
-          errorData.reason || errorData.error || 'Failed to sync with backend',
-      };
-    }
-
-    const data = await response.json();
-    return data as BackendSyncResult;
+    return parsed.data as BackendSyncResult;
   } catch (error: unknown) {
     return { success: false, reason: 'Failed to sync with backend' };
   }

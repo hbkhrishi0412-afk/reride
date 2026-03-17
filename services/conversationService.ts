@@ -1,44 +1,22 @@
 import type { Conversation } from '../types';
 import { queueRequest } from '../utils/requestQueue';
-import { getApiBaseUrl } from '../utils/apiConfig';
-
-const API_BASE_URL = `${getApiBaseUrl()}/api`;
-
-// Attach JWT if it exists so protected conversation routes succeed
-const getAuthHeaders = (): Record<string, string> => {
-  try {
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-      return { 'Content-Type': 'application/json' };
-    }
-    const token = localStorage.getItem('reRideAccessToken');
-    if (!token) return { 'Content-Type': 'application/json' };
-    return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    };
-  } catch {
-    return { 'Content-Type': 'application/json' };
-  }
-};
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 /**
  * Save conversation to Supabase
  */
 export async function saveConversationToSupabase(conversation: Conversation): Promise<{ success: boolean; data?: Conversation; error?: string }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/conversations`, {
+    const response = await authenticatedFetch('/api/conversations', {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: JSON.stringify(conversation),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      return { success: false, error: errorData.reason || 'Failed to save conversation' };
+    const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to save conversation' };
     }
-
-    const result = await response.json();
-    return { success: true, data: result.data };
+    return { success: true, data: result.data?.data };
   } catch (error) {
     console.error('Error saving conversation to Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -51,23 +29,22 @@ export async function saveConversationToSupabase(conversation: Conversation): Pr
 export async function addMessageToConversation(conversationId: string, message: any): Promise<{ success: boolean; data?: Conversation; error?: string }> {
   try {
     console.log('📡 Calling API to save message:', { 
-      url: `${API_BASE_URL}/conversations`, 
+      url: `/api/conversations`, 
       conversationId, 
       messageId: message?.id,
       method: 'PUT'
     });
     
-    const response = await fetch(`${API_BASE_URL}/conversations`, {
+    const response = await authenticatedFetch('/api/conversations', {
       method: 'PUT',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ conversationId, message }),
     });
 
     console.log('📡 API response status:', response.status, response.statusText);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      const errorMessage = errorData.reason || `HTTP ${response.status}: ${response.statusText}`;
+    const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      const errorMessage = result.reason || result.error || `HTTP ${response.status}: ${response.statusText}`;
       console.error('❌ API error response:', {
         status: response.status,
         statusText: response.statusText,
@@ -78,9 +55,8 @@ export async function addMessageToConversation(conversationId: string, message: 
       return { success: false, error: errorMessage };
     }
 
-    const result = await response.json();
-    console.log('✅ API success response:', { conversationId, hasData: !!result.data });
-    return { success: true, data: result.data };
+    console.log('✅ API success response:', { conversationId, hasData: !!result.data?.data });
+    return { success: true, data: result.data?.data };
   } catch (error) {
     console.error('❌ Network error adding message to conversation:', {
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -106,10 +82,10 @@ export async function getConversationsFromSupabase(customerId?: string, sellerId
         // Only add query string if there are params, otherwise just use the base URL
         const queryString = params.toString();
         const url = queryString 
-          ? `${API_BASE_URL}/conversations?${queryString}`
-          : `${API_BASE_URL}/conversations`;
+          ? `/api/conversations?${queryString}`
+          : `/api/conversations`;
 
-        const response = await fetch(url, { headers: getAuthHeaders() });
+        const response = await authenticatedFetch(url);
 
         // Handle 404 gracefully - API route might not be available in development
         // Silently fall back to localStorage (no console error - this is expected in dev)
@@ -117,13 +93,11 @@ export async function getConversationsFromSupabase(customerId?: string, sellerId
           return { success: false, error: 'API route not available' };
         }
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-          return { success: false, error: errorData.reason || 'Failed to get conversations' };
+        const parsed = await handleApiResponse<{ data?: Conversation[]; reason?: string; error?: string }>(response);
+        if (!parsed.success) {
+          return { success: false, error: parsed.reason || parsed.error || 'Failed to get conversations' };
         }
-
-        const result = await response.json();
-        return { success: true, data: result.data || [] };
+        return { success: true, data: parsed.data?.data || [] };
       },
       { priority: 5, id: 'conversations', maxRetries: 2 }
     );

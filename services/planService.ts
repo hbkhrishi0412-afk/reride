@@ -1,6 +1,6 @@
 import type { PlanDetails, SubscriptionPlan } from '../types';
-import { getApiBaseUrl } from '../utils/apiConfig';
 import { PLAN_DETAILS } from '../constants/plans.js';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 // Lazy-load Plan model only when needed (server-side only)
 let PlanModel: any = null;
@@ -36,8 +36,6 @@ const getPlanModel = async () => {
   
   return planModelPromise;
 };
-
-const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 const normalizePlan = (raw: any): PlanDetails => ({
     id: (String(raw?.id || raw?.planId || 'free') as SubscriptionPlan),
@@ -133,11 +131,12 @@ export const planService = {
     getAllPlans: async (): Promise<PlanDetails[]> => {
         if (typeof window !== 'undefined') {
             try {
-                const response = await fetch(`${API_BASE_URL}/plans?type=plans`);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch plans: ${response.status}`);
+                const response = await authenticatedFetch(`/api/plans?type=plans`);
+                const parsed = await handleApiResponse<unknown>(response);
+                if (!parsed.success) {
+                    throw new Error(parsed.reason || parsed.error || `Failed to fetch plans: ${response.status}`);
                 }
-                const data = await response.json();
+                const data = parsed.data;
                 if (!Array.isArray(data)) {
                     return [];
                 }
@@ -180,15 +179,13 @@ export const planService = {
     // Update plan details
     updatePlan: async (planId: SubscriptionPlan | string, updates: Partial<PlanDetails>): Promise<void> => {
         if (typeof window !== 'undefined') {
-            const response = await fetch(`${API_BASE_URL}/plans?type=plans`, {
+            const response = await authenticatedFetch(`/api/plans?type=plans`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ planId, ...updates }),
             });
-            if (!response.ok) {
-                const text = await response.text().catch(() => '');
-                throw new Error(text || `Failed to update plan (${response.status})`);
-            }
+            const parsed = await handleApiResponse<{ success?: boolean; reason?: string; error?: string }>(response);
+            if (!parsed.success) throw new Error(parsed.reason || parsed.error || `Failed to update plan (${response.status})`);
+            if (parsed.data?.success === false) throw new Error(parsed.data.reason || parsed.data.error || `Failed to update plan (${response.status})`);
             return;
         }
 
@@ -229,17 +226,14 @@ export const planService = {
     // Create new plan
     createPlan: async (planData: Omit<PlanDetails, 'id'>): Promise<string> => {
         if (typeof window !== 'undefined') {
-            const response = await fetch(`${API_BASE_URL}/plans?type=plans`, {
+            const response = await authenticatedFetch(`/api/plans?type=plans`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(planData),
             });
-            if (!response.ok) {
-                const text = await response.text().catch(() => '');
-                throw new Error(text || `Failed to create plan (${response.status})`);
-            }
-            const created = await response.json().catch(() => null);
-            return String(created?.id || `custom_${Date.now()}`);
+            const parsed = await handleApiResponse<{ id?: string; success?: boolean; reason?: string; error?: string }>(response);
+            if (!parsed.success) throw new Error(parsed.reason || parsed.error || `Failed to create plan (${response.status})`);
+            if (parsed.data?.success === false) throw new Error(parsed.data.reason || parsed.data.error || `Failed to create plan (${response.status})`);
+            return String(parsed.data?.id || `custom_${Date.now()}`);
         }
 
         const Plan = await getPlanModel();
@@ -275,7 +269,7 @@ export const planService = {
     // Delete custom plan
     deletePlan: async (planId: string): Promise<boolean> => {
         if (typeof window !== 'undefined') {
-            const response = await fetch(`${API_BASE_URL}/plans?type=plans&planId=${encodeURIComponent(planId)}`, {
+            const response = await authenticatedFetch(`/api/plans?type=plans&planId=${encodeURIComponent(planId)}`, {
                 method: 'DELETE',
             });
             return response.ok;
