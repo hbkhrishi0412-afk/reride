@@ -4,6 +4,7 @@ const AUDIT_LOG_STORAGE_KEY = 'reRideAuditLog';
 
 export const getAuditLog = (): AuditLogEntry[] => {
   try {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
     const logJson = localStorage.getItem(AUDIT_LOG_STORAGE_KEY);
     return logJson ? JSON.parse(logJson) : [];
   } catch (error) {

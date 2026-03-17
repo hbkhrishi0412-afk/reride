@@ -57,6 +57,11 @@ class ErrorBoundary extends Component<Props, State> {
             <p className="text-gray-600 text-center mb-4">
               We're sorry, but something unexpected happened. Please try refreshing the page.
             </p>
+            {this.state.error && (
+              <p className="text-sm text-red-600 text-center mb-4 break-words px-2" data-testid="error-message">
+                {this.state.error.message}
+              </p>
+            )}
             <div className="flex space-x-3">
               <button
                 onClick={() => window.location.reload()}
@@ -71,9 +76,9 @@ class ErrorBoundary extends Component<Props, State> {
                 Try Again
               </button>
             </div>
-            {isDevelopmentEnvironment() && this.state.error && (
+            {(isDevelopmentEnvironment() || (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.())) && this.state.error && (
               <details className="mt-4 p-3 bg-gray-100 rounded text-xs">
-                <summary className="cursor-pointer font-semibold">Error Details (Development)</summary>
+                <summary className="cursor-pointer font-semibold">Error Details</summary>
                 <pre className="mt-2 whitespace-pre-wrap text-red-600">
                   {this.state.error.toString()}
                   {this.state.errorInfo?.componentStack}

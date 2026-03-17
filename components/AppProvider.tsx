@@ -72,9 +72,10 @@ interface HistoryState {
   selectedVehicleId?: number;
 }
 
-// Helper function to map URL paths to views
+// Helper function to map URL paths to views (safe for Capacitor/WebView)
 function pathToView(path: string): View {
-  const normalizedPath = path.toLowerCase();
+  if (path == null || typeof path !== 'string') return View.HOME;
+  const normalizedPath = path.toLowerCase().trim();
   
   // Exact matches first
   if (normalizedPath === '/' || normalizedPath === '') return View.HOME;
@@ -316,7 +317,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    // Check for existing logged-in user on app startup
+    // Check for existing logged-in user on app startup (safe for WebView/Capacitor)
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined' || typeof sessionStorage === 'undefined') {
+      return null;
+    }
     try {
       const savedUser = localStorage.getItem('reRideCurrentUser');
       const savedSession = sessionStorage.getItem('currentUser');
@@ -392,11 +396,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (error) {
       logWarn('Failed to load user from localStorage:', error);
-      // Clear corrupted data
       try {
-        localStorage.removeItem('reRideCurrentUser');
-      } catch (clearError) {
-        logWarn('Failed to clear corrupted user data from localStorage:', clearError);
+        if (typeof localStorage !== 'undefined') localStorage.removeItem('reRideCurrentUser');
+        if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('currentUser');
+      } catch (_) {
+        // Ignore clear errors
       }
     }
     return null;
@@ -431,26 +435,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [initialSearchQuery, setInitialSearchQuery] = useState<string>('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [userLocation, setUserLocationState] = useState<string>(() => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'Mumbai';
     try {
       const storedLocation = localStorage.getItem('reRideUserLocation');
-      if (storedLocation && storedLocation.trim().length > 0) {
-        return storedLocation;
-      }
+      if (storedLocation && storedLocation.trim().length > 0) return storedLocation;
     } catch (error) {
       logWarn('Failed to load user location from localStorage:', error);
     }
     return 'Mumbai';
   });
   const [selectedCity, setSelectedCityState] = useState<string>(() => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return '';
     try {
       const storedCity = localStorage.getItem('reRideSelectedCity');
-      if (storedCity && storedCity.trim().length > 0) {
-        return storedCity;
-      }
+      if (storedCity && storedCity.trim().length > 0) return storedCity;
       const storedLocation = localStorage.getItem('reRideUserLocation');
-      if (storedLocation && storedLocation.trim().length > 0) {
-        return storedLocation;
-      }
+      if (storedLocation && storedLocation.trim().length > 0) return storedLocation;
     } catch (error) {
       logWarn('Failed to load selected city from localStorage:', error);
     }
@@ -460,12 +460,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => getSettings());
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>(() => getAuditLog());
   const [vehicleData, setVehicleData] = useState<VehicleData>(() => {
-    // Try to load from localStorage first, fallback to static data
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return VEHICLE_DATA;
     try {
       const savedVehicleData = localStorage.getItem('reRideVehicleData');
-      if (savedVehicleData) {
-        return JSON.parse(savedVehicleData);
-      }
+      if (savedVehicleData) return JSON.parse(savedVehicleData);
     } catch (error) {
       logWarn('Failed to load vehicle data from localStorage:', error);
     }
@@ -474,37 +472,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [faqItems, setFaqItems] = useState<FAQItem[]>([]);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(() => getSupportTickets() || []);
   const [notifications, setNotifications] = useState<Notification[]>(() => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
     try {
       const notificationsJson = localStorage.getItem('reRideNotifications');
-      if (notificationsJson) {
-        return JSON.parse(notificationsJson);
-      } else {
-        // Create sample notifications for testing
-        const sampleNotifications: Notification[] = [
-          {
-            id: 1,
-            recipientEmail: 'seller@test.com',
-            message: 'New message from Mock Customer: Offer: 600000',
-            targetId: 'conv_1703123456789',
-            targetType: 'conversation',
-            isRead: false,
-            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() // 2 hours ago
-          },
-          {
-            id: 2,
-            recipientEmail: 'seller@test.com',
-            message: 'New message from Mock Customer: Offer: 123444',
-            targetId: 'conv_1703123456789',
-            targetType: 'conversation',
-            isRead: false,
-            timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString() // 1 hour ago
-          }
-        ];
+      if (notificationsJson) return JSON.parse(notificationsJson);
+      const sampleNotifications: Notification[] = [
+        {
+          id: 1,
+          recipientEmail: 'seller@test.com',
+          message: 'New message from Mock Customer: Offer: 600000',
+          targetId: 'conv_1703123456789',
+          targetType: 'conversation',
+          isRead: false,
+          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 2,
+          recipientEmail: 'seller@test.com',
+          message: 'New message from Mock Customer: Offer: 123444',
+          targetId: 'conv_1703123456789',
+          targetType: 'conversation',
+          isRead: false,
+          timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
+        }
+      ];
+      try {
         localStorage.setItem('reRideNotifications', JSON.stringify(sampleNotifications));
-        return sampleNotifications;
+      } catch (_) {
+        // WebView/Capacitor may restrict setItem; continue without persisting
       }
-    } catch { 
-      return []; 
+      return sampleNotifications;
+    } catch {
+      return [];
     }
   });
 
@@ -1151,10 +1150,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser, currentView]);
 
-  // Map initial path on first load to views
+  // Map initial path on first load to views (safe for Capacitor/WebView)
   useEffect(() => {
     try {
-      const path = window.location.pathname;
+      const path = (typeof window !== 'undefined' && window.location?.pathname) ? window.location.pathname : '/';
       const initialView = pathToView(path);
       setCurrentView(initialView);
       
@@ -1185,9 +1184,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync React Router location changes with app view state
   // This replaces the manual popstate handler — React Router manages browser history
   useEffect(() => {
-    const path = location.pathname;
-    const routerState = location.state as HistoryState | null;
-    const newView = routerState?.view || pathToView(path);
+    const path = (location?.pathname ?? '/') || '/';
+    const routerState = location?.state as HistoryState | null;
+    let newView: View;
+    try {
+      newView = routerState?.view ?? pathToView(path);
+    } catch (_) {
+      newView = View.HOME;
+    }
 
     // Prevent loops: only update if the view actually changed
     if (newView === currentView) return;
