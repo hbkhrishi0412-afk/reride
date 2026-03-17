@@ -11,7 +11,17 @@
  * API origin so fetches go to the real server.
  */
 
-const PRODUCTION_ORIGIN = 'https://www.reride.co.in';
+const DEFAULT_PRODUCTION_ORIGIN = 'https://www.reride.co.in';
+
+function getProductionOrigin(): string {
+  const fromEnv =
+    typeof import.meta !== 'undefined'
+      ? (import.meta as any).env?.VITE_PRODUCTION_ORIGIN ||
+        (import.meta as any).env?.VITE_APP_URL
+      : undefined;
+  const origin = (fromEnv || DEFAULT_PRODUCTION_ORIGIN).toString();
+  return origin.replace(/\/+$/, '');
+}
 
 let _isCapacitorCached: boolean | null = null;
 
@@ -43,7 +53,7 @@ export function getApiBaseUrl(): string {
       : undefined;
   if (envOverride) return envOverride.replace(/\/+$/, '');
 
-  if (isCapacitorNative()) return PRODUCTION_ORIGIN;
+  if (isCapacitorNative()) return getProductionOrigin();
 
   return '';
 }

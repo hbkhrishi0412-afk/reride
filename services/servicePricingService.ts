@@ -1,5 +1,7 @@
 // Service to fetch service pricing from Supabase
 
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+
 export interface ServicePricing {
   id: string;
   name: string;
@@ -37,18 +39,13 @@ export async function fetchServices(): Promise<ServicePricing[]> {
   }
 
   try {
-    const response = await fetch('/api/services', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch services: ${response.statusText}`);
+    const response = await authenticatedFetch('/api/services', { method: 'GET' });
+    const result = await handleApiResponse<ServicePricing[]>(response);
+    if (!result.success) {
+      throw new Error(result.reason || result.error || 'Failed to fetch services');
     }
 
-    const data = await response.json();
+    const data = result.data || [];
     servicesCache = data;
     cacheTimestamp = now;
     return data;

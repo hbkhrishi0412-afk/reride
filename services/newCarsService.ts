@@ -1,3 +1,5 @@
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+
 export interface NewCarVariantPayload {
   variant_name: string;
   engine_specs: string;
@@ -42,38 +44,41 @@ export interface NewCarPayload {
 
 export const newCarsService = {
   async getAll(): Promise<NewCarPayload[]> {
-    const res = await fetch('/api/new-cars');
-    if (!res.ok) throw new Error('Failed to fetch new cars');
-    return res.json();
+    const res = await authenticatedFetch('/api/new-cars');
+    const result = await handleApiResponse<NewCarPayload[]>(res);
+    if (!result.success) throw new Error(result.reason || result.error || 'Failed to fetch new cars');
+    return result.data || [];
   },
   async create(payload: NewCarPayload): Promise<NewCarPayload> {
-    const res = await fetch('/api/new-cars', {
+    const res = await authenticatedFetch('/api/new-cars', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.reason || 'Failed to create');
-    return data.data;
+    const result = await handleApiResponse<{ success?: boolean; data?: NewCarPayload; reason?: string }>(res);
+    if (!result.success) throw new Error(result.reason || result.error || 'Failed to create');
+    if (result.data?.success === false) throw new Error(result.data.reason || 'Failed to create');
+    if (!result.data?.data) throw new Error('Invalid server response: missing data');
+    return result.data.data;
   },
   async update(id: string, payload: Partial<NewCarPayload>): Promise<NewCarPayload> {
-    const res = await fetch('/api/new-cars', {
+    const res = await authenticatedFetch('/api/new-cars', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ _id: id, ...payload })
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.reason || 'Failed to update');
-    return data.data;
+    const result = await handleApiResponse<{ success?: boolean; data?: NewCarPayload; reason?: string }>(res);
+    if (!result.success) throw new Error(result.reason || result.error || 'Failed to update');
+    if (result.data?.success === false) throw new Error(result.data.reason || 'Failed to update');
+    if (!result.data?.data) throw new Error('Invalid server response: missing data');
+    return result.data.data;
   },
   async remove(id: string): Promise<boolean> {
-    const res = await fetch('/api/new-cars', {
+    const res = await authenticatedFetch('/api/new-cars', {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ _id: id })
     });
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.reason || 'Failed to delete');
+    const result = await handleApiResponse<{ success?: boolean; reason?: string }>(res);
+    if (!result.success) throw new Error(result.reason || result.error || 'Failed to delete');
+    if (result.data?.success === false) throw new Error(result.data.reason || 'Failed to delete');
     return true;
   }
 };

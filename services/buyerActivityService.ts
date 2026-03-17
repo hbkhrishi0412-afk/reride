@@ -1,44 +1,22 @@
 import type { BuyerActivity } from '../types';
 import { queueRequest } from '../utils/requestQueue';
-import { getApiBaseUrl } from '../utils/apiConfig';
-
-const API_BASE_URL = `${getApiBaseUrl()}/api`;
-
-// Attach JWT so buyer activity APIs that require auth work in production
-const getAuthHeaders = (): Record<string, string> => {
-  try {
-    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-      return { 'Content-Type': 'application/json' };
-    }
-    const token = localStorage.getItem('reRideAccessToken');
-    if (!token) return { 'Content-Type': 'application/json' };
-    return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    };
-  } catch {
-    return { 'Content-Type': 'application/json' };
-  }
-};
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 /**
  * Save buyer activity to Supabase
  */
 export async function saveBuyerActivityToSupabase(activity: BuyerActivity): Promise<{ success: boolean; data?: BuyerActivity; error?: string }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/buyer-activity`, {
+    const response = await authenticatedFetch('/api/buyer-activity', {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: JSON.stringify(activity),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      return { success: false, error: errorData.reason || 'Failed to save buyer activity' };
+    const result = await handleApiResponse<{ data?: BuyerActivity; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to save buyer activity' };
     }
-
-    const result = await response.json();
-    return { success: true, data: result.data };
+    return { success: true, data: result.data?.data };
   } catch (error) {
     console.error('Error saving buyer activity to Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -52,23 +30,17 @@ export async function getBuyerActivityFromSupabase(userId: string): Promise<{ su
   try {
     const result = await queueRequest(
       async () => {
-        const response = await fetch(`${API_BASE_URL}/buyer-activity?userId=${encodeURIComponent(userId)}`, {
-          method: 'GET',
-          headers: getAuthHeaders(),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-          throw new Error(errorData.reason || 'Failed to get buyer activity');
+        const response = await authenticatedFetch(`/api/buyer-activity?userId=${encodeURIComponent(userId)}`, { method: 'GET' });
+        const parsed = await handleApiResponse<{ data?: BuyerActivity; reason?: string; error?: string }>(response);
+        if (!parsed.success) {
+          throw new Error(parsed.reason || parsed.error || 'Failed to get buyer activity');
         }
-
-        const result = await response.json();
-        return result.data;
+        return parsed.data?.data;
       },
       { id: `buyer-activity-${userId}` }
     );
 
-    return { success: true, data: result };
+    return { success: true, data: result || undefined };
   } catch (error) {
     console.error('Error getting buyer activity from Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
@@ -80,19 +52,16 @@ export async function getBuyerActivityFromSupabase(userId: string): Promise<{ su
  */
 export async function updateBuyerActivityInSupabase(userId: string, updates: Partial<BuyerActivity>): Promise<{ success: boolean; data?: BuyerActivity; error?: string }> {
   try {
-    const response = await fetch(`${API_BASE_URL}/buyer-activity`, {
+    const response = await authenticatedFetch('/api/buyer-activity', {
       method: 'PUT',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ userId, ...updates }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ reason: 'Unknown error' }));
-      return { success: false, error: errorData.reason || 'Failed to update buyer activity' };
+    const result = await handleApiResponse<{ data?: BuyerActivity; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to update buyer activity' };
     }
-
-    const result = await response.json();
-    return { success: true, data: result.data };
+    return { success: true, data: result.data?.data };
   } catch (error) {
     console.error('Error updating buyer activity in Supabase:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };

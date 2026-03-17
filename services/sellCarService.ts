@@ -1,6 +1,6 @@
 // Client-side API service for sell car submissions
 // This file should only contain client-side code, not server-side MongoDB imports
-import { getApiBaseUrl } from '../utils/apiConfig';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 interface SellCarSubmission {
   registration: string;
@@ -22,19 +22,10 @@ interface SellCarSubmission {
 }
 
 class SellCarAPI {
-  private baseURL: string;
-
-  constructor() {
-    this.baseURL = `${getApiBaseUrl()}/api`;
-  }
-
   async submitCarData(data: Omit<SellCarSubmission, 'submittedAt' | 'status' | '_id'>): Promise<{ success: boolean; id?: string; message: string; error?: string }> {
     try {
-      const response = await fetch(`${this.baseURL}/sell-car`, {
+      const response = await authenticatedFetch('/api/sell-car', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           ...data,
           submittedAt: new Date().toISOString(),
@@ -42,13 +33,11 @@ class SellCarAPI {
         }),
       });
 
-      const result = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to submit car data');
+      const result = await handleApiResponse<{ success: boolean; id?: string; message: string; error?: string }>(response);
+      if (!result.success || !result.data?.success) {
+        throw new Error(result.data?.error || result.reason || result.error || 'Failed to submit car data');
       }
-
-      return result;
+      return result.data;
     } catch (error) {
       console.error('Error submitting car data:', error);
       
@@ -83,14 +72,12 @@ class SellCarAPI {
       if (params.status) queryParams.append('status', params.status);
       if (params.search) queryParams.append('search', params.search);
 
-      const response = await fetch(`${this.baseURL}/sell-car?${queryParams}`);
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to fetch submissions');
+      const response = await authenticatedFetch(`/api/sell-car?${queryParams.toString()}`);
+      const result = await handleApiResponse<{ success: boolean; data?: SellCarSubmission[]; pagination?: any; error?: string }>(response);
+      if (!result.success || result.data?.success === false) {
+        throw new Error(result.data?.error || result.reason || result.error || 'Failed to fetch submissions');
       }
-
-      return result;
+      return result.data || { success: true, data: [] };
     } catch (error) {
       console.error('Error fetching submissions:', error);
       return {
@@ -106,21 +93,16 @@ class SellCarAPI {
     estimatedPrice?: number;
   }): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      const response = await fetch(`${this.baseURL}/sell-car`, {
+      const response = await authenticatedFetch('/api/sell-car', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ id, ...updates }),
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to update submission');
+      const result = await handleApiResponse<{ success: boolean; message?: string; error?: string }>(response);
+      if (!result.success || result.data?.success === false) {
+        throw new Error(result.data?.error || result.reason || result.error || 'Failed to update submission');
       }
-
-      return result;
+      return result.data || { success: true };
     } catch (error) {
       console.error('Error updating submission:', error);
       return {
@@ -132,17 +114,15 @@ class SellCarAPI {
 
   async deleteSubmission(id: string): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      const response = await fetch(`${this.baseURL}/sell-car?id=${id}`, {
+      const response = await authenticatedFetch(`/api/sell-car?id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to delete submission');
+      const result = await handleApiResponse<{ success: boolean; message?: string; error?: string }>(response);
+      if (!result.success || result.data?.success === false) {
+        throw new Error(result.data?.error || result.reason || result.error || 'Failed to delete submission');
       }
-
-      return result;
+      return result.data || { success: true };
     } catch (error) {
       console.error('Error deleting submission:', error);
       return {

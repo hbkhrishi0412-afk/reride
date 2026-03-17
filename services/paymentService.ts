@@ -1,4 +1,5 @@
 import type { PaymentRequest, SubscriptionPlan } from '../types';
+import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 // Create a payment request for plan upgrade
 export const createPaymentRequest = async (
@@ -10,11 +11,8 @@ export const createPaymentRequest = async (
   transactionId?: string
 ): Promise<PaymentRequest> => {
   try {
-    const response = await fetch('/api/payments?action=create', {
+    const response = await authenticatedFetch('/api/payments?action=create', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         sellerEmail,
         planId,
@@ -25,13 +23,14 @@ export const createPaymentRequest = async (
       }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create payment request');
+    const result = await handleApiResponse<{ paymentRequest?: PaymentRequest }>(response);
+    if (!result.success) {
+      throw new Error(result.reason || result.error || 'Failed to create payment request');
     }
-
-    const data = await response.json();
-    return data.paymentRequest;
+    if (!result.data?.paymentRequest) {
+      throw new Error('Invalid server response: missing paymentRequest');
+    }
+    return result.data.paymentRequest;
   } catch (error) {
     console.error('Error creating payment request:', error);
     throw error;
@@ -41,28 +40,12 @@ export const createPaymentRequest = async (
 // Get payment request status for a seller
 export const getPaymentRequestStatus = async (sellerEmail: string): Promise<PaymentRequest | null> => {
   try {
-    const response = await fetch(`/api/payments?action=status&sellerEmail=${encodeURIComponent(sellerEmail)}`);
-    
-    if (!response.ok) {
-      // Check if response is JSON
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to get payment request status');
-      } else {
-        throw new Error(`API endpoint not found (${response.status})`);
-      }
+    const response = await authenticatedFetch(`/api/payments?action=status&sellerEmail=${encodeURIComponent(sellerEmail)}`);
+    const result = await handleApiResponse<{ paymentRequest?: PaymentRequest; paymentStatus?: PaymentRequest | null }>(response);
+    if (!result.success) {
+      throw new Error(result.reason || result.error || 'Failed to get payment request status');
     }
-
-    // Check if response is JSON
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      // Backend returns { paymentStatus }, normalize to PaymentRequest-like object if present
-      return data.paymentRequest || data.paymentStatus || null;
-    } else {
-      throw new Error('API returned non-JSON response');
-    }
+    return result.data?.paymentRequest || result.data?.paymentStatus || null;
   } catch (error) {
     console.error('Error getting payment request status:', error);
     return null;
@@ -73,15 +56,12 @@ export const getPaymentRequestStatus = async (sellerEmail: string): Promise<Paym
 export const getPaymentRequests = async (adminEmail: string, status?: string): Promise<PaymentRequest[]> => {
   try {
     const url = `/api/payments?action=list&adminEmail=${encodeURIComponent(adminEmail)}${status ? `&status=${status}` : ''}`;
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to get payment requests');
+    const response = await authenticatedFetch(url);
+    const result = await handleApiResponse<{ paymentRequests?: PaymentRequest[] }>(response);
+    if (!result.success) {
+      throw new Error(result.reason || result.error || 'Failed to get payment requests');
     }
-
-    const data = await response.json();
-    return data.paymentRequests || [];
+    return result.data?.paymentRequests || [];
   } catch (error) {
     console.error('Error getting payment requests:', error);
     throw error;
@@ -94,11 +74,8 @@ export const approvePaymentRequest = async (
   notes?: string
 ): Promise<PaymentRequest> => {
   try {
-    const response = await fetch('/api/payments?action=approve', {
+    const response = await authenticatedFetch('/api/payments?action=approve', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         paymentRequestId,
         adminEmail,
@@ -106,13 +83,11 @@ export const approvePaymentRequest = async (
       }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to approve payment request');
+    const result = await handleApiResponse<{ paymentRequest?: PaymentRequest }>(response);
+    if (!result.success) {
+      throw new Error(result.reason || result.error || 'Failed to approve payment request');
     }
-
-    const data = await response.json();
-    return data.paymentRequest || { id: paymentRequestId } as unknown as PaymentRequest;
+    return result.data?.paymentRequest || ({ id: paymentRequestId } as unknown as PaymentRequest);
   } catch (error) {
     console.error('Error approving payment request:', error);
     throw error;
@@ -125,11 +100,8 @@ export const rejectPaymentRequest = async (
   rejectionReason?: string
 ): Promise<PaymentRequest> => {
   try {
-    const response = await fetch('/api/payments?action=reject', {
+    const response = await authenticatedFetch('/api/payments?action=reject', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         paymentRequestId,
         adminEmail,
@@ -137,13 +109,11 @@ export const rejectPaymentRequest = async (
       }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to reject payment request');
+    const result = await handleApiResponse<{ paymentRequest?: PaymentRequest }>(response);
+    if (!result.success) {
+      throw new Error(result.reason || result.error || 'Failed to reject payment request');
     }
-
-    const data = await response.json();
-    return data.paymentRequest || { id: paymentRequestId } as unknown as PaymentRequest;
+    return result.data?.paymentRequest || ({ id: paymentRequestId } as unknown as PaymentRequest);
   } catch (error) {
     console.error('Error rejecting payment request:', error);
     throw error;

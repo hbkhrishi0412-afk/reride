@@ -331,6 +331,10 @@ async function mainHandler(
   req: VercelRequest,
   res: VercelResponse,
 ) {
+  const primaryOrigin =
+    process.env.PRIMARY_ORIGIN ||
+    process.env.ALLOWED_ORIGIN ||
+    'https://www.reride.co.in';
   // Set security headers
   const securityHeaders = getSecurityHeaders();
   Object.entries(securityHeaders).forEach(([key, value]) => {
@@ -360,14 +364,14 @@ async function mainHandler(
       res.setHeader('Access-Control-Allow-Origin', origin as string);
     } else {
       // Fallback to primary production domain
-      res.setHeader('Access-Control-Allow-Origin', 'https://www.reride.co.in');
+      res.setHeader('Access-Control-Allow-Origin', primaryOrigin);
     }
   } else if (!isProduction) {
     // In development, allow all origins as fallback
     res.setHeader('Access-Control-Allow-Origin', origin || '*');
   } else {
     // Production fallback - use primary domain
-    res.setHeader('Access-Control-Allow-Origin', 'https://www.reride.co.in');
+    res.setHeader('Access-Control-Allow-Origin', primaryOrigin);
   }
   
   res.setHeader('Access-Control-Allow-Methods', config.CORS.ALLOWED_METHODS.join(', '));
