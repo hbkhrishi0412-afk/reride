@@ -3,10 +3,12 @@ import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
+import { applyCors } from './_cors.js';
 
 // ServiceProviderPayload is now imported from the service file
 
 export async function handleServiceProviders(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
   try {
     // CRITICAL FIX: Handle missing/invalid auth token gracefully
     // Some requests might not have auth (e.g., public endpoints, initial page loads)

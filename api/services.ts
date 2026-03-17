@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
 import { authenticateRequest } from './auth.js';
+import { applyCors } from './_cors.js';
 
 interface Service {
   id: string;
@@ -98,6 +99,7 @@ function getErrorStatusCode(message: string): number {
 }
 
 export async function handleServices(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
   try {
     const supabase = getSupabaseAdminClient();
     const authContext = await getAuthContext(req, supabase);
@@ -221,4 +223,7 @@ export async function handleServices(req: VercelRequest, res: VercelResponse) {
     return res.status(status).json({ error: message });
   }
 }
+
+// Vercel serverless expects a default export when the module is loaded directly
+export default handleServices;
 

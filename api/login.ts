@@ -1,8 +1,10 @@
 // api/login.ts - Supabase JWT Token Verification Endpoint
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
+import { applyCors } from './_cors.js';
 
 export async function handleLogin(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -24,5 +26,8 @@ export async function handleLogin(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 }
+
+// Vercel serverless expects a default export when the module is loaded directly
+export default handleLogin;
 
 
