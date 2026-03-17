@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { applyCors } from './_cors.js';
 
 interface ProviderService {
   serviceType: string;
@@ -35,6 +36,7 @@ async function resolveProviderId(req: VercelRequest, allowDevFallback = false): 
 }
 
 export async function handleProviderServices(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
   try {
     const scope = (req.query.scope as string) || 'mine';
     let uid: string | null = null;
@@ -165,5 +167,8 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
     return res.status(status).json({ error: message });
   }
 }
+
+// Vercel serverless expects a default export when the module is loaded directly
+export default handleProviderServices;
 
 
