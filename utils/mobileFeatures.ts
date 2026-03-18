@@ -23,8 +23,7 @@ export interface PushNotificationOptions {
  * Request push notification permission
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
-  if (!('Notification' in window)) {
-    console.warn('Notifications are not supported in this browser');
+  if (typeof Notification === 'undefined' || !('Notification' in window)) {
     return 'denied';
   }
 
@@ -72,16 +71,16 @@ export async function showNotification(options: PushNotificationOptions): Promis
       await registration.showNotification(options.title, notificationOptions);
     } catch (error) {
       console.error('Failed to show notification via service worker:', error);
-      // Fallback to regular notification
-      new Notification(options.title, {
-        body: options.body,
-        icon: options.icon || '/icon-192.png',
-        tag: options.tag,
-        data: options.data
-      });
+      if (typeof Notification !== 'undefined') {
+        new Notification(options.title, {
+          body: options.body,
+          icon: options.icon || '/icon-192.png',
+          tag: options.tag,
+          data: options.data
+        });
+      }
     }
-  } else {
-    // Fallback for browsers without service worker
+  } else if (typeof Notification !== 'undefined') {
     new Notification(options.title, {
       body: options.body,
       icon: options.icon || '/icon-192.png',

@@ -87,7 +87,9 @@ export default defineConfig({
       },
       output: {
         // More aggressive code splitting for better performance
-        manualChunks: (id) => {
+        // Capacitor (Android WebView) is much more sensitive to stale/chunk ordering.
+        // Disable our aggressive manual chunking so React + ReactDOM stay in a sane dependency graph.
+        manualChunks: isCapacitorBuild ? undefined : (id) => {
           // FIX: React must be in the vendor chunk so other libraries (like framer-motion) 
           // that depend on it can access React.createContext when they load
           // Check for React-related modules first, before any other node_modules checks
@@ -278,6 +280,9 @@ export default defineConfig({
     modulePreload: {
       polyfill: false,
       resolveDependencies: (_filename, deps) => {
+        // For Capacitor builds, don't over-filter. Let Vite preload the full dependency chain
+        // so the initial React render doesn't race chunk loads.
+        if (isCapacitorBuild) return deps;
         const critical = ['vendor-', 'app-provider-', 'supabase-', 'services-', 'utils-'];
         return deps.filter((dep) => critical.some((p) => dep.includes(p)));
       },

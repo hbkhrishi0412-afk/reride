@@ -99,24 +99,19 @@ export const updateNotificationInMongoDB = updateNotificationInSupabase;
  * @returns Promise<boolean> - true if permission is granted, false otherwise.
  */
 const checkAndRequestPermission = async (): Promise<boolean> => {
-    // Check if the browser supports notifications
-    if (!('Notification' in window)) {
-        console.warn("This browser does not support desktop notification.");
+    if (typeof Notification === 'undefined' || !('Notification' in window)) {
         return false;
     }
 
-    // Check if permission is already granted
     if (Notification.permission === 'granted') {
         return true;
     }
 
-    // If permission has not been denied, ask for it
     if (Notification.permission !== 'denied') {
         const permission = await Notification.requestPermission();
         return permission === 'granted';
     }
 
-    // Permission is denied
     return false;
 };
 
@@ -133,8 +128,7 @@ export const showNotification = async (title: string, options: NotificationOptio
 
     const hasPermission = await checkAndRequestPermission();
 
-    if (hasPermission) {
-        // Create and display the notification
+    if (hasPermission && typeof Notification !== 'undefined') {
         new Notification(title, options);
     }
 };

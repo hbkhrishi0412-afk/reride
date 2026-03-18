@@ -28,8 +28,7 @@ export const MobilePushNotificationManager: React.FC<MobilePushNotificationManag
   // Request permission and subscribe on mount
   useEffect(() => {
     if (permission === 'default' && !isSubscribed) {
-      // Auto-subscribe if permission is granted
-      if (Notification.permission === 'granted') {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         subscribe();
       }
     }
