@@ -44,7 +44,7 @@ export function usePushNotifications() {
   }, []);
 
   const checkPermission = async () => {
-    if ('Notification' in window) {
+    if (typeof Notification !== 'undefined' && 'Notification' in window) {
       setPermission(Notification.permission);
     }
   };
