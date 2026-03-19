@@ -763,7 +763,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                                     />
                                     <button
                                       type="button"
-                                      onClick={() => { navigator.clipboard.writeText(shareUrl); }}
+                                      onClick={() => { try { navigator.clipboard?.writeText(shareUrl); } catch { /* clipboard unavailable */ } }}
                                       className="px-3 py-2 text-sm font-semibold bg-blue-600 text-white rounded-r-lg hover:bg-blue-700"
                                     >
                                       Copy

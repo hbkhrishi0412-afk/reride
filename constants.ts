@@ -110,7 +110,8 @@ export const CITIES_BY_STATE: Record<string, string[]> = {
 export async function getMockUsers(): Promise<User[]> {
     try {
         // Check if user is authenticated before making request
-        const token = localStorage.getItem('reRideAccessToken');
+        let token: string | null = null;
+        try { token = localStorage.getItem('reRideAccessToken'); } catch { /* WebView may block storage */ }
         if (!token) {
             // No token available, return fallback users
             return getFallbackUsers();

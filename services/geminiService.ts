@@ -1,9 +1,18 @@
 
-
-import { SchemaType } from "@google/generative-ai";
 import type { Vehicle, ProsAndCons, Conversation, Suggestion } from '../types';
 import type { SearchFilters } from "../types";
 import { authenticatedFetch } from '../utils/authenticatedFetch';
+
+// NOTE: Do not import `@google/generative-ai` on the client.
+// That library brings Node/crypto/util dependencies which can crash WebView environments
+// (e.g. missing `util.promisify`). We only need SchemaType values for the request payload,
+// so we define them as strings.
+const SchemaType = {
+    ARRAY: 'ARRAY',
+    OBJECT: 'OBJECT',
+    STRING: 'STRING',
+    NUMBER: 'NUMBER',
+} as const;
 
 /**
  * A helper function to call our secure backend proxy for the Gemini API.

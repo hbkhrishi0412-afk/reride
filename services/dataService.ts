@@ -6,12 +6,21 @@ import { getApiBaseUrl } from '../utils/apiConfig';
 class DataService {
   private isDevelopment: boolean;
   private apiBaseUrl: string;
+  // Fallback in case the primary origin (e.g. www.reride.co.in) is not reachable from Android/WebView.
+  // This is a best-effort retry for network/DNS issues; it won't mask real 401/404 API responses.
+  private apiBaseUrlFallback: string | null = null;
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
     this.isDevelopment = this.detectDevelopment();
     this.apiBaseUrl = `${getApiBaseUrl()}/api`;
+    if (this.apiBaseUrl.includes('https://www.reride.co.in')) {
+      this.apiBaseUrlFallback = this.apiBaseUrl.replace(
+        'https://www.reride.co.in',
+        'https://reride.co.in'
+      );
+    }
   }
 
   private detectDevelopment(): boolean {
@@ -90,7 +99,18 @@ class DataService {
             const controller = new AbortController();
             timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout for faster fallback
 
-            const resp = await fetch(`${this.apiBaseUrl}${endpoint}`, {
+            const primaryUrl = `${this.apiBaseUrl}${endpoint}`;
+            const fallbackUrl =
+              this.apiBaseUrlFallback ? `${this.apiBaseUrlFallback}${endpoint}` : null;
+
+            // Reduce noise: only emit detailed URL diagnostics for vehicles listing.
+            const shouldDebugVehicles = endpoint.includes('/vehicles');
+            if (shouldDebugVehicles) {
+              // eslint-disable-next-line no-console
+              console.info('VEHICLES_API_URLS', { primaryUrl, fallbackUrl });
+            }
+
+            const resp = await fetch(primaryUrl, {
               ...fetchOptions,
               signal: controller.signal
             });
@@ -110,6 +130,56 @@ class DataService {
             if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
               throw new Error('API request timeout');
             }
+            // Best-effort fallback for cases where only one hostname works (common on some networks/DNS).
+            // If the fallback also fails, we throw the same user-facing network error.
+            if (fetchError instanceof Error) {
+              // This will show up in logcat and helps diagnose the exact failure.
+              // eslint-disable-next-line no-console
+              const primaryUrl = `${this.apiBaseUrl}${endpoint}`;
+              const fallbackUrl =
+                this.apiBaseUrlFallback ? `${this.apiBaseUrlFallback}${endpoint}` : null;
+              const shouldDebugVehicles = endpoint.includes('/vehicles');
+              if (shouldDebugVehicles) {
+                console.warn('API fetch failed (network). Retrying with fallback if available:', {
+                  message: fetchError.message,
+                  name: fetchError.name,
+                  primaryUrl,
+                  fallbackUrl,
+                });
+              }
+            }
+
+            const fallbackUrl =
+              this.apiBaseUrlFallback ? `${this.apiBaseUrlFallback}${endpoint}` : null;
+
+            if (fallbackUrl) {
+              try {
+                const shouldDebugVehicles = endpoint.includes('/vehicles');
+                if (shouldDebugVehicles) {
+                  // eslint-disable-next-line no-console
+                  console.warn('VEHICLES_API_TRY_FALLBACK_URL', fallbackUrl);
+                }
+                const controller2 = new AbortController();
+                const timeoutId2 = setTimeout(() => controller2.abort(), 7000);
+                const resp2 = await fetch(fallbackUrl, {
+                  ...fetchOptions,
+                  signal: controller2.signal,
+                });
+                clearTimeout(timeoutId2);
+                if (endpoint.includes('/vehicles')) {
+                  // eslint-disable-next-line no-console
+                  console.warn('VEHICLES_API_FALLBACK_RESPONDED', resp2.status);
+                }
+                return resp2;
+              } catch {
+                // Swallow and throw the primary network error below.
+                if (endpoint.includes('/vehicles')) {
+                  // eslint-disable-next-line no-console
+                  console.warn('VEHICLES_API_FALLBACK_FAILED_NETWORK');
+                }
+              }
+            }
+
             throw new Error('Network error: Unable to reach API server');
           }
         };
@@ -903,8 +973,7 @@ class DataService {
       });
       
       if (result.success && result.user) {
-        // Store user session
-        localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+        try { localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user)); } catch { /* storage unavailable */ }
       }
       
       return result;
@@ -931,7 +1000,7 @@ class DataService {
     }
     
     const { password: _, ...userWithoutPassword } = user;
-    localStorage.setItem('reRideCurrentUser', JSON.stringify(userWithoutPassword));
+    try { localStorage.setItem('reRideCurrentUser', JSON.stringify(userWithoutPassword)); } catch { /* storage unavailable */ }
     return { success: true, user: userWithoutPassword };
   }
 
@@ -958,8 +1027,7 @@ class DataService {
           this.setLocalStorageData('reRideUsers_prod', cachedUsers);
         }
         
-        // Store user session
-        localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+        try { localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user)); } catch { /* storage unavailable */ }
       }
       
       return result;
@@ -1073,12 +1141,14 @@ class DataService {
   }
 
   logout(): void {
-    localStorage.removeItem('reRideCurrentUser');
-    sessionStorage.removeItem('currentUser');
+    try {
+      localStorage.removeItem('reRideCurrentUser');
+      sessionStorage.removeItem('currentUser');
+    } catch { /* storage unavailable */ }
   }
 
   isOnline(): boolean {
-    return navigator.onLine;
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
   }
 
   // Sync local data with API when online

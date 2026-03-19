@@ -105,12 +105,13 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   const [savingProfile, setSavingProfile] = useState(false);
   const [localProvider, setLocalProvider] = useState<Provider | null>(provider);
   const [activeTab, setActiveTab] = useState<'overview' | 'profile' | 'services' | 'open' | 'my-requests'>(() => {
-    // Check sessionStorage for desired tab (set from header dropdown)
-    const savedTab = sessionStorage.getItem('serviceProviderActiveTab');
-    if (savedTab && ['overview', 'profile', 'services', 'open', 'my-requests'].includes(savedTab)) {
-      sessionStorage.removeItem('serviceProviderActiveTab'); // Clear after reading
-      return savedTab as 'overview' | 'profile' | 'services' | 'open' | 'my-requests';
-    }
+    try {
+      const savedTab = sessionStorage.getItem('serviceProviderActiveTab');
+      if (savedTab && ['overview', 'profile', 'services', 'open', 'my-requests'].includes(savedTab)) {
+        sessionStorage.removeItem('serviceProviderActiveTab');
+        return savedTab as 'overview' | 'profile' | 'services' | 'open' | 'my-requests';
+      }
+    } catch { /* storage unavailable */ }
     // Check URL hash as fallback
     const hash = window.location.hash.slice(1);
     if (hash && ['overview', 'profile', 'services', 'open', 'my-requests'].includes(hash)) {
@@ -521,11 +522,13 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   // Listen for tab changes from external sources (e.g., header dropdown)
   useEffect(() => {
     const checkTab = () => {
-      const savedTab = sessionStorage.getItem('serviceProviderActiveTab');
-      if (savedTab && ['overview', 'profile', 'services', 'open', 'my-requests'].includes(savedTab)) {
-        setActiveTab(savedTab as 'overview' | 'profile' | 'services' | 'open' | 'my-requests');
-        sessionStorage.removeItem('serviceProviderActiveTab');
-      }
+      try {
+        const savedTab = sessionStorage.getItem('serviceProviderActiveTab');
+        if (savedTab && ['overview', 'profile', 'services', 'open', 'my-requests'].includes(savedTab)) {
+          setActiveTab(savedTab as 'overview' | 'profile' | 'services' | 'open' | 'my-requests');
+          sessionStorage.removeItem('serviceProviderActiveTab');
+        }
+      } catch { /* storage unavailable */ }
     };
     
     // Listen for custom event from header

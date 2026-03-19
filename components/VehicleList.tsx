@@ -124,24 +124,28 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         setIsLoadingVehicleData(true);
         
         // Check cache first
-        const cachedData = localStorage.getItem('reRideVehicleDataFilters');
-        if (cachedData) {
-          const { data, timestamp } = JSON.parse(cachedData);
-          if (Date.now() - timestamp < 5 * 60 * 1000) { // 5 minutes cache
-            setVehicleData(data);
-            setIsLoadingVehicleData(false);
-            return;
+        try {
+          const cachedData = localStorage.getItem('reRideVehicleDataFilters');
+          if (cachedData) {
+            const { data: cached, timestamp } = JSON.parse(cachedData);
+            if (Date.now() - timestamp < 5 * 60 * 1000) {
+              setVehicleData(cached);
+              setIsLoadingVehicleData(false);
+              return;
+            }
           }
-        }
+        } catch { /* storage unavailable */ }
         
         const data = await getVehicleData();
         setVehicleData(data);
         
         // Cache the data
-        localStorage.setItem('reRideVehicleDataFilters', JSON.stringify({
-          data,
-          timestamp: Date.now()
-        }));
+        try {
+          localStorage.setItem('reRideVehicleDataFilters', JSON.stringify({
+            data,
+            timestamp: Date.now()
+          }));
+        } catch { /* storage unavailable */ }
         
         // Logging handled by logger utility
       } catch (error) {

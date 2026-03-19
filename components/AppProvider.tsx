@@ -21,7 +21,7 @@ import {
   updateSupportTicketInSupabase,
 } from '../services/supportTicketService';
 import { dataService } from '../services/dataService';
-import { getAuthHeaders } from '../utils/authenticatedFetch';
+import { getAuthHeaders, refreshAuthToken } from '../utils/authenticatedFetch';
 import { VEHICLE_DATA } from './vehicleData';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
@@ -1326,6 +1326,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Fallback to currentUser if localStorage doesn't have it (shouldn't happen, but safe)
         const isAdmin = (userRole || currentUser?.role) === 'admin';
         
+        // AUTH: Ensure we have an access token before starting any production API calls.
+        // Without this, `dataService` may run with missing `reRideAccessToken` and fail the first requests.
+        if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
+          try {
+            const hasAccessToken =
+              !!localStorage.getItem('reRideAccessToken') ||
+              !!localStorage.getItem('sb-access-token') ||
+              !!localStorage.getItem('supabase.auth.token');
+            
+            const hasRefreshToken = !!localStorage.getItem('reRideRefreshToken');
+            
+            if (!hasAccessToken && hasRefreshToken) {
+              // Hard timeout so we don't block rendering too long.
+              await Promise.race([
+                refreshAuthToken(),
+                new Promise((resolve) => setTimeout(resolve, 2500)),
+              ]);
+            }
+          } catch (error) {
+            logWarn('⚠️ Auth rehydration failed (non-critical):', error);
+          }
+        }
+        
         // Keep UI responsive, but do not treat slow responses as empty data.
         const loadWithTimeout = <T,>(promise: Promise<T>, timeoutMs: number): Promise<T | null> => {
           return Promise.race([
@@ -1838,6 +1861,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // For admin users, ensure we fetch users (critical for admin panel)
         if (isAdmin) {
           logDebug('📊 AppProvider: Admin user detected - fetching users for admin panel...');
+        }
+
+        // AUTH: Ensure we have an access token before production API calls.
+        // This runs when a user is restored from localStorage on initial load.
+        if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
+          try {
+            const hasAccessToken =
+              !!localStorage.getItem('reRideAccessToken') ||
+              !!localStorage.getItem('sb-access-token') ||
+              !!localStorage.getItem('supabase.auth.token');
+            const hasRefreshToken = !!localStorage.getItem('reRideRefreshToken');
+
+            if (!hasAccessToken && hasRefreshToken) {
+              await Promise.race([
+                refreshAuthToken(),
+                new Promise((resolve) => setTimeout(resolve, 2500)),
+              ]);
+            }
+          } catch (error) {
+            logWarn('⚠️ Auth rehydration failed in syncLatestData (non-critical):', error);
+          }
         }
         
         // Load vehicles and users in PARALLEL for faster loading (no sequential delays)

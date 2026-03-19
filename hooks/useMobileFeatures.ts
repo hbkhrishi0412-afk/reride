@@ -311,7 +311,7 @@ export function useDeepLinking() {
 // ============================================
 
 export function useOfflineMode() {
-  const [isOnline, setIsOnlineState] = useState(navigator.onLine);
+  const [isOnline, setIsOnlineState] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [pendingActions, setPendingActions] = useState<any[]>([]);
 
   useEffect(() => {

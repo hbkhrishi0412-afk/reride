@@ -44,13 +44,18 @@ const SocialShareButtons: React.FC = () => {
     const [copyStatus, setCopyStatus] = useState('Copy Link');
 
     const handleCopyLink = () => {
-        navigator.clipboard.writeText(window.location.href).then(() => {
-            setCopyStatus('Copied!');
-            setTimeout(() => setCopyStatus('Copy Link'), 2000);
-        }, () => {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(window.location.href).then(() => {
+                setCopyStatus('Copied!');
+                setTimeout(() => setCopyStatus('Copy Link'), 2000);
+            }, () => {
+                setCopyStatus('Failed!');
+                setTimeout(() => setCopyStatus('Copy Link'), 2000);
+            });
+        } else {
             setCopyStatus('Failed!');
             setTimeout(() => setCopyStatus('Copy Link'), 2000);
-        });
+        }
     };
 
     return (

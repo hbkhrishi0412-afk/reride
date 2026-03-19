@@ -23,18 +23,28 @@ function getProductionOrigin(): string {
   return origin.replace(/\/+$/, '');
 }
 
-let _isCapacitorCached: boolean | null = null;
+let _isNativeWebViewCached: boolean | null = null;
 
 export function isCapacitorNative(): boolean {
-  if (_isCapacitorCached !== null) return _isCapacitorCached;
+  if (_isNativeWebViewCached !== null) return _isNativeWebViewCached;
   try {
-    _isCapacitorCached =
-      typeof window !== 'undefined' &&
+    if (typeof window === 'undefined') {
+      _isNativeWebViewCached = false;
+      return _isNativeWebViewCached;
+    }
+
+    const isCapacitorNativePlatform =
       (window as any).Capacitor?.isNativePlatform?.() === true;
+
+    // Support custom Android WebView wrappers using WebViewAssetLoader host.
+    const isAndroidAssetLoaderHost =
+      window.location.hostname === 'appassets.androidplatform.net';
+
+    _isNativeWebViewCached = isCapacitorNativePlatform || isAndroidAssetLoaderHost;
   } catch {
-    _isCapacitorCached = false;
+    _isNativeWebViewCached = false;
   }
-  return _isCapacitorCached;
+  return _isNativeWebViewCached;
 }
 
 /**
