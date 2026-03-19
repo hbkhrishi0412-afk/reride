@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import { matchesCity } from '../utils/cityMapping';
+import { FALLBACK_VEHICLES } from '../constants/fallback';
 import MobileVehicleCard from './MobileVehicleCard';
 
 interface MobileHomePageProps {
@@ -50,7 +51,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const touchStartData = useRef<Map<number, { x: number; y: number; time: number }>>(new Map());
 
   const publishedVehicles = useMemo(
-    () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published'),
+    () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published' && vehicle.listingType !== 'rental'),
     [allVehicles]
   );
 
@@ -130,10 +131,33 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     }).format(value);
   }, []);
 
-  // Memoize featured vehicles slice to prevent unnecessary re-renders
+  // Ensure mobile hero cards always have data:
+  // featured -> published -> active/non-sold -> static fallback.
   const displayedFeaturedVehicles = useMemo(
-    () => featuredVehicles,
-    [featuredVehicles]
+    () => {
+      const nonRentalFeatured = featuredVehicles.filter(vehicle => vehicle && vehicle.listingType !== 'rental');
+      if (nonRentalFeatured.length > 0) return nonRentalFeatured.slice(0, 4);
+
+      if (publishedVehicles.length > 0) return publishedVehicles.slice(0, 4);
+
+      const activeLikeVehicles = allVehicles.filter(vehicle =>
+        vehicle &&
+        vehicle.listingType !== 'rental' &&
+        vehicle.status !== 'sold' &&
+        vehicle.listingStatus === 'active'
+      );
+      if (activeLikeVehicles.length > 0) return activeLikeVehicles.slice(0, 4);
+
+      const nonSoldVehicles = allVehicles.filter(vehicle =>
+        vehicle &&
+        vehicle.listingType !== 'rental' &&
+        vehicle.status !== 'sold'
+      );
+      if (nonSoldVehicles.length > 0) return nonSoldVehicles.slice(0, 4);
+
+      return FALLBACK_VEHICLES.slice(0, 4);
+    },
+    [featuredVehicles, publishedVehicles, allVehicles]
   );
 
   return (
@@ -214,18 +238,24 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       </div>
 
       {/* Featured Vehicles Carousel */}
-      {featuredVehicles.length > 0 ? (
+      {displayedFeaturedVehicles.length > 0 ? (
         <div className="px-4 py-6 bg-white">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-1">Featured Vehicles</h2>
-              <p className="text-xs text-gray-500">Handpicked quality vehicles</p>
+          <div className="text-center mb-5">
+            <div className="flex flex-col items-center gap-3">
+              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 via-orange-500 to-pink-500 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider shadow-lg">
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Featured Collection
+              </button>
+              <h2 className="text-4xl font-black text-gray-900 tracking-tight">Premium Vehicles</h2>
+              <p className="text-gray-600 text-sm leading-relaxed">Handpicked vehicles that meet our highest standards of quality and performance</p>
             </div>
             <button
               onClick={() => onNavigate(ViewEnum.USED_CARS)}
-              className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-orange-50 active:scale-95 transition-all"
+              className="mt-3 inline-flex items-center gap-2 px-5 py-2 rounded-full border border-purple-600 text-purple-700 font-bold text-sm hover:bg-purple-50 transition-all duration-200 active:scale-95"
             >
-              View All
+              View all vehicles
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>

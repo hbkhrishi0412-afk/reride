@@ -23,14 +23,16 @@ function getProductionOrigin(): string {
   return origin.replace(/\/+$/, '');
 }
 
+// Cache only "true" results.
+// In Android debug builds, `window.Capacitor` can be available slightly after our first JS tick.
+// If we cache "false", the API fetch rewrite might never be applied.
 let _isNativeWebViewCached: boolean | null = null;
 
 export function isCapacitorNative(): boolean {
-  if (_isNativeWebViewCached !== null) return _isNativeWebViewCached;
+  if (_isNativeWebViewCached === true) return true;
   try {
     if (typeof window === 'undefined') {
-      _isNativeWebViewCached = false;
-      return _isNativeWebViewCached;
+      return false;
     }
 
     const isCapacitorNativePlatform =
@@ -40,11 +42,12 @@ export function isCapacitorNative(): boolean {
     const isAndroidAssetLoaderHost =
       window.location.hostname === 'appassets.androidplatform.net';
 
-    _isNativeWebViewCached = isCapacitorNativePlatform || isAndroidAssetLoaderHost;
+    const result = isCapacitorNativePlatform || isAndroidAssetLoaderHost;
+    if (result) _isNativeWebViewCached = true;
+    return result;
   } catch {
-    _isNativeWebViewCached = false;
   }
-  return _isNativeWebViewCached;
+  return false;
 }
 
 /**
@@ -87,10 +90,17 @@ export function resolveApiUrl(path: string): string {
  * Call this once at app startup (e.g. in index.tsx before React renders).
  */
 let _fetchPatched = false;
-export function patchFetchForCapacitor(): void {
+export function patchFetchForCapacitor(retryCount: number = 3): void {
   if (_fetchPatched) return;
   if (typeof window === 'undefined') return;
-  if (!isCapacitorNative()) return;
+  if (!isCapacitorNative()) {
+    // Retry briefly: in some Android WebView setups, Capacitor isn't ready
+    // at the exact time this module runs.
+    if (retryCount > 0) {
+      setTimeout(() => patchFetchForCapacitor(retryCount - 1), 250);
+    }
+    return;
+  }
 
   const originalFetch = window.fetch.bind(window);
   const base = getApiBaseUrl();
