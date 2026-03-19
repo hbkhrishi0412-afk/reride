@@ -69,6 +69,8 @@ export const SECURITY_CONFIG = {
           'https://www.reride.co.in',
           'https://reride.co.in',
           'https://reride-app.vercel.app', // Keep for backward compatibility
+          // Android WebViewAssetLoader origin (used by MainActivity)
+          'https://appassets.androidplatform.net',
           'https://localhost',             // REQUIRED FOR CAPACITOR ANDROID APP
           'capacitor://localhost'          // REQUIRED FOR CAPACITOR IOS APP
         ]
@@ -80,6 +82,7 @@ export const SECURITY_CONFIG = {
           'https://reride--2-.vercel.app',
           'https://www.reride.co.in',
           'https://reride.co.in',
+          'https://appassets.androidplatform.net',
           'https://localhost',
           'capacitor://localhost'
         ],

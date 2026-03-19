@@ -74,6 +74,8 @@ const SECURITY_CONFIG = {
           const defaults = [
             'https://www.reride.co.in',
             'https://reride.co.in',
+            // Android WebViewAssetLoader origin (used by MainActivity)
+            'https://appassets.androidplatform.net',
             'https://localhost',
             'capacitor://localhost',
             'http://localhost'
@@ -90,6 +92,7 @@ const SECURITY_CONFIG = {
           'http://localhost:5173',
           'https://localhost',
           'capacitor://localhost',
+          'https://appassets.androidplatform.net',
           'https://reride-app.vercel.app',
           'https://reride--2-.vercel.app'
         ],

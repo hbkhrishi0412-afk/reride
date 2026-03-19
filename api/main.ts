@@ -350,7 +350,12 @@ async function mainHandler(
     origin.includes('::1')
   );
   // Capacitor Android/iOS WebView always uses these origins (androidScheme: 'https' or capacitor://)
-  const isCapacitorApp = origin === 'https://localhost' || origin === 'capacitor://localhost' || origin === 'http://localhost';
+  const isCapacitorApp =
+    origin === 'https://localhost' ||
+    origin === 'capacitor://localhost' ||
+    origin === 'http://localhost' ||
+    origin === 'https://appassets.androidplatform.net' ||
+    origin?.includes('appassets.androidplatform.net');
 
   // Allow: config whitelist, dev localhost, OR Capacitor mobile app (in prod too)
   if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost) || isCapacitorApp) {
