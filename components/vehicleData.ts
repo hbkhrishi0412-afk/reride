@@ -1,16 +1,5 @@
 import { VehicleCategory } from '../types.js';
-
-export interface VehicleModel {
-    name: string;
-    variants: string[];
-}
-
-export interface VehicleMake {
-    name: string;
-    models: VehicleModel[];
-}
-
-export type VehicleCategoryData = VehicleMake[];
+import type { VehicleCategoryData } from '../vehicleDataTypes';
 
 const DEFAULT_PLACEHOLDER = 'https://picsum.photos/800/600?random=1';
 

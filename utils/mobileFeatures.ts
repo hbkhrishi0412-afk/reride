@@ -465,12 +465,10 @@ export interface ShareData {
  * Share content using Web Share API
  */
 export async function shareContent(data: ShareData): Promise<boolean> {
-  if (!navigator.share) {
-    console.warn('Web Share API is not supported');
-    // Fallback: copy to clipboard
+  if (typeof navigator === 'undefined' || !navigator.share) {
     if (data.text || data.url) {
       const text = `${data.title || ''}\n${data.text || ''}\n${data.url || ''}`.trim();
-      await navigator.clipboard.writeText(text);
+      try { await navigator.clipboard?.writeText(text); } catch { /* clipboard unavailable */ }
       return true;
     }
     return false;
@@ -569,7 +567,7 @@ export function handleDeepLink(
  * Check if app is online
  */
 export function isOnline(): boolean {
-  return navigator.onLine;
+  return typeof navigator !== 'undefined' ? navigator.onLine : true;
 }
 
 /**

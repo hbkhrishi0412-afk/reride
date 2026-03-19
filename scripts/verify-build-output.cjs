@@ -15,15 +15,20 @@ if (!fs.existsSync(distIndex)) {
 
 const html = fs.readFileSync(distIndex, 'utf8');
 
-// Must contain the built script pattern (Vite replaces /index.tsx with /assets/index-<hash>.js or ./assets/ for Capacitor)
-if (!html.includes('src="/assets/index-') && !html.includes('src=\'/assets/index-') && !html.includes('src="./assets/index-') && !html.includes("src='./assets/index-")) {
-  console.error('❌ dist/index.html does not reference built app script (/assets/index-*.js or ./assets/index-*.js).');
+// Must contain the built script pattern (Vite replaces /index.tsx with /assets/index.js or /assets/index-<hash>.js)
+const hasBuiltScript =
+  html.includes('src="/assets/index') ||
+  html.includes("src='/assets/index") ||
+  html.includes('src="./assets/index') ||
+  html.includes("src='./assets/index");
+if (!hasBuiltScript) {
+  console.error('❌ dist/index.html does not reference built app script (/assets/index*.js or ./assets/index*.js).');
   console.error('   Production would try to load /index.tsx and fail. Fix Vite build or output.');
   process.exit(1);
 }
 
 // Must NOT contain the dev entry as the only script (would break production)
-if (html.includes('src="/index.tsx"') && !html.includes('/assets/index-') && !html.includes('./assets/index-')) {
+if (html.includes('src="/index.tsx"') && !hasBuiltScript) {
   console.error('❌ dist/index.html still has src="/index.tsx". Build did not transform the entry.');
   process.exit(1);
 }

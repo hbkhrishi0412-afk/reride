@@ -25,7 +25,11 @@ const getPlanModel = async () => {
   // Lazy load the model
   planModelPromise = (async () => {
     try {
-      const PlanModule = await import('../models/Plan.js');
+      // Prevent Vite/Rollup from bundling server-only mongoose code into the browser build.
+      // This path is only reachable server-side because we early-return when `window` exists.
+      // Use a non-static specifier so bundlers can't pre-resolve/match it.
+      const modulePath = '../models/' + 'Plan.js';
+      const PlanModule = await import(/* @vite-ignore */ modulePath);
       PlanModel = PlanModule.default;
       return PlanModel;
     } catch (e) {

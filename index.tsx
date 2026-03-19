@@ -8,7 +8,6 @@ import './index.css';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { reportWebVitals, logPerformanceMetrics } from './utils/performance';
-import { isDevelopmentEnvironment } from './utils/environment';
 import { initializeViewportZoom } from './utils/viewportZoom';
 import { injectCriticalCSS } from './utils/criticalCSS';
 import { validateEnvironmentVariablesSafe } from './utils/envValidation';
@@ -162,12 +161,13 @@ try {
 //   });
 // }
 
-// Log performance metrics after page load
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    logPerformanceMetrics();
-  }, 0);
-});
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      logPerformanceMetrics();
+    }, 0);
+  });
+}
 
 // Report Web Vitals
 reportWebVitals((metric) => {

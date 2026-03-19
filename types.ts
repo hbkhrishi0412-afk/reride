@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import type { VehicleCategoryData } from './components/vehicleData';
+import type { VehicleCategoryData } from './vehicleDataTypes';
 
 export enum VehicleCategory {
   FOUR_WHEELER = 'four-wheeler',

@@ -237,7 +237,7 @@
 
       // Detect if the app script failed to load (e.g. 404 in production)
       (function() {
-        var scriptEl = document.querySelector('script[src="/index.tsx"], script[src^="/assets/index-"], script[src^="./assets/index-"]');
+        var scriptEl = document.querySelector('script[src="/index.tsx"], script[src^="/assets/index"], script[src^="./assets/index"]');
         if (scriptEl) {
           scriptEl.addEventListener('error', function() { showLoadError('Entry script load failed'); });
         }

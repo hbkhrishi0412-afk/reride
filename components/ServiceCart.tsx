@@ -223,17 +223,19 @@ const ServiceCart: React.FC<Props> = ({
 
     // Persist cart state
     useEffect(() => {
-        const payload = { items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses };
-        localStorage.setItem(CART_KEY, JSON.stringify(payload));
+        try {
+            const payload = { items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses };
+            localStorage.setItem(CART_KEY, JSON.stringify(payload));
+        } catch { /* storage unavailable */ }
     }, [items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses]);
 
     // Load persisted cart (but skip if prefill is present - prefill takes priority)
     useEffect(() => {
-        // Check if prefill exists - if so, don't load localStorage items to avoid conflicts
-        const hasPrefill = sessionStorage.getItem('service_cart_prefill');
+        let hasPrefill: string | null = null;
+        try { hasPrefill = sessionStorage.getItem('service_cart_prefill'); } catch { /* storage unavailable */ }
         if (hasPrefill) {
-            // Prefill will handle items, but we can still load other settings
-            const raw = localStorage.getItem(CART_KEY);
+            let raw: string | null = null;
+            try { raw = localStorage.getItem(CART_KEY); } catch { /* storage unavailable */ }
             if (!raw) return;
             try {
                 const parsed = JSON.parse(raw);
@@ -257,8 +259,8 @@ const ServiceCart: React.FC<Props> = ({
             return;
         }
         
-        // No prefill - load normally from localStorage
-        const raw = localStorage.getItem(CART_KEY);
+        let raw: string | null = null;
+        try { raw = localStorage.getItem(CART_KEY); } catch { /* storage unavailable */ }
         if (!raw) return;
         try {
             const parsed = JSON.parse(raw);
@@ -287,7 +289,8 @@ const ServiceCart: React.FC<Props> = ({
 
     // Prefill from session (coming from landing cards or service detail page)
     useEffect(() => {
-        const raw = sessionStorage.getItem('service_cart_prefill');
+        let raw: string | null = null;
+        try { raw = sessionStorage.getItem('service_cart_prefill'); } catch { /* storage unavailable */ }
         if (!raw) return;
         try {
             const parsed = JSON.parse(raw);
@@ -365,14 +368,12 @@ const ServiceCart: React.FC<Props> = ({
                 setCarFormOpen(false);
             }
             
-            // Clear the prefill after processing
-            sessionStorage.removeItem('service_cart_prefill');
+            try { sessionStorage.removeItem('service_cart_prefill'); } catch { /* storage unavailable */ }
             prefillDataRef.current = null;
         } catch (error) {
             console.error('Error processing prefill:', error);
-            // Clear on error
             prefillDataRef.current = null;
-            sessionStorage.removeItem('service_cart_prefill');
+            try { sessionStorage.removeItem('service_cart_prefill'); } catch { /* storage unavailable */ }
         }
     }, []);
 
