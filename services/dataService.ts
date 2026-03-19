@@ -1,6 +1,6 @@
 import type { Vehicle, User, VehicleData } from '../types';
 import { queueRequest } from '../utils/requestQueue';
-import { getApiBaseUrl } from '../utils/apiConfig';
+import { getApiBaseUrl, isCapacitorNative } from '../utils/apiConfig';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
@@ -366,8 +366,26 @@ class DataService {
       return this.getVehiclesLocal();
     }
 
+    // Loading the full dataset (limit=0) can produce very large JSON payloads.
+    // On Android WebView this may block the JS thread long enough to trigger an ANR.
+    const isNativeWebView = isCapacitorNative();
+    const nativeVehiclesPageLimit = 30;
+    const maxNativeVehiclesCacheChars = 250_000; // ~250KB; protects against ANR from huge cached JSON
+
     // STEP 1: Check cache first for instant response (unless forceRefresh or dev with Supabase)
     const cacheKey = 'reRideVehicles_prod';
+    if (isNativeWebView) {
+      // If a previous version cached a very large vehicle list, avoid parsing it on startup.
+      try {
+        const raw = localStorage.getItem(cacheKey);
+        if (raw && raw.length > maxNativeVehiclesCacheChars) {
+          localStorage.removeItem(cacheKey);
+          console.warn(`⚠️ Cleared oversized native vehicle cache (${raw.length} chars)`);
+        }
+      } catch {
+        // Ignore localStorage errors; we'll just fall back to empty cache.
+      }
+    }
     const cachedVehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
     
       // In dev with Supabase, skip cache so we always get fresh vehicles with correct image URLs
@@ -375,8 +393,12 @@ class DataService {
       // If we have cached data and NOT forcing refresh, return it immediately and fetch fresh data in background
       if (cachedVehicles.length > 0 && !forceRefresh && !useApiInDev) {
         // Fetch fresh data in background (don't await) - use pagination for speed
-        // IMPORTANT: Refresh full dataset in background to avoid replacing cache with a partial page.
-        const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0&skipExpiryCheck=true';
+        // On Android WebView we intentionally keep this small to avoid ANR from huge JSON payloads.
+        const endpoint = includeAllStatuses
+          ? '/vehicles?action=admin-all'
+          : isNativeWebView
+            ? `/vehicles?limit=${nativeVehiclesPageLimit}&page=1&skipExpiryCheck=true`
+            : '/vehicles?limit=0&skipExpiryCheck=true';
         this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
           .then(response => {
             // Handle both array response (limit=0) and paginated response (limit>0)
@@ -411,10 +433,15 @@ class DataService {
     }
 
     // STEP 2: No cache - fetch from API (first load or cache expired)
-    // Use limit=0 to get all vehicles (backward compatible, still fast with optimizations)
+    // Use limit=0 to get all vehicles (backward compatible) on web;
+    // on Android WebView we use a small page to avoid ANR from large payloads.
     try {
       // Use limit=0 to get all vehicles as array (not paginated object)
-      const endpoint = includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles?limit=0&skipExpiryCheck=true';
+      const endpoint = includeAllStatuses
+        ? '/vehicles?action=admin-all'
+        : isNativeWebView
+          ? `/vehicles?limit=${nativeVehiclesPageLimit}&page=1&skipExpiryCheck=true`
+          : '/vehicles?limit=0&skipExpiryCheck=true';
       const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
       
       // Handle both array response (limit=0) and paginated response (limit>0)

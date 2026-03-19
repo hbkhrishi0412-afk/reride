@@ -28,7 +28,11 @@ export function applyCors(req: VercelRequest, res: VercelResponse): boolean {
 
   // Capacitor Android/iOS WebView origins (androidScheme can be 'https' or 'capacitor')
   const isCapacitorApp =
-    origin === 'https://localhost' || origin === 'capacitor://localhost' || origin === 'http://localhost';
+    origin === 'https://localhost' ||
+    origin === 'capacitor://localhost' ||
+    origin === 'http://localhost' ||
+    origin === 'https://appassets.androidplatform.net' ||
+    origin?.includes('appassets.androidplatform.net');
 
   if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost) || isCapacitorApp) {
     res.setHeader('Access-Control-Allow-Origin', origin as string);

@@ -1900,8 +1900,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (vehiclesResult.status === 'fulfilled' && Array.isArray(vehiclesResult.value)) {
           setVehicles(vehiclesResult.value);
           // PERFORMANCE: Recommendations are now computed via useMemo from vehicles
+          if (vehiclesResult.value.length === 0 && !hasCachedVehicles) {
+            addToast(
+              'No vehicle listings found. This usually means either Supabase is not configured or your vehicles are not marked as `published`.',
+              'error'
+            );
+          }
         } else if (vehiclesResult.status === 'rejected') {
           console.warn('Failed to sync vehicles:', vehiclesResult.reason);
+          const reason = vehiclesResult.reason as any;
+          const status = reason?.status ?? reason?.code;
+          const message = reason instanceof Error ? reason.message : reason?.message ?? String(reason);
+
+          if (status === 503 || /Supabase|SERVICE_ROLE_KEY|not configured/i.test(message)) {
+            addToast(
+              'Listings are empty because the server database is not available (Supabase config missing). If you manage this site, set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then redeploy.',
+              'error'
+            );
+          } else {
+            addToast('Could not load vehicles. Please check your connection and try again.', 'error');
+          }
         }
 
         // Update users if fetch succeeded
@@ -1915,9 +1933,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.warn('   2. Authentication/authorization issue');
             console.warn('   3. API returned empty array');
           }
+          if (usersResult.value.length === 0 && !hasCachedUsers) {
+            addToast(
+              'No dealer details found. This usually means either Supabase is not configured or your users are not marked with `role = seller`.',
+              'error'
+            );
+          }
         } else if (usersResult.status === 'rejected') {
           console.error('❌ AppProvider: Failed to sync users:', usersResult.reason);
           // For admin users, try to use cached data as fallback
+          const reason = usersResult.reason as any;
+          const status = reason?.status ?? reason?.code;
+          const message = reason instanceof Error ? reason.message : reason?.message ?? String(reason);
+
+          if (status === 503 || /Supabase|SERVICE_ROLE_KEY|not configured/i.test(message)) {
+            addToast(
+              'Dealer details are empty because the server database is not available (Supabase config missing). If you manage this site, set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then redeploy.',
+              'error'
+            );
+          } else if (currentUser?.role === 'admin') {
+            addToast('Could not load users. Please try again.', 'error');
+          }
           if (currentUser?.role === 'admin') {
             const cachedUsers = localStorage.getItem('reRideUsers_prod');
             if (cachedUsers) {
