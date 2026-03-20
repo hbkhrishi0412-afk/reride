@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { User, Vehicle } from '../types';
@@ -38,7 +38,7 @@ const MobileDealerCard: React.FC<{
   isSelected?: boolean;
   vehicleCount: number;
   followersCount: number;
-}> = ({
+}> = React.memo(({
   seller,
   onViewProfile,
   onSelect,
@@ -91,6 +91,8 @@ const MobileDealerCard: React.FC<{
             src={seller.logoUrl || `https://i.pravatar.cc/150?u=${seller.email}`}
             alt={seller.dealershipName || seller.name}
             className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+            loading="lazy"
+            decoding="async"
           />
           {verified && (
             <VerifiedBadge show={true} iconOnly size="sm" className="absolute -bottom-1 -right-1" />
@@ -152,7 +154,7 @@ const MobileDealerCard: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 /**
  * Mobile Dealer Profiles Page – aligned with website: map + list, filters, find nearby dealers.
@@ -270,12 +272,25 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
     [sellersWithCoords, filteredSellers]
   );
 
-  const getVehicleCount = (sellerEmail: string) => {
-    const normalized = sellerEmail?.toLowerCase().trim() || '';
-    return vehicles.filter(v => v.sellerEmail?.toLowerCase().trim() === normalized && v.status === 'published').length;
-  };
+  const vehicleCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of vehicles) {
+      if (v.status !== 'published' || !v.sellerEmail) continue;
+      const key = v.sellerEmail.toLowerCase().trim();
+      map.set(key, (map.get(key) || 0) + 1);
+    }
+    return map;
+  }, [vehicles]);
 
-  const handleDealerSelect = (sellerEmail: string, coords: CompanyLocation | null) => {
+  const followersCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of sellers) {
+      map.set(s.email, getFollowersCount(s.email));
+    }
+    return map;
+  }, [sellers]);
+
+  const handleDealerSelect = useCallback((sellerEmail: string, coords: CompanyLocation | null) => {
     if (coords) {
       setSelectedDealerEmail(sellerEmail);
       setSelectedDealerCenter([coords.lat, coords.lng]);
@@ -284,13 +299,13 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 100);
     }
-  };
+  }, []);
 
-  const handleMapClickDealerSelect = (sellerEmail: string, coords: CompanyLocation) => {
+  const handleMapClickDealerSelect = useCallback((sellerEmail: string, coords: CompanyLocation) => {
     setSelectedDealerEmail(sellerEmail);
     setSelectedDealerCenter([coords.lat, coords.lng]);
     onViewProfile(sellerEmail);
-  };
+  }, [onViewProfile]);
 
   const hasMapDealers = filteredSellersWithCoords.some(item => item.coords !== null);
 
@@ -413,8 +428,8 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
                     isRecommended={index === 0}
                     coords={sellerWithCoords?.coords ?? null}
                     isSelected={selectedDealerEmail === seller.email}
-                    vehicleCount={getVehicleCount(seller.email)}
-                    followersCount={getFollowersCount(seller.email)}
+                    vehicleCount={vehicleCountMap.get(seller.email?.toLowerCase().trim() || '') || 0}
+                    followersCount={followersCountMap.get(seller.email) || 0}
                   />
                 </div>
               );

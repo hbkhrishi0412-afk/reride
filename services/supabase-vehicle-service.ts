@@ -414,8 +414,8 @@ export const supabaseVehicleService = {
     
     // CRITICAL FIX: Add default limit to prevent timeout on large datasets
     // Default to 100 items per page if no limit specified
-    const limit = options?.limit || 100;
-    const offset = options?.offset || 0;
+    const limit = options?.limit ?? 100;
+    const offset = options?.offset ?? 0;
     
     // CRITICAL FIX: Use select with specific columns instead of '*' for better performance
     // This reduces data transfer and query time
@@ -434,19 +434,21 @@ export const supabaseVehicleService = {
       query = query.order('created_at', { ascending: false });
     }
     
-    // CRITICAL FIX: Always apply pagination to prevent timeout
-    // Use .range() for pagination (it handles both offset and limit)
-    // .range() is inclusive on both ends, so we need offset to offset+limit-1
-    query = query.range(offset, offset + limit - 1);
+    // Apply pagination only when `limit` is non-zero.
+    // Supabase .range() is inclusive on both ends: offset..offset+limit-1
+    if (limit !== 0) {
+      query = query.range(offset, offset + limit - 1);
+    }
     
     // CRITICAL FIX: Add timeout handling
     let data: any[] | null = null;
     let error: any = null;
     
     try {
-      // Create a timeout promise
+      // Create a timeout promise. `limit=0` queries can be larger.
+      const timeoutMs = limit === 0 ? 45000 : 25000;
       const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Query timeout: Vehicle fetch took too long')), 25000) // 25 second timeout
+        setTimeout(() => reject(new Error('Query timeout: Vehicle fetch took too long')), timeoutMs)
       );
       
       // Race between query and timeout

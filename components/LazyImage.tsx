@@ -38,7 +38,7 @@ interface LazyImageProps {
  * Lazy-loaded Image Component with Intersection Observer
  * Optimized for mobile app performance
  */
-export const LazyImage: React.FC<LazyImageProps> = ({
+export const LazyImage: React.FC<LazyImageProps> = React.memo(({
   src,
   alt,
   className = '',
@@ -285,6 +285,8 @@ export const LazyImage: React.FC<LazyImageProps> = ({
       )}
     </div>
   );
-};
+});
+
+LazyImage.displayName = 'LazyImage';
 
 export default LazyImage;

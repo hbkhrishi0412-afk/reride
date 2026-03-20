@@ -2907,7 +2907,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       if (action === 'radius-search' && req.query.lat && req.query.lng && req.query.radius) {
         const allVehicles = await vehicleService.findByStatus('published', {
           orderBy: 'created_at',
-          orderDirection: 'desc'
+          orderDirection: 'desc',
+          limit: 0
         });
         const nearbyVehicles = allVehicles.filter(vehicle => {
           if (!vehicle.exactLocation?.lat || !vehicle.exactLocation?.lng) return false;
@@ -3142,7 +3143,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
               console.warn('⚠️ COUNT query failed, falling back to fetch-all method:', countError);
               const allVehiclesForCount = await vehicleService.findByStatus('published', {
                 orderBy: 'created_at',
-                orderDirection: 'desc'
+                orderDirection: 'desc',
+                limit: 0
               });
               totalVehiclesCount = allVehiclesForCount.length;
               if (cached) {
@@ -3160,7 +3162,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           // Skip extra COUNT query for fast full-list fetches used by initial client hydration.
           vehicles = await vehicleService.findByStatus('published', {
             orderBy: 'created_at',
-            orderDirection: 'desc'
+            orderDirection: 'desc',
+            limit: 0
           });
           if (skipExpiryCheck) {
             totalVehiclesCount = vehicles.length;
@@ -3416,9 +3419,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       let finalVehicles = vehicles;
       if (!skipExpiryCheck && vehicleUpdates.length > 0) {
         // Only refresh published vehicles after updates (with database sorting)
+        const refreshOffset = limit > 0 ? (page - 1) * limit : 0;
         finalVehicles = await vehicleService.findByStatus('published', {
           orderBy: 'created_at',
-          orderDirection: 'desc'
+          orderDirection: 'desc',
+          limit,
+          offset: refreshOffset
         });
         console.log(`📊 Refreshed ${finalVehicles.length} published vehicles after ${vehicleUpdates.length} updates`);
       }

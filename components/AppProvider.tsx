@@ -31,6 +31,7 @@ import { deduplicateRequest } from '../utils/requestDeduplication';
 import * as buyerService from '../services/buyerService';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { supabaseRowToConversation } from '../services/supabase-conversation-service';
+import { isCapacitorNative } from '../utils/apiConfig';
 
 // PERFORMANCE: Helper function for user-friendly error messages
 // Improves UX by converting technical errors to actionable messages
@@ -1260,6 +1261,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Load initial data with instant cache display and background refresh
   useEffect(() => {
     let isMounted = true;
+    const isNativeWebView = isCapacitorNative();
+    const maxNativeVehicleCacheChars = 900_000; // Avoid large JSON.parse stalls on Android WebView startup
     
     const loadInitialData = async () => {
       try {
@@ -1275,14 +1278,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           // Parse vehicles cache
           if (cachedVehiclesJson) {
-            const cachedVehicles = JSON.parse(cachedVehiclesJson);
-            if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
-              // Show cached vehicles INSTANTLY - don't wait for API
-              setVehicles(cachedVehicles);
-              // PERFORMANCE: Recommendations are now computed via useMemo, no need to set
-              setIsLoading(false); // Stop loading immediately
-              hasCachedData = true;
-              logInfo(`✅ Instantly loaded ${cachedVehicles.length} cached vehicles`);
+            if (isNativeWebView && cachedVehiclesJson.length > maxNativeVehicleCacheChars) {
+              try {
+                localStorage.removeItem(cacheKey);
+              } catch {
+                // Ignore storage failures; we'll simply skip parsing this cache entry.
+              }
+              logWarn(
+                `⚠️ Skipped oversized native vehicle cache at startup (${cachedVehiclesJson.length} chars)`
+              );
+            } else {
+              const cachedVehicles = JSON.parse(cachedVehiclesJson);
+              if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
+                // Show cached vehicles INSTANTLY - don't wait for API
+                setVehicles(cachedVehicles);
+                // PERFORMANCE: Recommendations are now computed via useMemo, no need to set
+                setIsLoading(false); // Stop loading immediately
+                hasCachedData = true;
+                logInfo(`✅ Instantly loaded ${cachedVehicles.length} cached vehicles`);
+              }
             }
           }
           
@@ -1886,10 +1900,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         // Load vehicles and users in PARALLEL for faster loading (no sequential delays)
         // CRITICAL FIX: For admin users, force refresh to bypass cache and get fresh data
-        // Use Promise.allSettled to ensure both complete even if one fails
+        // Use deduplicateRequest so overlapping initial-load requests are reused, not duplicated
         const [vehiclesResult, usersResult] = await Promise.allSettled([
-          dataService.getVehicles(isAdmin, isAdmin), // includeAllStatuses=isAdmin, forceRefresh=isAdmin
-          dataService.getUsers(isAdmin) // forceRefresh=isAdmin
+          deduplicateRequest(
+            `vehicles-${isAdmin ? 'admin' : 'user'}`,
+            () => dataService.getVehicles(isAdmin, isAdmin)
+          ),
+          deduplicateRequest(
+            'users',
+            () => dataService.getUsers(isAdmin)
+          )
         ]);
 
         if (!isSubscribed) {
@@ -2164,7 +2184,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch { /* ignore */ }
       return false;
     })();
+    const isNativeWebView = isCapacitorNative();
+    const vehicleRefreshMs = isNativeWebView ? 3 * 60 * 1000 : 60 * 1000;
     const vehicleListRefreshInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
       dataService.getVehicles(isAdmin, false)
         .then((freshVehicles) => {
           if (Array.isArray(freshVehicles) && freshVehicles.length >= 0) {
@@ -2175,7 +2200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .catch((err) => {
           console.warn('Periodic vehicle list refresh failed:', err);
         });
-    }, 60 * 1000); // 1 minute
+    }, vehicleRefreshMs); // 1 minute on web, 3 minutes on native
 
     // Periodic refresh of vehicle data (makes/models etc) from API (every 5 minutes)
     const refreshInterval = setInterval(() => {
