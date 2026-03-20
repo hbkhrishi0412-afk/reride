@@ -54,6 +54,7 @@
     "env:copy": "node -e \"const fs=require('fs'); const p='.env'; if(!fs.existsSync(p)){ fs.copyFileSync('.env.example', p); console.log('Created .env from .env.example – edit .env and add your keys.'); } else { console.log('.env already exists.'); }\""
   },
   "dependencies": {
+    "@emotion/is-prop-valid": "^1.4.0",
     "@google/generative-ai": "^0.21.0",
     "@sentry/react": "^10.43.0",
     "@supabase/supabase-js": "^2.91.0",
