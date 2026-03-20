@@ -250,7 +250,9 @@
         var checkInterval;
         var reactMounted = false;
         var isCapacitor = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
-        var TIMEOUT_MS = isCapacitor ? 30000 : 15000;
+        // Allow slower devices to finish JS hydration before showing a fatal error.
+        // This prevents false negatives during slow loads / cache misses.
+        var TIMEOUT_MS = isCapacitor ? 45000 : 30000;
         
         var checkReactMounted = function() {
           if (window.__RERIDE_MOUNTED__) return true;

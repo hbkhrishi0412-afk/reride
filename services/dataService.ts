@@ -369,8 +369,10 @@ class DataService {
     // Loading the full dataset (limit=0) can produce very large JSON payloads.
     // On Android WebView this may block the JS thread long enough to trigger an ANR.
     const isNativeWebView = isCapacitorNative();
-    const nativeVehiclesPageLimit = 30;
-    const maxNativeVehiclesCacheChars = 250_000; // ~250KB; protects against ANR from huge cached JSON
+    // Mobile fix: request the full published set.
+    // The backend supports `limit=0` as "no pagination".
+    const nativeVehiclesPageLimit = 0;
+    const maxNativeVehiclesCacheChars = 2_000_000; // ~2MB; generous limit so full dataset fits in cache
 
     // STEP 1: Check cache first for instant response (unless forceRefresh or dev with Supabase)
     const cacheKey = 'reRideVehicles_prod';
@@ -390,8 +392,9 @@ class DataService {
     
       // In dev with Supabase, skip cache so we always get fresh vehicles with correct image URLs
       // CRITICAL FIX: For admin operations, bypass cache and fetch fresh data
-      // If we have cached data and NOT forcing refresh, return it immediately and fetch fresh data in background
-      if (cachedVehicles.length > 0 && !forceRefresh && !useApiInDev) {
+      // On native mobile, do not return cache immediately because old cache can diverge from website listings.
+      // We still keep cache as fallback if API fails.
+      if (cachedVehicles.length > 0 && !forceRefresh && !useApiInDev && !isNativeWebView) {
         // Fetch fresh data in background (don't await) - use pagination for speed
         // On Android WebView we intentionally keep this small to avoid ANR from huge JSON payloads.
         const endpoint = includeAllStatuses

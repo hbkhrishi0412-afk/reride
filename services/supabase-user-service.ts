@@ -753,17 +753,37 @@ export const supabaseUserService = {
   // Find users by role
   async findByRole(role: 'customer' | 'seller' | 'admin'): Promise<User[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('role', role);
-    
-    if (error) {
-      throw new Error(`Failed to fetch users by role: ${error.message}`);
+
+    // Supabase/PostgREST returns a default capped set if you don't paginate.
+    // Use the same pagination strategy as `findAll()` to ensure we load every dealer.
+    const pageSize = 1000;
+    const allUsers: User[] = [];
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', role)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) {
+        throw new Error(`Failed to fetch users by role: ${error.message}`);
+      }
+
+      const users = (data || []).map(supabaseRowToUser);
+      allUsers.push(...users);
+
+      if (!data || data.length < pageSize) {
+        hasMore = false;
+      } else {
+        offset += pageSize;
+      }
     }
-    
-    return (data || []).map(supabaseRowToUser);
+
+    return allUsers;
   },
 
   // Find users by status

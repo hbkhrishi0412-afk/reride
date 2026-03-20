@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
-import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
+import { getFirstValidImage } from '../utils/imageUtils';
 import { matchesCity } from '../utils/cityMapping';
 import { FALLBACK_VEHICLES } from '../constants/fallback';
 import MobileVehicleCard from './MobileVehicleCard';
+import LazyImage from './LazyImage';
 
 interface MobileHomePageProps {
   onSearch: (query: string) => void;
@@ -161,7 +162,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
+    <div className="bg-gray-50">
       {/* Hero Section */}
       <div
         className="relative pt-4 pb-8 px-4"
@@ -193,13 +194,15 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="Search by brand, model, budget..."
+              aria-label="Search vehicles"
               className="flex-1 outline-none text-gray-700 placeholder-gray-400"
               style={{ minHeight: '44px' }}
             />
             <button
               onClick={handleSearch}
+              aria-label="Search"
               className="bg-orange-500 text-white px-4 py-2.5 rounded-xl font-semibold flex-shrink-0"
               style={{ minHeight: '44px' }}
             >
@@ -248,7 +251,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 </svg>
                 Featured Collection
               </button>
-              <h2 className="text-4xl font-black text-gray-900 tracking-tight">Premium Vehicles</h2>
+              <h2 className="text-3xl font-black text-gray-900 tracking-tight">Premium Vehicles</h2>
               <p className="text-gray-600 text-sm leading-relaxed">Handpicked vehicles that meet our highest standards of quality and performance</p>
             </div>
             <button
@@ -262,12 +265,21 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </button>
           </div>
           
-          <div
-            ref={carouselRef}
-            className="flex overflow-x-auto snap-x snap-mandatory gap-4 -mx-4 px-4"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
-          >
-            {displayedFeaturedVehicles.map((vehicle) => {
+          <div className="relative">
+            <div
+              className="pointer-events-none absolute left-0 top-0 bottom-0 w-7 bg-gradient-to-r from-white to-transparent z-10"
+              aria-hidden="true"
+            />
+            <div
+              className="pointer-events-none absolute right-0 top-0 bottom-0 w-7 bg-gradient-to-l from-white to-transparent z-10"
+              aria-hidden="true"
+            />
+            <div
+              ref={carouselRef}
+              className="flex overflow-x-auto snap-x snap-mandatory gap-4 -mx-4 px-4 relative z-0"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+            >
+            {displayedFeaturedVehicles.map((vehicle, idx) => {
               const handleTouchStart = (e: React.TouchEvent) => {
                 touchStartData.current.set(vehicle.id, {
                   x: e.touches[0].clientX,
@@ -314,17 +326,32 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 <div
                   key={vehicle.id}
                   className="flex-shrink-0 w-[calc(100%-2rem)] snap-center cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View ${vehicle.year} ${vehicle.make} ${vehicle.model}`}
                   onClick={handleClick}
+                  onKeyDown={(e) => {
+                    // Keyboard activation for accessibility parity with onClick/onTouch
+                    if ((e.key === 'Enter' || e.key === ' ') && onSelectVehicle) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSelectVehicle(vehicle);
+                    }
+                  }}
                   onTouchStart={handleTouchStart}
                   onTouchEnd={handleTouchEnd}
                 >
                   <div className="bg-white rounded-2xl shadow-xl overflow-hidden active:scale-[0.98] transition-all duration-300 hover:shadow-2xl border border-gray-100 cursor-pointer">
                   <div className="relative h-52 overflow-hidden">
-                    <img
-                      src={optimizeImageUrl(getFirstValidImage(vehicle.images, vehicle.id), 800, 85)}
-                      alt={`${vehicle.make} ${vehicle.model}`}
-                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                    />
+                      <LazyImage
+                        src={getFirstValidImage(vehicle.images, vehicle.id)}
+                        alt={`${vehicle.make} ${vehicle.model}`}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                        width={800}
+                        quality={85}
+                        eager={idx === 0}
+                        fetchPriority={idx === 0 ? 'high' : 'auto'}
+                      />
                     {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent"></div>
                     
@@ -393,6 +420,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               </div>
             );
             })}
+            </div>
           </div>
 
           {/* Carousel Indicators */}
@@ -434,13 +462,16 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         </div>
       )}
 
-      {/* Categories Section - Premium Design */}
+      {/* Categories Section - Compact Mobile Tiles */}
       <div className="px-4 py-6 bg-gradient-to-b from-white to-gray-50">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-2xl font-bold text-gray-900">Browse by Category</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Browse by Category</h2>
+            <p className="text-xs text-gray-500 mt-1">Quick taps to filter</p>
+          </div>
           <button
             onClick={() => onNavigate(ViewEnum.USED_CARS)}
-            className="text-sm text-orange-500 font-semibold flex items-center gap-1"
+            className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-orange-50 active:scale-95 transition-all"
           >
             View All
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -448,7 +479,10 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             </svg>
           </button>
         </div>
-        <div className="grid grid-cols-5 gap-2.5">
+        <div
+          className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide"
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+        >
           {categories.map((category, index) => {
             // Define gradient backgrounds for each category
             const categoryGradients: Record<VehicleCategory, string> = {
@@ -470,24 +504,24 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                   onSelectCategory(category.id);
                   onNavigate(ViewEnum.USED_CARS);
                 }}
-                className="group relative flex flex-col items-center gap-2.5 p-3.5 bg-white rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+                className="group relative flex-shrink-0 flex flex-col items-center gap-2.5 p-3 bg-white rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-all duration-300 hover:shadow-lg w-[112px]"
                 style={{
                   animationDelay: `${index * 50}ms`,
-                  minHeight: '100px'
+                  minHeight: '96px'
                 }}
               >
                 {/* Gradient Background on Hover */}
                 <div className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-2xl opacity-0 group-active:opacity-5 group-hover:opacity-10 transition-opacity duration-300`}></div>
                 
                 {/* Icon Container with Gradient */}
-                <div className={`relative w-12 h-12 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-110 transition-all duration-300`}>
+                <div className={`relative w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-110 transition-all duration-300`}>
                   <span className="text-2xl relative z-10">{category.icon}</span>
                   {/* Shine effect */}
                   <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-xl"></div>
                 </div>
                 
                 {/* Category Name */}
-                <span className="text-xs font-bold text-gray-900 text-center leading-tight group-hover:text-orange-600 transition-colors duration-300">
+                <span className="text-[11px] font-bold text-gray-900 text-center leading-tight group-hover:text-orange-600 transition-colors duration-300">
                   {category.name}
                 </span>
                 
@@ -509,7 +543,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         </div>
       </div>
 
-      {/* Cities Section */}
+      {/* Cities Section - Smaller Mobile Location Tiles */}
       <div className="px-4 py-6 bg-gradient-to-b from-white to-gray-50">
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -552,7 +586,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                   onSelectCity(city.name);
                   onNavigate(ViewEnum.USED_CARS);
                 }}
-                className="group flex-shrink-0 rounded-full p-5 text-white w-[135px] h-[135px] active:scale-95 transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-2 relative overflow-hidden border border-white/30 flex items-center justify-center"
+                className="group flex-shrink-0 rounded-full p-4 text-white w-[118px] h-[118px] active:scale-95 transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-2 relative overflow-hidden border border-white/30 flex items-center justify-center"
                 style={{
                   ...gradientStyle,
                   boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1)'
@@ -570,12 +604,12 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 {/* Content */}
                 <div className="relative z-10 flex flex-col items-center justify-center text-center">
                   {/* City Abbreviation - Large and Bold */}
-                  <div className="text-3xl font-black mb-1.5 drop-shadow-lg leading-none tracking-tight">
+                  <div className="text-2xl font-black mb-1 drop-shadow-lg leading-none tracking-tight">
                     {city.abbr}
                   </div>
                   
                   {/* City Name */}
-                  <div className="text-xs font-bold mb-2 text-white/95 leading-tight px-2">
+                  <div className="text-[11px] font-bold mb-2 text-white/95 leading-tight px-1.5">
                     {city.name}
                   </div>
                   
@@ -631,8 +665,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 onSelect={onSelectVehicle}
                 isInWishlist={wishlist.includes(vehicle.id)}
                 isInCompare={comparisonList.includes(vehicle.id)}
-                onToggleWishlist={() => onToggleWishlist(vehicle.id)}
-                onToggleCompare={() => onToggleCompare(vehicle.id)}
+                onToggleWishlist={onToggleWishlist}
+                onToggleCompare={onToggleCompare}
               />
             ))}
           </div>
@@ -640,7 +674,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       )}
 
       {/* Sell Your Car CTA */}
-      <div className="px-4 py-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white mx-4 mb-6 rounded-xl">
+      <div className="px-4 py-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white mb-8 rounded-2xl">
         <h2 className="text-xl font-bold mb-2">Ready to Sell?</h2>
         <p className="text-white/90 text-sm mb-4">List your vehicle and reach thousands of buyers</p>
         <button
