@@ -178,6 +178,8 @@ export interface User {
   role: 'seller' | 'customer' | 'admin';
   location: string;
   address?: string; // Full address (street, city, state, etc.)
+  /** Indian postal PIN (6 digits) — used with address for map pin and area grouping */
+  pincode?: string;
   status: 'active' | 'inactive';
   createdAt: string; // ISO String
   updatedAt?: string; // ISO String - when the user was last updated

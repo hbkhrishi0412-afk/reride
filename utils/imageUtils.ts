@@ -298,3 +298,50 @@ export const getFirstValidImage = (images: string[], vehicleId?: number): string
   return DEFAULT_PLACEHOLDER;
 };
 
+function escapeSvgText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+/** SVG data-URI avatar (no external fetch) — reliable when third-party avatars are blocked or logos 404. */
+export function sellerInitialsAvatarDataUri(seller: {
+  dealershipName?: string;
+  name?: string;
+  email?: string;
+}): string {
+  const label = (seller.dealershipName || seller.name || seller.email || 'D').trim();
+  const text = (label.slice(0, 2).toUpperCase() || '?');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect fill="#FF6B35" width="100%" height="100%"/><text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="system-ui,sans-serif" font-size="40" font-weight="600">${escapeSvgText(text)}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Resolves seller logo for img elements: HTTPS URLs, same-origin paths, Supabase Storage paths under Images bucket.
+ */
+export function resolveSellerLogoUrl(seller: {
+  logoUrl?: string | null;
+  email?: string;
+  dealershipName?: string;
+  name?: string;
+}): string {
+  const fb = sellerInitialsAvatarDataUri(seller);
+  const raw = seller.logoUrl?.trim();
+  if (!raw) return fb;
+
+  if (raw.startsWith('data:') || raw.startsWith('blob:')) return raw;
+  if (raw.startsWith('//')) return `https:${raw}`;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+
+  if (raw.startsWith('/')) {
+    if (typeof window !== 'undefined') return `${window.location.origin}${raw}`;
+    return raw;
+  }
+
+  const clean = raw.replace(/^\//, '');
+  const attempts = [clean, ...(clean.includes('/') ? [] : [`logos/${clean}`])];
+  for (const p of attempts) {
+    const url = buildSupabasePublicUrl(p);
+    if (url) return url;
+  }
+  return fb;
+}
+

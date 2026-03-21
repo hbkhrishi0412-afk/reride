@@ -149,6 +149,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     mobile: currentUser.mobile || '',
     dealershipName: currentUser?.dealershipName || '',
     bio: currentUser?.bio || '',
+    location: currentUser?.location || '',
+    address: currentUser?.address || '',
+    pincode: currentUser?.pincode || '',
   });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -171,6 +174,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       mobile: currentUser.mobile || '',
       dealershipName: currentUser?.dealershipName || '',
       bio: currentUser?.bio || '',
+      location: currentUser?.location || '',
+      address: currentUser?.address || '',
+      pincode: currentUser?.pincode || '',
     });
   }, [currentUser]);
   
@@ -1056,6 +1062,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     if (isSeller && (!profileFormData.dealershipName || profileFormData.dealershipName.trim() === '')) {
       newErrors.dealershipName = 'Dealership name is required';
     }
+    if (isSeller && profileFormData.pincode.trim()) {
+      const pc = profileFormData.pincode.replace(/\D/g, '');
+      if (pc.length !== 6) {
+        newErrors.pincode = 'PIN code must be exactly 6 digits';
+      }
+    }
 
     setProfileErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -1068,13 +1080,19 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     setIsSavingProfile(true);
     try {
       if (onUpdateProfile) {
-        await onUpdateProfile({
+        const payload: Partial<User> = {
           name: profileFormData.name,
           email: profileFormData.email,
           mobile: profileFormData.mobile,
           dealershipName: profileFormData.dealershipName,
           bio: profileFormData.bio,
-        });
+        };
+        if (isSeller) {
+          payload.location = profileFormData.location.trim();
+          payload.address = profileFormData.address.trim() || undefined;
+          payload.pincode = profileFormData.pincode.replace(/\D/g, '').slice(0, 6) || '';
+        }
+        await onUpdateProfile(payload);
         setIsEditingProfile(false);
       }
     } catch (error) {
@@ -1151,6 +1169,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   mobile: currentUser.mobile || '',
                   dealershipName: currentUser?.dealershipName || '',
                   bio: currentUser?.bio || '',
+                  location: currentUser?.location || '',
+                  address: currentUser?.address || '',
+                  pincode: currentUser?.pincode || '',
                 });
               }}
               className="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1238,6 +1259,47 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   />
                   <p className="text-xs text-gray-500 mt-1">{profileFormData.bio.length}/500</p>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">City or region</label>
+                  <input
+                    type="text"
+                    name="location"
+                    value={profileFormData.location}
+                    onChange={handleProfileChange}
+                    placeholder="e.g. Bengaluru, Karnataka"
+                    className={`native-input ${profileErrors.location ? 'bg-red-50' : ''}`}
+                  />
+                  {profileErrors.location && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.location}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Street address</label>
+                  <textarea
+                    name="address"
+                    value={profileFormData.address}
+                    onChange={handleProfileChange}
+                    rows={2}
+                    placeholder="Building, street, locality"
+                    className={`native-input resize-none ${profileErrors.address ? 'bg-red-50' : ''}`}
+                  />
+                  {profileErrors.address && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.address}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">PIN code</label>
+                  <input
+                    type="text"
+                    name="pincode"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={profileFormData.pincode}
+                    onChange={handleProfileChange}
+                    placeholder="6-digit PIN"
+                    className={`native-input ${profileErrors.pincode ? 'bg-red-50' : ''}`}
+                  />
+                  {profileErrors.pincode && <p className="text-red-600 text-xs mt-1.5 font-medium">{profileErrors.pincode}</p>}
+                </div>
               </>
             )}
 
@@ -1259,6 +1321,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     mobile: currentUser.mobile || '',
                     dealershipName: currentUser?.dealershipName || '',
                     bio: currentUser?.bio || '',
+                    location: currentUser?.location || '',
+                    address: currentUser?.address || '',
+                    pincode: currentUser?.pincode || '',
                   });
                 }}
                 className="flex-1 native-button native-button-secondary"
@@ -1293,6 +1358,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <p className="text-xs text-orange-600 font-semibold uppercase mt-1">{currentUser.role}</p>
               {isSeller && currentUser?.dealershipName && (
                 <p className="text-sm text-gray-700 font-medium mt-1">{currentUser?.dealershipName}</p>
+              )}
+              {isSeller && (currentUser?.location || currentUser?.address || currentUser?.pincode) && (
+                <p className="text-xs text-gray-600 mt-2 leading-relaxed">
+                  {[currentUser?.location, currentUser?.address].filter(Boolean).join(' · ')}
+                  {currentUser?.pincode ? ` · PIN ${String(currentUser.pincode).replace(/\D/g, '').slice(0, 6)}` : ''}
+                </p>
               )}
           </div>
         </div>

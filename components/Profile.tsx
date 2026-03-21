@@ -16,6 +16,9 @@ interface FormErrors {
   mobile?: string;
   dealershipName?: string;
   bio?: string;
+  location?: string;
+  address?: string;
+  pincode?: string;
   avatar?: string;
   logo?: string;
   aadharCard?: string;
@@ -41,7 +44,8 @@ const ProfileInput: React.FC<{
   error?: string;
   maxLength?: number;
   required?: boolean;
-}> = ({ label, name, value, onChange, type = 'text', disabled = false, placeholder, error, maxLength, required }) => {
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+}> = ({ label, name, value, onChange, type = 'text', disabled = false, placeholder, error, maxLength, required, inputMode }) => {
   const charCount = (value || '').length;
   const showCharCount = maxLength && maxLength > 0;
 
@@ -68,6 +72,7 @@ const ProfileInput: React.FC<{
         placeholder={placeholder}
         maxLength={maxLength}
         required={required}
+        inputMode={inputMode}
         className={`w-full px-4 py-2.5 border rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed ${
           error 
             ? 'border-red-300 bg-red-50 focus:ring-red-500 focus:border-red-500' 
@@ -140,6 +145,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
     avatarUrl: currentUser.avatarUrl || '',
     dealershipName: currentUser?.dealershipName || '',
     bio: currentUser?.bio || '',
+    location: currentUser?.location || '',
+    address: currentUser?.address || '',
+    pincode: currentUser?.pincode || '',
     logoUrl: currentUser?.logoUrl || '',
     aadharNumber: currentUser?.aadharCard?.number || '',
     aadharDocumentUrl: currentUser?.aadharCard?.documentUrl || '',
@@ -178,6 +186,9 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
       avatarUrl: currentUser.avatarUrl || '',
       dealershipName: currentUser?.dealershipName || '',
       bio: currentUser?.bio || '',
+      location: currentUser?.location || '',
+      address: currentUser?.address || '',
+      pincode: currentUser?.pincode || '',
       logoUrl: currentUser?.logoUrl || '',
       aadharNumber: currentUser?.aadharCard?.number || '',
       aadharDocumentUrl: currentUser?.aadharCard?.documentUrl || '',
@@ -276,6 +287,11 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
 
       if (formData.bio && formData.bio.length > 500) {
         errors.bio = 'Bio must be less than 500 characters';
+      }
+
+      const pc = formData.pincode.replace(/\D/g, '');
+      if (formData.pincode.trim() && pc.length !== 6) {
+        errors.pincode = 'PIN code must be exactly 6 digits';
       }
     }
 
@@ -447,6 +463,13 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
         bio: formData.bio,
         logoUrl: formData.logoUrl,
       };
+
+      if (currentUser.role === 'seller') {
+        profileData.location = formData.location.trim();
+        profileData.address = formData.address.trim() || undefined;
+        const pc = formData.pincode.replace(/\D/g, '').slice(0, 6);
+        profileData.pincode = pc || '';
+      }
 
       // Always include aadharCard data to ensure Supabase saves it
       const existingAadhar = currentUser.aadharCard;
@@ -879,6 +902,53 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                               {formErrors.bio}
                             </p>
                           )}
+                        </div>
+
+                        <div className="md:col-span-2 space-y-4 pt-4 border-t border-gray-100">
+                          <h3 className="text-sm font-semibold text-gray-800">Business location</h3>
+                          <p className="text-xs text-gray-500">
+                            City or region is shown on listings. PIN code groups your dealership on the dealers map by area. Street address plus PIN gives a more accurate map pin.
+                          </p>
+                          <ProfileInput
+                            label="City or region"
+                            name="location"
+                            value={formData.location}
+                            onChange={handleInputChange}
+                            disabled={!isEditing}
+                            placeholder="e.g. Bengaluru, Karnataka"
+                            error={formErrors.location}
+                          />
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-semibold text-gray-700">Street address</label>
+                            <textarea
+                              name="address"
+                              value={formData.address}
+                              onChange={handleInputChange}
+                              disabled={!isEditing}
+                              rows={2}
+                              className={`w-full px-4 py-2.5 border rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed resize-none ${
+                                formErrors.address
+                                  ? 'border-red-300 bg-red-50'
+                                  : 'border-gray-300 bg-white hover:border-gray-400'
+                              }`}
+                              placeholder="Building, street, locality"
+                            />
+                            {formErrors.address && (
+                              <p className="text-xs text-red-600">{formErrors.address}</p>
+                            )}
+                          </div>
+                          <ProfileInput
+                            label="PIN code"
+                            name="pincode"
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={formData.pincode}
+                            onChange={handleInputChange}
+                            disabled={!isEditing}
+                            placeholder="6-digit PIN"
+                            error={formErrors.pincode}
+                          />
                         </div>
                       </>
                     )}
