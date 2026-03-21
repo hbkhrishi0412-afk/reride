@@ -277,13 +277,10 @@ const getVehiclesApi = async (): Promise<Vehicle[]> => {
   if (!Array.isArray(data)) {
     throw new Error('Invalid response format: expected array');
   }
-  
-  const validVehicles = data.filter(isVehicle);
-  if (validVehicles.length !== data.length) {
-    console.warn(`Filtered out ${data.length - validVehicles.length} invalid vehicles`);
-  }
-  
-  return validVehicles;
+
+  // Do not use strict `isVehicle` here — API rows may omit optional fields the guard requires,
+  // which would hide most listings on mobile after refresh (website still shows them).
+  return data;
 };
 
 const addVehicleApi = async (vehicleData: Vehicle): Promise<Vehicle> => {

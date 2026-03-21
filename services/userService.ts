@@ -118,10 +118,10 @@ const handleResponse = async (response: Response): Promise<any> => {
             try {
                 const refreshToken = localStorage.getItem('reRideRefreshToken');
                 if (refreshToken) {
-                    const refreshResponse = await fetch('/api/users', {
+                    const refreshResponse = await authenticatedFetch('/api/users', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'refresh-token', refreshToken })
+                        skipAuth: true,
+                        body: JSON.stringify({ action: 'refresh-token', refreshToken }),
                     });
                     
                     // Don't retry if we get rate limited or service unavailable
@@ -412,9 +412,9 @@ const authApi = async (body: any): Promise<any> => {
     // Create the request promise
     const requestPromise = (async () => {
         try {
-            const response = await fetch('/api/users', {
+            const response = await authenticatedFetch('/api/users', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                skipAuth: true,
                 body: JSON.stringify(body),
             });
             

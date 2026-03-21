@@ -1,6 +1,7 @@
 import type { Vehicle, User, VehicleData } from '../types';
 import { queueRequest } from '../utils/requestQueue';
 import { getApiBaseUrl, isCapacitorNative } from '../utils/apiConfig';
+import { ensureCsrfToken } from '../utils/authenticatedFetch';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
@@ -83,9 +84,16 @@ class DataService {
     
     return queueRequest(
       async () => {
+        let csrfHeader: string | undefined;
+        if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
+          const t = await ensureCsrfToken();
+          if (t) csrfHeader = t;
+        }
+
         const headersRecord: Record<string, string> = {
           Accept: 'application/json',
           ...(shouldSendJson ? { 'Content-Type': 'application/json' } : {}),
+          ...(csrfHeader ? { 'X-CSRF-Token': csrfHeader } : {}),
           ...this.getAuthHeaders(),
           ...((options.headers || {}) as Record<string, string>)
         };
@@ -364,6 +372,63 @@ class DataService {
     }
   }
 
+  /** Normalize GET /vehicles response (array or paginated envelope). */
+  private extractVehiclesFromApiResponse(
+    response: Vehicle[] | { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } }
+  ): {
+    vehicles: Vehicle[];
+    pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean };
+  } {
+    if (Array.isArray(response)) {
+      return { vehicles: response };
+    }
+    if (response && typeof response === 'object' && 'vehicles' in response) {
+      return {
+        vehicles: response.vehicles || [],
+        pagination: response.pagination,
+      };
+    }
+    throw new Error('Invalid response format: expected array or object with vehicles property');
+  }
+
+  /**
+   * If the API returns a paginated envelope with hasMore, fetch remaining pages so the app matches the website inventory.
+   * (Public published listing only — admin-all returns a full array in one response.)
+   */
+  private async expandPublishedVehiclesIfPaginated(
+    firstResponse: Vehicle[] | { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } },
+    includeAllStatuses: boolean,
+    isNativeWebView: boolean
+  ): Promise<Vehicle[]> {
+    const { vehicles, pagination } = this.extractVehiclesFromApiResponse(firstResponse);
+    if (includeAllStatuses || !pagination?.hasMore) {
+      return vehicles;
+    }
+    const limit = Math.max(1, Number(pagination.limit) || 50);
+    let page = (Number(pagination.page) || 1) + 1;
+    let hasMore = !!pagination.hasMore;
+    const merged = [...vehicles];
+    const maxPages = 100;
+
+    while (hasMore && page <= maxPages) {
+      const endpoint = isNativeWebView
+        ? `/vehicles?limit=${limit}&page=${page}&skipExpiryCheck=true`
+        : `/vehicles?limit=${limit}&page=${page}&skipExpiryCheck=true`;
+      const nextRaw = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: typeof pagination }>(endpoint);
+      const next = this.extractVehiclesFromApiResponse(nextRaw);
+      merged.push(...next.vehicles);
+      hasMore = !!next.pagination?.hasMore;
+      page++;
+    }
+
+    if (hasMore && page > maxPages) {
+      console.warn(`⚠️ Vehicle pagination stopped at ${maxPages} pages (safety cap). Loaded ${merged.length} vehicles.`);
+    } else if (merged.length > vehicles.length) {
+      console.log(`✅ Expanded paginated vehicle listing: ${merged.length} total (was ${vehicles.length} on first page)`);
+    }
+    return merged;
+  }
+
   // Vehicle operations
   async getVehicles(includeAllStatuses: boolean = false, forceRefresh: boolean = false): Promise<Vehicle[]> {
     // In development, use API when Supabase is configured so real vehicle images from Storage load
@@ -413,27 +478,24 @@ class DataService {
             ? `/vehicles?limit=${nativeVehiclesPageLimit}&page=1&skipExpiryCheck=true`
             : '/vehicles?limit=0&skipExpiryCheck=true';
         this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
-          .then(response => {
-            // Handle both array response (limit=0) and paginated response (limit>0)
-            let vehicles: Vehicle[];
-            if (Array.isArray(response)) {
-              vehicles = response;
-            } else if (response && typeof response === 'object' && 'vehicles' in response) {
-              vehicles = response.vehicles || [];
-            } else {
-              console.warn('⚠️ Invalid background refresh response format:', response);
-              return;
-            }
-            
-            if (Array.isArray(vehicles) && vehicles.length >= 0) {
-              this.setLocalStorageData(cacheKey, vehicles);
-              console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
-              // Notify UI so published vehicles appear without page refresh
-              if (typeof window !== 'undefined' && window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles } }));
+          .then(async (response) => {
+            try {
+              const vehicles = await this.expandPublishedVehiclesIfPaginated(
+                response,
+                includeAllStatuses,
+                isNativeWebView
+              );
+              if (Array.isArray(vehicles) && vehicles.length >= 0) {
+                this.setLocalStorageData(cacheKey, vehicles);
+                console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
+                if (typeof window !== 'undefined' && window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles } }));
+                }
+              } else if (vehicles.length === 0) {
+                console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');
               }
-            } else if (vehicles.length === 0) {
-              console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');
+            } catch (parseErr) {
+              console.warn('⚠️ Invalid background refresh response format:', parseErr);
             }
           })
         .catch(error => {
@@ -456,24 +518,21 @@ class DataService {
           ? `/vehicles?limit=${nativeVehiclesPageLimit}&page=1&skipExpiryCheck=true`
           : '/vehicles?limit=0&skipExpiryCheck=true';
       const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
-      
-      // Handle both array response (limit=0) and paginated response (limit>0)
-      let vehicles: Vehicle[];
-      if (Array.isArray(response)) {
-        vehicles = response;
-      } else if (response && typeof response === 'object' && 'vehicles' in response) {
-        vehicles = response.vehicles || [];
-      } else {
-        console.error('❌ Invalid response format:', response);
-        throw new Error('Invalid response format: expected array or object with vehicles property');
-      }
-      
+
+      const vehicles = await this.expandPublishedVehiclesIfPaginated(
+        response,
+        includeAllStatuses,
+        isNativeWebView
+      );
+
       if (!Array.isArray(vehicles)) {
         console.error('❌ Invalid response format: expected array, got:', typeof vehicles);
         throw new Error('Invalid response format: expected array');
       }
-      
-      console.log(`✅ Loaded ${vehicles.length} vehicles from production API (response type: ${Array.isArray(response) ? 'array' : 'paginated'}${forceRefresh ? ', forced refresh' : ''})`);
+
+      console.log(
+        `✅ Loaded ${vehicles.length} vehicles from production API (response type: ${Array.isArray(response) ? 'array' : 'paginated'}${forceRefresh ? ', forced refresh' : ''})`
+      );
       
       if (vehicles.length === 0) {
         console.warn('⚠️ API returned 0 vehicles. This might indicate:');
