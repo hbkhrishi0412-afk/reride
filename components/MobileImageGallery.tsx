@@ -25,13 +25,14 @@ export const MobileImageGallery: React.FC<MobileImageGalleryProps> = ({
 
   // Prevent body scroll when gallery is open
   useEffect(() => {
-    if (onClose) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
+    if (!onClose) return;
+    const body = document.body;
+    if (!body) return;
+    const originalOverflow = body.style.overflow;
+    body.style.overflow = 'hidden';
+    return () => {
+      if (document.body) document.body.style.overflow = originalOverflow;
+    };
   }, [onClose]);
 
   const handleTouchStart = (e: React.TouchEvent) => {

@@ -14,13 +14,14 @@ export const resetViewportZoom = (): void => {
   }
 
   try {
-    // Reset CSS zoom
+    // Reset CSS zoom (body may be null before DOM is ready, e.g. Capacitor WebView)
     document.documentElement.style.zoom = '1';
-    document.body.style.zoom = '1';
-    
-    // Reset transform scale
+    if (document.body) {
+      document.body.style.zoom = '1';
+      document.body.style.transform = 'scale(1)';
+    }
+
     document.documentElement.style.transform = 'scale(1)';
-    document.body.style.transform = 'scale(1)';
     
     // Ensure viewport meta tag is correct
     let viewport = document.querySelector('meta[name="viewport"]');

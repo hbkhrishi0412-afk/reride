@@ -2999,7 +2999,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 const errorNotification = document.createElement('div');
                                 errorNotification.textContent = `Failed to update expiry date: ${errorMessage}`;
                                 errorNotification.className = 'fixed top-5 right-5 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-[9999] text-sm font-medium animate-slide-up';
-                                document.body.appendChild(errorNotification);
+                                document.body?.appendChild(errorNotification);
                                 
                                 setTimeout(() => {
                                     errorNotification.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';

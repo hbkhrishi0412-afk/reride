@@ -87,7 +87,7 @@ export const SECURITY_CONFIG = {
           'capacitor://localhost'
         ],
     ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+    ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-App-Client'],
     CREDENTIALS: true,
     MAX_AGE: 86400 // 24 hours
   },

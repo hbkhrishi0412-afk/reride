@@ -775,12 +775,16 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   }, [isFeaturesOpen]);
   
   useEffect(() => {
+    const body = document.body;
+    if (!body) return;
     if (isFilterModalOpen) {
-        document.body.style.overflow = 'hidden';
+        body.style.overflow = 'hidden';
     } else {
-        document.body.style.overflow = 'auto';
+        body.style.overflow = 'auto';
     }
-    return () => { document.body.style.overflow = 'auto'; };
+    return () => {
+      if (document.body) document.body.style.overflow = 'auto';
+    };
   }, [isFilterModalOpen]);
 
   // Mobile Modal Filter Logic

@@ -5,11 +5,34 @@
 
 import { logInfo, logWarn, logError } from './logger';
 import { formatSupabaseError } from './errorUtils';
-import { resolveApiUrl } from './apiConfig';
+import { resolveApiUrl, isCapacitorNative } from './apiConfig';
+import { getBrowserAccessTokenForApi } from './authStorage';
 
 interface FetchOptions extends RequestInit {
   skipAuth?: boolean; // Skip authentication for public endpoints
   retryOn401?: boolean; // Retry request after token refresh (default: true)
+}
+
+/** Response constructor rejects status outside 200–599; never pass 0. */
+function createJsonErrorResponse(
+  status: number,
+  statusText: string,
+  body: Record<string, unknown>
+): Response {
+  const safeStatus = status >= 200 && status <= 599 ? status : 503;
+  try {
+    return new Response(JSON.stringify(body), {
+      status: safeStatus,
+      statusText,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch {
+    return new Response('{"success":false,"error":"Request failed"}', {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 // CSRF token: fetched once and sent with state-changing requests
@@ -57,21 +80,7 @@ export const getAuthHeaders = (): HeadersInit => {
   }
 
   try {
-    // Try to get Supabase session token first (synchronous check)
-    try {
-      // Note: Supabase getSession is async, so we'll check localStorage for cached token
-      const supabaseToken = localStorage.getItem('sb-access-token') || 
-                           localStorage.getItem('supabase.auth.token');
-      if (supabaseToken) {
-        headers['Authorization'] = `Bearer ${supabaseToken}`;
-        return headers;
-      }
-    } catch (supabaseError) {
-      // Supabase not available, fall back to custom token
-    }
-    
-    // Fallback to custom token
-    const token = localStorage.getItem('reRideAccessToken');
+    const token = getBrowserAccessTokenForApi();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -110,9 +119,16 @@ const refreshToken = async (): Promise<string | null> => {
         return null;
       }
 
+      // CSRF is required for POST /api/users (same as authenticatedFetch); missing token causes 403 on production.
+      await ensureCsrfToken();
+      const refreshHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (csrfToken) {
+        refreshHeaders['X-CSRF-Token'] = csrfToken;
+      }
+
       const response = await fetch(resolveApiUrl('/api/users'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: refreshHeaders,
         credentials: 'include',
         body: JSON.stringify({ action: 'refresh-token', refreshToken: refreshTokenValue }),
       });
@@ -315,10 +331,14 @@ export const authenticatedFetch = async (
     }
 
     // Merge with any existing headers
-    const mergedHeaders = {
+    const mergedHeaders: Record<string, string> = {
       ...headers,
       ...(fetchOptions.headers || {}),
-    };
+    } as Record<string, string>;
+
+    if (isCapacitorNative()) {
+      mergedHeaders['X-App-Client'] = 'capacitor';
+    }
 
     // First attempt - wrap in try-catch to handle network errors
     let response: Response;
@@ -333,18 +353,26 @@ export const authenticatedFetch = async (
       // Return a Response-like object that indicates failure
       // This prevents the error from propagating to ErrorBoundary
       logWarn('⚠️ Fetch error in authenticatedFetch:', fetchError);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Network error', 
-          reason: 'Unable to connect to server. Please check your internet connection.' 
-        }),
-        { 
-          status: 0, // Status 0 indicates network error
-          statusText: 'Network Error',
-          headers: { 'Content-Type': 'application/json' }
+      // Response() requires status in [200, 599]; never use 0 — it throws.
+      return createJsonErrorResponse(
+        503,
+        'Network Unavailable',
+        {
+          success: false,
+          error: 'Network error',
+          reason: 'Unable to connect to server. Please check your internet connection.',
         }
       );
+    }
+
+    // Opaque / blocked responses use status 0 — Response with status 0 cannot be used for JSON APIs
+    if (response.status === 0) {
+      logWarn('⚠️ Fetch returned status 0 (opaque/blocked or unreachable API)');
+      return createJsonErrorResponse(503, 'Network Unavailable', {
+        success: false,
+        error: 'Network error',
+        reason: 'Unable to reach API server. On Android emulator use http://10.0.2.2:<port> and enable cleartext traffic.',
+      });
     }
 
     // Handle 401 Unauthorized - try to refresh token and retry
@@ -468,23 +496,25 @@ export const authenticatedFetch = async (
       // The error will be handled by the caller
     }
 
+    if (response.status === 0) {
+      logWarn('⚠️ Fetch returned status 0 after auth handling');
+      return createJsonErrorResponse(503, 'Network Unavailable', {
+        success: false,
+        error: 'Network error',
+        reason: 'Unable to reach API server. On Android emulator use http://10.0.2.2:<port> and enable cleartext traffic.',
+      });
+    }
+
     return response;
   } catch (error) {
     // Catch any unexpected errors and return a safe Response object
     // This prevents errors from propagating to ErrorBoundary
     logError('❌ Unexpected error in authenticatedFetch:', error);
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: 'Request failed', 
-        reason: 'An unexpected error occurred. Please try again.' 
-      }),
-      { 
-        status: 500,
-        statusText: 'Internal Error',
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
+    return createJsonErrorResponse(500, 'Internal Error', {
+      success: false,
+      error: 'Request failed',
+      reason: 'An unexpected error occurred. Please try again.',
+    });
   }
 };
 

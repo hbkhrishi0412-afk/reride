@@ -42,12 +42,14 @@ const VehicleRow = memo<VehicleRowProps>(({ index, style, data }) => {
 
   const vehicle = vehicles[index];
 
+  const rowStyle = style ?? {};
+
   if (!vehicle) {
-    return <div style={style} />;
+    return <div style={rowStyle} />;
   }
 
   return (
-    <div style={style} className="px-4 py-2">
+    <div style={rowStyle} className="px-4 py-2">
       <VehicleCard
         vehicle={vehicle}
         onSelect={() => onSelectVehicle(vehicle)}
