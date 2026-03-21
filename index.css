@@ -2184,3 +2184,13 @@ a:hover {
     display: block !important;
   }
 }
+
+/* Dealers map — seller detail on marker hover (Leaflet tooltips) */
+.leaflet-tooltip.dealer-marker-hover-tooltip {
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important;
+  background: #fff !important;
+  color: #111827 !important;
+}

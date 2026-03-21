@@ -6,9 +6,9 @@ import { getFollowersCount } from '../services/buyerEngagementService';
 import { isUserVerified } from './VerifiedBadge';
 import VerifiedBadge from './VerifiedBadge';
 import { getSellers } from '../services/userService';
-import { getCityCoordinates } from '../services/locationService';
-import { CITY_COORDINATES } from '../constants/location';
 import { DealerMap, type CompanyLocation } from './DealerProfiles';
+import { getSellerMapCoordinates, normalizeIndianPincode } from '../utils/sellerLocation';
+import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imageUtils';
 
 // Fix for default marker icons in Leaflet (when map is used)
 if (typeof L !== 'undefined' && L.Icon?.Default?.prototype) {
@@ -65,7 +65,12 @@ const MobileDealerCard: React.FC<{
     return { isOpen, statusText, statusSubtext };
   };
   const { isOpen, statusText, statusSubtext } = getStatus();
-  const address = seller.address || seller.location || 'Address not available';
+  const pin = normalizeIndianPincode(seller.pincode);
+  const base = (seller.address || seller.location || '').trim();
+  const address =
+    !base && !pin
+      ? 'Address not available'
+      : [base || null, pin ? `PIN ${pin}` : null].filter(Boolean).join(' · ');
   const languages = ['Hindi', 'English'];
 
   const handleCall = (e: React.MouseEvent) => {
@@ -79,6 +84,10 @@ const MobileDealerCard: React.FC<{
   };
 
   const verified = isUserVerified(seller);
+  const [dealerLogoSrc, setDealerLogoSrc] = useState(() => resolveSellerLogoUrl(seller));
+  useEffect(() => {
+    setDealerLogoSrc(resolveSellerLogoUrl(seller));
+  }, [seller.logoUrl, seller.email, seller.dealershipName, seller.name]);
 
   return (
     <div
@@ -88,11 +97,12 @@ const MobileDealerCard: React.FC<{
       <div className="flex gap-4">
         <div className="relative flex-shrink-0">
           <img
-            src={seller.logoUrl || `https://i.pravatar.cc/150?u=${seller.email}`}
+            src={dealerLogoSrc}
             alt={seller.dealershipName || seller.name}
-            className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+            className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 bg-orange-50"
             loading="lazy"
             decoding="async"
+            onError={() => setDealerLogoSrc(sellerInitialsAvatarDataUri(seller))}
           />
           {verified && (
             <VerifiedBadge show={true} iconOnly size="sm" className="absolute -bottom-1 -right-1" />
@@ -200,31 +210,11 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
 
   useEffect(() => {
     const fetchCoords = async () => {
-      const sellersWithLocations = await Promise.all(
-        sellers.map(async (seller) => {
-          let city = seller.location?.trim() || '';
-          if (city.includes(',')) city = city.split(',')[0].trim();
-          const cityVariations: Record<string, string> = {
-            'delhi': 'New Delhi', 'bangalore': 'Bengaluru', 'bengaluru': 'Bengaluru',
-            'calcutta': 'Kolkata', 'madras': 'Chennai', 'bombay': 'Mumbai',
-          };
-          const normalizedCity = cityVariations[city.toLowerCase()] || city;
-          let coords: CompanyLocation | null = null;
-          if (normalizedCity && CITY_COORDINATES[normalizedCity]) {
-            coords = CITY_COORDINATES[normalizedCity];
-          } else if (city) {
-            const cityKey = Object.keys(CITY_COORDINATES).find(
-              key => key.toLowerCase() === city.toLowerCase() || key.toLowerCase() === normalizedCity.toLowerCase()
-            );
-            if (cityKey) coords = CITY_COORDINATES[cityKey];
-            else {
-              const fetched = await getCityCoordinates(city);
-              if (fetched) coords = fetched;
-            }
-          }
-          return { seller, coords };
-        })
-      );
+      const sellersWithLocations: Array<{ seller: User; coords: CompanyLocation | null }> = [];
+      for (const seller of sellers) {
+        const coords = await getSellerMapCoordinates(seller);
+        sellersWithLocations.push({ seller, coords });
+      }
       setSellersWithCoords(sellersWithLocations);
       const validCoords = sellersWithLocations.filter(item => item.coords !== null).map(item => item.coords!);
       if (validCoords.length > 0) {
@@ -244,18 +234,30 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
     let filtered = sellers;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(seller =>
-        (seller.dealershipName || seller.name || '').toLowerCase().includes(q) ||
-        (seller.location || '').toLowerCase().includes(q) ||
-        (seller.email || '').toLowerCase().includes(q)
-      );
+      const qDigits = q.replace(/\D/g, '');
+      filtered = filtered.filter(seller => {
+        const pin = normalizeIndianPincode(seller.pincode);
+        const pinMatch = qDigits.length >= 3 && pin.includes(qDigits);
+        return (
+          (seller.dealershipName || seller.name || '').toLowerCase().includes(q) ||
+          (seller.location || '').toLowerCase().includes(q) ||
+          (seller.email || '').toLowerCase().includes(q) ||
+          pinMatch
+        );
+      });
     }
     if (mapSearchQuery.trim()) {
       const q = mapSearchQuery.toLowerCase();
-      filtered = filtered.filter(seller =>
-        (seller.location || '').toLowerCase().includes(q) ||
-        (seller.address || '').toLowerCase().includes(q)
-      );
+      const qDigits = q.replace(/\D/g, '');
+      filtered = filtered.filter(seller => {
+        const pin = normalizeIndianPincode(seller.pincode);
+        const pinMatch = qDigits.length >= 3 && pin.includes(qDigits);
+        return (
+          (seller.location || '').toLowerCase().includes(q) ||
+          (seller.address || '').toLowerCase().includes(q) ||
+          pinMatch
+        );
+      });
     }
     if (companyTypeFilter !== 'all') {
       filtered = filtered.filter(seller => {
@@ -301,12 +303,6 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
     }
   }, []);
 
-  const handleMapClickDealerSelect = useCallback((sellerEmail: string, coords: CompanyLocation) => {
-    setSelectedDealerEmail(sellerEmail);
-    setSelectedDealerCenter([coords.lat, coords.lng]);
-    onViewProfile(sellerEmail);
-  }, [onViewProfile]);
-
   const hasMapDealers = filteredSellersWithCoords.some(item => item.coords !== null);
 
   return (
@@ -339,8 +335,7 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
               selectedCenter={selectedDealerCenter}
               filteredSellersWithCoords={filteredSellersWithCoords}
               selectedDealerEmail={selectedDealerEmail}
-              onDealerSelect={handleMapClickDealerSelect}
-              onViewProfile={onViewProfile}
+              onDealerSelect={handleDealerSelect}
             />
           </div>
         </div>

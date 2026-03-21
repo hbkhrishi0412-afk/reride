@@ -3,8 +3,13 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { User, Vehicle } from '../types.js';
 import { getSellers } from '../services/userService.js';
-import { getCityCoordinates } from '../services/locationService.js';
-import { CITY_COORDINATES } from '../constants/location.js';
+import {
+  getSellerMapCoordinates,
+  areaKeyFromSeller,
+  areaDisplayLabelFromSeller,
+  normalizeIndianPincode,
+} from '../utils/sellerLocation.js';
+import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imageUtils.js';
 
 // Fix for default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -27,6 +32,60 @@ export interface CompanyLocation {
   lng: number;
 }
 
+function escapeHtml(s: string): string {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+const TOOLTIP_OPTS: L.TooltipOptions = {
+  sticky: true,
+  direction: 'top',
+  opacity: 1,
+  className: 'dealer-marker-hover-tooltip',
+};
+
+function sellerHoverTooltipHtml(seller: User): string {
+  const showroom = seller.badges?.some((b) => b.type === 'top_seller') ?? false;
+  const typeLabel = showroom ? 'Showroom' : 'Car service';
+  const title = escapeHtml(seller.dealershipName || seller.name || 'Dealer');
+  const area = escapeHtml(areaDisplayLabelFromSeller(seller));
+  const addr = (seller.address || '').trim();
+  const locFirst = (seller.location || '').split(',')[0]?.trim() || '';
+  const where = addr || locFirst;
+  const pin = normalizeIndianPincode(seller.pincode);
+  const phone = (seller.mobile || '').trim();
+  let body = '';
+  if (where) {
+    body += `<p style="margin:4px 0 0;font-size:12px;color:#374151;line-height:1.35">${escapeHtml(where)}</p>`;
+  }
+  if (pin) {
+    body += `<p style="margin:2px 0 0;font-size:12px;color:#6b7280">PIN ${escapeHtml(pin)}</p>`;
+  }
+  if (phone) {
+    body += `<p style="margin:4px 0 0;font-size:12px;color:#4b5563">Phone: ${escapeHtml(phone)}</p>`;
+  }
+  return `<div style="min-width:180px;max-width:280px;padding:2px 0">
+    <p style="margin:0;font-weight:600;font-size:14px;color:#111827">${title}</p>
+    <p style="margin:2px 0 0;font-size:11px;color:#6b7280">${escapeHtml(typeLabel)} · ${area}</p>
+    ${body}
+  </div>`;
+}
+
+function clusterHoverTooltipHtml(groupItems: Array<{ seller: User; coords: CompanyLocation }>): string {
+  const n = groupItems.length;
+  const preview = groupItems
+    .slice(0, 4)
+    .map((i) => escapeHtml(i.seller.dealershipName || i.seller.name))
+    .join(', ');
+  const more = n > 4 ? ` +${n - 4} more` : '';
+  return `<div style="min-width:160px;max-width:280px;padding:2px 0">
+    <p style="margin:0;font-weight:600;font-size:13px;color:#111827">${n} dealers here</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#374151;line-height:1.4">${preview}${more}</p>
+    <p style="margin:4px 0 0;font-size:11px;color:#9ca3af">Click for the full list</p>
+  </div>`;
+}
+
 // Imperative Leaflet map: create/destroy in useEffect to avoid "Map container is already initialized"
 export const DealerMap: React.FC<{
   center: [number, number];
@@ -35,8 +94,8 @@ export const DealerMap: React.FC<{
   selectedCenter: [number, number] | null;
   filteredSellersWithCoords: Array<{ seller: User; coords: CompanyLocation | null }>;
   selectedDealerEmail: string | null;
+  /** Highlight a dealer in the sidebar list (no navigation to profile). */
   onDealerSelect: (sellerEmail: string, coords: CompanyLocation) => void;
-  onViewProfile: (sellerEmail: string) => void;
 }> = ({
   center,
   zoom,
@@ -45,7 +104,6 @@ export const DealerMap: React.FC<{
   filteredSellersWithCoords,
   selectedDealerEmail,
   onDealerSelect,
-  onViewProfile,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -66,8 +124,12 @@ export const DealerMap: React.FC<{
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
     }
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    // Carto basemaps (OSM data) load more reliably from production sites than anonymous OSM tile servers alone.
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd',
+      maxZoom: 20,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(map);
 
     mapRef.current = map;
@@ -93,7 +155,7 @@ export const DealerMap: React.FC<{
     }
   }, [bounds, selectedCenter]);
 
-  // Map click: find nearest dealer
+  // Map click (not on a pin): show popup listing all dealerships in the nearest dealer's city — no profile navigation.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -102,7 +164,9 @@ export const DealerMap: React.FC<{
       const target = e.originalEvent?.target as HTMLElement;
       if (target?.closest('.leaflet-marker-icon')) return;
 
-      const dealersWithCoords = filteredSellersWithCoords.filter(item => item.coords !== null);
+      const dealersWithCoords = filteredSellersWithCoords.filter(
+        (item): item is { seller: User; coords: CompanyLocation } => item.coords !== null
+      );
       if (dealersWithCoords.length === 0) return;
 
       const clickedLat = e.latlng.lat;
@@ -111,7 +175,6 @@ export const DealerMap: React.FC<{
       let minDist = Infinity;
       const R = 6371;
       for (const item of dealersWithCoords) {
-        if (!item.coords) continue;
         const dLat = (clickedLat - item.coords.lat) * Math.PI / 180;
         const dLng = (clickedLng - item.coords.lng) * Math.PI / 180;
         const a =
@@ -124,11 +187,40 @@ export const DealerMap: React.FC<{
           nearest = { seller: item.seller, coords: item.coords };
         }
       }
-      if (nearest) onDealerSelect(nearest.seller.email, nearest.coords);
+      if (!nearest) return;
+
+      const areaKey = areaKeyFromSeller(nearest.seller);
+      const sameArea = areaKey
+        ? dealersWithCoords.filter((item) => areaKeyFromSeller(item.seller) === areaKey)
+        : [nearest];
+
+      const displayArea = areaDisplayLabelFromSeller(nearest.seller);
+      const namesHtml = sameArea
+        .map(
+          (item) =>
+            `<li class="text-sm text-gray-800 py-0.5">${escapeHtml(item.seller.dealershipName || item.seller.name)}</li>`
+        )
+        .join('');
+
+      const popupHtml = `<div class="p-2">
+        <p class="font-semibold text-gray-900 mb-1">${escapeHtml(displayArea)}</p>
+        <p class="text-xs text-gray-500 mb-1">Dealerships in this area</p>
+        <ul class="list-disc pl-4 max-h-56 overflow-y-auto m-0">${namesHtml}</ul>
+      </div>`;
+
+      L.popup({ maxWidth: 300, className: 'dealer-city-popup' })
+        .setLatLng(e.latlng)
+        .setContent(popupHtml)
+        .openOn(map);
+
+      const first = sameArea[0];
+      if (first) onDealerSelect(first.seller.email, first.coords);
     };
 
     map.on('click', handleClick);
-    return () => { map.off('click', handleClick); };
+    return () => {
+      map.off('click', handleClick);
+    };
   }, [filteredSellersWithCoords, onDealerSelect]);
 
   const iconDefault = useMemo(
@@ -222,76 +314,66 @@ export const DealerMap: React.FC<{
           ? (showroom ? iconShowroomSelected : iconSelected)
           : (showroom ? iconShowroomDefault : iconDefault);
         const marker = L.marker([lat, lng], { icon });
-        const name = item.seller.dealershipName || item.seller.name;
-        const location = item.seller.location || '';
         const typeLabel = showroom ? 'Showroom' : 'Car Service';
+        const aKey = areaKeyFromSeller(item.seller);
+        const inArea = aKey
+          ? items.filter((i) => areaKeyFromSeller(i.seller) === aKey)
+          : [item];
+        const areaLabel = areaDisplayLabelFromSeller(item.seller);
+        const namesList = inArea
+          .map(
+            (i) =>
+              `<li class="text-sm text-gray-800 py-0.5">${escapeHtml(i.seller.dealershipName || i.seller.name)}</li>`
+          )
+          .join('');
+        marker.bindTooltip(sellerHoverTooltipHtml(item.seller), TOOLTIP_OPTS);
         marker.bindPopup(
           `<div class="p-2">
-            <h3 class="font-semibold text-blue-600 mb-1">${escapeHtml(name)}</h3>
-            <p class="text-sm text-gray-600">${escapeHtml(location)}</p>
-            <p class="text-xs text-gray-500 mt-1">${typeLabel} · 1 dealer in this area</p>
-            <button type="button" class="mt-2 text-sm text-blue-600 hover:text-blue-700 dealer-popup-view">View Profile</button>
+            <p class="text-xs font-medium text-gray-500 mb-1">${escapeHtml(areaLabel)} · ${escapeHtml(typeLabel)}</p>
+            <p class="text-xs text-gray-500 mb-1">Dealerships in this area</p>
+            <ul class="list-disc pl-4 max-h-48 overflow-y-auto m-0">${namesList}</ul>
           </div>`,
           { className: 'dealer-popup' }
         );
-        marker.on('popupopen', () => {
-          const el = marker.getPopup()?.getElement();
-          el?.querySelector('.dealer-popup-view')?.addEventListener('click', () => {
-            onDealerSelect(item.seller.email, item.coords);
-            onViewProfile(item.seller.email);
-          });
-        });
         marker.on('click', () => {
-          onViewProfile(item.seller.email);
+          onDealerSelect(item.seller.email, item.coords);
         });
         layer.addLayer(marker);
       } else {
         const marker = L.marker([lat, lng], { icon: createCountIcon(count, clusterType) });
-        const namesList = groupItems
+        const aKey = areaKeyFromSeller(groupItems[0].seller);
+        const inArea = aKey
+          ? items.filter((i) => areaKeyFromSeller(i.seller) === aKey)
+          : groupItems;
+        const namesList = inArea
           .map(
             (i) =>
-              `<button type="button" class="dealer-popup-item block w-full text-left text-sm text-blue-600 hover:text-blue-800 py-1 px-0 border-0 bg-transparent cursor-pointer" data-email="${escapeHtml(i.seller.email)}">${escapeHtml(i.seller.dealershipName || i.seller.name)}</button>`
+              `<li class="text-sm text-gray-800 py-0.5">${escapeHtml(i.seller.dealershipName || i.seller.name)}</li>`
           )
           .join('');
         const typeLabel = clusterType === 'mixed' ? 'Car showrooms & services' : clusterType === 'showroom' ? 'Car showrooms' : 'Car services';
+        const areaLabel = areaDisplayLabelFromSeller(groupItems[0].seller);
+        marker.bindTooltip(clusterHoverTooltipHtml(groupItems), TOOLTIP_OPTS);
         marker.bindPopup(
           `<div class="p-2 dealer-cluster-popup">
-            <h3 class="font-semibold text-gray-900 mb-1">${count} dealers in this area</h3>
+            <p class="text-xs font-medium text-gray-500 mb-1">${escapeHtml(areaLabel)}</p>
+            <h3 class="font-semibold text-gray-900 mb-1">${inArea.length} dealerships in this area</h3>
             <p class="text-xs text-gray-500 mb-2">${typeLabel}</p>
-            <div class="space-y-0.5">${namesList}</div>
+            <ul class="list-disc pl-4 max-h-48 overflow-y-auto m-0">${namesList}</ul>
           </div>`,
           { className: 'dealer-popup' }
         );
-        marker.on('popupopen', () => {
-          const el = marker.getPopup()?.getElement();
-          el?.querySelectorAll('.dealer-popup-item').forEach((btn) => {
-            btn.addEventListener('click', () => {
-              const email = (btn as HTMLElement).getAttribute('data-email');
-              const item = groupItems.find((i) => i.seller.email === email);
-              if (item) {
-                onDealerSelect(item.seller.email, item.coords);
-                onViewProfile(item.seller.email);
-              }
-            });
-          });
-        });
         marker.on('click', () => {
           const item = groupItems[0];
-          if (item) onViewProfile(item.seller.email);
+          if (item) onDealerSelect(item.seller.email, item.coords);
         });
         layer.addLayer(marker);
       }
     }
-  }, [filteredSellersWithCoords, selectedDealerEmail, iconDefault, iconSelected, iconShowroomDefault, iconShowroomSelected, onDealerSelect, onViewProfile]);
+  }, [filteredSellersWithCoords, selectedDealerEmail, iconDefault, iconSelected, iconShowroomDefault, iconShowroomSelected, onDealerSelect]);
 
   return <div ref={containerRef} className="h-full w-full" style={{ minHeight: 300 }} />;
 };
-
-function escapeHtml(s: string): string {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
-}
 
 const CompanyCard: React.FC<{
   seller: User;
@@ -302,6 +384,11 @@ const CompanyCard: React.FC<{
   coords?: CompanyLocation | null;
   isSelected?: boolean;
 }> = ({ seller, onViewProfile, onSelect, onCall, isRecommended = false, coords = null, isSelected = false }) => {
+  const [dealerLogoSrc, setDealerLogoSrc] = useState(() => resolveSellerLogoUrl(seller));
+  useEffect(() => {
+    setDealerLogoSrc(resolveSellerLogoUrl(seller));
+  }, [seller.logoUrl, seller.email, seller.dealershipName, seller.name]);
+
   // Determine company type - default to 'showroom' if not specified
   const companyType = (seller.badges?.some(b => b.type === 'top_seller') ? 'showroom' : 'car-service') as 'showroom' | 'car-service';
   
@@ -325,8 +412,12 @@ const CompanyCard: React.FC<{
   
   const { isOpen, statusText, statusSubtext } = getStatus();
   
-  // Get address - prefer address field, fallback to location
-  const address = seller.address || seller.location || 'Address not available';
+  const pin = normalizeIndianPincode(seller.pincode);
+  const base = (seller.address || seller.location || '').trim();
+  const address =
+    !base && !pin
+      ? 'Address not available'
+      : [base || null, pin ? `PIN ${pin}` : null].filter(Boolean).join(' · ');
   
   // Languages - default to Hindi and English for Indian dealers
   const languages = ['Hindi', 'English'];
@@ -355,9 +446,12 @@ const CompanyCard: React.FC<{
         {/* Company Logo */}
         <div className="flex-shrink-0">
           <img
-            src={seller.logoUrl || `https://i.pravatar.cc/80?u=${seller.email}`}
+            src={dealerLogoSrc}
             alt={seller.dealershipName || seller.name}
-            className="w-16 h-16 rounded object-cover border border-gray-200"
+            className="w-16 h-16 rounded object-cover border border-gray-200 bg-orange-50"
+            loading="lazy"
+            decoding="async"
+            onError={() => setDealerLogoSrc(sellerInitialsAvatarDataUri(seller))}
           />
         </div>
         
@@ -500,57 +594,12 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
   // Get coordinates for sellers
   useEffect(() => {
     const fetchCoords = async () => {
-      const sellersWithLocations = await Promise.all(
-        sellers.map(async (seller) => {
-          // Parse location - handle various formats like "Mumbai, Maharashtra" or just "Mumbai"
-          let city = seller.location?.trim() || '';
-          
-          // Extract city name (first part before comma, or the whole string)
-          if (city.includes(',')) {
-            city = city.split(',')[0].trim();
-          }
-          
-          // Handle common city name variations
-          const cityVariations: Record<string, string> = {
-            'delhi': 'New Delhi',
-            'bangalore': 'Bengaluru',
-            'bengaluru': 'Bengaluru',
-            'calcutta': 'Kolkata',
-            'madras': 'Chennai',
-            'bombay': 'Mumbai',
-          };
-          
-          const normalizedCity = cityVariations[city.toLowerCase()] || city;
-          
-          // Try to match city name (case-insensitive)
-          let coords: CompanyLocation | null = null;
-          
-          // First try exact match
-          if (normalizedCity && CITY_COORDINATES[normalizedCity]) {
-            coords = CITY_COORDINATES[normalizedCity];
-          } else if (city) {
-            // Try case-insensitive match
-            const cityKey = Object.keys(CITY_COORDINATES).find(
-              key => key.toLowerCase() === city.toLowerCase() || key.toLowerCase() === normalizedCity.toLowerCase()
-            );
-            if (cityKey) {
-              coords = CITY_COORDINATES[cityKey];
-            } else {
-              // Try to fetch coordinates from constants.ts
-              const fetchedCoords = await getCityCoordinates(city);
-              if (fetchedCoords) {
-                coords = fetchedCoords;
-              }
-            }
-          }
-          
-          return {
-            seller,
-            coords,
-          };
-        })
-      );
-      
+      const sellersWithLocations: Array<{ seller: User; coords: CompanyLocation | null }> = [];
+      for (const seller of sellers) {
+        const coords = await getSellerMapCoordinates(seller);
+        sellersWithLocations.push({ seller, coords });
+      }
+
       setSellersWithCoords(sellersWithLocations);
       
       // Update map bounds
@@ -586,19 +635,25 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
+      const qDigits = query.replace(/\D/g, '');
       filtered = filtered.filter(seller => {
         const name = (seller.dealershipName || seller.name || '').toLowerCase();
         const location = (seller.location || '').toLowerCase();
-        return name.includes(query) || location.includes(query);
+        const pin = normalizeIndianPincode(seller.pincode);
+        const pinMatch = qDigits.length >= 3 && pin.includes(qDigits);
+        return name.includes(query) || location.includes(query) || pinMatch;
       });
     }
 
     if (mapSearchQuery.trim()) {
       const query = mapSearchQuery.toLowerCase();
+      const qDigits = query.replace(/\D/g, '');
       filtered = filtered.filter(seller => {
         const location = (seller.location || '').toLowerCase();
         const address = (seller.address || '').toLowerCase();
-        return location.includes(query) || address.includes(query);
+        const pin = normalizeIndianPincode(seller.pincode);
+        const pinMatch = qDigits.length >= 3 && pin.includes(qDigits);
+        return location.includes(query) || address.includes(query) || pinMatch;
       });
     }
 
@@ -634,13 +689,6 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 100);
     }
-  };
-
-  // Handle map click - find nearest dealer and display details
-  const handleMapClickDealerSelect = (sellerEmail: string, coords: CompanyLocation) => {
-    setSelectedDealerEmail(sellerEmail);
-    setSelectedDealerCenter([coords.lat, coords.lng]);
-    onViewProfile(sellerEmail);
   };
 
   return (
@@ -835,8 +883,7 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
             selectedCenter={selectedDealerCenter}
             filteredSellersWithCoords={filteredSellersWithCoords}
             selectedDealerEmail={selectedDealerEmail}
-            onDealerSelect={handleMapClickDealerSelect}
-            onViewProfile={onViewProfile}
+            onDealerSelect={handleDealerSelect}
           />
         </div>
       </div>
