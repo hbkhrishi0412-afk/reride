@@ -454,7 +454,17 @@ async function mainHandler(
     if (req.method === 'GET' && (pathname.includes('/csrf-token') || pathname.endsWith('/csrf-token'))) {
       const token = generateCsrfToken();
       const cookieName = getCsrfCookieName();
-      res.setHeader('Set-Cookie', `${cookieName}=${token}; Path=/; SameSite=Strict; Max-Age=86400`);
+      // SameSite=Strict breaks cross-origin credentialed fetches (Android WebView → API origin).
+      // SameSite=None + Secure allows the cookie on fetch(..., { credentials: 'include' }) from the app WebView.
+      const forwardedProto = (req.headers['x-forwarded-proto'] as string) || '';
+      const useCrossSiteCookie =
+        forwardedProto === 'https' || process.env.VERCEL === '1';
+      const sameSite = useCrossSiteCookie ? 'None' : 'Lax';
+      const secureSuffix = useCrossSiteCookie ? '; Secure' : '';
+      res.setHeader(
+        'Set-Cookie',
+        `${cookieName}=${token}; Path=/; SameSite=${sameSite}; Max-Age=86400${secureSuffix}`,
+      );
       return res.status(200).json({ token });
     }
 

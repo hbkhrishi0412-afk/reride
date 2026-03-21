@@ -60,10 +60,22 @@ function getUserFriendlyErrorMessage(error: unknown, defaultMessage: string): st
   return defaultMessage;
 }
 
-/** API may return [] on failure or empty DB — do not wipe a list we already have (e.g. from cache). */
-function mergeVehicleListPreserveOnEmpty(prev: Vehicle[], incoming: Vehicle[]): Vehicle[] {
-  if (incoming.length > 0) return incoming;
-  return prev.length > 0 ? prev : [];
+/**
+ * After login sync: avoid replacing a full catalog with a tiny partial response (stale dedup / bad cache).
+ * Admins always take the server result so bulk deletes stay correct.
+ */
+function mergeVehicleCatalog(prev: Vehicle[], incoming: Vehicle[], isAdmin: boolean): Vehicle[] {
+  if (!Array.isArray(incoming)) return Array.isArray(prev) ? prev : [];
+  if (incoming.length === 0) return prev.length > 0 ? prev : [];
+  if (prev.length === 0 || incoming.length >= prev.length) return incoming;
+  if (isAdmin) return incoming;
+  if (prev.length >= 5 && incoming.length <= 2) {
+    console.warn(
+      `⚠️ Skipping vehicle state shrink (${incoming.length} vs ${prev.length} cached) — likely partial API response.`
+    );
+    return prev;
+  }
+  return incoming;
 }
 
 interface VehicleUpdateOptions {
@@ -1124,7 +1136,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const list = await dataService.getVehicles(isAdmin, true);
       const next = Array.isArray(list) ? list : [];
-      setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, next));
+      setVehicles((prev) => mergeVehicleCatalog(prev, next, !!isAdmin));
       if (list.length > 0) {
         addToast(`Loaded ${list.length} vehicles`, 'success');
       }
@@ -1384,7 +1396,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Load vehicles and users in parallel with aggressive timeout for instant response
         // CRITICAL: Don't block UI - load data in background, UI already rendered
         const vehicleRequest = deduplicateRequest(
-          `vehicles-${isAdmin ? 'admin' : 'user'}`,
+          `vehicles-${isAdmin ? 'admin' : 'user'}-init`,
           () => dataService.getVehicles(isAdmin).catch((error) => {
             logWarn('Failed to load vehicles:', error);
             return [];
@@ -1407,7 +1419,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Update vehicles immediately when available.
           // If timed out, keep current state and apply result when the original request completes.
           if (Array.isArray(vehiclesData)) {
-            setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, vehiclesData));
+            setVehicles((prev) => mergeVehicleCatalog(prev, vehiclesData, !!isAdmin));
             // PERFORMANCE: Recommendations are now computed via useMemo from vehicles
             if (vehiclesData.length > 0) {
               logInfo(`✅ Updated with ${vehiclesData.length} fresh vehicles from API`);
@@ -1418,7 +1430,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             logWarn('⚠️ Vehicle API response exceeded initial timeout. Keeping current vehicles and waiting for response...');
             vehicleRequest.then((lateVehicles) => {
               if (!isMounted || !Array.isArray(lateVehicles)) return;
-              setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, lateVehicles));
+              setVehicles((prev) => mergeVehicleCatalog(prev, lateVehicles, !!isAdmin));
               if (lateVehicles.length > 0) {
                 logInfo(`✅ Late vehicle response applied: ${lateVehicles.length} vehicles`);
               }
@@ -1910,7 +1922,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Use deduplicateRequest so overlapping initial-load requests are reused, not duplicated
         const [vehiclesResult, usersResult] = await Promise.allSettled([
           deduplicateRequest(
-            `vehicles-${isAdmin ? 'admin' : 'user'}`,
+            `vehicles-${isAdmin ? 'admin' : 'user'}-sync-fr${isAdmin ? '1' : '0'}`,
             () => dataService.getVehicles(isAdmin, isAdmin)
           ),
           deduplicateRequest(
@@ -1925,14 +1937,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Update vehicles if fetch succeeded
         if (vehiclesResult.status === 'fulfilled' && Array.isArray(vehiclesResult.value)) {
-          setVehicles(vehiclesResult.value);
+          setVehicles((prev) => mergeVehicleCatalog(prev, vehiclesResult.value, !!isAdmin));
           // PERFORMANCE: Recommendations are now computed via useMemo from vehicles
-          if (vehiclesResult.value.length === 0 && !hasCachedVehicles) {
-            addToast(
-              'No vehicle listings found. This usually means either Supabase is not configured or your vehicles are not marked as `published`.',
-              'error'
-            );
-          }
+          // Do not toast on empty listings: zero published vehicles is valid (new seller, empty marketplace).
+          // Misconfiguration is surfaced when the request fails (see rejected branch / 503 handling).
         } else if (vehiclesResult.status === 'rejected') {
           console.warn('Failed to sync vehicles:', vehiclesResult.reason);
           const reason = vehiclesResult.reason as any;
@@ -1960,12 +1968,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.warn('   2. Authentication/authorization issue');
             console.warn('   3. API returned empty array');
           }
-          if (usersResult.value.length === 0 && !hasCachedUsers) {
-            addToast(
-              'No dealer details found. This usually means either Supabase is not configured or your users are not marked with `role = seller`.',
-              'error'
-            );
-          }
+          // Do not toast on empty users: non-admins cannot list all users (GET /api/users returns 403),
+          // so getUsers() legitimately resolves to []. Dealer enrichment uses currentUser + vehicles.
         } else if (usersResult.status === 'rejected') {
           console.error('❌ AppProvider: Failed to sync users:', usersResult.reason);
           // For admin users, try to use cached data as fallback
@@ -2161,7 +2165,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handleVehiclesCacheUpdated = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail && Array.isArray(detail.vehicles)) {
-        setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, detail.vehicles));
+        let admin = false;
+        try {
+          const raw = localStorage.getItem('reRideCurrentUser');
+          if (raw) admin = JSON.parse(raw)?.role === 'admin';
+        } catch { /* ignore */ }
+        setVehicles((prev) => mergeVehicleCatalog(prev, detail.vehicles, admin));
         console.log('✅ Vehicle list updated from background refresh');
       }
     };
@@ -2200,7 +2209,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dataService.getVehicles(isAdmin, false)
         .then((freshVehicles) => {
           if (Array.isArray(freshVehicles) && freshVehicles.length >= 0) {
-            setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, freshVehicles));
+            setVehicles((prev) => mergeVehicleCatalog(prev, freshVehicles, !!isAdmin));
             console.log('✅ Vehicle list refreshed from API');
           }
         })
@@ -3260,19 +3269,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             featuredCredits: userData.featuredCredits || 0,
             usedCertifications: userData.usedCertifications || 0,
           };
-          
-          // Save to Supabase
-          try {
-            const { supabaseUserService } = await import('../services/supabase-user-service');
-            // Remove password before saving to Supabase (security)
-            const { password: _, ...userWithoutPassword } = createdUser;
-            await supabaseUserService.create(userWithoutPassword);
-            console.log('✅ User saved to Supabase:', createdUser.email);
-          } catch (supabaseError) {
-            // Log error but don't fail the entire operation if Supabase save fails
-            console.warn('⚠️ Failed to save user to Supabase:', supabaseError);
-            // Still show success toast since Supabase save succeeded
-          }
+
+          // User row is already persisted by POST /api/users (register); do not insert again from the
+          // browser (anon client would fail RLS or duplicate the row).
           
           setUsers(prev => [...prev, createdUser]);
           

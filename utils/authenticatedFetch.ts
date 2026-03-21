@@ -306,10 +306,13 @@ export const authenticatedFetch = async (
       }
     }
 
-    // Prepare headers
-    const headers = skipAuth
+    // Prepare headers — even skipAuth requests need X-CSRF-Token after ensureCsrfToken (register, etc.)
+    const headers: Record<string, string> = skipAuth
       ? { 'Content-Type': 'application/json' }
-      : getAuthHeaders();
+      : (getAuthHeaders() as Record<string, string>);
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
 
     // Merge with any existing headers
     const mergedHeaders = {
