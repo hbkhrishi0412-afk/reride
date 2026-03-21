@@ -22,16 +22,62 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
     
-    <!-- Preconnect to external domains for faster loading (preconnect is preferred over dns-prefetch) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- DNS prefetch for other external domains -->
-    <link rel="dns-prefetch" href="https://nominatim.openstreetmap.org">
-    <link rel="dns-prefetch" href="https://i.pravatar.cc">
-    
-    <!-- Load fonts with display=swap and media=print trick for async loading -->
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap"></noscript>
+    <!-- Capacitor / packaged WebView: skip Google Fonts (slow on cellular). Web: load fonts as before. -->
+    <script>
+      (function () {
+        var h = location.hostname;
+        var p = location.protocol;
+        var port = location.port || '';
+        var devPorts = ['5173', '4173', '3000', '8080'];
+        window.__RERIDE_SKIP_REMOTE_FONTS__ =
+          h === 'appassets.androidplatform.net' ||
+          h.indexOf('appassets.androidplatform.net') !== -1 ||
+          (h === 'localhost' && (p === 'capacitor:' || p === 'ionic:')) ||
+          (h === 'localhost' && p === 'https:' && devPorts.indexOf(port) === -1);
+      })();
+    </script>
+    <script>
+      (function () {
+        if (window.__RERIDE_SKIP_REMOTE_FONTS__) {
+          var s = document.createElement('style');
+          s.id = 'reride-font-fallback';
+          s.textContent =
+            'html,body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}';
+          document.head.appendChild(s);
+          return;
+        }
+        var p1 = document.createElement('link');
+        p1.rel = 'preconnect';
+        p1.href = 'https://fonts.googleapis.com';
+        document.head.appendChild(p1);
+        var p2 = document.createElement('link');
+        p2.rel = 'preconnect';
+        p2.href = 'https://fonts.gstatic.com';
+        p2.crossOrigin = 'anonymous';
+        document.head.appendChild(p2);
+        var dns1 = document.createElement('link');
+        dns1.rel = 'dns-prefetch';
+        dns1.href = 'https://nominatim.openstreetmap.org';
+        document.head.appendChild(dns1);
+        var dns2 = document.createElement('link');
+        dns2.rel = 'dns-prefetch';
+        dns2.href = 'https://i.pravatar.cc';
+        document.head.appendChild(dns2);
+        var font = document.createElement('link');
+        font.rel = 'preload';
+        font.as = 'style';
+        font.href =
+          'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap';
+        font.onload = function () {
+          this.onload = null;
+          this.rel = 'stylesheet';
+        };
+        document.head.appendChild(font);
+      })();
+    </script>
+    <noscript>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Nunito+Sans:wght@600;700;800&display=swap">
+    </noscript>
     
     <!-- Preload critical font files for faster rendering - using font-display: swap -->
     <!-- Note: Actual font URLs will be determined by Google Fonts, but preconnect helps -->
@@ -249,10 +295,17 @@
         var timeoutId;
         var checkInterval;
         var reactMounted = false;
-        var isCapacitor = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+        var h = location.hostname;
+        var p = location.protocol;
+        var port = location.port || '';
+        var devPorts = ['5173', '4173', '3000', '8080'];
+        var isCapacitorLike =
+          (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
+          h === 'appassets.androidplatform.net' ||
+          h.indexOf('appassets.androidplatform.net') !== -1 ||
+          (h === 'localhost' && (p === 'capacitor:' || p === 'ionic:' || (p === 'https:' && devPorts.indexOf(port) === -1)));
         // Allow slower devices to finish JS hydration before showing a fatal error.
-        // This prevents false negatives during slow loads / cache misses.
-        var TIMEOUT_MS = isCapacitor ? 45000 : 30000;
+        var TIMEOUT_MS = isCapacitorLike ? 60000 : 30000;
         
         var checkReactMounted = function() {
           if (window.__RERIDE_MOUNTED__) return true;

@@ -132,14 +132,27 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     }).format(value);
   }, []);
 
-  // Ensure mobile hero cards always have data:
-  // featured -> published -> active/non-sold -> static fallback.
+  // Premium carousel: show featured first, then fill with other published listings.
+  // (Previously we only showed `featuredVehicles` when any existed — e.g. one featured
+  // row in DB meant a single card even if many listings were published.)
   const displayedFeaturedVehicles = useMemo(
     () => {
+      const MAX_CAROUSEL = 24;
       const nonRentalFeatured = featuredVehicles.filter(vehicle => vehicle && vehicle.listingType !== 'rental');
-      if (nonRentalFeatured.length > 0) return nonRentalFeatured.slice(0, 4);
+      const seen = new Set<number>();
+      const merged: Vehicle[] = [];
 
-      if (publishedVehicles.length > 0) return publishedVehicles.slice(0, 4);
+      const pushUnique = (vehicle: Vehicle) => {
+        if (merged.length >= MAX_CAROUSEL) return;
+        if (vehicle?.id != null && !seen.has(vehicle.id)) {
+          seen.add(vehicle.id);
+          merged.push(vehicle);
+        }
+      };
+
+      nonRentalFeatured.forEach(pushUnique);
+      publishedVehicles.forEach(pushUnique);
+      if (merged.length > 0) return merged;
 
       const activeLikeVehicles = allVehicles.filter(vehicle =>
         vehicle &&
@@ -147,14 +160,14 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         vehicle.status !== 'sold' &&
         vehicle.listingStatus === 'active'
       );
-      if (activeLikeVehicles.length > 0) return activeLikeVehicles.slice(0, 4);
+      if (activeLikeVehicles.length > 0) return activeLikeVehicles.slice(0, MAX_CAROUSEL);
 
       const nonSoldVehicles = allVehicles.filter(vehicle =>
         vehicle &&
         vehicle.listingType !== 'rental' &&
         vehicle.status !== 'sold'
       );
-      if (nonSoldVehicles.length > 0) return nonSoldVehicles.slice(0, 4);
+      if (nonSoldVehicles.length > 0) return nonSoldVehicles.slice(0, MAX_CAROUSEL);
 
       return FALLBACK_VEHICLES.slice(0, 4);
     },

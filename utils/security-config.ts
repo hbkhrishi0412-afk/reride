@@ -131,7 +131,9 @@ export const SECURITY_CONFIG = {
     'Permissions-Policy': 'geolocation=(self), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
     'Cross-Origin-Embedder-Policy': process.env.NODE_ENV === 'production' ? 'require-corp' : 'unsafe-none',
     'Cross-Origin-Opener-Policy': 'same-origin',
-    'Cross-Origin-Resource-Policy': 'same-origin'
+    // Must allow cross-origin reads: Capacitor WebView (https://localhost) fetches this API on www.reride.co.in.
+    // same-origin caused fetch() to fail in the native app with "Failed to fetch" / network errors.
+    'Cross-Origin-Resource-Policy': 'cross-origin'
   },
 
   // Input Validation

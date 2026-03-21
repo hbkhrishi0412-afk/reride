@@ -42,7 +42,26 @@ export function isCapacitorNative(): boolean {
     const isAndroidAssetLoaderHost =
       window.location.hostname === 'appassets.androidplatform.net';
 
-    const result = isCapacitorNativePlatform || isAndroidAssetLoaderHost;
+    // Capacitor bridge can appear after the first JS tick. Rely on the WebView
+    // origin so /api/* is rewritten immediately (otherwise requests hit
+    // https://localhost and 404 in production).
+    const port = window.location.port || '';
+    const devServerPorts = ['5173', '4173', '3000', '8080'];
+    const host = window.location.hostname;
+    const proto = window.location.protocol;
+    const isCapacitorLikeOrigin =
+      host === 'appassets.androidplatform.net' ||
+      host.includes('appassets.androidplatform.net') ||
+      (host === 'localhost' && proto === 'capacitor:') ||
+      (host === 'localhost' && proto === 'ionic:') ||
+      (host === 'localhost' &&
+        proto === 'https:' &&
+        !devServerPorts.includes(port));
+
+    const result =
+      isCapacitorNativePlatform ||
+      isAndroidAssetLoaderHost ||
+      isCapacitorLikeOrigin;
     if (result) _isNativeWebViewCached = true;
     return result;
   } catch {
@@ -76,6 +95,9 @@ export function getApiBaseUrl(): string {
  * On the web, returns the path unchanged.
  */
 export function resolveApiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
   const base = getApiBaseUrl();
   if (!base) return path;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -90,14 +112,13 @@ export function resolveApiUrl(path: string): string {
  * Call this once at app startup (e.g. in index.tsx before React renders).
  */
 let _fetchPatched = false;
-export function patchFetchForCapacitor(retryCount: number = 3): void {
+export function patchFetchForCapacitor(retryCount: number = 40): void {
   if (_fetchPatched) return;
   if (typeof window === 'undefined') return;
   if (!isCapacitorNative()) {
-    // Retry briefly: in some Android WebView setups, Capacitor isn't ready
-    // at the exact time this module runs.
+    // Retry: rare WebViews where origin detection is delayed.
     if (retryCount > 0) {
-      setTimeout(() => patchFetchForCapacitor(retryCount - 1), 250);
+      setTimeout(() => patchFetchForCapacitor(retryCount - 1), 150);
     }
     return;
   }

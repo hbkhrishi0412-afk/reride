@@ -44,6 +44,25 @@ interface VehicleListProps {
 // Base items per page - optimized for performance (10-12 vehicles per load)
 const BASE_ITEMS_PER_PAGE = 12;
 
+/** Nearest scrollable ancestor — IntersectionObserver defaults to the viewport, which breaks load-more inside MobileLayout's overflow-y main. */
+function getScrollableAncestor(el: Element | null): Element | null {
+  if (typeof document === 'undefined' || !el) return null;
+  let node: Element | null = el.parentElement;
+  while (node && node !== document.documentElement) {
+    const style = window.getComputedStyle(node);
+    const oy = style.overflowY;
+    const h = node as HTMLElement;
+    if (
+      (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
+      h.scrollHeight > h.clientHeight
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 // Amazon/Flipkart-style skeleton loader with shimmer effect
 const VehicleCardSkeleton: React.FC = () => (
     <div className="bg-white rounded-xl shadow-soft-lg overflow-hidden relative">
@@ -179,6 +198,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [isAiSearchCollapsed, setIsAiSearchCollapsed] = useState(true); // Start collapsed on mobile for better UX
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const hasMoreRef = useRef(true);
+  const isLoadingMoreRef = useRef(false);
   
   // Infinite scroll pagination - load 12 vehicles at a time
 
@@ -1146,35 +1167,40 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   
   const totalPages = Math.ceil(processedVehicles.length / BASE_ITEMS_PER_PAGE);
   const hasMore = currentPage < totalPages;
-  
-  // Infinite scroll: Load more when user scrolls near bottom
+
+  hasMoreRef.current = hasMore;
+  isLoadingMoreRef.current = isLoadingMore;
+
+  // Infinite scroll: load-more sentinel must use the real scroll container as root (MobileLayout main), not the viewport.
   useEffect(() => {
-    if (!hasMore || isLoadingMore) return;
-    
+    if (!hasMore) return;
+
+    const node = loadMoreRef.current;
+    if (!node) return;
+
+    const rootEl = getScrollableAncestor(node);
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
-          setIsLoadingMore(true);
-          // Small delay for smooth UX
-          setTimeout(() => {
-            setCurrentPage(prev => prev + 1);
-            setIsLoadingMore(false);
-          }, 300);
-        }
+        if (!entries[0]?.isIntersecting) return;
+        if (!hasMoreRef.current || isLoadingMoreRef.current) return;
+        isLoadingMoreRef.current = true;
+        setIsLoadingMore(true);
+        window.setTimeout(() => {
+          setCurrentPage((p) => p + 1);
+          setIsLoadingMore(false);
+          isLoadingMoreRef.current = false;
+        }, 200);
       },
-      { rootMargin: '200px' } // Start loading 200px before reaching bottom
-    );
-    
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current);
-    }
-    
-    return () => {
-      if (loadMoreRef.current) {
-        observer.unobserve(loadMoreRef.current);
+      {
+        root: rootEl ?? null,
+        rootMargin: '240px',
+        threshold: 0,
       }
-    };
-  }, [hasMore, isLoadingMore]);
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, currentPage, processedVehicles.length, isLoading, isAiSearching]);
 
   if (isWishlistMode) {
      return (

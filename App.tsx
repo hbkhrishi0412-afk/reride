@@ -3372,8 +3372,8 @@ const AppContent: React.FC = () => {
       );
       }
       
-      // For customer users, show MobileBuyerDashboard (buyer-focused)
-      if (currentUser.role === 'customer') {
+      // Buyer dashboard only — must not hijack Home / Used Cars / Detail (same routing as website).
+      if (currentUser.role === 'customer' && currentView === ViewEnum.BUYER_DASHBOARD) {
         return (
           <>
           <MobileLayout
