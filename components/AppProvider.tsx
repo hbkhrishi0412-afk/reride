@@ -60,6 +60,12 @@ function getUserFriendlyErrorMessage(error: unknown, defaultMessage: string): st
   return defaultMessage;
 }
 
+/** API may return [] on failure or empty DB — do not wipe a list we already have (e.g. from cache). */
+function mergeVehicleListPreserveOnEmpty(prev: Vehicle[], incoming: Vehicle[]): Vehicle[] {
+  if (incoming.length > 0) return incoming;
+  return prev.length > 0 ? prev : [];
+}
+
 interface VehicleUpdateOptions {
   successMessage?: string;
   skipToast?: boolean;
@@ -1117,7 +1123,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isAdmin = currentUser?.role === 'admin';
     try {
       const list = await dataService.getVehicles(isAdmin, true);
-      setVehicles(Array.isArray(list) ? list : []);
+      const next = Array.isArray(list) ? list : [];
+      setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, next));
       if (list.length > 0) {
         addToast(`Loaded ${list.length} vehicles`, 'success');
       }
@@ -1392,7 +1399,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
 
         Promise.all([
-          loadWithTimeout(vehicleRequest, 4500),
+          loadWithTimeout(vehicleRequest, isCapacitorNative() ? 12000 : 4500),
           loadWithTimeout(usersRequest, 3500)
         ]).then(([vehiclesData, usersData]) => {
           if (!isMounted) return;
@@ -1400,7 +1407,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Update vehicles immediately when available.
           // If timed out, keep current state and apply result when the original request completes.
           if (Array.isArray(vehiclesData)) {
-            setVehicles(vehiclesData);
+            setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, vehiclesData));
             // PERFORMANCE: Recommendations are now computed via useMemo from vehicles
             if (vehiclesData.length > 0) {
               logInfo(`✅ Updated with ${vehiclesData.length} fresh vehicles from API`);
@@ -1411,7 +1418,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             logWarn('⚠️ Vehicle API response exceeded initial timeout. Keeping current vehicles and waiting for response...');
             vehicleRequest.then((lateVehicles) => {
               if (!isMounted || !Array.isArray(lateVehicles)) return;
-              setVehicles(lateVehicles);
+              setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, lateVehicles));
               if (lateVehicles.length > 0) {
                 logInfo(`✅ Late vehicle response applied: ${lateVehicles.length} vehicles`);
               }
@@ -2154,7 +2161,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handleVehiclesCacheUpdated = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail && Array.isArray(detail.vehicles)) {
-        setVehicles(detail.vehicles);
+        setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, detail.vehicles));
         console.log('✅ Vehicle list updated from background refresh');
       }
     };
@@ -2193,7 +2200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dataService.getVehicles(isAdmin, false)
         .then((freshVehicles) => {
           if (Array.isArray(freshVehicles) && freshVehicles.length >= 0) {
-            setVehicles(freshVehicles);
+            setVehicles((prev) => mergeVehicleListPreserveOnEmpty(prev, freshVehicles));
             console.log('✅ Vehicle list refreshed from API');
           }
         })

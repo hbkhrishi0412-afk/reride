@@ -353,6 +353,7 @@ async function mainHandler(
   const isCapacitorApp =
     origin === 'https://localhost' ||
     origin === 'capacitor://localhost' ||
+    origin === 'ionic://localhost' ||
     origin === 'http://localhost' ||
     origin === 'https://appassets.androidplatform.net' ||
     origin?.includes('appassets.androidplatform.net');

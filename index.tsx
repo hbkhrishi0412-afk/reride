@@ -1,3 +1,4 @@
+import './utils/capacitorInit';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -14,10 +15,6 @@ import { validateEnvironmentVariablesSafe } from './utils/envValidation';
 import { logInfo, logWarn, logError } from './utils/logger';
 import { ensureCsrfToken } from './utils/authenticatedFetch';
 import { initAnalytics, trackPageView } from './utils/analytics';
-import { patchFetchForCapacitor } from './utils/apiConfig';
-
-// Rewrite /api/* requests to production origin when running inside Capacitor
-patchFetchForCapacitor();
 
 // i18n - must run before any component that uses useTranslation
 import './lib/i18n';

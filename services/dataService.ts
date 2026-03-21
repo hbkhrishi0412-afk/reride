@@ -4,23 +4,41 @@ import { getApiBaseUrl, isCapacitorNative } from '../utils/apiConfig';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
-  private isDevelopment: boolean;
-  private apiBaseUrl: string;
-  // Fallback in case the primary origin (e.g. www.reride.co.in) is not reachable from Android/WebView.
-  // This is a best-effort retry for network/DNS issues; it won't mask real 401/404 API responses.
-  private apiBaseUrlFallback: string | null = null;
+  /**
+   * Vite dev / localhost / file: — used only as input to `isDevelopment` getter.
+   * Capacitor WebView uses https://localhost but must still use the production API + Supabase.
+   */
+  private devHostFlag: boolean;
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
-    this.isDevelopment = this.detectDevelopment();
-    this.apiBaseUrl = `${getApiBaseUrl()}/api`;
-    if (this.apiBaseUrl.includes('https://www.reride.co.in')) {
-      this.apiBaseUrlFallback = this.apiBaseUrl.replace(
-        'https://www.reride.co.in',
-        'https://reride.co.in'
-      );
+    this.devHostFlag = this.detectDevelopment();
+  }
+
+  /**
+   * Never treat the native app as "development" for data: localhost there is the WebView, not a dev server.
+   * Otherwise getVehicles() returns getVehiclesLocal() and ignores Supabase (website would show 7, app 0).
+   */
+  private get isDevelopment(): boolean {
+    if (typeof window !== 'undefined' && isCapacitorNative()) {
+      return false;
     }
+    return this.devHostFlag;
+  }
+
+  /** Resolve at request time — Capacitor may not be detected when the singleton is constructed. */
+  private resolveApiBaseUrl(): string {
+    return `${getApiBaseUrl()}/api`;
+  }
+
+  /** Fallback origin if the primary hostname fails on some networks (Android DNS, etc.). */
+  private resolveApiBaseUrlFallback(): string | null {
+    const base = this.resolveApiBaseUrl();
+    if (base.includes('https://www.reride.co.in')) {
+      return base.replace('https://www.reride.co.in', 'https://reride.co.in');
+    }
+    return null;
   }
 
   private detectDevelopment(): boolean {
@@ -72,11 +90,16 @@ class DataService {
           ...((options.headers || {}) as Record<string, string>)
         };
 
+        // Capacitor: cross-origin GET does not need cookies; omit avoids extra CORS/credential coupling.
+        // POST/PUT/DELETE still send credentials so CSRF cookies can be included when needed.
+        const credentialsMode: RequestCredentials =
+          isCapacitorNative() && method === 'GET' ? 'omit' : 'include';
+
         const fetchOptions: RequestInit = {
           ...options,
           method,
           headers: headersRecord,
-          credentials: 'include'
+          credentials: credentialsMode
         };
 
         // Check cache for GET requests
@@ -95,13 +118,14 @@ class DataService {
         // Helper: perform fetch with timeout so we can retry after token refresh
         const performFetch = async (): Promise<Response> => {
           let timeoutId: NodeJS.Timeout | null = null;
+          const apiBase = this.resolveApiBaseUrl();
+          const fbBase = this.resolveApiBaseUrlFallback();
           try {
             const controller = new AbortController();
             timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout for faster fallback
 
-            const primaryUrl = `${this.apiBaseUrl}${endpoint}`;
-            const fallbackUrl =
-              this.apiBaseUrlFallback ? `${this.apiBaseUrlFallback}${endpoint}` : null;
+            const primaryUrl = `${apiBase}${endpoint}`;
+            const fallbackUrl = fbBase ? `${fbBase}${endpoint}` : null;
 
             // Reduce noise: only emit detailed URL diagnostics for vehicles listing.
             const shouldDebugVehicles = endpoint.includes('/vehicles');
@@ -135,22 +159,20 @@ class DataService {
             if (fetchError instanceof Error) {
               // This will show up in logcat and helps diagnose the exact failure.
               // eslint-disable-next-line no-console
-              const primaryUrl = `${this.apiBaseUrl}${endpoint}`;
-              const fallbackUrl =
-                this.apiBaseUrlFallback ? `${this.apiBaseUrlFallback}${endpoint}` : null;
+              const primaryUrl = `${apiBase}${endpoint}`;
+              const fallbackUrlForLog = fbBase ? `${fbBase}${endpoint}` : null;
               const shouldDebugVehicles = endpoint.includes('/vehicles');
               if (shouldDebugVehicles) {
                 console.warn('API fetch failed (network). Retrying with fallback if available:', {
                   message: fetchError.message,
                   name: fetchError.name,
                   primaryUrl,
-                  fallbackUrl,
+                  fallbackUrl: fallbackUrlForLog,
                 });
               }
             }
 
-            const fallbackUrl =
-              this.apiBaseUrlFallback ? `${this.apiBaseUrlFallback}${endpoint}` : null;
+            const fallbackUrl = fbBase ? `${fbBase}${endpoint}` : null;
 
             if (fallbackUrl) {
               try {
@@ -289,26 +311,14 @@ class DataService {
 
   private getAuthHeaders(): Record<string, string> {
     try {
-      // Check if user has access token (required for production)
       const accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
       if (accessToken) {
-        // Log token presence (but not the token itself) for debugging
         if (process.env.NODE_ENV === 'development') {
           console.log('📊 getAuthHeaders: Access token found, length:', accessToken.length);
         }
-        return { 'Authorization': `Bearer ${accessToken}` };
+        return { Authorization: `Bearer ${accessToken}` };
       }
-      
-      // In production, we must have a token - return empty headers to trigger 401
-      // This will cause the API to return 401, which will trigger fallback to local storage
-      // In development, we can proceed without token (localStorage mode)
-      if (!this.isDevelopment) {
-        console.warn('⚠️ getAuthHeaders: No access token found in production mode');
-      }
-      if (!this.isDevelopment) {
-        console.warn('⚠️ No access token found in production - API calls will fail and fallback to local storage');
-      }
-      
+      // Many routes (e.g. published vehicles) are public — missing token is normal for anonymous users.
       return {};
     } catch (error) {
       console.error('Failed to get auth headers:', error);

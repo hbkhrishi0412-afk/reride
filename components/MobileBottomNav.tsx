@@ -137,7 +137,11 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 onToggleMenu();
                 return;
               }
-              // For other items, navigate to the view specified in the item
+              // Messaging requires an account (same as website: browse is public, inbox is authenticated)
+              if (item.view === ViewEnum.INBOX && !currentUser) {
+                onNavigate(ViewEnum.LOGIN_PORTAL);
+                return;
+              }
               onNavigate(item.view);
             };
             

@@ -2,6 +2,7 @@
 import type { Vehicle, User, VehicleCategory } from '../types';
 import { isVehicle, isApiResponse } from '../types';
 import { isDevelopmentEnvironment } from '../utils/environment';
+import { isCapacitorNative } from '../utils/apiConfig';
 
 // Fallback mock vehicles to prevent loading issues
 const FALLBACK_VEHICLES: Vehicle[] = [
@@ -326,11 +327,12 @@ const deleteVehicleApi = async (vehicleId: number): Promise<{ success: boolean, 
 
 
 // --- Environment Detection ---
-// Use local storage in development, API in production
+// Use local storage in development, API in production (Capacitor WebView uses localhost — not dev)
 const isDevelopment = (): boolean => {
   try {
-    return isDevelopmentEnvironment() || 
-           window.location.hostname === 'localhost' || 
+    if (isCapacitorNative()) return false;
+    return isDevelopmentEnvironment() ||
+           window.location.hostname === 'localhost' ||
            window.location.hostname === '127.0.0.1' ||
            window.location.hostname.includes('localhost') ||
            window.location.protocol === 'file:';

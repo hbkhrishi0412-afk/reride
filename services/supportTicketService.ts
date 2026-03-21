@@ -1,9 +1,6 @@
 import type { SupportTicket } from '../types';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
-import { getApiBaseUrl } from '../utils/apiConfig';
-
 const SUPPORT_TICKET_STORAGE_KEY = 'reRideSupportTickets';
-const API_BASE_URL = `${getApiBaseUrl()}/api`;
 
 export const getSupportTickets = (): SupportTicket[] | null => {
   try {
@@ -57,7 +54,7 @@ export const fetchSupportTicketsFromSupabase = async (
     if (status) params.append('status', status);
 
     const query = params.toString();
-    const url = query ? `${API_BASE_URL}/support-tickets?${query}` : `${API_BASE_URL}/support-tickets`;
+    const url = query ? `/api/support-tickets?${query}` : '/api/support-tickets';
 
     const response = await authenticatedFetch(url, { method: 'GET' });
     const parsed = await handleApiResponse<{ tickets?: any[] }>(response);
@@ -78,7 +75,7 @@ export const createSupportTicketInSupabase = async (
   ticket: Omit<SupportTicket, 'id' | 'createdAt' | 'updatedAt' | 'replies' | 'status'>
 ): Promise<SupportTicket | null> => {
   try {
-    const response = await authenticatedFetch(`${API_BASE_URL}/support-tickets`, {
+    const response = await authenticatedFetch('/api/support-tickets', {
       method: 'POST',
       body: JSON.stringify(ticket)
     });
@@ -98,7 +95,7 @@ export const updateSupportTicketInSupabase = async (
 ): Promise<boolean> => {
   try {
     const response = await authenticatedFetch(
-      `${API_BASE_URL}/support-tickets?id=${encodeURIComponent(String(ticket.id))}`,
+      `/api/support-tickets?id=${encodeURIComponent(String(ticket.id))}`,
       {
         method: 'PUT',
         body: JSON.stringify({

@@ -113,7 +113,8 @@ const SECURITY_CONFIG = {
     'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Cross-Origin-Opener-Policy': 'same-origin',
-    'Cross-Origin-Resource-Policy': 'same-origin'
+    // Capacitor WebView (https://localhost) must be allowed to read JSON from www.reride.co.in (see security-config.ts).
+    'Cross-Origin-Resource-Policy': 'cross-origin'
   },
 
   // Input Validation

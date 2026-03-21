@@ -210,6 +210,10 @@ describe('API Security Integration Tests', () => {
       expect(headers['X-XSS-Protection']).toBeDefined();
       // Config may use '0' (disabled) or '1; mode=block'; both are valid
       expect(['0', '1; mode=block']).toContain(headers['X-XSS-Protection']);
+
+      // API responses are fetched from Capacitor WebView (https://localhost) → production origin.
+      // CORP: same-origin blocked cross-origin reads in browsers; cross-origin is required for mobile.
+      expect(headers['Cross-Origin-Resource-Policy']).toBe('cross-origin');
     });
   });
 

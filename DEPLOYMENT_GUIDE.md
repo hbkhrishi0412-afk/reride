@@ -557,7 +557,19 @@ After redeploying, open the used-cars page and click **Retry** if it still shows
 **Also check:**
 - Vercel logs (Logs tab) for `GET /api/vehicles` — if you see "Returning 0 published vehicles" or 503, the above env vars are required.
 - **Routing:** If `x-vercel-original-path` is not set, the API uses `req.url` as fallback so `/api/vehicles` still reaches the vehicles handler. If you see vehicles requests returning user-list or wrong JSON, routing may have failed (check Vercel runtime and that `api/main.ts` receives the correct path).
-- **Timeouts:** Initial load waits up to 4.5s; if the serverless function is cold or slow, click **Retry** to fetch again.
+- **Timeouts:** Initial load waits up to 4.5s (longer on native); if the serverless function is cold or slow, click **Retry** to fetch again.
+- **Android / Capacitor:** The WebView origin is `https://localhost`, so API calls must target your production host (e.g. `https://www.reride.co.in/api/...`). The app runs `utils/capacitorInit.ts` **before** `App` loads so fetch patching runs first, and `DataService` resolves `getApiBaseUrl()` **per request** (not once at module load) so Capacitor detection is reliable. **Critical:** `DataService` must not treat `localhost` as “development” when `isCapacitorNative()` is true — otherwise `getVehicles()` uses `getVehiclesLocal()` (mock/localStorage) instead of `/api/vehicles` + Supabase, and Browse Cars shows **0** while the website shows published listings. After changing this, run `npm run build`, then `npx cap sync android` and ship a new APK/AAB.
+- **HTTP `Cross-Origin-Resource-Policy`:** The API must not send `Cross-Origin-Resource-Policy: same-origin` for JSON the mobile app reads cross-origin (WebView `https://localhost` → `https://www.reride.co.in`). The codebase sets **`cross-origin`** in `utils/security-config.ts` / `security-config.js` (same values as `getSecurityHeaders()` in `api/main.ts`). **After each deploy**, confirm the live header (replace host if needed):
+
+```bash
+# Windows (cmd/PowerShell)
+curl -sI "https://www.reride.co.in/api/vehicles?limit=1" -H "Origin: https://localhost" | findstr /i "Cross-Origin-Resource-Policy Access-Control-Allow-Origin"
+
+# macOS / Linux
+curl -sI "https://www.reride.co.in/api/vehicles?limit=1" -H "Origin: https://localhost" | grep -iE "Cross-Origin-Resource-Policy|Access-Control-Allow-Origin"
+```
+
+You should see `Cross-Origin-Resource-Policy: cross-origin` and `Access-Control-Allow-Origin: https://localhost`. If production still shows `same-origin`, the security-config change is not deployed or a CDN cache is stale—purge/redeploy. **Client-side** `DataService` also uses `credentials: "omit"` for Capacitor GETs to avoid unnecessary credentialed CORS coupling on public listings.
 
 ### Database Connection Issues
 

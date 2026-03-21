@@ -243,21 +243,26 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               )}
             </div>
           )}
-          {/* Chat Button - Always visible */}
+          {/* Chat: browsing is public; messaging the seller requires login (handled in App onStartChat). */}
           <button
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               handleChat();
             }}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md"
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-4 rounded-xl font-semibold flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-md"
             style={{ minHeight: '48px' }}
             type="button"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            Chat with Seller
+            <span className="flex items-center justify-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              {currentUser ? 'Chat with Seller' : 'Login to chat with seller'}
+            </span>
+            {!currentUser && (
+              <span className="text-xs font-normal text-white/90">Sign in to message the seller</span>
+            )}
           </button>
         </div>
 
