@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import VehicleCard from './VehicleCard.js';
 import MobileVehicleCard from './MobileVehicleCard.js';
 import MobileFilterSheet from './MobileFilterSheet.js';
@@ -44,18 +44,22 @@ interface VehicleListProps {
 // Base items per page - optimized for performance (10-12 vehicles per load)
 const BASE_ITEMS_PER_PAGE = 12;
 
+/** Scroll root id set on MobileLayout `<main>` — avoids walking the tree and fixes IO root when overflow is scrollable but heights match before paint. */
+const MOBILE_SCROLL_ROOT_ID = 'mobile-app-scroll-root';
+
 /** Nearest scrollable ancestor — IntersectionObserver defaults to the viewport, which breaks load-more inside MobileLayout's overflow-y main. */
 function getScrollableAncestor(el: Element | null): Element | null {
   if (typeof document === 'undefined' || !el) return null;
+  const designated = document.getElementById(MOBILE_SCROLL_ROOT_ID);
+  if (designated && designated.contains(el)) {
+    return designated;
+  }
   let node: Element | null = el.parentElement;
   while (node && node !== document.documentElement) {
     const style = window.getComputedStyle(node);
     const oy = style.overflowY;
-    const h = node as HTMLElement;
-    if (
-      (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
-      h.scrollHeight > h.clientHeight
-    ) {
+    // Do not require scrollHeight > clientHeight: the root is still the correct IO root for overflow:auto/scroll even when content is short or layout is mid-paint.
+    if (oy === 'auto' || oy === 'scroll' || oy === 'overlay') {
       return node;
     }
     node = node.parentElement;
@@ -1172,34 +1176,51 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   isLoadingMoreRef.current = isLoadingMore;
 
   // Infinite scroll: load-more sentinel must use the real scroll container as root (MobileLayout main), not the viewport.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!hasMore) return;
 
     const node = loadMoreRef.current;
     if (!node) return;
 
-    const rootEl = getScrollableAncestor(node);
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]?.isIntersecting) return;
-        if (!hasMoreRef.current || isLoadingMoreRef.current) return;
-        isLoadingMoreRef.current = true;
-        setIsLoadingMore(true);
-        window.setTimeout(() => {
-          setCurrentPage((p) => p + 1);
-          setIsLoadingMore(false);
-          isLoadingMoreRef.current = false;
-        }, 200);
-      },
-      {
-        root: rootEl ?? null,
-        rootMargin: '240px',
-        threshold: 0,
-      }
-    );
+    let cancelled = false;
+    let observer: IntersectionObserver | null = null;
 
-    observer.observe(node);
-    return () => observer.disconnect();
+    const attach = () => {
+      if (cancelled || !loadMoreRef.current) return;
+      const rootEl = getScrollableAncestor(loadMoreRef.current);
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (!entries[0]?.isIntersecting) return;
+          if (!hasMoreRef.current || isLoadingMoreRef.current) return;
+          isLoadingMoreRef.current = true;
+          setIsLoadingMore(true);
+          window.setTimeout(() => {
+            setCurrentPage((p) => p + 1);
+            setIsLoadingMore(false);
+            isLoadingMoreRef.current = false;
+          }, 200);
+        },
+        {
+          root: rootEl ?? null,
+          rootMargin: '0px 0px 320px 0px',
+          threshold: 0,
+        }
+      );
+      observer.observe(loadMoreRef.current);
+    };
+
+    // Double rAF: scroll root and sentinel positions are stable after MobileLayout flex + list paint (WebView / PWA).
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(attach);
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      observer?.disconnect();
+    };
   }, [hasMore, currentPage, processedVehicles.length, isLoading, isAiSearching]);
 
   if (isWishlistMode) {
@@ -1471,10 +1492,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   if (isMobileApp) {
     return (
       <div 
-        className="w-full min-h-screen"
+        className="w-full min-h-0"
         style={{
           background: 'linear-gradient(180deg, #FAFAFA 0%, #FFFFFF 100%)',
-          minHeight: '100vh'
         }}
       >
         {/* Premium Search Bar */}
