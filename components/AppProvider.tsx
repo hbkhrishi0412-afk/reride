@@ -32,6 +32,7 @@ import * as buyerService from '../services/buyerService';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { supabaseRowToConversation } from '../services/supabase-conversation-service';
 import { isCapacitorNative } from '../utils/apiConfig';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 
 // PERFORMANCE: Helper function for user-friendly error messages
 // Improves UX by converting technical errors to actionable messages
@@ -1363,10 +1364,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Without this, `dataService` may run with missing `reRideAccessToken` and fail the first requests.
         if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
           try {
-            const hasAccessToken =
-              !!localStorage.getItem('reRideAccessToken') ||
-              !!localStorage.getItem('sb-access-token') ||
-              !!localStorage.getItem('supabase.auth.token');
+            const hasAccessToken = !!getBrowserAccessTokenForApi();
             
             const hasRefreshToken = !!localStorage.getItem('reRideRefreshToken');
             
@@ -1900,10 +1898,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // This runs when a user is restored from localStorage on initial load.
         if (typeof window !== 'undefined' && !isDevelopmentEnvironment()) {
           try {
-            const hasAccessToken =
-              !!localStorage.getItem('reRideAccessToken') ||
-              !!localStorage.getItem('sb-access-token') ||
-              !!localStorage.getItem('supabase.auth.token');
+            const hasAccessToken = !!getBrowserAccessTokenForApi();
             const hasRefreshToken = !!localStorage.getItem('reRideRefreshToken');
 
             if (!hasAccessToken && hasRefreshToken) {

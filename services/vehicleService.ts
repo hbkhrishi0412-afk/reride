@@ -1,5 +1,6 @@
 
-import type { Vehicle, User, VehicleCategory } from '../types';
+import type { Vehicle, VehicleCategory } from '../types';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { isVehicle, isApiResponse } from '../types';
 import { isDevelopmentEnvironment } from '../utils/environment';
 import { isCapacitorNative } from '../utils/apiConfig';
@@ -45,23 +46,15 @@ const FALLBACK_VEHICLES: Vehicle[] = [
 // --- API Helpers ---
 const getAuthHeader = () => {
   try {
-    // Check if we're in a browser environment
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
       return {};
     }
-    
-    // Try localStorage first for persistent login, fallback to sessionStorage
-    const userJson = localStorage.getItem('reRideCurrentUser') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('currentUser') : null);
-    if (!userJson) return {};
-    const user: User = JSON.parse(userJson);
-    
-    // Use access token for authorization
-    const accessToken = localStorage.getItem('reRideAccessToken') || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('accessToken') : null);
+    const accessToken =
+      getBrowserAccessTokenForApi() ||
+      (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('accessToken') : null);
     if (accessToken) {
-      return { 'Authorization': `Bearer ${accessToken}` };
+      return { Authorization: `Bearer ${accessToken}` };
     }
-    
-    // No token available — return empty auth header
     return {};
   } catch (error) {
     if (process.env.NODE_ENV !== 'production') {

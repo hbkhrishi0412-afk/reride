@@ -156,11 +156,13 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                   WebkitTapHighlightColor: 'transparent'
                 }}
                 onTouchStart={(e) => {
-                  e.currentTarget.style.transform = 'scale(0.92)';
+                  const el = e.currentTarget;
+                  el.style.transform = 'scale(0.92)';
                 }}
                 onTouchEnd={(e) => {
+                  const el = e.currentTarget;
                   setTimeout(() => {
-                    e.currentTarget.style.transform = '';
+                    if (el) el.style.transform = '';
                   }, 150);
                 }}
               >

@@ -2,6 +2,7 @@ import type { Vehicle, User, VehicleData } from '../types';
 import { queueRequest } from '../utils/requestQueue';
 import { getApiBaseUrl, isCapacitorNative } from '../utils/apiConfig';
 import { ensureCsrfToken } from '../utils/authenticatedFetch';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
@@ -38,6 +39,9 @@ class DataService {
     const base = this.resolveApiBaseUrl();
     if (base.includes('https://www.reride.co.in')) {
       return base.replace('https://www.reride.co.in', 'https://reride.co.in');
+    }
+    if (base.startsWith('https://reride.co.in') && !base.includes('www.')) {
+      return base.replace('https://reride.co.in', 'https://www.reride.co.in');
     }
     return null;
   }
@@ -94,6 +98,7 @@ class DataService {
           Accept: 'application/json',
           ...(shouldSendJson ? { 'Content-Type': 'application/json' } : {}),
           ...(csrfHeader ? { 'X-CSRF-Token': csrfHeader } : {}),
+          ...(isCapacitorNative() ? { 'X-App-Client': 'capacitor' } : {}),
           ...this.getAuthHeaders(),
           ...((options.headers || {}) as Record<string, string>)
         };
@@ -319,7 +324,9 @@ class DataService {
 
   private getAuthHeaders(): Record<string, string> {
     try {
-      const accessToken = localStorage.getItem('reRideAccessToken') || sessionStorage.getItem('accessToken');
+      const accessToken =
+        getBrowserAccessTokenForApi() ||
+        (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('accessToken') : null);
       if (accessToken) {
         if (process.env.NODE_ENV === 'development') {
           console.log('📊 getAuthHeaders: Access token found, length:', accessToken.length);
@@ -401,12 +408,29 @@ class DataService {
     isNativeWebView: boolean
   ): Promise<Vehicle[]> {
     const { vehicles, pagination } = this.extractVehiclesFromApiResponse(firstResponse);
-    if (includeAllStatuses || !pagination?.hasMore) {
+    if (includeAllStatuses || !pagination) {
       return vehicles;
     }
-    const limit = Math.max(1, Number(pagination.limit) || 50);
-    let page = (Number(pagination.page) || 1) + 1;
-    let hasMore = !!pagination.hasMore;
+
+    const p = pagination;
+    const total = typeof p.total === 'number' && !Number.isNaN(p.total) ? p.total : undefined;
+    const pages = typeof p.pages === 'number' && !Number.isNaN(p.pages) ? p.pages : undefined;
+    const pageNum = Number(p.page) || 1;
+
+    // Do not trust hasMore alone — align with total/pages so we never request page 2 when the server reports a single page (avoids noisy logs and wasted requests).
+    if (pages !== undefined && pageNum >= pages) {
+      return vehicles;
+    }
+    if (total !== undefined && vehicles.length >= total) {
+      return vehicles;
+    }
+    if (!p.hasMore) {
+      return vehicles;
+    }
+
+    const limit = Math.max(1, Number(p.limit) || 50);
+    let page = pageNum + 1;
+    let hasMore = !!p.hasMore;
     const merged = [...vehicles];
     const maxPages = 100;
 
@@ -417,7 +441,17 @@ class DataService {
       const nextRaw = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: typeof pagination }>(endpoint);
       const next = this.extractVehiclesFromApiResponse(nextRaw);
       merged.push(...next.vehicles);
-      hasMore = !!next.pagination?.hasMore;
+      if (next.vehicles.length === 0) {
+        break;
+      }
+      const np = next.pagination;
+      if (typeof np?.total === 'number' && merged.length >= np.total) {
+        break;
+      }
+      if (typeof np?.pages === 'number' && page >= np.pages) {
+        break;
+      }
+      hasMore = !!np?.hasMore;
       page++;
     }
 

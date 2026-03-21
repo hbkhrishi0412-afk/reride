@@ -11,7 +11,29 @@
  * API origin so fetches go to the real server.
  */
 
-const DEFAULT_PRODUCTION_ORIGIN = 'https://www.reride.co.in';
+/** Canonical production site (non-www); `www` is supported via dataService URL fallback. */
+const DEFAULT_PRODUCTION_ORIGIN = 'https://reride.co.in';
+
+/**
+ * Android emulator cannot reach the dev machine via localhost/127.0.0.1 — use 10.0.2.2.
+ * Physical devices still need your LAN IP; this only rewrites when running on Android native.
+ */
+function rewriteLocalhostForAndroidEmulator(baseUrl: string): string {
+  if (typeof window === 'undefined') return baseUrl;
+  try {
+    const cap = (window as any).Capacitor;
+    if (cap?.getPlatform?.() !== 'android') return baseUrl;
+    const u = new URL(baseUrl);
+    const h = u.hostname;
+    if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') {
+      u.hostname = '10.0.2.2';
+      return u.toString().replace(/\/+$/, '');
+    }
+  } catch {
+    return baseUrl;
+  }
+  return baseUrl;
+}
 
 function getProductionOrigin(): string {
   const fromEnv =
@@ -74,7 +96,7 @@ export function isCapacitorNative(): boolean {
  *
  * - Web (dev):   '' (empty — relative `/api/` proxied by Vite)
  * - Web (prod):  '' (empty — same Vercel origin)
- * - Capacitor:   'https://www.reride.co.in'
+ * - Capacitor:   'https://reride.co.in' (override with `VITE_API_URL` / `VITE_PRODUCTION_ORIGIN`)
  *
  * Override via `VITE_API_URL` env var for custom deployments.
  */
@@ -83,7 +105,9 @@ export function getApiBaseUrl(): string {
     typeof import.meta !== 'undefined'
       ? import.meta.env?.VITE_API_URL
       : undefined;
-  if (envOverride) return envOverride.replace(/\/+$/, '');
+  if (envOverride) {
+    return rewriteLocalhostForAndroidEmulator(envOverride.replace(/\/+$/, ''));
+  }
 
   if (isCapacitorNative()) return getProductionOrigin();
 

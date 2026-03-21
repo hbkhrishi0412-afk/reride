@@ -3451,7 +3451,10 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // Return paginated response with metadata if pagination was requested
       if (limit > 0) {
-        const totalPages = Math.ceil(finalTotalCount / limit);
+        const totalPages = Math.max(1, Math.ceil(finalTotalCount / limit));
+        const hasMore =
+          page < totalPages &&
+          !(normalizedVehicles.length === 0 && page > 1);
         console.log(`📊 Returning ${normalizedVehicles.length} published vehicles (page ${page} of ${totalPages}, total: ${finalTotalCount})`);
         return res.status(200).json({
           vehicles: normalizedVehicles,
@@ -3460,7 +3463,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             limit,
             total: finalTotalCount,
             pages: totalPages,
-            hasMore: page < totalPages
+            hasMore
           }
         });
       }

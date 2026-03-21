@@ -41,11 +41,12 @@ const CarSpecModal: React.FC<CarSpecModalProps> = ({ car, variant, onClose }) =>
                 onClose();
             }
         };
-        document.body.style.overflow = 'hidden';
+        const body = document.body;
+        if (body) body.style.overflow = 'hidden';
         window.addEventListener('keydown', handleEsc);
 
         return () => {
-            document.body.style.overflow = 'auto';
+            if (document.body) document.body.style.overflow = 'auto';
             window.removeEventListener('keydown', handleEsc);
         };
     }, [onClose]);

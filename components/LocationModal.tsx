@@ -55,16 +55,14 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             setSelectedOption('detect');
             setSelectedDistrict('');
             setSelectedCity('');
-            // Prevent body scroll when modal is open
-            document.body.style.overflow = 'hidden';
-        } else {
-            // Restore body scroll when modal closes
-            document.body.style.overflow = '';
         }
-        
+        const body = document.body;
+        if (body) {
+            body.style.overflow = isOpen ? 'hidden' : '';
+        }
+
         return () => {
-            // Cleanup: restore body scroll
-            document.body.style.overflow = '';
+            if (document.body) document.body.style.overflow = '';
         };
     }, [isOpen]);
 

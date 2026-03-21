@@ -23,14 +23,16 @@ export const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({
   const backdropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const body = document.body;
+    if (!body) return;
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = '';
+      body.style.overflow = '';
     }
 
     return () => {
-      document.body.style.overflow = '';
+      if (document.body) document.body.style.overflow = '';
     };
   }, [isOpen]);
 
@@ -42,21 +44,23 @@ export const MobileFilterSheet: React.FC<MobileFilterSheetProps> = ({
 
   // Prevent body scroll when sheet is open
   useEffect(() => {
-    if (isOpen) {
-      const originalOverflow = document.body.style.overflow;
-      const originalPosition = document.body.style.position;
-      const originalWidth = document.body.style.width;
-      
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      
-      return () => {
-        document.body.style.overflow = originalOverflow;
-        document.body.style.position = originalPosition;
-        document.body.style.width = originalWidth;
-      };
-    }
+    if (!isOpen) return;
+    const body = document.body;
+    if (!body) return;
+    const originalOverflow = body.style.overflow;
+    const originalPosition = body.style.position;
+    const originalWidth = body.style.width;
+
+    body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.width = '100%';
+
+    return () => {
+      if (!document.body) return;
+      document.body.style.overflow = originalOverflow;
+      document.body.style.position = originalPosition;
+      document.body.style.width = originalWidth;
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
