@@ -100,7 +100,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
       )}
       
       <main 
-        className="overflow-y-auto native-scroll w-full"
+        id="mobile-app-scroll-root"
+        className="min-h-0 overflow-y-auto overflow-x-hidden native-scroll w-full"
         style={{
           ...mainStyles,
           background: shouldShowGradient ? 'transparent' : 'linear-gradient(180deg, #FAFAFA 0%, #FFFFFF 100%)'
