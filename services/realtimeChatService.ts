@@ -7,6 +7,7 @@
 
 import type { Conversation, ChatMessage, Notification } from '../types';
 import { addMessageToConversation, saveConversationToSupabase } from './conversationService';
+import { getDevSocketHost } from '../utils/apiConfig';
 
 interface SocketInstance {
   on(event: string, callback: (data: any) => void): void;
@@ -85,7 +86,7 @@ class RealtimeChatService {
       
       if (isDevelopment) {
         const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsHost = 'localhost:3001';
+        const wsHost = getDevSocketHost(3001);
         const wsUrl = `${wsProtocol}//${wsHost}`;
 
         try {

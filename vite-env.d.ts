@@ -18,7 +18,13 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID: string
   readonly VITE_APP_URL?: string
   readonly VITE_API_URL?: string
+  readonly VITE_PRODUCTION_ORIGIN?: string
+  /** When `true` and build `MODE` is `development`, Capacitor uses your PC dev API (see `getMobileLocalApiOrigin`). */
+  readonly VITE_MOBILE_LOCAL_DEV?: string
+  /** Port for local dev API (default 3001, same as dev-api-server.js). */
+  readonly VITE_LOCAL_API_PORT?: string
   readonly VITE_GA_MEASUREMENT_ID?: string
+  readonly MODE: string
   readonly DEV: boolean
   readonly PROD: boolean
 }

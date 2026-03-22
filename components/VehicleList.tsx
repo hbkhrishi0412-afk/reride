@@ -13,7 +13,7 @@ import { saveSearch } from '../services/buyerEngagementService.js';
 import { getVehicleData } from '../services/vehicleDataService.js';
 import { logInfo, logError } from '../utils/logger.js';
 import type { VehicleData } from '../types.js';
-import type { VehicleMake, VehicleModel } from './vehicleData.js';
+import type { VehicleMake, VehicleModel } from '../vehicleDataTypes.js';
 // Lazy load location data when needed
 
 interface VehicleListProps {

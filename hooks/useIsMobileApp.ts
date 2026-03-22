@@ -12,7 +12,7 @@ export const useIsMobileApp = () => {
     let mediaQuery: MediaQueryList | null = null;
     let handleDisplayModeChange: ((e: MediaQueryListEvent) => void) | null = null;
     let handleResize: (() => void) | null = null;
-    let capRetry: ReturnType<typeof setTimeout> | undefined;
+    let capRetry: number | undefined;
 
     try {
       mediaQuery = window.matchMedia('(display-mode: standalone)');
