@@ -302,6 +302,7 @@ const AppContent: React.FC = () => {
     recommendations,
     selectedVehicle,
     isLoading,
+    vehiclesCatalogReady,
     conversations,
     setConversations,
     toasts,
@@ -1042,7 +1043,7 @@ const AppContent: React.FC = () => {
             <VehicleList
               vehicles={enrichVehiclesWithSellerInfo(filteredVehicles, users)}
               onSelectVehicle={selectVehicle}
-              isLoading={isLoading}
+              isLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
               comparisonList={comparisonList}
               onToggleCompare={(id) => {
                 setComparisonList(prev => 
@@ -1552,7 +1553,7 @@ const AppContent: React.FC = () => {
           <VehicleList
             vehicles={enrichVehiclesWithSellerInfo(vehicles.filter(v => wishlist.includes(v.id)), users)}
             onSelectVehicle={selectVehicle}
-            isLoading={isLoading}
+            isLoading={isLoading || (!vehiclesCatalogReady && vehicles.length === 0)}
             comparisonList={comparisonList}
             onToggleCompare={(id) => {
               setComparisonList(prev => 

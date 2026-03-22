@@ -85,9 +85,13 @@ class DataService {
     // Use request queue to prevent rate limiting
     // Higher priority for GET requests (read operations are more critical)
     const requestPriority = method === 'GET' ? Math.max(priority, 7) : priority;
-    
-    return queueRequest(
-      async () => {
+
+    // On Capacitor native, bypass the sequential queue for GET requests so the initial
+    // vehicles + users fetches run in parallel instead of serialized behind a 200ms delay.
+    // The queue was designed for rate-limit protection; mobile startup should not be throttled.
+    const bypassQueue = isCapacitorNative() && method === 'GET';
+
+    const doRequest = async () => {
         let csrfHeader: string | undefined;
         if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
           const t = await ensureCsrfToken();
@@ -133,9 +137,10 @@ class DataService {
           let timeoutId: NodeJS.Timeout | null = null;
           const apiBase = this.resolveApiBaseUrl();
           const fbBase = this.resolveApiBaseUrlFallback();
+          const fetchTimeoutMs = isCapacitorNative() ? 20000 : 7000;
           try {
             const controller = new AbortController();
-            timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout for faster fallback
+            timeoutId = setTimeout(() => controller.abort(), fetchTimeoutMs);
 
             const primaryUrl = `${apiBase}${endpoint}`;
             const fallbackUrl = fbBase ? `${fbBase}${endpoint}` : null;
@@ -195,7 +200,7 @@ class DataService {
                   console.warn('VEHICLES_API_TRY_FALLBACK_URL', fallbackUrl);
                 }
                 const controller2 = new AbortController();
-                const timeoutId2 = setTimeout(() => controller2.abort(), 7000);
+                const timeoutId2 = setTimeout(() => controller2.abort(), fetchTimeoutMs);
                 const resp2 = await fetch(fallbackUrl, {
                   ...fetchOptions,
                   signal: controller2.signal,
@@ -313,7 +318,14 @@ class DataService {
         }
         
         return data;
-      },
+    };
+
+    if (bypassQueue) {
+      return doRequest();
+    }
+
+    return queueRequest(
+      doRequest,
       {
         priority: requestPriority,
         id: `${method}_${endpoint}`,
@@ -906,14 +918,7 @@ class DataService {
         }
 
         if (!accessToken) {
-          console.warn('⚠️ No access token found. Cannot fetch users from API.');
-          // Try to use cached data
-          const cachedUsers = this.getLocalStorageData<User[]>('reRideUsers_prod', []);
-          if (cachedUsers.length > 0) {
-            console.warn('⚠️ Using cached users data (no token available)');
-            return cachedUsers;
-          }
-          return [];
+          console.warn('⚠️ No access token found. Will attempt unauthenticated API call (public endpoints like sellers still work).');
         }
       }
 
