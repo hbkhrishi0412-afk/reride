@@ -5,7 +5,16 @@
 
 import { logInfo, logWarn, logError } from './logger';
 import { formatSupabaseError } from './errorUtils';
-import { resolveApiUrl, isCapacitorNative } from './apiConfig';
+import {
+  resolveApiUrl,
+  isCapacitorNative,
+  normalizeRerideApiHostToWww,
+} from './apiConfig';
+
+/** Single place: resolve + never emit apex `reride.co.in` (307 breaks CORS preflight). */
+function resolvedApiUrl(pathOrUrl: string): string {
+  return normalizeRerideApiHostToWww(resolveApiUrl(pathOrUrl));
+}
 import { getBrowserAccessTokenForApi } from './authStorage';
 
 interface FetchOptions extends RequestInit {
@@ -44,7 +53,7 @@ export async function ensureCsrfToken(): Promise<string | null> {
   if (csrfTokenPromise) return csrfTokenPromise;
   csrfTokenPromise = (async () => {
     try {
-      const res = await fetch(resolveApiUrl('/api/csrf-token'), {
+      const res = await fetch(resolvedApiUrl('/api/csrf-token'), {
         credentials: isCapacitorNative() ? 'omit' : 'include',
       });
       if (!res.ok) return null;
@@ -132,7 +141,7 @@ const refreshToken = async (): Promise<string | null> => {
         refreshHeaders['X-App-Client'] = 'capacitor';
       }
 
-      const response = await fetch(resolveApiUrl('/api/users'), {
+      const response = await fetch(resolvedApiUrl('/api/users'), {
         method: 'POST',
         headers: refreshHeaders,
         credentials: isCapacitorNative() ? 'omit' : 'include',
@@ -304,7 +313,7 @@ export const authenticatedFetch = async (
   options: FetchOptions = {}
 ): Promise<Response> => {
   try {
-    const resolvedUrl = resolveApiUrl(url);
+    const resolvedUrl = resolvedApiUrl(url);
     const { skipAuth = false, retryOn401 = true, ...fetchOptions } = options;
 
     // For state-changing methods, ensure CSRF token is present

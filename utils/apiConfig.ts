@@ -258,28 +258,19 @@ export function resolveApiUrl(path: string): string {
 }
 
 /**
- * Patch the global fetch so that any call to a relative `/api/...` path is
- * rewritten to the real API origin when needed:
- * - Capacitor WebView (`https://localhost`) → production origin
- * - Browser on apex `https://reride.co.in` → canonical `www` (avoids 307 + broken credentialed fetches)
+ * Patch global `fetch` so API calls always behave correctly:
+ * - Relative `/api/...` → resolved via `resolveApiUrl` (WebView / Capacitor → `www`, Vite dev unchanged).
+ * - Absolute `https://reride.co.in/...` (apex) → `https://www.reride.co.in/...` (avoids 307 + broken CORS preflight).
  *
- * Call this once at app startup (e.g. in index.tsx before React renders).
+ * Installed for **all** browser sessions (not only when `isCapacitorNative()` is true) so a delayed or
+ * missed native detection cannot leave requests pointing at the apex host.
+ *
+ * Call once at startup (e.g. `utils/capacitorInit.ts` imported before `App`).
  */
 let _fetchPatched = false;
-export function patchFetchForCapacitor(retryCount: number = 40): void {
+export function patchFetchForCapacitor(_retryCount: number = 40): void {
   if (_fetchPatched) return;
   if (typeof window === 'undefined') return;
-
-  const onProductionApex =
-    window.location.hostname === 'reride.co.in';
-
-  if (!isCapacitorNative() && !onProductionApex) {
-    // Retry: rare WebViews where origin detection is delayed.
-    if (retryCount > 0) {
-      setTimeout(() => patchFetchForCapacitor(retryCount - 1), 150);
-    }
-    return;
-  }
 
   const originalFetch = window.fetch.bind(window);
 
