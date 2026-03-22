@@ -97,7 +97,14 @@ const SECURITY_CONFIG = {
           'https://reride--2-.vercel.app'
         ],
     ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    // Must match utils/security-config.ts — Capacitor / WebView sends X-App-Client; web sends X-CSRF-Token.
+    ALLOWED_HEADERS: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-CSRF-Token',
+      'X-App-Client'
+    ],
     CREDENTIALS: true,
     MAX_AGE: 86400 // 24 hours
   },
