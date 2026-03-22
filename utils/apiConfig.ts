@@ -11,8 +11,8 @@
  * API origin so fetches go to the real server.
  */
 
-/** Canonical production site (non-www); `www` is supported via dataService URL fallback. */
-const DEFAULT_PRODUCTION_ORIGIN = 'https://reride.co.in';
+/** Primary production API host (matches Vercel `PRIMARY_ORIGIN` / live site). */
+const DEFAULT_PRODUCTION_ORIGIN = 'https://www.reride.co.in';
 
 /**
  * Android emulator cannot reach the dev machine via localhost/127.0.0.1 — use 10.0.2.2.
@@ -139,14 +139,20 @@ export function isCapacitorNative(): boolean {
     const devServerPorts = ['5173', '4173', '3000', '8080'];
     const host = window.location.hostname;
     const proto = window.location.protocol;
+    const loopback = host === 'localhost' || host === '127.0.0.1';
+    // Packaged app: https/http loopback without a Vite dev port (not :5173 etc.)
+    const isPackagedWebViewShell =
+      loopback &&
+      (proto === 'https:' || proto === 'http:') &&
+      !devServerPorts.includes(port);
     const isCapacitorLikeOrigin =
       host === 'appassets.androidplatform.net' ||
       host.includes('appassets.androidplatform.net') ||
       (host === 'localhost' && proto === 'capacitor:') ||
       (host === 'localhost' && proto === 'ionic:') ||
-      (host === 'localhost' &&
-        proto === 'https:' &&
-        !devServerPorts.includes(port));
+      (loopback && proto === 'capacitor:') ||
+      (loopback && proto === 'ionic:') ||
+      isPackagedWebViewShell;
 
     const result =
       isCapacitorNativePlatform ||
@@ -195,7 +201,27 @@ export function resolveApiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) {
     return path;
   }
-  const base = getApiBaseUrl();
+  let base = getApiBaseUrl();
+  // Defense-in-depth: if base is still empty, never leave `/api/*` relative — that hits
+  // `https://localhost/api/*` in the WebView and fails (login sync, CSRF, etc.).
+  if (!base && typeof window !== 'undefined' && path.startsWith('/api/')) {
+    const port = window.location.port || '';
+    const devServerPorts = ['5173', '4173', '3000', '8080'];
+    const h = window.location.hostname;
+    const proto = window.location.protocol;
+    const loopback = h === 'localhost' || h === '127.0.0.1';
+    const looksPackagedShell =
+      h === 'appassets.androidplatform.net' ||
+      h.includes('appassets.androidplatform.net') ||
+      (loopback &&
+        (proto === 'https:' || proto === 'http:') &&
+        !devServerPorts.includes(port));
+    if (looksPackagedShell) {
+      base = shouldUseBundledMobileLocalApi()
+        ? rewriteLocalhostForAndroidEmulator(getMobileLocalApiOrigin())
+        : getProductionOrigin();
+    }
+  }
   if (!base) return path;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${base}${normalizedPath}`;
@@ -226,11 +252,10 @@ export function patchFetchForCapacitor(retryCount: number = 40): void {
     input: RequestInfo | URL,
     init?: RequestInit
   ): Promise<Response> {
-    const base = getApiBaseUrl();
     if (typeof input === 'string' && input.startsWith('/api/')) {
-      input = `${base}${input}`;
+      input = resolveApiUrl(input);
     } else if (input instanceof Request && input.url.startsWith('/api/')) {
-      input = new Request(`${base}${input.url}`, input);
+      input = new Request(resolveApiUrl(input.url), input);
     }
     return originalFetch(input, init);
   } as typeof window.fetch;

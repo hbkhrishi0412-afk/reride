@@ -17,8 +17,6 @@ class MainActivity : ComponentActivity() {
             .addPathHandler("/", AssetsPathHandler(this))
             .build()
 
-        // Use a plain WebView to avoid dependency/classpath issues.
-        // The critical fix for vehicles/Home is the /api/* interception rule below.
         val webView = WebView(this)
         setContentView(webView)
 
@@ -30,13 +28,10 @@ class MainActivity : ComponentActivity() {
                 val uri = request.url
                 val path = uri.path.orEmpty()
 
-                // Important: DO NOT route backend API calls through WebViewAssetLoader.
-                // Your frontend calls `/api/...` relative to the current origin (which becomes
-                // `https://appassets.androidplatform.net/...` inside WebView). If we intercept it,
-                // WebViewAssetLoader tries to find `assets/api/...` packaged resources and returns 404/empty.
-                if (path.startsWith("/api/") || path == "/api") return null
+                // Do not intercept API calls; let them go to the real network
+                if (path.startsWith("/api/")) return null
 
-                // Only intercept requests intended for the packaged web host.
+                // Only intercept requests for the local assets host
                 if (uri.host != "appassets.androidplatform.net") return null
 
                 return assetLoader.shouldInterceptRequest(uri)
@@ -47,7 +42,8 @@ class MainActivity : ComponentActivity() {
         webView.settings.domStorageEnabled = true
         webView.settings.allowFileAccess = false
         webView.settings.allowContentAccess = false
-
+        
+        // Load the local index.html
         webView.loadUrl("https://appassets.androidplatform.net/index.html")
     }
 }

@@ -107,10 +107,9 @@ class DataService {
           ...((options.headers || {}) as Record<string, string>)
         };
 
-        // Capacitor: cross-origin GET does not need cookies; omit avoids extra CORS/credential coupling.
-        // POST/PUT/DELETE still send credentials so CSRF cookies can be included when needed.
-        const credentialsMode: RequestCredentials =
-          isCapacitorNative() && method === 'GET' ? 'omit' : 'include';
+        // Capacitor WebView origin is https://localhost — credentialed cross-origin + third-party cookies
+        // often fail; API uses JWT headers and server skips CSRF for X-App-Client: capacitor.
+        const credentialsMode: RequestCredentials = isCapacitorNative() ? 'omit' : 'include';
 
         const fetchOptions: RequestInit = {
           ...options,
