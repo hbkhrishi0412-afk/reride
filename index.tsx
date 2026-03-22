@@ -2,7 +2,7 @@ import './utils/capacitorInit';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, HashRouter } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './index.css';
@@ -14,6 +14,7 @@ import { injectCriticalCSS } from './utils/criticalCSS';
 import { validateEnvironmentVariablesSafe } from './utils/envValidation';
 import { logInfo, logWarn, logError } from './utils/logger';
 import { ensureCsrfToken } from './utils/authenticatedFetch';
+import { isCapacitorNative } from './utils/apiConfig';
 import { initAnalytics, trackPageView } from './utils/analytics';
 
 // i18n - must run before any component that uses useTranslation
@@ -94,7 +95,11 @@ if (typeof window !== 'undefined') {
     ensureCsrfToken();
     // Analytics (GA4) when measurement ID is set
     initAnalytics();
-    trackPageView(window.location.pathname);
+    trackPageView(
+      isCapacitorNative()
+        ? `${window.location.pathname}${window.location.hash || ''}`
+        : window.location.pathname
+    );
   });
 } else {
   // Fallback if window is not available (shouldn't happen in browser)
@@ -116,16 +121,20 @@ const queryClient = new QueryClient({
 
 // StrictMode is enabled in development to catch bugs (double-renders are intentional).
 // In production, StrictMode is stripped out by React — no performance impact.
+// Browser history has no server fallback for deep links in Android WebViewAssetLoader
+// (paths like /used-cars 404). Hash routes work for the packaged app; web keeps clean URLs.
+const AppRouter = isCapacitorNative() ? HashRouter : BrowserRouter;
+
 try {
   root.render(
     <React.StrictMode>
       <HelmetProvider>
         <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
+          <AppRouter>
             <ErrorBoundary>
               <App />
             </ErrorBoundary>
-          </BrowserRouter>
+          </AppRouter>
         </QueryClientProvider>
       </HelmetProvider>
     </React.StrictMode>

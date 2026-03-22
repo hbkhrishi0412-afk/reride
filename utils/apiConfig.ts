@@ -152,7 +152,8 @@ export function isCapacitorNative(): boolean {
 
     // Support custom Android WebView wrappers using WebViewAssetLoader host.
     const isAndroidAssetLoaderHost =
-      window.location.hostname === 'appassets.androidplatform.net';
+      window.location.hostname.toLowerCase() === 'appassets.androidplatform.net' ||
+      window.location.hostname.toLowerCase().includes('appassets.androidplatform.net');
 
     // Capacitor bridge can appear after the first JS tick. Rely on the WebView
     // origin so /api/* is rewritten immediately (otherwise requests hit
@@ -168,8 +169,6 @@ export function isCapacitorNative(): boolean {
       (proto === 'https:' || proto === 'http:') &&
       !devServerPorts.includes(port);
     const isCapacitorLikeOrigin =
-      host === 'appassets.androidplatform.net' ||
-      host.includes('appassets.androidplatform.net') ||
       (host === 'localhost' && proto === 'capacitor:') ||
       (host === 'localhost' && proto === 'ionic:') ||
       (loopback && proto === 'capacitor:') ||
@@ -240,9 +239,10 @@ export function resolveApiUrl(path: string): string {
     const h = window.location.hostname;
     const proto = window.location.protocol;
     const loopback = h === 'localhost' || h === '127.0.0.1';
+    const hl = h.toLowerCase();
     const looksPackagedShell =
-      h === 'appassets.androidplatform.net' ||
-      h.includes('appassets.androidplatform.net') ||
+      hl === 'appassets.androidplatform.net' ||
+      hl.includes('appassets.androidplatform.net') ||
       (loopback &&
         (proto === 'https:' || proto === 'http:') &&
         !devServerPorts.includes(port));
@@ -277,6 +277,7 @@ export function patchFetchForCapacitor(_retryCount: number = 40): void {
   const rewriteFetchInput = (input: RequestInfo | URL): RequestInfo | URL => {
     if (typeof input === 'string') {
       if (input.startsWith('/api/')) return resolveApiUrl(input);
+      // Any absolute URL to apex (http/https) — avoid 307 on OPTIONS preflight.
       if (/^https?:\/\/reride\.co\.in\b/i.test(input)) {
         return normalizeRerideApiHostToWww(input);
       }

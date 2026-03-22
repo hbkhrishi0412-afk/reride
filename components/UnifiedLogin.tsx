@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, User } from '../types';
 import { login, register } from '../services/userService';
-import { signInWithGoogle, syncWithBackend } from '../services/authService';
+import { signInWithGoogle } from '../services/authService';
 import OTPLogin from './OTPLogin';
 import PasswordInput from './PasswordInput';
 import Logo from './Logo';
@@ -168,19 +168,27 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       }
 
       const result = await signInWithGoogle();
-      
-      if (result.success && result.firebaseUser) {
-        // Type assertion: we've already checked that selectedRole is not 'admin'
-        const backendResult = await syncWithBackend(result.firebaseUser, selectedRole as 'customer' | 'seller', 'google');
-        
-        if (backendResult.success && backendResult.user) {
-          onLogin(backendResult.user);
-        } else {
-          throw new Error(backendResult.reason || 'Failed to authenticate with backend');
+
+      // Supabase OAuth is redirect-based: API returns a URL to Google, not a user object.
+      const redirectUrl =
+        result.user &&
+        typeof result.user === 'object' &&
+        'redirectUrl' in result.user &&
+        typeof (result.user as { redirectUrl?: string }).redirectUrl === 'string'
+          ? (result.user as { redirectUrl: string }).redirectUrl
+          : null;
+
+      if (result.success && redirectUrl) {
+        try {
+          sessionStorage.setItem('reride_oauth_role', selectedRole);
+        } catch {
+          /* ignore */
         }
-      } else {
-        throw new Error(result.reason || 'Failed to sign in with Google');
+        window.location.assign(redirectUrl);
+        return;
       }
+
+      throw new Error(result.reason || 'Failed to sign in with Google');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
     } finally {

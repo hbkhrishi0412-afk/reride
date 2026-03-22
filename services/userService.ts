@@ -95,6 +95,31 @@ const clearTokens = () => {
   }
 };
 
+/**
+ * After API login/register, establish a Supabase Auth session with the same password when
+ * the user exists in Supabase Auth. Enables Realtime, Storage RLS, and consistent auth
+ * across web + Capacitor without blocking login if this step fails.
+ */
+async function bridgeSupabasePasswordSession(
+  email: string,
+  password: string,
+): Promise<void> {
+  try {
+    const { getSupabaseClient } = await import('../lib/supabase');
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.toLowerCase().trim(),
+      password,
+    });
+    if (error && process.env.NODE_ENV === 'development') {
+      // Common: user exists in DB but not in Supabase Auth, or email not confirmed
+      console.warn('[ReRide] Supabase Auth bridge skipped:', error.message);
+    }
+  } catch {
+    /* non-fatal */
+  }
+}
+
 const handleResponse = async (response: Response): Promise<any> => {
     if (!response.ok) {
         // Handle rate limiting (429) - don't retry, use fallback immediately
@@ -652,6 +677,10 @@ export const login = async (credentials: { email?: string; password?: string; ro
       if (result.accessToken && result.refreshToken) {
         storeTokens(result.accessToken, result.refreshToken);
         localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+        void bridgeSupabasePasswordSession(
+          String(credentials.email),
+          String(credentials.password),
+        );
       }
       
       return {
@@ -703,6 +732,10 @@ export const register = async (credentials: { email?: string; password?: string;
       if (result.success && result.accessToken && result.refreshToken) {
         storeTokens(result.accessToken, result.refreshToken);
         localStorage.setItem('reRideCurrentUser', JSON.stringify(result.user));
+        void bridgeSupabasePasswordSession(
+          String(credentials.email),
+          String(credentials.password),
+        );
       }
       return result;
     } catch {
