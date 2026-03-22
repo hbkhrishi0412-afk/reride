@@ -169,8 +169,10 @@ export function isCapacitorNative(): boolean {
  * Returns the base URL to prepend to `/api/...` endpoints.
  *
  * - Web (dev):   '' (empty — relative `/api/` proxied by Vite)
- * - Web (prod):  '' (empty — same Vercel origin)
- * - Capacitor:   'https://reride.co.in' (override with `VITE_API_URL` / `VITE_PRODUCTION_ORIGIN`)
+ * - Web (prod):  '' (empty — same Vercel origin), except on apex `reride.co.in` where we use
+ *                `getProductionOrigin()` so `/api/*` is not requested on apex (307 → www breaks
+ *                credentialed fetch + CSRF for many browsers).
+ * - Capacitor:   `getProductionOrigin()` (default `https://www.reride.co.in`; override via env)
  *
  * Override via `VITE_API_URL` env var for custom deployments.
  */
@@ -187,6 +189,10 @@ export function getApiBaseUrl(): string {
     if (shouldUseBundledMobileLocalApi()) {
       return rewriteLocalhostForAndroidEmulator(getMobileLocalApiOrigin());
     }
+    return getProductionOrigin();
+  }
+
+  if (typeof window !== 'undefined' && window.location.hostname === 'reride.co.in') {
     return getProductionOrigin();
   }
 
@@ -229,8 +235,9 @@ export function resolveApiUrl(path: string): string {
 
 /**
  * Patch the global fetch so that any call to a relative `/api/...` path is
- * automatically rewritten to the production origin when running inside
- * Capacitor. This avoids having to touch every individual fetch call.
+ * rewritten to the real API origin when needed:
+ * - Capacitor WebView (`https://localhost`) → production origin
+ * - Browser on apex `https://reride.co.in` → canonical `www` (avoids 307 + broken credentialed fetches)
  *
  * Call this once at app startup (e.g. in index.tsx before React renders).
  */
@@ -238,7 +245,11 @@ let _fetchPatched = false;
 export function patchFetchForCapacitor(retryCount: number = 40): void {
   if (_fetchPatched) return;
   if (typeof window === 'undefined') return;
-  if (!isCapacitorNative()) {
+
+  const onProductionApex =
+    window.location.hostname === 'reride.co.in';
+
+  if (!isCapacitorNative() && !onProductionApex) {
     // Retry: rare WebViews where origin detection is delayed.
     if (retryCount > 0) {
       setTimeout(() => patchFetchForCapacitor(retryCount - 1), 150);
