@@ -26,6 +26,9 @@ interface MobileDealerProfilesPageProps {
   sellers?: User[];
   vehicles?: Vehicle[];
   onViewProfile: (sellerEmail: string) => void;
+  /** When set, "Call now" is allowed; otherwise guests are prompted to log in. */
+  currentUser?: User | null;
+  onRequireLogin?: () => void;
 }
 
 /** Mobile dealer card: same info as website (address, status, Call now, Reride Recommends) */
@@ -38,6 +41,8 @@ const MobileDealerCard: React.FC<{
   isSelected?: boolean;
   vehicleCount: number;
   followersCount: number;
+  currentUser?: User | null;
+  onRequireLogin?: () => void;
 }> = React.memo(({
   seller,
   onViewProfile,
@@ -47,6 +52,8 @@ const MobileDealerCard: React.FC<{
   isSelected = false,
   vehicleCount,
   followersCount,
+  currentUser,
+  onRequireLogin,
 }) => {
   const companyType = (seller.badges?.some(b => b.type === 'top_seller') ? 'showroom' : 'car-service') as 'showroom' | 'car-service';
   const hasProPlan = seller.subscriptionPlan === 'pro' || seller.subscriptionPlan === 'premium';
@@ -75,6 +82,10 @@ const MobileDealerCard: React.FC<{
 
   const handleCall = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!currentUser) {
+      onRequireLogin?.();
+      return;
+    }
     if (seller.mobile) window.location.href = `tel:${seller.mobile}`;
   };
 
@@ -173,6 +184,8 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
   sellers: propSellers,
   vehicles = [],
   onViewProfile,
+  currentUser,
+  onRequireLogin,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
@@ -425,6 +438,8 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
                     isSelected={selectedDealerEmail === seller.email}
                     vehicleCount={vehicleCountMap.get(seller.email?.toLowerCase().trim() || '') || 0}
                     followersCount={followersCountMap.get(seller.email) || 0}
+                    currentUser={currentUser}
+                    onRequireLogin={onRequireLogin}
                   />
                 </div>
               );

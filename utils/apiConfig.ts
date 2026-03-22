@@ -265,6 +265,25 @@ export function resolveApiUrl(path: string): string {
 }
 
 /**
+ * True when a resolved API URL targets a different origin than the current page (e.g. Android
+ * WebView at `appassets.androidplatform.net` calling `https://www.reride.co.in/api/...`).
+ * Credentialed cross-origin fetches often fail CORS/preflight in WebView; use `credentials: 'omit'`
+ * plus `X-App-Client` / CSRF header instead (see `authenticatedFetch`).
+ */
+export function isApiRequestCrossOrigin(resolvedPathOrUrl: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const abs =
+      resolvedPathOrUrl.startsWith('http://') || resolvedPathOrUrl.startsWith('https://')
+        ? resolvedPathOrUrl
+        : new URL(resolvedPathOrUrl, window.location.origin).href;
+    return new URL(abs).origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Patch global `fetch` so API calls always behave correctly:
  * - Relative `/api/...` → resolved via `resolveApiUrl` (WebView / Capacitor → `www`, Vite dev unchanged).
  * - Absolute `https://reride.co.in/...` (apex) → `https://www.reride.co.in/...` (avoids 307 + broken CORS preflight).

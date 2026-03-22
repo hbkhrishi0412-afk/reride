@@ -8,6 +8,7 @@ import { formatSupabaseError } from './errorUtils';
 import {
   resolveApiUrl,
   isCapacitorNative,
+  isApiRequestCrossOrigin,
   normalizeRerideApiHostToWww,
 } from './apiConfig';
 
@@ -53,8 +54,11 @@ export async function ensureCsrfToken(): Promise<string | null> {
   if (csrfTokenPromise) return csrfTokenPromise;
   csrfTokenPromise = (async () => {
     try {
-      const res = await fetch(resolvedApiUrl('/api/csrf-token'), {
-        credentials: isCapacitorNative() ? 'omit' : 'include',
+      const csrfUrl = resolvedApiUrl('/api/csrf-token');
+      const omitCreds =
+        isCapacitorNative() || isApiRequestCrossOrigin(csrfUrl);
+      const res = await fetch(csrfUrl, {
+        credentials: omitCreds ? 'omit' : 'include',
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -137,14 +141,17 @@ const refreshToken = async (): Promise<string | null> => {
         refreshHeaders['X-CSRF-Token'] = csrfToken;
       }
 
-      if (isCapacitorNative()) {
+      const refreshUrl = resolvedApiUrl('/api/users');
+      const omitCreds =
+        isCapacitorNative() || isApiRequestCrossOrigin(refreshUrl);
+      if (omitCreds) {
         refreshHeaders['X-App-Client'] = 'capacitor';
       }
 
-      const response = await fetch(resolvedApiUrl('/api/users'), {
+      const response = await fetch(refreshUrl, {
         method: 'POST',
         headers: refreshHeaders,
-        credentials: isCapacitorNative() ? 'omit' : 'include',
+        credentials: omitCreds ? 'omit' : 'include',
         body: JSON.stringify({ action: 'refresh-token', refreshToken: refreshTokenValue }),
       });
 
@@ -318,6 +325,12 @@ export const authenticatedFetch = async (
 
     // For state-changing methods, ensure CSRF token is present
     const method = (fetchOptions.method || 'GET').toUpperCase();
+    const hasBody =
+      fetchOptions.body !== undefined && fetchOptions.body !== null;
+    /** Public GET/HEAD without a body: avoid non-simple headers so browsers skip CORS preflight (fixes Android WebView / appassets failures on /api/users?role=seller). */
+    const isSimpleRead =
+      skipAuth && (method === 'GET' || method === 'HEAD') && !hasBody;
+
     if ((method === 'POST' || method === 'PUT' || method === 'DELETE') && !csrfToken) {
       await ensureCsrfToken();
     }
@@ -337,12 +350,28 @@ export const authenticatedFetch = async (
       }
     }
 
-    // Prepare headers — even skipAuth requests need X-CSRF-Token after ensureCsrfToken (register, etc.)
-    const headers: Record<string, string> = skipAuth
-      ? { 'Content-Type': 'application/json' }
-      : (getAuthHeaders() as Record<string, string>);
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
+    // Prepare headers — skip default JSON Content-Type on simple GET/HEAD (triggers preflight).
+    const headers: Record<string, string> = {};
+    if (skipAuth) {
+      if (!isSimpleRead) {
+        headers['Content-Type'] = 'application/json';
+      }
+    } else {
+      Object.assign(headers, getAuthHeaders() as Record<string, string>);
+      if ((method === 'GET' || method === 'HEAD') && !hasBody) {
+        delete headers['Content-Type'];
+      }
+    }
+    const needsCsrfHeader =
+      Boolean(csrfToken) &&
+      !isSimpleRead &&
+      (method === 'POST' ||
+        method === 'PUT' ||
+        method === 'DELETE' ||
+        method === 'PATCH' ||
+        hasBody);
+    if (needsCsrfHeader) {
+      headers['X-CSRF-Token'] = csrfToken!;
     }
 
     // Merge with any existing headers
@@ -351,15 +380,18 @@ export const authenticatedFetch = async (
       ...(fetchOptions.headers || {}),
     } as Record<string, string>;
 
-    if (isCapacitorNative()) {
+    const crossOriginApi = isApiRequestCrossOrigin(resolvedUrl);
+    const omitCredentials =
+      isCapacitorNative() || crossOriginApi;
+    if (!isSimpleRead && omitCredentials) {
       mergedHeaders['X-App-Client'] = 'capacitor';
     }
 
-    // Capacitor: omit cookies — cross-site CSRF cookies do not attach from https://localhost; credentialed
-    // CORS often causes preflight/network failures. Server exempts CSRF when X-App-Client: capacitor + origin.
+    // Capacitor / cross-origin WebView: omit cookies — credentialed cross-origin CORS often fails preflight.
+    // Same-origin web (e.g. www → /api on Vercel) keeps credentials: include for CSRF cookies when needed.
     const credentialsMode: RequestCredentials =
       fetchOptions.credentials ??
-      (isCapacitorNative() ? 'omit' : 'include');
+      (omitCredentials ? 'omit' : 'include');
 
     // First attempt - wrap in try-catch to handle network errors
     let response: Response;

@@ -378,16 +378,18 @@ const getUsersApi = async (role?: 'seller' | 'customer' | 'admin'): Promise<User
   // Use authenticatedFetch for production API calls
   try {
     const { authenticatedFetch } = await import('../utils/authenticatedFetch');
-    // If role is specified, fetch users by role (public access for sellers)
+    // Public dealer list: GET /api/users?role=seller — skip auth + simple headers so WebView does not send a CORS preflight (avoids CORS errors on Android appassets).
     const url = role ? `/api/users?role=${role}` : '/api/users';
-    const response = await authenticatedFetch(url);
+    const response = await authenticatedFetch(url, {
+      skipAuth: role === 'seller',
+    });
     return handleResponse(response);
   } catch (error) {
     // If authenticatedFetch fails, try regular fetch (for development)
     // For sellers, use regular fetch since it's public access
     const url = role ? `/api/users?role=${role}` : '/api/users';
     const response = await fetch(url, {
-      headers: getAuthHeader()
+      headers: role === 'seller' ? {} : getAuthHeader(),
     });
     return handleResponse(response);
   }

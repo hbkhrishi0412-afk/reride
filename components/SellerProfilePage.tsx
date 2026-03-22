@@ -18,9 +18,11 @@ interface SellerProfilePageProps {
     onToggleWishlist: (id: number) => void;
     onBack: () => void;
     onViewSellerProfile: (sellerEmail: string) => void;
+    currentUser?: User | null;
+    onRequireLogin?: () => void;
 }
 
-const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles, onSelectVehicle, comparisonList, onToggleCompare, wishlist, onToggleWishlist, onBack, onViewSellerProfile }) => {
+const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles, onSelectVehicle, comparisonList, onToggleCompare, wishlist, onToggleWishlist, onBack, onViewSellerProfile, currentUser, onRequireLogin }) => {
     // 🔴 GUARD CLAUSE: Prevent crash when seller data hasn't loaded yet
     if (!seller) {
         return (
@@ -37,7 +39,8 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
     // Restore logged-in user from storage (used to gate owner-only views)
     const storedUserJson = localStorage.getItem('reRideCurrentUser');
     const storedUser: User | null = storedUserJson ? JSON.parse(storedUserJson) : null;
-    const currentUserId = storedUser?.email || localStorage.getItem('currentUserEmail') || 'guest';
+    const viewer = currentUser ?? storedUser;
+    const currentUserId = viewer?.email || localStorage.getItem('currentUserEmail') || 'guest';
     const [isFollowing, setIsFollowing] = useState(() => isFollowingSeller(currentUserId as string, seller.email));
 
     // Derived engagement counts
@@ -46,7 +49,7 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
     const followingCount = useMemo(() => getFollowingCount(seller.email), [seller.email, isFollowing]);
 
     // Owner-only visibility (seller viewing their own page)
-    const isOwnerSeller = storedUser?.role === 'seller' && storedUser.email === seller.email;
+    const isOwnerSeller = viewer?.role === 'seller' && viewer.email === seller.email;
 
     // Owner modals state
     const [showFollowers, setShowFollowers] = useState(false);
@@ -57,6 +60,10 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
     const followingList = useMemo(() => getFollowedSellers(seller.email), [seller.email, isFollowing]);
     
     const handleFollowToggle = () => {
+        if (!viewer) {
+            onRequireLogin?.();
+            return;
+        }
         if (isFollowing) {
             unfollowSeller(currentUserId, seller.email);
             setIsFollowing(false);
@@ -64,6 +71,22 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
             followSeller(currentUserId, seller.email, true);
             setIsFollowing(true);
         }
+    };
+
+    const guardWishlist = (id: number) => {
+        if (!viewer) {
+            onRequireLogin?.();
+            return;
+        }
+        onToggleWishlist(id);
+    };
+
+    const guardCompare = (id: number) => {
+        if (!viewer) {
+            onRequireLogin?.();
+            return;
+        }
+        onToggleCompare(id);
     };
 
     const filteredVehicles = useMemo(() => {
@@ -289,31 +312,44 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                                         </span>
                                     </div>
                                     
-                                    {/* Enhanced Follow Button */}
-                                    <button
-                                        onClick={handleFollowToggle}
-                                        className={`w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 ${
-                                            isFollowing 
-                                                ? 'bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 text-gray-700 dark:text-gray-200 hover:from-gray-200 hover:to-gray-300 dark:hover:from-gray-600 dark:hover:to-gray-500' 
-                                                : 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-pink-700'
-                                        }`}
-                                    >
-                                        {isFollowing ? (
-                                            <>
-                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                </svg>
-                                                <span>Following</span>
-                                            </>
+                                    {/* Follow — public read; follow action requires login */}
+                                    {!isOwnerSeller && (
+                                        viewer ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleFollowToggle}
+                                                className={`w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 ${
+                                                    isFollowing 
+                                                        ? 'bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 text-gray-700 dark:text-gray-200 hover:from-gray-200 hover:to-gray-300 dark:hover:from-gray-600 dark:hover:to-gray-500' 
+                                                        : 'bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-pink-700'
+                                                }`}
+                                            >
+                                                {isFollowing ? (
+                                                    <>
+                                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                        <span>Following</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                                        </svg>
+                                                        <span>Follow Seller</span>
+                                                    </>
+                                                )}
+                                            </button>
                                         ) : (
-                                            <>
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                                </svg>
-                                                <span>Follow Seller</span>
-                                            </>
-                                        )}
-                                    </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onRequireLogin?.()}
+                                                className="w-full px-4 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-lg bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white hover:from-blue-700 hover:via-purple-700 hover:to-pink-700"
+                                            >
+                                                <span>Log in to follow</span>
+                                            </button>
+                                        )
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -358,9 +394,9 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                             key={vehicle.id} 
                             vehicle={vehicle} 
                             onSelect={onSelectVehicle} 
-                            onToggleCompare={onToggleCompare} 
+                            onToggleCompare={guardCompare} 
                             isSelectedForCompare={comparisonList.includes(vehicle.id)} 
-                            onToggleWishlist={onToggleWishlist} 
+                            onToggleWishlist={guardWishlist} 
                             isInWishlist={wishlist.includes(vehicle.id)} 
                             isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
                             onViewSellerProfile={onViewSellerProfile}
@@ -399,8 +435,8 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                 vehicle={quickViewVehicle}
                 onClose={() => setQuickViewVehicle(null)}
                 onSelectVehicle={onSelectVehicle}
-                onToggleCompare={onToggleCompare}
-                onToggleWishlist={onToggleWishlist}
+                onToggleCompare={guardCompare}
+                onToggleWishlist={guardWishlist}
                 comparisonList={comparisonList}
                 wishlist={wishlist}
             />
