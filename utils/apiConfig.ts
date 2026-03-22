@@ -35,6 +35,40 @@ function rewriteLocalhostForAndroidEmulator(baseUrl: string): string {
   return baseUrl;
 }
 
+/** Matches `dev-api-server.js` default unless overridden via `VITE_LOCAL_API_PORT`. */
+function getLocalApiPort(): string {
+  const p =
+    typeof import.meta !== 'undefined'
+      ? (import.meta as any).env?.VITE_LOCAL_API_PORT
+      : undefined;
+  const s = (p != null && String(p).trim() !== '' ? String(p) : '3001').replace(/^:/, '');
+  return s;
+}
+
+function getLocalApiPortNumber(): number {
+  const n = parseInt(getLocalApiPort(), 10);
+  return Number.isFinite(n) ? n : 3001;
+}
+
+/**
+ * Host:port for dev WebSocket / Socket.io when the API runs on your machine.
+ * The Android emulator cannot reach the host via localhost; 10.0.2.2 is the standard alias.
+ * Defaults to the same port as the local REST API (`VITE_LOCAL_API_PORT` or 3001).
+ */
+export function getDevSocketHost(port?: number): string {
+  const resolved = port ?? getLocalApiPortNumber();
+  if (typeof window === 'undefined') return `localhost:${resolved}`;
+  try {
+    const cap = (window as any).Capacitor;
+    if (cap?.getPlatform?.() === 'android') {
+      return `10.0.2.2:${resolved}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return `localhost:${resolved}`;
+}
+
 function getProductionOrigin(): string {
   const fromEnv =
     typeof import.meta !== 'undefined'
@@ -43,6 +77,40 @@ function getProductionOrigin(): string {
       : undefined;
   const origin = (fromEnv || DEFAULT_PRODUCTION_ORIGIN).toString();
   return origin.replace(/\/+$/, '');
+}
+
+/**
+ * Base URL for the Node dev API on your PC when testing the Capacitor app.
+ * Android emulator: `10.0.2.2` reaches the host; iOS Simulator: `localhost` works.
+ */
+export function getMobileLocalApiOrigin(): string {
+  const port = getLocalApiPort();
+  if (typeof window === 'undefined') {
+    return `http://127.0.0.1:${port}`;
+  }
+  try {
+    const cap = (window as any).Capacitor;
+    if (cap?.getPlatform?.() === 'android') {
+      return `http://10.0.2.2:${port}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return `http://localhost:${port}`;
+}
+
+/**
+ * Use PC-local API + `.env.development` Supabase when building with
+ * `vite build --mode development` and `VITE_MOBILE_LOCAL_DEV=true`.
+ * Production store builds use `vite build` (mode production) → live API + `.env.production` Supabase.
+ */
+function shouldUseBundledMobileLocalApi(): boolean {
+  if (typeof import.meta === 'undefined') return false;
+  const env = import.meta.env;
+  return (
+    env.VITE_MOBILE_LOCAL_DEV === 'true' &&
+    env.MODE === 'development'
+  );
 }
 
 // Cache only "true" results.
@@ -109,7 +177,12 @@ export function getApiBaseUrl(): string {
     return rewriteLocalhostForAndroidEmulator(envOverride.replace(/\/+$/, ''));
   }
 
-  if (isCapacitorNative()) return getProductionOrigin();
+  if (isCapacitorNative()) {
+    if (shouldUseBundledMobileLocalApi()) {
+      return rewriteLocalhostForAndroidEmulator(getMobileLocalApiOrigin());
+    }
+    return getProductionOrigin();
+  }
 
   return '';
 }
@@ -148,12 +221,12 @@ export function patchFetchForCapacitor(retryCount: number = 40): void {
   }
 
   const originalFetch = window.fetch.bind(window);
-  const base = getApiBaseUrl();
 
   window.fetch = function patchedFetch(
     input: RequestInfo | URL,
     init?: RequestInit
   ): Promise<Response> {
+    const base = getApiBaseUrl();
     if (typeof input === 'string' && input.startsWith('/api/')) {
       input = `${base}${input}`;
     } else if (input instanceof Request && input.url.startsWith('/api/')) {

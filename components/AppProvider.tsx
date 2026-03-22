@@ -31,7 +31,7 @@ import { deduplicateRequest } from '../utils/requestDeduplication';
 import * as buyerService from '../services/buyerService';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { supabaseRowToConversation } from '../services/supabase-conversation-service';
-import { isCapacitorNative } from '../utils/apiConfig';
+import { isCapacitorNative, getDevSocketHost } from '../utils/apiConfig';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 
 // PERFORMANCE: Helper function for user-friendly error messages
@@ -4300,7 +4300,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
                     // This prevents mixed content errors when app is served over HTTPS
                     const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    const wsUrl = `${wsProtocol}//localhost:3001`;
+                    const wsUrl = `${wsProtocol}//${getDevSocketHost(3001)}`;
                     const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
                     
                     socket.emit('conversation:message', {

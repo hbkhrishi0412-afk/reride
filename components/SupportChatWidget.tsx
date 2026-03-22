@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
+import { getDevSocketHost } from '../utils/apiConfig';
 
 interface ChatMessage {
   id: string;
@@ -62,7 +63,7 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = process.env.NODE_ENV === 'production'
       ? 'www.reride.co.in'
-      : 'localhost:3001';
+      : getDevSocketHost(3001);
     const wsUrl = `${wsProtocol}//${wsHost}/chat`;
 
     const newSocket = new WebSocket(wsUrl);

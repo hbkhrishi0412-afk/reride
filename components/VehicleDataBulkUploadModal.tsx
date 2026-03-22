@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import type { VehicleData } from '../types';
-import type { VehicleMake, VehicleModel } from './vehicleData';
+import type { VehicleMake, VehicleModel } from '../vehicleDataTypes';
 import { VEHICLE_DATA } from './vehicleData';
 
 interface BulkUploadModalProps {

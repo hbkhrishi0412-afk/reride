@@ -5,6 +5,8 @@ const config: CapacitorConfig = {
   appName: 'ReRide',
   webDir: 'dist',
   server: {
+    // https → WebView is a secure context; http://10.0.2.2 (local dev API) needs mixed-content
+    // allowance in MainActivity.java. Do not switch to http here unless you accept non-HTTPS WebView.
     androidScheme: 'https'
   },
   plugins: {

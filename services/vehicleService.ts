@@ -335,77 +335,18 @@ const isDevelopment = (): boolean => {
 
 export const getVehicles = async (): Promise<Vehicle[]> => {
   try {
-    const isDev = isDevelopment();
-    console.log('getVehicles: Starting, isDevelopment:', isDev);
-    
-    // Always try API first for production, with fallback to local
-    if (!isDev) {
-      try {
-        console.log('getVehicles: Trying API...');
-        const result = await getVehiclesApi();
-        console.log(`✅ getVehicles: API success, loaded ${result.length} vehicles`);
-        
-        // Validate result is an array
-        if (!Array.isArray(result)) {
-          console.error('❌ getVehicles: API returned non-array:', typeof result);
-          throw new Error('Invalid response format: expected array');
-        }
-        
-        // Cache production data (not mock data)
-        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-          try {
-            localStorage.setItem('reRideVehicles_prod', JSON.stringify(result));
-            console.log('✅ Cached production vehicles to localStorage');
-          } catch (cacheError) {
-            console.warn('⚠️ Failed to cache vehicles:', cacheError);
-          }
-        }
-        return result;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error('❌ getVehicles: Production API failed:', errorMessage);
-        
-        // In production, try to use cached API data (not mock data)
-        if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-          try {
-            const cachedVehiclesJson = localStorage.getItem('reRideVehicles_prod');
-            if (cachedVehiclesJson) {
-              const cachedVehicles = JSON.parse(cachedVehiclesJson);
-              if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
-                console.warn(`⚠️ getVehicles: Using cached production data (${cachedVehicles.length} vehicles) due to API failure`);
-                return cachedVehicles;
-              }
-            }
-          } catch (cacheError) {
-            console.error('❌ Failed to load cached production data:', cacheError);
-          }
-        }
-        
-        // If no cached data, return empty array (don't use mock data in production)
-        console.error('❌ getVehicles: No cached production data available, returning empty array');
-        console.error('💡 Troubleshooting:');
-        console.error('   1. Check if /api/vehicles endpoint is working');
-        console.error('   2. Verify Firebase database has vehicles');
-        console.error('   3. Check browser network tab for API errors');
-        console.error('   4. Try seeding the database: POST /api/seed');
-        return [];
-      }
-    } else {
-      // Development mode - use local storage
-      console.log('getVehicles: Development mode, using local storage');
-      return await getVehiclesLocal();
-    }
+    // Single source of truth: DataService (local dev API vs production, Capacitor base URL, caching, pagination).
+    const { dataService } = await import('./dataService');
+    return await dataService.getVehicles(false, false);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('❌ getVehicles: Critical error:', errorMessage);
-    
-    // In production, return empty array instead of fallback vehicles
+
     if (!isDevelopment()) {
       console.error('💡 Production error - returning empty array. Check API and database configuration.');
       return [];
     }
-    
-    // Last resort fallback only in development
+
     console.warn('⚠️ Using fallback vehicles in development mode');
     return FALLBACK_VEHICLES;
   }
