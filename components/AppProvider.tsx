@@ -33,6 +33,9 @@ import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { supabaseRowToConversation } from '../services/supabase-conversation-service';
 import { isCapacitorNative, getDevSocketHost } from '../utils/apiConfig';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import { getSupabaseClient } from '../lib/supabase';
+import { syncWithBackend } from '../services/supabase-auth-service';
+import type { Session } from '@supabase/supabase-js';
 
 // PERFORMANCE: Helper function for user-friendly error messages
 // Improves UX by converting technical errors to actionable messages
@@ -336,6 +339,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   // Flag to prevent navigation loops when handling popstate
   const isHandlingPopStateRef = useRef(false);
+  /** Prevents double handleLogin when both getSession + onAuthStateChange run after Google OAuth */
+  const googleOAuthSyncDoneRef = useRef(false);
+  /** One-shot: restore ReRide profile from persisted Supabase Auth session (mobile cold start / cleared app user cache) */
+  const supabaseSessionRestoreCheckedRef = useRef(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [vehiclesCatalogReady, setVehiclesCatalogReady] = useState<boolean>(false);
@@ -659,6 +666,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Clear storage
       sessionStorage.removeItem('currentUser');
+      sessionStorage.removeItem('reride_oauth_role');
+      sessionStorage.removeItem('reride_last_role');
+      googleOAuthSyncDoneRef.current = false;
+      supabaseSessionRestoreCheckedRef.current = false;
       localStorage.removeItem('reRideCurrentUser');
       localStorage.removeItem('reRideAccessToken');
       localStorage.removeItem('reRideRefreshToken');
@@ -680,6 +691,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Even if there's an error, clear local state
       setCurrentUser(null);
       sessionStorage.removeItem('currentUser');
+      sessionStorage.removeItem('reride_oauth_role');
+      sessionStorage.removeItem('reride_last_role');
+      googleOAuthSyncDoneRef.current = false;
+      supabaseSessionRestoreCheckedRef.current = false;
       localStorage.removeItem('reRideCurrentUser');
       setCurrentView(View.HOME);
       setActiveChat(null);
@@ -733,7 +748,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(user);
     sessionStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
-    
+    try {
+      if (user.role === 'customer' || user.role === 'seller') {
+        sessionStorage.setItem('reride_last_role', user.role);
+      }
+    } catch {
+      /* ignore */
+    }
+
     // Verify user storage (for debugging production issues)
     const storedInSession = sessionStorage.getItem('currentUser');
     const storedInLocal = localStorage.getItem('reRideCurrentUser');
@@ -763,6 +785,107 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentView(View.HOME);
     }
   }, [addToast]);
+
+  // After Supabase Google OAuth redirect: session exists; sync profile with ReRide API and log in
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = getSupabaseClient();
+
+    const tryFinishGoogleOAuth = async (session: Session | null) => {
+      const pendingRole = sessionStorage.getItem('reride_oauth_role') as
+        | 'customer'
+        | 'seller'
+        | null;
+      if (!pendingRole || !session?.user || googleOAuthSyncDoneRef.current || cancelled) {
+        return;
+      }
+      googleOAuthSyncDoneRef.current = true;
+      sessionStorage.removeItem('reride_oauth_role');
+
+      try {
+        const result = await syncWithBackend(
+          session.user as unknown as Record<string, unknown>,
+          pendingRole,
+          'google',
+        );
+        if (result.success && result.user) {
+          handleLogin(result.user);
+        } else {
+          googleOAuthSyncDoneRef.current = false;
+          addToast(result.reason || 'Could not finish Google sign-in', 'error');
+          await supabase.auth.signOut();
+        }
+      } catch (e) {
+        googleOAuthSyncDoneRef.current = false;
+        logError('Google OAuth backend sync failed:', e);
+        addToast('Could not finish Google sign-in', 'error');
+        await supabase.auth.signOut();
+      }
+    };
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      void tryFinishGoogleOAuth(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void tryFinishGoogleOAuth(session);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [handleLogin, addToast]);
+
+  // Supabase session exists (e.g. after app update / storage mismatch) but ReRide user not in memory — resync profile
+  useEffect(() => {
+    if (currentUser) return;
+    if (supabaseSessionRestoreCheckedRef.current) return;
+    try {
+      if (sessionStorage.getItem('reride_oauth_role')) return;
+    } catch {
+      /* ignore */
+    }
+
+    supabaseSessionRestoreCheckedRef.current = true;
+
+    void (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.user?.email) return;
+
+        let role = sessionStorage.getItem('reride_last_role') as 'customer' | 'seller' | null;
+        const meta = session.user.user_metadata as Record<string, unknown> | undefined;
+        if (!role || !['customer', 'seller'].includes(role)) {
+          const mr = meta?.role;
+          role =
+            typeof mr === 'string' && ['customer', 'seller'].includes(mr)
+              ? (mr as 'customer' | 'seller')
+              : 'customer';
+        }
+
+        const prov = (session.user.app_metadata as Record<string, unknown> | undefined)?.provider;
+        const authProvider: 'google' | 'phone' | 'email' =
+          prov === 'google' ? 'google' : session.user.phone ? 'phone' : 'email';
+
+        const result = await syncWithBackend(
+          session.user as unknown as Record<string, unknown>,
+          role,
+          authProvider,
+        );
+        if (result.success && result.user) {
+          handleLogin(result.user);
+        }
+      } catch (e) {
+        logDebug('Supabase session restore skipped:', e);
+      }
+    })();
+  }, [currentUser, handleLogin]);
 
   const handleRegister = useCallback((user: User) => {
     // CRITICAL: Validate user object before setting

@@ -540,11 +540,15 @@ async function mainHandler(
     // Capacitor WebView (https://localhost) cannot send cross-site CSRF cookies; requests use JWT + this header.
     const skipCsrfForCapacitorNative =
       appClientHeader === 'capacitor' && Boolean(isCapacitorApp);
+    const urlHasGemini =
+      pathname.includes('/gemini') ||
+      (typeof req.url === 'string' && req.url.includes('/gemini'));
     const isCsrfExempt =
       pathname.includes('/login') ||
       pathname.includes('/csrf-token') ||
       pathname.includes('/health') ||
       pathname.includes('/db-health') ||
+      urlHasGemini ||
       skipCsrfForCapacitorNative;
     if (isStateChanging && !isCsrfExempt) {
       const headerToken = (req.headers['x-csrf-token'] || req.headers['X-CSRF-Token']) as string | undefined;

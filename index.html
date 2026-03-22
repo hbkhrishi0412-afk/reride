@@ -111,12 +111,22 @@
       
       // Only prefetch if we're in production mode (not localhost)
       (function() {
-        const isLocalhost = window.location.hostname === 'localhost' || 
-                           window.location.hostname === '127.0.0.1' ||
-                           window.location.hostname.includes('localhost');
+        const h = window.location.hostname || '';
+        const hl = h.toLowerCase();
+        const isLocalhost = h === 'localhost' || 
+                           h === '127.0.0.1' ||
+                           h.includes('localhost');
+        const isPackagedWebView =
+          hl === 'appassets.androidplatform.net' ||
+          hl.indexOf('appassets.androidplatform.net') !== -1 ||
+          (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
         
         // Skip prefetch in development to avoid 404 errors when API server isn't running
         if (isLocalhost) {
+          return;
+        }
+        // Capacitor / WebViewAssetLoader: relative /api/* has no same-origin server; avoid noise and wrong-host requests
+        if (isPackagedWebView) {
           return;
         }
         

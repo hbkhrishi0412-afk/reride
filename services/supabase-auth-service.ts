@@ -43,28 +43,62 @@ function wrapError(error: unknown, fallbackMessage: string): string {
 
 // ── Google Sign-In ──────────────────────────────────────────────────────────
 
+/**
+ * OAuth return URL (no `#` fragment). Must be listed under Supabase → Authentication →
+ * URL Configuration → Redirect URLs (e.g. `https://www.reride.co.in/**`,
+ * `https://appassets.androidplatform.net/**`, `http://localhost:5173/**`).
+ */
+export function getOAuthRedirectUrl(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const { origin, pathname, search } = window.location;
+  return `${origin}${pathname}${search || ''}`;
+}
+
+function mapGoogleProviderError(message: string): string | undefined {
+  const m = message.toLowerCase();
+  if (
+    m.includes('unsupported provider') ||
+    (m.includes('provider') && (m.includes('not enabled') || m.includes('disabled')))
+  ) {
+    return (
+      'Google sign-in is not enabled for this project. In the Supabase Dashboard open ' +
+      'Authentication → Providers → Google, turn it on, and add the Web Client ID and secret ' +
+      'from Google Cloud Console (OAuth 2.0). Also add this app URL under Redirect URLs.'
+    );
+  }
+  return undefined;
+}
+
 export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
   try {
     const supabase = getSupabaseClient();
+    const redirectTo = getOAuthRedirectUrl();
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo:
-          typeof window !== 'undefined' ? window.location.origin : undefined,
+        redirectTo,
       },
     });
 
     if (error) {
+      const mapped = mapGoogleProviderError(error.message || '');
       return {
         success: false,
-        reason: formatSupabaseError(
-          error.message || 'Failed to sign in with Google',
-        ),
+        reason:
+          mapped ||
+          formatSupabaseError(error.message || 'Failed to sign in with Google'),
       };
     }
 
-    // OAuth redirects — return the URL the browser should follow
+    if (!data?.url) {
+      return {
+        success: false,
+        reason: 'Could not start Google sign-in. Please try again.',
+      };
+    }
+
+    // OAuth redirects — caller must assign window.location to data.url
     return { success: true, user: { redirectUrl: data.url } };
   } catch (error: unknown) {
     return { success: false, reason: wrapError(error, 'Failed to sign in with Google') };
