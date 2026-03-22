@@ -1,6 +1,10 @@
 import type { Vehicle, User, VehicleData } from '../types';
 import { queueRequest } from '../utils/requestQueue';
-import { getApiBaseUrl, isCapacitorNative } from '../utils/apiConfig';
+import {
+  getApiBaseUrl,
+  isCapacitorNative,
+  normalizeRerideApiHostToWww,
+} from '../utils/apiConfig';
 import { ensureCsrfToken } from '../utils/authenticatedFetch';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 
@@ -137,8 +141,10 @@ class DataService {
             const controller = new AbortController();
             timeoutId = setTimeout(() => controller.abort(), fetchTimeoutMs);
 
-            const primaryUrl = `${apiBase}${endpoint}`;
-            const fallbackUrl = fbBase ? `${fbBase}${endpoint}` : null;
+            const primaryUrl = normalizeRerideApiHostToWww(`${apiBase}${endpoint}`);
+            const fallbackUrl = fbBase
+              ? normalizeRerideApiHostToWww(`${fbBase}${endpoint}`)
+              : null;
 
             // Reduce noise: only emit detailed URL diagnostics for vehicles listing.
             const shouldDebugVehicles = endpoint.includes('/vehicles');
@@ -172,8 +178,10 @@ class DataService {
             if (fetchError instanceof Error) {
               // This will show up in logcat and helps diagnose the exact failure.
               // eslint-disable-next-line no-console
-              const primaryUrl = `${apiBase}${endpoint}`;
-              const fallbackUrlForLog = fbBase ? `${fbBase}${endpoint}` : null;
+              const primaryUrl = normalizeRerideApiHostToWww(`${apiBase}${endpoint}`);
+              const fallbackUrlForLog = fbBase
+                ? normalizeRerideApiHostToWww(`${fbBase}${endpoint}`)
+                : null;
               const shouldDebugVehicles = endpoint.includes('/vehicles');
               if (shouldDebugVehicles) {
                 console.warn('API fetch failed (network). Retrying with fallback if available:', {
