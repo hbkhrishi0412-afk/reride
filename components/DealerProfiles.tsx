@@ -23,6 +23,8 @@ interface DealerProfilesProps {
   sellers?: User[];
   vehicles?: Vehicle[];
   onViewProfile: (sellerEmail: string) => void;
+  currentUser?: User | null;
+  onRequireLogin?: () => void;
 }
 
 type CompanyType = 'all' | 'car-service' | 'showroom';
@@ -383,7 +385,9 @@ const CompanyCard: React.FC<{
   isRecommended?: boolean;
   coords?: CompanyLocation | null;
   isSelected?: boolean;
-}> = ({ seller, onViewProfile, onSelect, onCall, isRecommended = false, coords = null, isSelected = false }) => {
+  currentUser?: User | null;
+  onRequireLogin?: () => void;
+}> = ({ seller, onViewProfile, onSelect, onCall, isRecommended = false, coords = null, isSelected = false, currentUser, onRequireLogin }) => {
   const [dealerLogoSrc, setDealerLogoSrc] = useState(() => resolveSellerLogoUrl(seller));
   useEffect(() => {
     setDealerLogoSrc(resolveSellerLogoUrl(seller));
@@ -422,7 +426,12 @@ const CompanyCard: React.FC<{
   // Languages - default to Hindi and English for Indian dealers
   const languages = ['Hindi', 'English'];
   
-  const handleCall = () => {
+  const handleCall = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!currentUser) {
+      onRequireLogin?.();
+      return;
+    }
     if (seller.mobile && onCall) {
       onCall(seller.mobile);
     } else {
@@ -500,10 +509,8 @@ const CompanyCard: React.FC<{
           {/* Action Buttons */}
           <div className="flex gap-2">
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCall();
-              }}
+              type="button"
+              onClick={handleCall}
               className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded flex items-center gap-2 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -544,7 +551,7 @@ const CompanyCard: React.FC<{
   );
 };
 
-const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, onViewProfile }) => {
+const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, onViewProfile, currentUser, onRequireLogin }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [companyTypeFilter, setCompanyTypeFilter] = useState<CompanyType>('all');
@@ -829,6 +836,8 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
                         isRecommended={index === 0}
                         coords={sellerWithCoords?.coords || null}
                         isSelected={selectedDealerEmail === seller.email}
+                        currentUser={currentUser}
+                        onRequireLogin={onRequireLogin}
                       />
                     </div>
                   );

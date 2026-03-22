@@ -436,6 +436,12 @@ const AppContent: React.FC = () => {
     setActiveChat(null);
   }, [setActiveChat]);
 
+  /** Dealers & seller profiles are public to view; calling, follow, save, compare require an account. */
+  const requireLoginForDealerInteraction = React.useCallback(() => {
+    addToast('Log in to call dealers, follow, save listings, and compare vehicles.', 'info');
+    navigate(ViewEnum.LOGIN_PORTAL);
+  }, [addToast, navigate]);
+
   // Simple handler for service cart submissions (wire to real API as needed)
   const handleServiceRequestSubmit = React.useCallback(async (payload: ServiceRequestPayload) => {
     try {
@@ -2518,6 +2524,8 @@ const AppContent: React.FC = () => {
               onToggleCompare={toggleCompare}
               wishlist={wishlist}
               onToggleWishlist={toggleWishlist}
+              currentUser={currentUser}
+              onRequireLogin={requireLoginForDealerInteraction}
               onBack={() => goBack(ViewEnum.HOME)}
               onViewSellerProfile={(sellerEmail) => {
                 const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
@@ -2550,6 +2558,8 @@ const AppContent: React.FC = () => {
             onToggleCompare={toggleCompare}
             wishlist={wishlist}
             onToggleWishlist={toggleWishlist}
+            currentUser={currentUser}
+            onRequireLogin={requireLoginForDealerInteraction}
             onBack={() => goBack(ViewEnum.HOME)}
             onViewSellerProfile={(sellerEmail) => {
               // Normalize emails for comparison (critical for production)
@@ -2584,6 +2594,8 @@ const AppContent: React.FC = () => {
             <MobileDealerProfilesPage
               sellers={sellersFromUsers.length > 0 ? sellersFromUsers : undefined}
               vehicles={vehicles}
+              currentUser={currentUser}
+              onRequireLogin={requireLoginForDealerInteraction}
               onViewProfile={(sellerEmail) => {
                 const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
                 const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
@@ -2603,6 +2615,8 @@ const AppContent: React.FC = () => {
           <DealerProfiles 
             sellers={sellersFromUsers.length > 0 ? sellersFromUsers : undefined} 
             vehicles={vehicles}
+            currentUser={currentUser}
+            onRequireLogin={requireLoginForDealerInteraction}
             onViewProfile={(sellerEmail) => {
               // Create minimal user object with just email for profile lookup
               setPublicProfile({ email: sellerEmail, name: '', mobile: '', role: 'seller', location: '', status: 'active', createdAt: new Date().toISOString() } as User);
@@ -2943,7 +2957,8 @@ const AppContent: React.FC = () => {
     onExportUsers, onExportVehicles, onExportSales, onUpdateVehicleData,
     onToggleVerifiedStatus, onUpdateSupportTicket, onAddFaq, onUpdateFaq,
     onDeleteFaq, onCertificationApproval, onOfferResponse, addSellerRating,
-    sendMessage, setActiveChat, setConversations, setForgotPasswordRole
+    sendMessage, setActiveChat, setConversations, setForgotPasswordRole,
+    requireLoginForDealerInteraction
   ]);
 
   const handleNotificationClick = React.useCallback((notification: Notification) => {

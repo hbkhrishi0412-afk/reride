@@ -18,6 +18,8 @@ interface MobileSellerProfilePageProps {
   onToggleWishlist: (id: number) => void;
   onBack: () => void;
   onViewSellerProfile: (sellerEmail: string) => void;
+  currentUser?: User | null;
+  onRequireLogin?: () => void;
 }
 
 /**
@@ -37,7 +39,9 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
   wishlist,
   onToggleWishlist,
   onBack,
-  onViewSellerProfile
+  onViewSellerProfile,
+  currentUser,
+  onRequireLogin,
 }) => {
   if (!seller) {
     return (
@@ -53,14 +57,19 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
   const [searchQuery, setSearchQuery] = useState('');
   const storedUserJson = localStorage.getItem('reRideCurrentUser');
   const storedUser: User | null = storedUserJson ? JSON.parse(storedUserJson) : null;
-  const currentUserId = storedUser?.email || localStorage.getItem('currentUserEmail') || 'guest';
+  const viewer = currentUser ?? storedUser;
+  const currentUserId = viewer?.email || localStorage.getItem('currentUserEmail') || 'guest';
   const [isFollowing, setIsFollowing] = useState(() => isFollowingSeller(currentUserId as string, seller.email));
 
   const followersCount = useMemo(() => getFollowersCount(seller.email), [seller.email, isFollowing]);
   const followingCount = useMemo(() => getFollowingCount(seller.email), [seller.email, isFollowing]);
-  const isOwnerSeller = storedUser?.role === 'seller' && storedUser.email === seller.email;
+  const isOwnerSeller = viewer?.role === 'seller' && viewer.email === seller.email;
 
   const handleFollowToggle = () => {
+    if (!viewer) {
+      onRequireLogin?.();
+      return;
+    }
     if (isFollowing) {
       unfollowSeller(currentUserId, seller.email);
       setIsFollowing(false);
@@ -167,19 +176,31 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
               ) : null}
             </div>
 
-            {/* Follow Button */}
-            {!isOwnerSeller && storedUser && (
-              <button
-                onClick={handleFollowToggle}
-                className={`w-full py-2.5 px-4 rounded-xl font-semibold ${
-                  isFollowing
-                    ? 'bg-gray-100 text-gray-700'
-                    : 'bg-orange-500 text-white'
-                }`}
-                style={{ minHeight: '44px' }}
-              >
-                {isFollowing ? 'Following' : 'Follow'}
-              </button>
+            {/* Follow — browse is public; following requires login */}
+            {!isOwnerSeller && (
+              viewer ? (
+                <button
+                  type="button"
+                  onClick={handleFollowToggle}
+                  className={`w-full py-2.5 px-4 rounded-xl font-semibold ${
+                    isFollowing
+                      ? 'bg-gray-100 text-gray-700'
+                      : 'bg-orange-500 text-white'
+                  }`}
+                  style={{ minHeight: '44px' }}
+                >
+                  {isFollowing ? 'Following' : 'Follow'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onRequireLogin?.()}
+                  className="w-full py-2.5 px-4 rounded-xl font-semibold bg-orange-500 text-white"
+                  style={{ minHeight: '44px' }}
+                >
+                  Log in to follow
+                </button>
+              )
             )}
           </div>
         </div>
@@ -297,8 +318,13 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
                 </div>
                 <div className="px-4 pb-4 flex gap-2">
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (!viewer) {
+                        onRequireLogin?.();
+                        return;
+                      }
                       onToggleWishlist(vehicle.id);
                     }}
                     className={`flex-1 py-2 px-4 rounded-lg font-semibold text-sm ${
@@ -311,8 +337,13 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
                     {wishlist.includes(vehicle.id) ? 'Saved' : 'Save'}
                   </button>
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (!viewer) {
+                        onRequireLogin?.();
+                        return;
+                      }
                       onToggleCompare(vehicle.id);
                     }}
                     disabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
