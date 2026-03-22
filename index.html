@@ -2,6 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Before any other fetch(): force /api/* and apex host → www (fixes Android WebView CORS preflight). Public file → always /reride-api-fetch-boot.js. -->
+    <script src="/reride-api-fetch-boot.js"></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
     
@@ -34,6 +36,30 @@
           h.indexOf('appassets.androidplatform.net') !== -1 ||
           (h === 'localhost' && (p === 'capacitor:' || p === 'ionic:')) ||
           (h === 'localhost' && p === 'https:' && devPorts.indexOf(port) === -1);
+      })();
+    </script>
+    <!-- Packaged WebView: force API + apex → www before bundle loads (avoids 307 on CORS preflight). -->
+    <script>
+      (function () {
+        try {
+          var h = (location.hostname || '').toLowerCase();
+          if (h !== 'appassets.androidplatform.net' && h.indexOf('appassets.androidplatform.net') === -1) {
+            return;
+          }
+          var base = 'https://www.reride.co.in';
+          var orig = window.fetch.bind(window);
+          window.fetch = function (input, init) {
+            if (typeof input === 'string') {
+              if (input.indexOf('/api/') === 0) {
+                return orig(base + input, init);
+              }
+              if (/^https?:\/\/reride\.co\.in\b/i.test(input)) {
+                input = input.replace(/^https?:\/\/reride\.co\.in\b/i, 'https://www.reride.co.in');
+              }
+            }
+            return orig(input, init);
+          };
+        } catch (e) {}
       })();
     </script>
     <script>

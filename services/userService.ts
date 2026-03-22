@@ -82,6 +82,22 @@ const storeTokens = (accessToken: string, refreshToken: string) => {
   }
 };
 
+/** Phone OTP via MessageBot (or similar) returns JWTs from /api/users — same persistence as email login. */
+export const establishSessionFromOtpAuth = (payload: {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+}): void => {
+  storeTokens(payload.accessToken, payload.refreshToken);
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('reRideCurrentUser', JSON.stringify(payload.user));
+    }
+  } catch {
+    /* ignore */
+  }
+};
+
 const clearTokens = () => {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     return;

@@ -10,6 +10,11 @@ import type { User as SupabaseAuthUser, Session } from '@supabase/supabase-js';
 import type { User } from '../types.js';
 import { formatSupabaseError } from '../utils/errorUtils.js';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import {
+  getNativeOAuthRedirectUrl,
+  openGoogleOAuthUrl,
+  shouldUseNativeGoogleOAuthFlow,
+} from '../utils/oauthMobile';
 
 // ── Shared result types ─────────────────────────────────────────────────────
 
@@ -20,6 +25,7 @@ interface AuthResult<T = unknown> {
 }
 
 interface OAuthSignInResult extends AuthResult {
+  /** Null when OAuth opened in system browser / Custom Tab (Android); session finishes via PKCE deep link. */
   user?: { redirectUrl: string | null };
 }
 
@@ -46,10 +52,13 @@ function wrapError(error: unknown, fallbackMessage: string): string {
 /**
  * OAuth return URL (no `#` fragment). Must be listed under Supabase → Authentication →
  * URL Configuration → Redirect URLs (e.g. `https://www.reride.co.in/**`,
- * `https://appassets.androidplatform.net/**`, `http://localhost:5173/**`).
+ * `https://appassets.androidplatform.net/**`, `http://localhost:5173/**`,
+ * `com.reride.app://oauth-callback` (Android Custom Tab / PKCE return).
  */
 export function getOAuthRedirectUrl(): string | undefined {
   if (typeof window === 'undefined') return undefined;
+  const native = getNativeOAuthRedirectUrl();
+  if (native) return native;
   const { origin, pathname, search } = window.location;
   return `${origin}${pathname}${search || ''}`;
 }
@@ -74,10 +83,13 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
     const supabase = getSupabaseClient();
     const redirectTo = getOAuthRedirectUrl();
 
+    const useExternalBrowser = shouldUseNativeGoogleOAuthFlow();
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo,
+        skipBrowserRedirect: useExternalBrowser,
       },
     });
 
@@ -98,7 +110,11 @@ export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
       };
     }
 
-    // OAuth redirects — caller must assign window.location to data.url
+    if (useExternalBrowser) {
+      await openGoogleOAuthUrl(data.url);
+      return { success: true, user: { redirectUrl: null } };
+    }
+
     return { success: true, user: { redirectUrl: data.url } };
   } catch (error: unknown) {
     return { success: false, reason: wrapError(error, 'Failed to sign in with Google') };

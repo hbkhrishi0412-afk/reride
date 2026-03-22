@@ -111,6 +111,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
         return;
       }
 
+      if (result.success && !redirectUrl) {
+        try {
+          sessionStorage.setItem('reride_oauth_role', 'seller');
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
       throw new Error(result.reason || 'Failed to sign in with Google');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in with Google');

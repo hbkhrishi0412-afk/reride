@@ -73,12 +73,16 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
         throw new Error('Please enter the 6-digit OTP');
       }
 
-      const result = await verifyOTP(confirmationResult, otp);
-      
+      const result = await verifyOTP(confirmationResult, otp, role);
+
+      if (result.success && result.sessionComplete && result.appUser) {
+        onLogin(result.appUser);
+        return;
+      }
+
       if (result.success && result.firebaseUser) {
-        // Sync with backend
         const backendResult = await syncWithBackend(result.firebaseUser, role, 'phone');
-        
+
         if (backendResult.success && backendResult.user) {
           onLogin(backendResult.user);
         } else {

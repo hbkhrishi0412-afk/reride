@@ -188,6 +188,15 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         return;
       }
 
+      if (result.success && !redirectUrl) {
+        try {
+          sessionStorage.setItem('reride_oauth_role', selectedRole);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
       throw new Error(result.reason || 'Failed to sign in with Google');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
