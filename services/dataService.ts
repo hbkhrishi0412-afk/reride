@@ -34,15 +34,11 @@ class DataService {
     return `${getApiBaseUrl()}/api`;
   }
 
-  /** Fallback origin if the primary hostname fails on some networks (Android DNS, etc.). */
+  /**
+   * Previously retried the apex host when www failed; apex redirects to www and breaks
+   * CORS preflight (OPTIONS) from Android WebView (appassets.androidplatform.net).
+   */
   private resolveApiBaseUrlFallback(): string | null {
-    const base = this.resolveApiBaseUrl();
-    if (base.includes('https://www.reride.co.in')) {
-      return base.replace('https://www.reride.co.in', 'https://reride.co.in');
-    }
-    if (base.startsWith('https://reride.co.in') && !base.includes('www.')) {
-      return base.replace('https://reride.co.in', 'https://www.reride.co.in');
-    }
     return null;
   }
 

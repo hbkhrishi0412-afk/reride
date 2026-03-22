@@ -15,6 +15,28 @@
 const DEFAULT_PRODUCTION_ORIGIN = 'https://www.reride.co.in';
 
 /**
+ * `https://reride.co.in` redirects to www; CORS preflight (OPTIONS) cannot follow redirects.
+ * Normalize apex → `www` for any env override or absolute URL so Android WebView / Capacitor
+ * never calls the apex host for `/api/*`.
+ */
+export function normalizeRerideApiHostToWww(urlOrOrigin: string): string {
+  const raw = urlOrOrigin.trim();
+  try {
+    const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    if (u.hostname !== 'reride.co.in') {
+      return raw.replace(/\/+$/, '');
+    }
+    u.hostname = 'www.reride.co.in';
+    if (u.pathname === '/' && !u.search && !u.hash) {
+      return `${u.protocol}//${u.host}`;
+    }
+    return u.toString();
+  } catch {
+    return raw.replace(/\/+$/, '');
+  }
+}
+
+/**
  * Android emulator cannot reach the dev machine via localhost/127.0.0.1 — use 10.0.2.2.
  * Physical devices still need your LAN IP; this only rewrites when running on Android native.
  */
@@ -76,7 +98,7 @@ function getProductionOrigin(): string {
         (import.meta as any).env?.VITE_APP_URL
       : undefined;
   const origin = (fromEnv || DEFAULT_PRODUCTION_ORIGIN).toString();
-  return origin.replace(/\/+$/, '');
+  return normalizeRerideApiHostToWww(origin.replace(/\/+$/, ''));
 }
 
 /**
@@ -182,7 +204,9 @@ export function getApiBaseUrl(): string {
       ? import.meta.env?.VITE_API_URL
       : undefined;
   if (envOverride) {
-    return rewriteLocalhostForAndroidEmulator(envOverride.replace(/\/+$/, ''));
+    return normalizeRerideApiHostToWww(
+      rewriteLocalhostForAndroidEmulator(envOverride.replace(/\/+$/, ''))
+    );
   }
 
   if (isCapacitorNative()) {
@@ -205,7 +229,7 @@ export function getApiBaseUrl(): string {
  */
 export function resolveApiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) {
-    return path;
+    return normalizeRerideApiHostToWww(path);
   }
   let base = getApiBaseUrl();
   // Defense-in-depth: if base is still empty, never leave `/api/*` relative — that hits
@@ -259,16 +283,48 @@ export function patchFetchForCapacitor(retryCount: number = 40): void {
 
   const originalFetch = window.fetch.bind(window);
 
+  const rewriteFetchInput = (input: RequestInfo | URL): RequestInfo | URL => {
+    if (typeof input === 'string') {
+      if (input.startsWith('/api/')) return resolveApiUrl(input);
+      if (/^https?:\/\/reride\.co\.in\b/i.test(input)) {
+        return normalizeRerideApiHostToWww(input);
+      }
+      return input;
+    }
+    if (input instanceof URL) {
+      if (input.hostname === 'reride.co.in') {
+        return new URL(normalizeRerideApiHostToWww(input.href));
+      }
+      return input;
+    }
+    if (input instanceof Request) {
+      const u = input.url;
+      try {
+        const parsed = new URL(u);
+        if (parsed.pathname.startsWith('/api/')) {
+          return new Request(
+            resolveApiUrl(`${parsed.pathname}${parsed.search}${parsed.hash}`),
+            input
+          );
+        }
+        if (parsed.hostname === 'reride.co.in') {
+          return new Request(normalizeRerideApiHostToWww(u), input);
+        }
+      } catch {
+        if (u.startsWith('/api/')) {
+          return new Request(resolveApiUrl(u), input);
+        }
+      }
+      return input;
+    }
+    return input;
+  };
+
   window.fetch = function patchedFetch(
     input: RequestInfo | URL,
     init?: RequestInit
   ): Promise<Response> {
-    if (typeof input === 'string' && input.startsWith('/api/')) {
-      input = resolveApiUrl(input);
-    } else if (input instanceof Request && input.url.startsWith('/api/')) {
-      input = new Request(resolveApiUrl(input.url), input);
-    }
-    return originalFetch(input, init);
+    return originalFetch(rewriteFetchInput(input), init);
   } as typeof window.fetch;
 
   _fetchPatched = true;
