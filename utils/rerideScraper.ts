@@ -393,16 +393,16 @@ export const fetchCarDataFromReride = async (): Promise<ScrapedCarData> => {
 
 // Helper functions for filtering
 export const getModelsByMake = (make: string, carData: ScrapedCarData): CarModel[] => {
-  const makeData = carData.makes.find(m => m.name === make);
-  return makeData ? makeData.models : [];
+  const makeData = carData?.makes?.find(m => m.name === make);
+  return makeData?.models ?? [];
 };
 
 export const getVariantsByModel = (make: string, model: string, carData: ScrapedCarData): string[] => {
-  const makeData = carData.makes.find(m => m.name === make);
-  if (!makeData) return [];
-  
+  const makeData = carData?.makes?.find(m => m.name === make);
+  if (!makeData?.models?.length) return [];
+
   const modelData = makeData.models.find(m => m.name === model);
-  return modelData ? modelData.variants : [];
+  return modelData?.variants ?? [];
 };
 
 // Indian districts/cities for location selection

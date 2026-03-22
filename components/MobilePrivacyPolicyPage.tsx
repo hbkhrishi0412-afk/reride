@@ -155,8 +155,8 @@ const MobilePrivacyPolicyPage: React.FC = () => {
               If you have any questions about this Privacy Policy, please contact us:
             </p>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-gray-700 text-sm mb-2"><strong>Email:</strong> privacy@reride.com</p>
-              <p className="text-gray-700 text-sm mb-2"><strong>Support:</strong> support@reride.com</p>
+              <p className="text-gray-700 text-sm mb-2"><strong>Email:</strong> privacy@ReRide.com</p>
+              <p className="text-gray-700 text-sm mb-2"><strong>Support:</strong> support@ReRide.com</p>
               <p className="text-gray-700 text-sm"><strong>Address:</strong> ReRide, India</p>
             </div>
           </section>

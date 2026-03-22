@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
-import { fetchCarDataFromReride, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/rerideScraper';
+import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData } from '../utils/rerideScraper';
 import { useCamera } from '../hooks/useMobileFeatures';
 
 interface MobileSellCarPageProps {
@@ -64,9 +64,10 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
     const loadCarData = async () => {
       try {
         const data = await fetchCarDataFromReride();
-        setCarData(data);
+        setCarData(data?.makes?.length ? data : getCarData());
       } catch (error) {
         console.error('Failed to load car data:', error);
+        setCarData(getCarData());
       }
     };
     loadCarData();
@@ -75,7 +76,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
   useEffect(() => {
     if (carData && carDetails.make) {
       const models = getModelsByMake(carDetails.make, carData);
-      setAvailableModels(models.map(m => m.name));
+      setAvailableModels((models ?? []).map(m => m.name));
       setAvailableVariants([]);
       setCarDetails(prev => ({ ...prev, model: '', variant: '' }));
     }
@@ -229,7 +230,7 @@ export const MobileSellCarPage: React.FC<MobileSellCarPageProps> = ({ onNavigate
                 style={{ minHeight: '56px' }}
               >
                 <option value="">Select Make</option>
-                {carData?.makes.map(make => (
+                {(carData?.makes ?? []).map(make => (
                   <option key={make.name} value={make.name}>{make.name}</option>
                 ))}
               </select>

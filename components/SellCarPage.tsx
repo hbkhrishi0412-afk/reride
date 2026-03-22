@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
-import { fetchCarDataFromReride, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
+import { fetchCarDataFromReride, getCarData, getModelsByMake, getVariantsByModel, getIndianDistricts, getCarYears, getOwnershipOptions, ScrapedCarData, CarMake } from '../utils/rerideScraper';
 import { sellCarAPI } from '../services/sellCarService';
 
 interface SellCarPageProps {
@@ -148,9 +148,10 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       setIsLoading(true);
       try {
         const data = await fetchCarDataFromReride();
-        setCarData(data);
+        setCarData(data?.makes?.length ? data : getCarData());
       } catch (error) {
         console.error('Failed to load car data:', error);
+        setCarData(getCarData());
       } finally {
         setIsLoading(false);
       }
@@ -610,7 +611,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
-            {carData?.makes.map((brand, index) => {
+            {(carData?.makes ?? []).map((brand, index) => {
               const logoUrl = getBrandLogo(brand.name);
 
               return (

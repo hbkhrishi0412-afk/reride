@@ -254,7 +254,7 @@ export function resolveApiUrl(path: string): string {
   }
   if (!base) return path;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${normalizedPath}`;
+  return normalizeRerideApiHostToWww(`${base}${normalizedPath}`);
 }
 
 /**
