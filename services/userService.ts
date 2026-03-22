@@ -1,6 +1,7 @@
 
 import type { User } from '../types';
 import { isDevelopmentEnvironment } from '../utils/environment';
+import { isCapacitorNative } from '../utils/apiConfig';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
 // Fallback mock users for development only (no credentials stored in source)
@@ -501,8 +502,14 @@ const authApi = async (body: any): Promise<any> => {
 
 // --- Environment Detection ---
 // Use local storage in development, API in production
-// Force development mode on localhost even if running on different ports
+// Capacitor WebView uses https://localhost — must NOT be treated as dev (same as dataService).
 const isDevelopment = (() => {
+  if (typeof window !== 'undefined' && isCapacitorNative()) {
+    return false;
+  }
+  if (typeof window === 'undefined') {
+    return isDevelopmentEnvironment();
+  }
   // Check if we're explicitly in development mode
   if (isDevelopmentEnvironment()) return true;
   

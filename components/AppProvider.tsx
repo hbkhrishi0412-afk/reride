@@ -188,6 +188,8 @@ interface AppContextType {
   selectedVehicle: Vehicle | null;
   vehicles: Vehicle[];
   isLoading: boolean;
+  /** False until the first vehicle catalog hydration attempt finishes (cache and/or API). Avoids showing a false "Unable to load vehicles" on mobile while the network request is still in flight. */
+  vehiclesCatalogReady: boolean;
   currentUser: User | null;
   comparisonList: number[];
   ratings: { [key: string]: number[] };
@@ -336,6 +338,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isHandlingPopStateRef = useRef(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [vehiclesCatalogReady, setVehiclesCatalogReady] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     // Check for existing logged-in user on app startup (safe for WebView/Capacitor)
     if (typeof window === 'undefined' || typeof localStorage === 'undefined' || typeof sessionStorage === 'undefined') {
@@ -1138,10 +1141,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const list = await dataService.getVehicles(isAdmin, true);
       const next = Array.isArray(list) ? list : [];
       setVehicles((prev) => mergeVehicleCatalog(prev, next, !!isAdmin));
+      setVehiclesCatalogReady(true);
       if (list.length > 0) {
         addToast(`Loaded ${list.length} vehicles`, 'success');
       }
     } catch (err) {
+      setVehiclesCatalogReady(true);
       logWarn('Refresh vehicles failed:', err);
       const msg = err instanceof Error ? err.message : String(err);
       const is503OrSupabase = (err as any)?.status === 503 || (err as any)?.code === 503 || /supabase|503|service temporarily unavailable/i.test(msg);
@@ -1282,9 +1287,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let isMounted = true;
     const isNativeWebView = isCapacitorNative();
-    const maxNativeVehicleCacheChars = 900_000; // Avoid large JSON.parse stalls on Android WebView startup
+    const maxNativeVehicleCacheChars = 2_000_000; // Must match DataService limit so cache isn't deleted after being written
     
     const loadInitialData = async () => {
+      const markVehiclesCatalogReady = () => {
+        if (isMounted) setVehiclesCatalogReady(true);
+      };
+
       try {
         let hasCachedData = false;
         
@@ -1312,6 +1321,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (Array.isArray(cachedVehicles) && cachedVehicles.length > 0) {
                 // Show cached vehicles INSTANTLY - don't wait for API
                 setVehicles(cachedVehicles);
+                setVehiclesCatalogReady(true);
                 // PERFORMANCE: Recommendations are now computed via useMemo, no need to set
                 setIsLoading(false); // Stop loading immediately
                 hasCachedData = true;
@@ -1395,22 +1405,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // CRITICAL: Don't block UI - load data in background, UI already rendered
         const vehicleRequest = deduplicateRequest(
           `vehicles-${isAdmin ? 'admin' : 'user'}-init`,
-          () => dataService.getVehicles(isAdmin).catch((error) => {
-            logWarn('Failed to load vehicles:', error);
-            return [];
-          })
+          () => dataService.getVehicles(isAdmin)
         );
         const usersRequest = deduplicateRequest(
           'users',
-          () => dataService.getUsers().catch((error) => {
-            logWarn('Failed to load users:', error);
-            return [];
-          })
+          () => dataService.getUsers()
         );
 
+        // On native, give enough time for the full round-trip (20s fetch timeout + overhead).
+        // Swallow errors at this level so Promise.all always resolves.
         Promise.all([
-          loadWithTimeout(vehicleRequest, isCapacitorNative() ? 12000 : 4500),
-          loadWithTimeout(usersRequest, 3500)
+          loadWithTimeout(vehicleRequest, isCapacitorNative() ? 25000 : 4500).catch((e) => { logWarn('Failed to load vehicles:', e); return null; }),
+          loadWithTimeout(usersRequest, isCapacitorNative() ? 25000 : 3500).catch((e) => { logWarn('Failed to load users:', e); return null; })
         ]).then(([vehiclesData, usersData]) => {
           if (!isMounted) return;
           
@@ -1424,20 +1430,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } else {
               logWarn('⚠️ API returned empty vehicles array. Check database for published vehicles.');
             }
+            markVehiclesCatalogReady();
           } else if (vehiclesData === null) {
             logWarn('⚠️ Vehicle API response exceeded initial timeout. Keeping current vehicles and waiting for response...');
-            vehicleRequest.then((lateVehicles) => {
-              if (!isMounted || !Array.isArray(lateVehicles)) return;
-              setVehicles((prev) => mergeVehicleCatalog(prev, lateVehicles, !!isAdmin));
-              if (lateVehicles.length > 0) {
-                logInfo(`✅ Late vehicle response applied: ${lateVehicles.length} vehicles`);
-              }
-            }).catch((lateError) => {
-              logWarn('Late vehicle response failed:', lateError);
-              if (isMounted) setVehicles(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
-            });
+            vehicleRequest
+              .then((lateVehicles) => {
+                if (!isMounted || !Array.isArray(lateVehicles)) return;
+                setVehicles((prev) => mergeVehicleCatalog(prev, lateVehicles, !!isAdmin));
+                if (lateVehicles.length > 0) {
+                  logInfo(`✅ Late vehicle response applied: ${lateVehicles.length} vehicles`);
+                }
+              })
+              .catch((lateError) => {
+                logWarn('Late vehicle response failed:', lateError);
+                if (isMounted) setVehicles(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
+              })
+              .finally(markVehiclesCatalogReady);
           } else {
             logError('❌ API returned non-array vehicles data:', typeof vehiclesData);
+            markVehiclesCatalogReady();
           }
           
           // Always update users state, even if empty array (for consistency)
@@ -1447,10 +1458,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               logInfo(`✅ Updated with ${usersData.length} fresh users from API`);
             } else {
               // In development mode, if API returns empty and no cached data, try fallback users
-              const isDevelopment = isDevelopmentEnvironment() || 
+              // Capacitor WebView uses localhost — do not treat as dev (would load mock users).
+              const isDevelopment = !isCapacitorNative() &&
+                                    (isDevelopmentEnvironment() || 
                                     (typeof window !== 'undefined' && 
                                      (window.location.hostname === 'localhost' || 
-                                      window.location.hostname === '127.0.0.1'));
+                                      window.location.hostname === '127.0.0.1')));
               if (isDevelopment) {
                 // Check if we already have users from cache
                 const currentUsersJson = localStorage.getItem('reRideUsers_prod') || localStorage.getItem('reRideUsers');
@@ -1569,6 +1582,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!hasCachedData && isMounted) {
             setIsLoading(false);
           }
+          markVehiclesCatalogReady();
         });
         
         // STEP 4: Defer non-critical data loading until after initial render
@@ -1788,6 +1802,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Ensure we have at least empty arrays
           setVehicles(prev => Array.isArray(prev) ? prev : []);
           setUsers(prev => Array.isArray(prev) ? prev : []);
+          setVehiclesCatalogReady(true);
           // PERFORMANCE: Recommendations are now computed via useMemo, no need to clear
           setIsLoading(false);
           if (process.env.NODE_ENV === 'development') {
@@ -1857,6 +1872,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showNotification(notif.title || 'New message', { body: notif.message });
       }
     },
+  });
+
+  // Supabase Realtime: published vehicle inserts/updates/deletes → debounced full refresh (web + Capacitor)
+  const vehicleRealtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleVehicleRealtimeRefresh = useCallback(() => {
+    if (vehicleRealtimeDebounceRef.current) {
+      clearTimeout(vehicleRealtimeDebounceRef.current);
+    }
+    vehicleRealtimeDebounceRef.current = setTimeout(() => {
+      vehicleRealtimeDebounceRef.current = null;
+      try {
+        const raw = localStorage.getItem('reRideCurrentUser');
+        const admin = raw ? JSON.parse(raw)?.role === 'admin' : false;
+        void dataService
+          .getVehicles(!!admin, true)
+          .then((fresh) => {
+            if (Array.isArray(fresh)) {
+              setVehicles((prev) => mergeVehicleCatalog(prev, fresh, !!admin));
+            }
+          })
+          .catch(() => {});
+      } catch {
+        /* ignore */
+      }
+    }, 1500);
+  }, []);
+
+  useSupabaseRealtime({
+    table: 'vehicles',
+    enabled: typeof window !== 'undefined' && !isDevelopmentEnvironment(),
+    onInsert: scheduleVehicleRealtimeRefresh,
+    onUpdate: scheduleVehicleRealtimeRefresh,
+    onDelete: scheduleVehicleRealtimeRefresh,
+  });
+
+  const usersRealtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleUsersRealtimeRefresh = useCallback(() => {
+    if (usersRealtimeDebounceRef.current) {
+      clearTimeout(usersRealtimeDebounceRef.current);
+    }
+    usersRealtimeDebounceRef.current = setTimeout(() => {
+      usersRealtimeDebounceRef.current = null;
+      void dataService
+        .getUsers(true)
+        .then((fresh) => {
+          if (Array.isArray(fresh)) {
+            setUsers(fresh);
+          }
+        })
+        .catch(() => {});
+    }, 2000);
+  }, []);
+
+  useSupabaseRealtime({
+    table: 'users',
+    enabled: typeof window !== 'undefined' && !isDevelopmentEnvironment(),
+    onInsert: scheduleUsersRealtimeRefresh,
+    onUpdate: scheduleUsersRealtimeRefresh,
+    onDelete: scheduleUsersRealtimeRefresh,
   });
 
   // Refresh server-sourced data whenever the authenticated user changes
@@ -2001,6 +2075,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } finally {
         if (isSubscribed) {
           setIsLoading(false);
+          setVehiclesCatalogReady(true);
         }
       }
     };
@@ -3030,6 +3105,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectedVehicle,
     vehicles,
     isLoading,
+    vehiclesCatalogReady,
     currentUser,
     comparisonList,
     ratings,
@@ -3270,8 +3346,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           setUsers(prev => [...prev, createdUser]);
           
-          // Save to localStorage after Supabase success
-          const isDevelopment = isDevelopmentEnvironment() || window.location.hostname === 'localhost';
+          // Save to localStorage after Supabase success (dev browser only — not Capacitor localhost)
+          const isDevelopment = !isCapacitorNative() &&
+            (isDevelopmentEnvironment() || window.location.hostname === 'localhost');
           if (isDevelopment) {
             try {
               const { getUsersLocal } = await import('../services/userService');
@@ -4814,7 +4891,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addToast(`Offer ${response} successfully`, 'success');
     },
   }), [
-    currentView, previousView, selectedVehicle, vehicles, isLoading, currentUser,
+    currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady, currentUser,
     comparisonList, ratings, sellerRatings, wishlist, conversations, toasts,
     forgotPasswordRole, typingStatus, selectedCategory, publicSellerProfile,
     activeChat, isAnnouncementVisible, recommendations, initialSearchQuery,
