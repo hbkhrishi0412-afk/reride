@@ -116,7 +116,7 @@ const MobileTermsOfServicePage: React.FC = () => {
           <section className="mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-3">7. Disclaimers and Limitation of Liability</h2>
             <p className="text-gray-700 text-sm leading-relaxed mb-3">
-              THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND. TO THE MAXIMUM EXTENT PERMITTED BY LAW, RERIDE SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.
+              THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND. TO THE MAXIMUM EXTENT PERMITTED BY LAW, ReRide SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.
             </p>
           </section>
 
@@ -140,8 +140,8 @@ const MobileTermsOfServicePage: React.FC = () => {
               If you have any questions about these Terms of Service, please contact us:
             </p>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <p className="text-gray-700 text-sm mb-2"><strong>Email:</strong> legal@reride.com</p>
-              <p className="text-gray-700 text-sm mb-2"><strong>Support:</strong> support@reride.com</p>
+              <p className="text-gray-700 text-sm mb-2"><strong>Email:</strong> legal@ReRide.com</p>
+              <p className="text-gray-700 text-sm mb-2"><strong>Support:</strong> support@ReRide.com</p>
               <p className="text-gray-700 text-sm"><strong>Address:</strong> ReRide, India</p>
             </div>
           </section>

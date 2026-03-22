@@ -169,7 +169,7 @@ const TermsOfServicePage: React.FC = () => {
 
             <h3 className="text-xl font-semibold text-reride-text-dark mb-3 mt-6">7.3 Limitation of Liability</h3>
             <p className="text-gray-700 leading-relaxed mb-4">
-              TO THE MAXIMUM EXTENT PERMITTED BY LAW, RERIDE SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR REVENUES, WHETHER INCURRED DIRECTLY OR INDIRECTLY, OR ANY LOSS OF DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES RESULTING FROM YOUR USE OF THE SERVICE.
+              TO THE MAXIMUM EXTENT PERMITTED BY LAW, ReRide SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS OR REVENUES, WHETHER INCURRED DIRECTLY OR INDIRECTLY, OR ANY LOSS OF DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES RESULTING FROM YOUR USE OF THE SERVICE.
             </p>
           </section>
 
@@ -233,8 +233,8 @@ const TermsOfServicePage: React.FC = () => {
               If you have any questions about these Terms of Service, please contact us:
             </p>
             <div className="bg-gray-50 p-6 rounded-lg">
-              <p className="text-gray-700 mb-2"><strong>Email:</strong> legal@reride.com</p>
-              <p className="text-gray-700 mb-2"><strong>Support:</strong> support@reride.com</p>
+              <p className="text-gray-700 mb-2"><strong>Email:</strong> legal@ReRide.com</p>
+              <p className="text-gray-700 mb-2"><strong>Support:</strong> support@ReRide.com</p>
               <p className="text-gray-700"><strong>Address:</strong> ReRide, India</p>
             </div>
           </section>
