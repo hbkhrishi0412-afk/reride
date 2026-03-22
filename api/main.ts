@@ -1790,6 +1790,196 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
     }
 
+    // MESSAGEBOT OTP — send via MessageBot SMS API, verify against hashed row in otp_verifications
+    if (action === 'send-otp-messagebot') {
+      const { phoneNumber } = req.body;
+
+      if (!phoneNumber) {
+        return res.status(400).json({
+          success: false,
+          reason: 'Phone number is required.',
+        });
+      }
+
+      try {
+        const { sendMessageBotOTP, getMessageBotConfig } = await import('../services/messagebotService.js');
+        const mbConfig = getMessageBotConfig();
+
+        if (!mbConfig) {
+          return res.status(503).json({
+            success: false,
+            reason:
+              'MessageBot SMS is not configured. Set MESSAGEBOT_API_TOKEN and MESSAGEBOT_SENDER_ID (and DLT IDs for India).',
+          });
+        }
+
+        let cleanedNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
+        if (!cleanedNumber.startsWith('+')) {
+          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
+          cleanedNumber = `+91${cleanedNumber}`;
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        const supabase = getSupabaseAdminClient();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        const crypto = await import('crypto');
+        const jwtSecret = getSecurityConfig().JWT.SECRET;
+        if (!jwtSecret) {
+          return res.status(503).json({ success: false, reason: 'Server configuration error. Please try again later.' });
+        }
+        const otpHash = crypto.createHash('sha256').update(otp + jwtSecret).digest('hex');
+
+        const { error: storeError } = await supabase
+          .from('otp_verifications')
+          .upsert(
+            {
+              phone: cleanedNumber,
+              otp_hash: otpHash,
+              expires_at: expiresAt,
+              created_at: new Date().toISOString(),
+            },
+            { onConflict: 'phone' },
+          );
+
+        if (storeError && !storeError.message.includes('relation') && !storeError.message.includes('does not exist')) {
+          logWarn('⚠️ Could not store OTP in database:', storeError.message);
+        }
+
+        const mbResult = await sendMessageBotOTP(cleanedNumber, otp, mbConfig);
+
+        if (!mbResult.success) {
+          logError('❌ MessageBot SMS send failed:', mbResult.error);
+          return res.status(500).json({
+            success: false,
+            reason: mbResult.error || 'Failed to send OTP via MessageBot',
+          });
+        }
+
+        logInfo('✅ OTP sent via MessageBot to:', cleanedNumber);
+        return res.status(200).json({
+          success: true,
+          message: 'OTP sent successfully',
+          phone: cleanedNumber,
+          ...(process.env.NODE_ENV !== 'production' ? { otp } : {}),
+        });
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'Failed to send OTP';
+        logError('❌ MessageBot OTP send error:', error);
+        return res.status(500).json({ success: false, reason: msg });
+      }
+    }
+
+    if (action === 'verify-otp-messagebot') {
+      const { phoneNumber, otp } = req.body;
+      const requestedRole = (req.body.role as string) || 'customer';
+
+      if (!phoneNumber || !otp) {
+        return res.status(400).json({
+          success: false,
+          reason: 'Phone number and OTP are required.',
+        });
+      }
+
+      if (requestedRole !== 'customer' && requestedRole !== 'seller') {
+        return res.status(400).json({
+          success: false,
+          reason: 'Invalid role for phone OTP login.',
+        });
+      }
+
+      try {
+        const supabase = getSupabaseAdminClient();
+
+        let cleanedNumber = phoneNumber.replace(/[\s\-\(\)]/g, '');
+        if (!cleanedNumber.startsWith('+')) {
+          cleanedNumber = cleanedNumber.replace(/^(0|91)/, '');
+          cleanedNumber = `+91${cleanedNumber}`;
+        }
+
+        const crypto = await import('crypto');
+        const jwtSecret = getSecurityConfig().JWT.SECRET;
+        if (!jwtSecret) {
+          return res.status(503).json({ success: false, reason: 'Server configuration error.' });
+        }
+
+        const { data: row, error: fetchError } = await supabase
+          .from('otp_verifications')
+          .select('otp_hash, expires_at')
+          .eq('phone', cleanedNumber)
+          .maybeSingle();
+
+        if (fetchError || !row) {
+          return res.status(400).json({
+            success: false,
+            reason: 'No OTP found for this number. Please request a new code.',
+          });
+        }
+
+        const expiresAt = row.expires_at ? new Date(String(row.expires_at)) : null;
+        if (expiresAt && expiresAt.getTime() < Date.now()) {
+          await supabase.from('otp_verifications').delete().eq('phone', cleanedNumber);
+          return res.status(400).json({
+            success: false,
+            reason: 'OTP has expired. Please request a new code.',
+          });
+        }
+
+        const expectedHash = crypto.createHash('sha256').update(String(otp) + jwtSecret).digest('hex');
+        if (expectedHash !== row.otp_hash) {
+          return res.status(400).json({
+            success: false,
+            reason: 'Invalid OTP. Please try again.',
+          });
+        }
+
+        await supabase.from('otp_verifications').delete().eq('phone', cleanedNumber);
+
+        const userEmail = `${cleanedNumber.replace('+', '')}@phone.reride.co.in`;
+        let user = await userService.findByEmail(userEmail);
+
+        if (!user) {
+          const userData: Omit<UserType, 'id'> = {
+            email: userEmail,
+            name: `User ${cleanedNumber}`,
+            mobile: cleanedNumber,
+            role: requestedRole as 'customer' | 'seller',
+            location: '',
+            authProvider: 'phone',
+            status: 'active' as const,
+            isVerified: true,
+            subscriptionPlan: 'free' as const,
+            featuredCredits: 0,
+            usedCertifications: 0,
+            createdAt: new Date().toISOString(),
+          };
+          user = await userService.create(userData);
+        } else if (user.role !== requestedRole) {
+          return res.status(400).json({
+            success: false,
+            reason: `This number is registered as a ${user.role}. Please choose the correct account type.`,
+            detectedRole: user.role,
+          });
+        }
+
+        const accessToken = generateAccessToken(user);
+        const refreshToken = generateRefreshToken(user);
+        const normalizedUser = normalizeUser(user);
+
+        return res.status(200).json({
+          success: true,
+          user: normalizedUser,
+          accessToken,
+          refreshToken,
+        });
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'Failed to verify OTP';
+        logError('❌ MessageBot OTP verify error:', error);
+        return res.status(500).json({ success: false, reason: msg });
+      }
+    }
+
     logWarn('⚠️ POST /api/users: Invalid action received', { action, bodyKeys: Object.keys(req.body || {}) });
     return res.status(400).json({ 
       success: false, 

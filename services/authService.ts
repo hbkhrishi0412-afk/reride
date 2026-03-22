@@ -11,6 +11,15 @@ import {
 } from './supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase.js';
 import type { User } from '../types';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
+
+function isMessageBotOtpEnabled(): boolean {
+  try {
+    return import.meta.env.VITE_OTP_SMS_PROVIDER === 'messagebot';
+  } catch {
+    return false;
+  }
+}
 
 // ── Google Sign-In ──────────────────────────────────────────────────────────
 
@@ -32,7 +41,7 @@ export const signInWithGoogle = async (): Promise<{
 // ── OTP / Phone Authentication ──────────────────────────────────────────────
 
 /**
- * Send an OTP to a phone number via Supabase phone auth.
+ * Send an OTP: either MessageBot SMS (server) or Supabase phone auth (Twilio/Supabase SMS).
  */
 export const sendOTP = async (
   phoneNumber: string,
@@ -42,12 +51,39 @@ export const sendOTP = async (
   reason?: string;
 }> => {
   try {
-    const supabase = getSupabaseClient();
-
-    // Format phone number — must include country code
     const formattedNumber = phoneNumber.startsWith('+')
       ? phoneNumber
       : `+91${phoneNumber}`;
+
+    if (isMessageBotOtpEnabled()) {
+      const response = await authenticatedFetch('/api/users', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({
+          action: 'send-otp-messagebot',
+          phoneNumber: formattedNumber,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        reason?: string;
+      };
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          reason: data.reason || 'Failed to send OTP',
+        };
+      }
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('supabase_phone_auth', formattedNumber);
+      }
+      return {
+        success: true,
+        confirmationResult: { phone: formattedNumber },
+      };
+    }
+
+    const supabase = getSupabaseClient();
 
     const { error } = await supabase.auth.signInWithOtp({
       phone: formattedNumber,
@@ -103,20 +139,22 @@ export const sendOTP = async (
 };
 
 /**
- * Verify an OTP code.
+ * Verify an OTP code (MessageBot + JWT session, or Supabase verifyOtp + oauth-login sync).
  */
 export const verifyOTP = async (
   confirmationResult: { phone?: string } | null,
   otp: string,
+  role: 'customer' | 'seller' = 'customer',
 ): Promise<{
   success: boolean;
   user?: Record<string, unknown>;
   firebaseUser?: Record<string, unknown>;
   reason?: string;
+  /** MessageBot path: session stored; use appUser with onLogin */
+  sessionComplete?: boolean;
+  appUser?: User;
 }> => {
   try {
-    const supabase = getSupabaseClient();
-
     const phone =
       confirmationResult?.phone ||
       (typeof window !== 'undefined'
@@ -129,6 +167,52 @@ export const verifyOTP = async (
         reason: 'Phone number not found. Please request OTP again.',
       };
     }
+
+    if (isMessageBotOtpEnabled()) {
+      const response = await authenticatedFetch('/api/users', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({
+          action: 'verify-otp-messagebot',
+          phoneNumber: phone,
+          otp,
+          role,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        reason?: string;
+        user?: User;
+        accessToken?: string;
+        refreshToken?: string;
+        detectedRole?: string;
+      };
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          reason: data.reason || 'Invalid OTP',
+        };
+      }
+      if (!data.user || !data.accessToken || !data.refreshToken) {
+        return { success: false, reason: 'Invalid response from server.' };
+      }
+      const { establishSessionFromOtpAuth } = await import('./userService');
+      establishSessionFromOtpAuth({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        user: data.user,
+      });
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('supabase_phone_auth');
+      }
+      return {
+        success: true,
+        sessionComplete: true,
+        appUser: data.user,
+      };
+    }
+
+    const supabase = getSupabaseClient();
 
     const { data, error } = await supabase.auth.verifyOtp({
       phone,

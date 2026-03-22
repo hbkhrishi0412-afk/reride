@@ -24,6 +24,8 @@ interface ImportMetaEnv {
   /** Port for local dev API (default 3001, same as dev-api-server.js). */
   readonly VITE_LOCAL_API_PORT?: string
   readonly VITE_GA_MEASUREMENT_ID?: string
+  /** When `messagebot`, phone OTP uses MessageBot SMS + server JWT (see .env.example). Omit or other value = Supabase SMS. */
+  readonly VITE_OTP_SMS_PROVIDER?: string
   readonly MODE: string
   readonly DEV: boolean
   readonly PROD: boolean

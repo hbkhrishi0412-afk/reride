@@ -21,10 +21,17 @@ const DEFAULT_PRODUCTION_ORIGIN = 'https://www.reride.co.in';
  */
 export function normalizeRerideApiHostToWww(urlOrOrigin: string): string {
   const raw = urlOrOrigin.trim();
+  // Rewrite apex in any absolute URL string (covers build-time env typos and bypasses URL edge cases).
+  const apexStripped = raw.replace(
+    /(https?:\/\/)reride\.co\.in(?=[:/?#]|$)/gi,
+    '$1www.reride.co.in'
+  );
   try {
-    const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    const u = new URL(
+      apexStripped.includes('://') ? apexStripped : `https://${apexStripped}`
+    );
     if (u.hostname !== 'reride.co.in') {
-      return raw.replace(/\/+$/, '');
+      return apexStripped.replace(/\/+$/, '');
     }
     u.hostname = 'www.reride.co.in';
     if (u.pathname === '/' && !u.search && !u.hash) {
@@ -32,7 +39,7 @@ export function normalizeRerideApiHostToWww(urlOrOrigin: string): string {
     }
     return u.toString();
   } catch {
-    return raw.replace(/\/+$/, '');
+    return apexStripped.replace(/\/+$/, '');
   }
 }
 
@@ -271,6 +278,10 @@ let _fetchPatched = false;
 export function patchFetchForCapacitor(_retryCount: number = 40): void {
   if (_fetchPatched) return;
   if (typeof window === 'undefined') return;
+  if ((window as unknown as { __RERIDE_FETCH_BOOT__?: boolean }).__RERIDE_FETCH_BOOT__) {
+    _fetchPatched = true;
+    return;
+  }
 
   const originalFetch = window.fetch.bind(window);
 
@@ -278,7 +289,7 @@ export function patchFetchForCapacitor(_retryCount: number = 40): void {
     if (typeof input === 'string') {
       if (input.startsWith('/api/')) return resolveApiUrl(input);
       // Any absolute URL to apex (http/https) — avoid 307 on OPTIONS preflight.
-      if (/^https?:\/\/reride\.co\.in\b/i.test(input)) {
+      if (/(https?:\/\/)reride\.co\.in(?=[:/?#]|$)/i.test(input)) {
         return normalizeRerideApiHostToWww(input);
       }
       return input;
