@@ -352,9 +352,11 @@ async function mainHandler(
   // Capacitor Android/iOS WebView always uses these origins (androidScheme: 'https' or capacitor://)
   const isCapacitorApp =
     origin === 'https://localhost' ||
+    origin === 'https://127.0.0.1' ||
     origin === 'capacitor://localhost' ||
     origin === 'ionic://localhost' ||
     origin === 'http://localhost' ||
+    origin === 'http://127.0.0.1' ||
     origin === 'https://appassets.androidplatform.net' ||
     origin?.includes('appassets.androidplatform.net');
 
@@ -532,8 +534,18 @@ async function mainHandler(
 
     // CSRF validation for state-changing methods (POST, PUT, DELETE)
     const isStateChanging = req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE';
-    const isCsrfExempt = pathname.includes('/login') || pathname.includes('/csrf-token') ||
-      pathname.includes('/health') || pathname.includes('/db-health');
+    const appClientHeader = String(
+      req.headers['x-app-client'] || req.headers['X-App-Client'] || '',
+    ).toLowerCase();
+    // Capacitor WebView (https://localhost) cannot send cross-site CSRF cookies; requests use JWT + this header.
+    const skipCsrfForCapacitorNative =
+      appClientHeader === 'capacitor' && Boolean(isCapacitorApp);
+    const isCsrfExempt =
+      pathname.includes('/login') ||
+      pathname.includes('/csrf-token') ||
+      pathname.includes('/health') ||
+      pathname.includes('/db-health') ||
+      skipCsrfForCapacitorNative;
     if (isStateChanging && !isCsrfExempt) {
       const headerToken = (req.headers['x-csrf-token'] || req.headers['X-CSRF-Token']) as string | undefined;
       const cookieToken = (req.headers.cookie || '')

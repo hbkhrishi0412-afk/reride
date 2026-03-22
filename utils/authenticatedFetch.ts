@@ -44,7 +44,9 @@ export async function ensureCsrfToken(): Promise<string | null> {
   if (csrfTokenPromise) return csrfTokenPromise;
   csrfTokenPromise = (async () => {
     try {
-      const res = await fetch(resolveApiUrl('/api/csrf-token'), { credentials: 'include' });
+      const res = await fetch(resolveApiUrl('/api/csrf-token'), {
+        credentials: isCapacitorNative() ? 'omit' : 'include',
+      });
       if (!res.ok) return null;
       const data = await res.json();
       if (data?.token) {
@@ -126,10 +128,14 @@ const refreshToken = async (): Promise<string | null> => {
         refreshHeaders['X-CSRF-Token'] = csrfToken;
       }
 
+      if (isCapacitorNative()) {
+        refreshHeaders['X-App-Client'] = 'capacitor';
+      }
+
       const response = await fetch(resolveApiUrl('/api/users'), {
         method: 'POST',
         headers: refreshHeaders,
-        credentials: 'include',
+        credentials: isCapacitorNative() ? 'omit' : 'include',
         body: JSON.stringify({ action: 'refresh-token', refreshToken: refreshTokenValue }),
       });
 
@@ -340,13 +346,19 @@ export const authenticatedFetch = async (
       mergedHeaders['X-App-Client'] = 'capacitor';
     }
 
+    // Capacitor: omit cookies — cross-site CSRF cookies do not attach from https://localhost; credentialed
+    // CORS often causes preflight/network failures. Server exempts CSRF when X-App-Client: capacitor + origin.
+    const credentialsMode: RequestCredentials =
+      fetchOptions.credentials ??
+      (isCapacitorNative() ? 'omit' : 'include');
+
     // First attempt - wrap in try-catch to handle network errors
     let response: Response;
     try {
       response = await fetch(resolvedUrl, {
         ...fetchOptions,
         headers: mergedHeaders,
-        credentials: 'include',
+        credentials: credentialsMode,
       });
     } catch (fetchError) {
       // Network error, CORS error, or other fetch failures
@@ -427,7 +439,7 @@ export const authenticatedFetch = async (
                 ...mergedHeaders,
                 'Authorization': `Bearer ${newToken}`,
               },
-              credentials: 'include',
+              credentials: credentialsMode,
             });
           } catch (retryError) {
             // Network error on retry - return original 401 response
