@@ -1535,11 +1535,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           () => dataService.getUsers()
         );
 
+        // Use the SAME deadline for both requests. Previously users used 3.5s vs vehicles 4.5s on web,
+        // so users often timed out first; the .then ran with vehicles populated and usersData === null,
+        // and user counts appeared only when the late usersRequest settled (staggered admin stat cards).
+        // Admins need the full user list for analytics — allow a bit longer than the default web budget.
+        const parallelInitTimeoutMs = isCapacitorNative()
+          ? 25000
+          : isAdmin
+            ? 12000
+            : 4500;
+
         // On native, give enough time for the full round-trip (20s fetch timeout + overhead).
         // Swallow errors at this level so Promise.all always resolves.
         Promise.all([
-          loadWithTimeout(vehicleRequest, isCapacitorNative() ? 25000 : 4500).catch((e) => { logWarn('Failed to load vehicles:', e); return null; }),
-          loadWithTimeout(usersRequest, isCapacitorNative() ? 25000 : 3500).catch((e) => { logWarn('Failed to load users:', e); return null; })
+          loadWithTimeout(vehicleRequest, parallelInitTimeoutMs).catch((e) => { logWarn('Failed to load vehicles:', e); return null; }),
+          loadWithTimeout(usersRequest, parallelInitTimeoutMs).catch((e) => { logWarn('Failed to load users:', e); return null; })
         ]).then(([vehiclesData, usersData]) => {
           if (!isMounted) return;
           
