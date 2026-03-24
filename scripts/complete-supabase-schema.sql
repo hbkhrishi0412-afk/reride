@@ -58,6 +58,17 @@ CREATE INDEX IF NOT EXISTS idx_users_location ON users(location);
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
+-- 1b. APP CONFIG (admin vehicle dropdown JSON, etc.)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS app_config (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+COMMENT ON TABLE app_config IS 'Key-value settings; key vehicle_data = seller form dropdown catalog (JSON)';
+
+-- ============================================================================
 -- 2. VEHICLES TABLE
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS vehicles (

@@ -1,10 +1,6 @@
 import type { Vehicle, User, VehicleData } from '../types';
 import { queueRequest } from '../utils/requestQueue';
-import {
-  getApiBaseUrl,
-  isCapacitorNative,
-  normalizeRerideApiHostToWww,
-} from '../utils/apiConfig';
+import { isCapacitorNative, resolveApiUrl } from '../utils/apiConfig';
 import { ensureCsrfToken } from '../utils/authenticatedFetch';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 
@@ -33,17 +29,10 @@ class DataService {
     return this.devHostFlag;
   }
 
-  /** Resolve at request time — Capacitor may not be detected when the singleton is constructed. */
-  private resolveApiBaseUrl(): string {
-    return `${getApiBaseUrl()}/api`;
-  }
-
-  /**
-   * Previously retried the apex host when www failed; apex redirects to www and breaks
-   * CORS preflight (OPTIONS) from Android WebView (appassets.androidplatform.net).
-   */
-  private resolveApiBaseUrlFallback(): string | null {
-    return null;
+  /** Full `/api/...` URL: same rules as `resolveApiUrl` (WebView → `https://www.reride.co.in/...`). */
+  private resolveDataApiUrl(endpoint: string): string {
+    const path = endpoint.startsWith('/') ? `/api${endpoint}` : `/api/${endpoint}`;
+    return resolveApiUrl(path);
   }
 
   private detectDevelopment(): boolean {
@@ -134,17 +123,12 @@ class DataService {
         // Helper: perform fetch with timeout so we can retry after token refresh
         const performFetch = async (): Promise<Response> => {
           let timeoutId: NodeJS.Timeout | null = null;
-          const apiBase = this.resolveApiBaseUrl();
-          const fbBase = this.resolveApiBaseUrlFallback();
+          const primaryUrl = this.resolveDataApiUrl(endpoint);
+          const fallbackUrl: string | null = null;
           const fetchTimeoutMs = isCapacitorNative() ? 20000 : 7000;
           try {
             const controller = new AbortController();
             timeoutId = setTimeout(() => controller.abort(), fetchTimeoutMs);
-
-            const primaryUrl = normalizeRerideApiHostToWww(`${apiBase}${endpoint}`);
-            const fallbackUrl = fbBase
-              ? normalizeRerideApiHostToWww(`${fbBase}${endpoint}`)
-              : null;
 
             // Reduce noise: only emit detailed URL diagnostics for vehicles listing.
             const shouldDebugVehicles = endpoint.includes('/vehicles');
@@ -178,33 +162,29 @@ class DataService {
             if (fetchError instanceof Error) {
               // This will show up in logcat and helps diagnose the exact failure.
               // eslint-disable-next-line no-console
-              const primaryUrl = normalizeRerideApiHostToWww(`${apiBase}${endpoint}`);
-              const fallbackUrlForLog = fbBase
-                ? normalizeRerideApiHostToWww(`${fbBase}${endpoint}`)
-                : null;
               const shouldDebugVehicles = endpoint.includes('/vehicles');
               if (shouldDebugVehicles) {
                 console.warn('API fetch failed (network). Retrying with fallback if available:', {
                   message: fetchError.message,
                   name: fetchError.name,
                   primaryUrl,
-                  fallbackUrl: fallbackUrlForLog,
+                  fallbackUrl,
                 });
               }
             }
 
-            const fallbackUrl = fbBase ? `${fbBase}${endpoint}` : null;
+            const fallbackFetchUrl = fallbackUrl;
 
-            if (fallbackUrl) {
+            if (fallbackFetchUrl) {
               try {
                 const shouldDebugVehicles = endpoint.includes('/vehicles');
                 if (shouldDebugVehicles) {
                   // eslint-disable-next-line no-console
-                  console.warn('VEHICLES_API_TRY_FALLBACK_URL', fallbackUrl);
+                  console.warn('VEHICLES_API_TRY_FALLBACK_URL', fallbackFetchUrl);
                 }
                 const controller2 = new AbortController();
                 const timeoutId2 = setTimeout(() => controller2.abort(), fetchTimeoutMs);
-                const resp2 = await fetch(fallbackUrl, {
+                const resp2 = await fetch(fallbackFetchUrl, {
                   ...fetchOptions,
                   signal: controller2.signal,
                 });

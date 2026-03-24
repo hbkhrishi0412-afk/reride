@@ -15,6 +15,13 @@ interface EditingState {
   originalValue: string;
 }
 
+const ADD_NEW_LABEL: Record<EditingState['type'], string> = {
+  category: 'Category',
+  make: 'Make',
+  model: 'Model',
+  variant: 'Variant',
+};
+
 const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
   vehicleData,
   onUpdate,
@@ -330,10 +337,10 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
     path: string[],
     selectedItem: string | null,
     onSelect: (item: string | null) => void,
-    type: string,
+    columnKind: EditingState['type'],
     disabled: boolean = false
   ) => {
-    const isAdding = adding && adding.type === type.toLowerCase().slice(0, -1) && JSON.stringify(adding.path) === JSON.stringify(path);
+    const isAdding = adding && adding.type === columnKind && JSON.stringify(adding.path) === JSON.stringify(path);
 
     return (
       <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300 ${disabled ? 'opacity-50' : 'hover:shadow-xl'}`}>
@@ -376,7 +383,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
                 </div>
               ) : (
                 items.map(item => {
-                  const isEditing = editing && editing.type === type.toLowerCase().slice(0, -1) && editing.originalValue === item;
+                  const isEditing = editing && editing.type === columnKind && editing.originalValue === item;
                   const isSelected = selectedItem === item;
 
                   return (
@@ -426,7 +433,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
                           </span>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
-                              onClick={() => handleEdit(type.toLowerCase().slice(0, -1) as EditingState['type'], path, item)}
+                              onClick={() => handleEdit(columnKind, path, item)}
                               className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900 rounded transition-colors"
                               title="Edit"
                             >
@@ -435,7 +442,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
                               </svg>
                             </button>
                             <button
-                              onClick={() => handleDelete(type.toLowerCase().slice(0, -1) as EditingState['type'], path, item)}
+                              onClick={() => handleDelete(columnKind, path, item)}
                               className="p-1 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900 rounded transition-colors"
                               title="Delete"
                             >
@@ -459,7 +466,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
                       type="text"
                       value={newItemValue}
                       onChange={(e) => setNewItemValue(e.target.value)}
-                      placeholder={`Add new ${type.toLowerCase().slice(0, -1)}`}
+                      placeholder={`Add new ${ADD_NEW_LABEL[columnKind].toLowerCase()}`}
                       className="flex-1 px-3 py-2 border border-green-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                       autoFocus
                       onKeyDown={(e) => {
@@ -483,7 +490,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
                 </div>
               ) : (
                 <button
-                  onClick={() => handleAddNew(type.toLowerCase().slice(0, -1), path)}
+                  onClick={() => handleAddNew(columnKind, path)}
                   className={`w-full p-3 border-2 border-dashed rounded-lg transition-all duration-200 ${
                     disabled
                       ? 'border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed'
@@ -496,7 +503,7 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                     <span className="font-medium">
-                      Add New {type.slice(0, -1)}
+                      Add New {ADD_NEW_LABEL[columnKind]}
                     </span>
                   </div>
                 </button>
@@ -574,10 +581,10 @@ const VehicleDataManagement: React.FC<VehicleDataManagementProps> = ({
 
       {/* Data Management Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {renderColumn("Categories", filteredCategories.map(formatCategoryName), [], selectedCategory ? formatCategoryName(selectedCategory) : null, handleSelectCategory, "Categories")}
-        {renderColumn("Makes", filteredMakes, selectedCategory ? [selectedCategory] : [], selectedMake, handleSelectMake, "Makes", !selectedCategory)}
-        {renderColumn("Models", filteredModels, selectedCategory && selectedMake ? [selectedCategory, selectedMake] : [], selectedModel, handleSelectModel, "Models", !selectedMake)}
-        {renderColumn("Variants", filteredVariants, selectedCategory && selectedMake && selectedModel ? [selectedCategory, selectedMake, selectedModel] : [], null, () => {}, "Variants", !selectedModel)}
+        {renderColumn("Categories", filteredCategories.map(formatCategoryName), [], selectedCategory ? formatCategoryName(selectedCategory) : null, handleSelectCategory, 'category')}
+        {renderColumn("Makes", filteredMakes, selectedCategory ? [selectedCategory] : [], selectedMake, handleSelectMake, 'make', !selectedCategory)}
+        {renderColumn("Models", filteredModels, selectedCategory && selectedMake ? [selectedCategory, selectedMake] : [], selectedModel, handleSelectModel, 'model', !selectedMake)}
+        {renderColumn("Variants", filteredVariants, selectedCategory && selectedMake && selectedModel ? [selectedCategory, selectedMake, selectedModel] : [], null, () => {}, 'variant', !selectedModel)}
       </div>
     </div>
   );
