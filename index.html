@@ -2,6 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- MUST run before reride-api-fetch-boot.js: apex https://reride.co.in returns 307; CORS preflight cannot follow redirects. -->
+    <script>
+      (function () {
+        if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+        var downstream = window.fetch.bind(window);
+        function apexToWww(str) {
+          return str.replace(/(https?:\/\/)reride\.co\.in(?=[:/?#]|$)/gi, '$1www.reride.co.in');
+        }
+        window.fetch = function (input, init) {
+          try {
+            if (typeof input === 'string') return downstream(apexToWww(input), init);
+            if (typeof URL !== 'undefined' && input instanceof URL) {
+              var href = apexToWww(input.href);
+              return downstream(href !== input.href ? href : input, init);
+            }
+            if (typeof Request !== 'undefined' && input instanceof Request) {
+              var u = input.url;
+              var parsed = new URL(u);
+              if (parsed.hostname === 'reride.co.in') {
+                parsed.hostname = 'www.reride.co.in';
+                return downstream(new Request(parsed.toString(), input), init);
+              }
+            }
+          } catch (e) {}
+          return downstream(input, init);
+        };
+      })();
+    </script>
     <!-- Before any other fetch(): force /api/* and apex host → www (fixes Android WebView CORS preflight). Public file → always /reride-api-fetch-boot.js. -->
     <script src="/reride-api-fetch-boot.js"></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -47,16 +75,42 @@
             return;
           }
           var base = 'https://www.reride.co.in';
+          function normalizeApexStr(u) {
+            if (typeof u !== 'string') return u;
+            return u.replace(/(https?:\/\/)reride\.co\.in(?=[:/?#]|$)/gi, '$1www.reride.co.in');
+          }
           var orig = window.fetch.bind(window);
           window.fetch = function (input, init) {
-            if (typeof input === 'string') {
-              if (input.indexOf('/api/') === 0) {
-                return orig(base + input, init);
+            try {
+              if (typeof input === 'string') {
+                var s = normalizeApexStr(input);
+                if (s.indexOf('/api/') === 0) s = base + s;
+                return orig(s, init);
               }
-              if (/^https?:\/\/reride\.co\.in\b/i.test(input)) {
-                input = input.replace(/^https?:\/\/reride\.co\.in\b/i, 'https://www.reride.co.in');
+              if (typeof URL !== 'undefined' && input instanceof URL) {
+                var uh = normalizeApexStr(input.href);
+                return orig(uh !== input.href ? uh : input, init);
               }
-            }
+              if (typeof Request !== 'undefined' && input instanceof Request) {
+                var ru = input.url;
+                var parsed;
+                try {
+                  parsed = new URL(ru);
+                } catch (e0) {
+                  return orig(input, init);
+                }
+                if (parsed.hostname === 'reride.co.in') {
+                  parsed.hostname = 'www.reride.co.in';
+                  return orig(new Request(parsed.toString(), input), init);
+                }
+                if (parsed.pathname.indexOf('/api/') === 0) {
+                  var full = base + parsed.pathname + parsed.search + parsed.hash;
+                  return orig(new Request(full, input), init);
+                }
+                var n = normalizeApexStr(ru);
+                if (n !== ru) return orig(new Request(n, input), init);
+              }
+            } catch (e1) {}
             return orig(input, init);
           };
         } catch (e) {}
