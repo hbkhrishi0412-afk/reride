@@ -9,6 +9,7 @@ import { supabaseVehicleService } from '../services/supabase-vehicle-service.js'
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from './vehicleCatalogSupabase.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
   adminRead, 
@@ -3035,7 +3036,11 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     try {
       if (req.method === 'GET') {
         try {
-          // Try to get vehicle data from Firebase using Admin SDK (bypasses security rules)
+          const fromSupabase = await readVehicleCatalogFromSupabase();
+          if (fromSupabase) {
+            return res.status(200).json(fromSupabase);
+          }
+          // Legacy: Firebase / supabase-admin-db path
           const vehicleData = await adminRead<{ data: typeof defaultData }>(DB_PATHS.VEHICLE_DATA, 'default');
           if (vehicleData && vehicleData.data) {
             return res.status(200).json(vehicleData.data);
@@ -3057,24 +3062,50 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       if (!requireAdmin(req, res, 'Vehicle data update')) {
         return;
       }
-          // Save vehicle data to Firebase using Admin SDK (bypasses security rules)
+          const sbResult = await writeVehicleCatalogToSupabase(req.body);
+          if (!sbResult.skipped && !sbResult.ok) {
+            return res.status(500).json({
+              success: false,
+              reason: sbResult.error || 'Failed to save vehicle catalog to Supabase.',
+            });
+          }
+
+          if (sbResult.ok) {
+            console.log('✅ Vehicle catalog saved to Supabase (app_config.vehicle_data)');
+            try {
+              await adminUpdate(DB_PATHS.VEHICLE_DATA, 'default', {
+                data: req.body,
+                updatedAt: new Date().toISOString()
+              });
+            } catch (mirrorErr) {
+              logWarn('⚠️ Legacy DB mirror failed after Supabase save:', mirrorErr);
+            }
+            return res.status(200).json({ 
+              success: true, 
+              data: req.body,
+              message: 'Vehicle data updated successfully',
+              timestamp: new Date().toISOString(),
+              storage: 'supabase'
+            });
+          }
+
+          // No service role: persist via legacy path only
           await adminUpdate(DB_PATHS.VEHICLE_DATA, 'default', {
             data: req.body,
             updatedAt: new Date().toISOString()
           });
           
-          console.log('✅ Vehicle data saved successfully to Firebase');
+          console.log('✅ Vehicle data saved successfully to legacy store');
           return res.status(200).json({ 
             success: true, 
             data: req.body,
             message: 'Vehicle data updated successfully',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            storage: 'legacy'
           });
         } catch (dbError) {
           console.warn('⚠️ Database connection failed for vehicles data save:', dbError);
           
-          // For POST requests, we should still return success but indicate fallback
-          // This prevents the sync from failing completely - NEVER return 500
           console.log('📝 Returning success with fallback indication for POST request');
           res.setHeader('X-Data-Fallback', 'true');
           return res.status(200).json({
@@ -4814,18 +4845,19 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, _optio
   try {
     if (req.method === 'GET') {
       try {
-        // Try to get vehicle data from Firebase using Admin SDK (bypasses security rules)
+        const fromSupabase = await readVehicleCatalogFromSupabase();
+        if (fromSupabase) {
+          return res.status(200).json(fromSupabase);
+        }
         const vehicleData = await adminRead<{ data: typeof defaultData }>(DB_PATHS.VEHICLE_DATA, 'default');
         if (vehicleData && vehicleData.data) {
           return res.status(200).json(vehicleData.data);
         }
         
-        // If no data exists, create default using Admin SDK (bypasses security rules)
         await adminCreate(DB_PATHS.VEHICLE_DATA, { data: defaultData }, 'default');
         return res.status(200).json(defaultData);
       } catch (dbError) {
         logWarn('⚠️ Database connection failed for vehicle-data, returning default data:', dbError);
-        // Return default data as fallback - NEVER return 500
         res.setHeader('X-Data-Fallback', 'true');
         return res.status(200).json(defaultData);
       }
@@ -4836,24 +4868,49 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, _optio
         if (!requireAdmin(req, res, 'Vehicle data update')) {
           return;
         }
-        // Save vehicle data to Firebase using Admin SDK (bypasses security rules)
+        const sbResult = await writeVehicleCatalogToSupabase(req.body);
+        if (!sbResult.skipped && !sbResult.ok) {
+          return res.status(500).json({
+            success: false,
+            reason: sbResult.error || 'Failed to save vehicle catalog to Supabase.',
+          });
+        }
+
+        if (sbResult.ok) {
+          console.log('✅ Vehicle catalog saved to Supabase (app_config.vehicle_data)');
+          try {
+            await adminUpdate(DB_PATHS.VEHICLE_DATA, 'default', {
+              data: req.body,
+              updatedAt: new Date().toISOString()
+            });
+          } catch (mirrorErr) {
+            logWarn('⚠️ Legacy DB mirror failed after Supabase save:', mirrorErr);
+          }
+          return res.status(200).json({ 
+            success: true, 
+            data: req.body,
+            message: 'Vehicle data updated successfully',
+            timestamp: new Date().toISOString(),
+            storage: 'supabase'
+          });
+        }
+
         await adminUpdate(DB_PATHS.VEHICLE_DATA, 'default', {
           data: req.body,
           updatedAt: new Date().toISOString()
         });
         
-        console.log('✅ Vehicle data saved successfully to Firebase');
+        console.log('✅ Vehicle data saved successfully to legacy store');
         return res.status(200).json({ 
           success: true, 
           data: req.body,
           message: 'Vehicle data updated successfully',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          storage: 'legacy'
         });
       } catch (dbError) {
         logWarn('⚠️ Database connection failed for vehicle-data save:', dbError);
         
-        // For POST requests, we should still return success but indicate fallback
-        // This prevents the sync from failing completely - NEVER return 500
         console.log('📝 Returning success with fallback indication for POST request');
         res.setHeader('X-Data-Fallback', 'true');
         return res.status(200).json({

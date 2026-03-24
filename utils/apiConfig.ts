@@ -215,6 +215,21 @@ export function getApiBaseUrl(): string {
     );
   }
 
+  // Android WebViewAssetLoader (Chrome Custom Tab / packaged host): never rely solely on
+  // Capacitor detection — empty base makes `/api/*` relative to this origin and breaks login + data.
+  if (typeof window !== 'undefined') {
+    const hl = window.location.hostname.toLowerCase();
+    if (
+      hl === 'appassets.androidplatform.net' ||
+      hl.includes('appassets.androidplatform.net')
+    ) {
+      if (shouldUseBundledMobileLocalApi()) {
+        return rewriteLocalhostForAndroidEmulator(getMobileLocalApiOrigin());
+      }
+      return getProductionOrigin();
+    }
+  }
+
   if (isCapacitorNative()) {
     if (shouldUseBundledMobileLocalApi()) {
       return rewriteLocalhostForAndroidEmulator(getMobileLocalApiOrigin());
@@ -297,11 +312,9 @@ let _fetchPatched = false;
 export function patchFetchForCapacitor(_retryCount: number = 40): void {
   if (_fetchPatched) return;
   if (typeof window === 'undefined') return;
-  if ((window as unknown as { __RERIDE_FETCH_BOOT__?: boolean }).__RERIDE_FETCH_BOOT__) {
-    _fetchPatched = true;
-    return;
-  }
 
+  // Always chain on top of `public/reride-api-fetch-boot.js` (or native fetch) so apex → www
+  // and `/api/*` resolution stay correct even if an older boot script shipped in the APK.
   const originalFetch = window.fetch.bind(window);
 
   const rewriteFetchInput = (input: RequestInfo | URL): RequestInfo | URL => {
