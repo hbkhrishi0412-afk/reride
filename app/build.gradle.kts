@@ -12,8 +12,8 @@ android {
         applicationId = "com.reride.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.5"
+        versionCode = 9
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
