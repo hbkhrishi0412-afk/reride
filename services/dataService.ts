@@ -473,9 +473,9 @@ class DataService {
     // Loading the full dataset (limit=0) can produce very large JSON payloads.
     // On Android WebView this may block the JS thread long enough to trigger an ANR.
     const isNativeWebView = isCapacitorNative();
-    // Mobile fix: request the full published set.
-    // The backend supports `limit=0` as "no pagination".
-    const nativeVehiclesPageLimit = 0;
+    // Mobile: use paginated first page (smaller payload, faster) then expand via expandPublishedVehiclesIfPaginated.
+    // limit=0 skips pagination on the server; pairing limit=0 with page=1 is confusing in logs and unnecessary here.
+    const nativeVehiclesPageLimit = 30;
     const maxNativeVehiclesCacheChars = 2_000_000; // ~2MB; generous limit so full dataset fits in cache
 
     // STEP 1: Check cache first for instant response (unless forceRefresh or dev with Supabase)

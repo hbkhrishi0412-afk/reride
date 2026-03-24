@@ -70,9 +70,24 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+  let requestToUse = request;
+  const wasApexHost = url.hostname === 'reride.co.in';
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') {
+  // Apex host redirects to `www`. Redirects during CORS preflight (OPTIONS) are not allowed
+  // and break mobile dealer/user APIs. Normalize at the Service Worker level so it works
+  // even if client-side fetch patching is missed for some requests.
+  if (wasApexHost) {
+    url.hostname = 'www.reride.co.in';
+    requestToUse = new Request(url.toString(), request);
+  }
+
+  // Fix CORS preflight and non-GET API calls:
+  // If we rewrote from apex -> www, always forward the rewritten request.
+  // Otherwise keep existing behavior (ignore non-GET to avoid caching side-effects).
+  if (requestToUse.method !== 'GET') {
+    if (wasApexHost) {
+      event.respondWith(fetch(requestToUse));
+    }
     return;
   }
 
@@ -107,7 +122,7 @@ self.addEventListener('fetch', (event) => {
 
   // API requests - Network First with Cache Fallback
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirstStrategy(request, API_CACHE));
+    event.respondWith(networkFirstStrategy(requestToUse, API_CACHE));
     return;
   }
 
