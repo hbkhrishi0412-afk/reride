@@ -73,6 +73,17 @@ self.addEventListener('fetch', (event) => {
   let requestToUse = request;
   const wasApexHost = url.hostname === 'reride.co.in';
 
+  // Let Google Fonts load directly.
+  // If the SW handles these cross-origin requests with offline/cache fallbacks,
+  // it can surface as `503 (from service worker)` even when the fonts request
+  // would succeed via a normal network fetch.
+  if (
+    url.hostname === 'fonts.googleapis.com' ||
+    url.hostname === 'fonts.gstatic.com'
+  ) {
+    return;
+  }
+
   // Apex host redirects to `www`. Redirects during CORS preflight (OPTIONS) are not allowed
   // and break mobile dealer/user APIs. Normalize at the Service Worker level so it works
   // even if client-side fetch patching is missed for some requests.
