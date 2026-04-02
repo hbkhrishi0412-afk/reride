@@ -83,11 +83,26 @@ describe('DataService', () => {
         bootSpace: '500 litres'
       }];
 
-      mockFetch.mockResolvedValueOnce(createJsonResponse(mockVehicles));
+      // Web path uses paginated first request then merge (same inventory as legacy limit=0).
+      mockFetch.mockResolvedValueOnce(
+        createJsonResponse({
+          vehicles: mockVehicles,
+          pagination: {
+            page: 1,
+            limit: 80,
+            total: mockVehicles.length,
+            pages: 1,
+            hasMore: false,
+          },
+        })
+      );
 
       const result = await dataService.getVehicles();
       expect(result).toEqual(mockVehicles);
-      expect(mockFetch).toHaveBeenCalledWith('/api/vehicles', expect.any(Object));
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/vehicles\?.*limit=/),
+        expect.any(Object)
+      );
     });
 
     it('should fallback to local storage when API fails', async () => {

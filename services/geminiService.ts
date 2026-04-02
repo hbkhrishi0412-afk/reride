@@ -116,7 +116,7 @@ export const generateProsAndCons = async (vehicle: Vehicle): Promise<ProsAndCons
     const prompt = `Based on the following vehicle data, generate a balanced list of 3 pros and 3 cons.
 Make: ${vehicle.make}, Model: ${vehicle.model}, Year: ${vehicle.year}.
 The car has run ${vehicle.mileage} kms. Its fuel efficiency is ${vehicle.fuelEfficiency}.
-Key features include: ${vehicle.features.join(', ')}.
+Key features include: ${(Array.isArray(vehicle.features) ? vehicle.features : []).join(', ')}.
 Provide the output in JSON format with two keys: "pros" and "cons", each containing an array of strings.`;
 
     const requestPayload = {
@@ -136,7 +136,11 @@ Provide the output in JSON format with two keys: "pros" and "cons", each contain
 
     try {
         const jsonText = await callGeminiAPI(requestPayload);
-        return JSON.parse(jsonText.trim());
+        const parsed = JSON.parse(jsonText.trim()) as Partial<ProsAndCons>;
+        return {
+            pros: Array.isArray(parsed.pros) ? parsed.pros : [],
+            cons: Array.isArray(parsed.cons) ? parsed.cons : [],
+        };
     } catch (error) {
         console.error("Failed to generate pros and cons from proxy:", error);
         return { pros: ['AI analysis unavailable.'], cons: ['Could not generate suggestions at this time.'] };

@@ -12,6 +12,12 @@ export enum VehicleCategory {
   CONSTRUCTION = 'construction'
 }
 
+/** Lightweight counts for home discovery (from GET /api/vehicles?aggregate=storefront). */
+export interface StorefrontDiscoveryAggregates {
+  categories: Partial<Record<VehicleCategory, number>>;
+  cities: Record<string, number>;
+}
+
 export type BadgeType = 'verified' | 'top_seller' | 'high_rating';
 
 export interface Badge {

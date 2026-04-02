@@ -114,7 +114,9 @@ const queryClient = new QueryClient({
       staleTime: 60 * 1000,
       gcTime: 10 * 60 * 1000,
       retry: 1,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
       refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
     },
   },
 });

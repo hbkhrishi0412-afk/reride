@@ -1,4 +1,4 @@
-import type { Vehicle, User, VehicleData } from '../types';
+import type { Vehicle, User, VehicleData, StorefrontDiscoveryAggregates } from '../types';
 import { queueRequest } from '../utils/requestQueue';
 import { isCapacitorNative, resolveApiUrl } from '../utils/apiConfig';
 import { ensureCsrfToken } from '../utils/authenticatedFetch';
@@ -13,6 +13,8 @@ class DataService {
   private devHostFlag: boolean;
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  /** Coalesce concurrent identical getVehicles() calls (mount + listeners, strict mode, etc.). */
+  private vehiclesFetchInflight = new Map<string, Promise<Vehicle[]>>();
 
   constructor() {
     this.devHostFlag = this.detectDevelopment();
@@ -458,9 +460,45 @@ class DataService {
     return merged;
   }
 
+  /** Web published listing: page size before merging pages (20–200). Override with VITE_VEHICLES_PAGE_SIZE. */
+  private getWebVehiclesPageSize(): number {
+    try {
+      const meta = (typeof import.meta !== 'undefined' ? import.meta : {}) as any;
+      const raw = meta?.env?.VITE_VEHICLES_PAGE_SIZE;
+      const n = raw !== undefined && raw !== '' ? parseInt(String(raw), 10) : NaN;
+      if (Number.isFinite(n) && n >= 20 && n <= 200) {
+        return n;
+      }
+    } catch {
+      /* ignore */
+    }
+    return 80;
+  }
+
+  /** Published list URL: native stays small pages; web uses chunked fetch + merge unless legacy env is set. */
+  private buildPublishedVehiclesFirstPageEndpoint(
+    includeAllStatuses: boolean,
+    isNativeWebView: boolean,
+    nativeVehiclesPageLimit: number
+  ): string {
+    if (includeAllStatuses) {
+      return '/vehicles?action=admin-all';
+    }
+    if (isNativeWebView) {
+      return `/vehicles?limit=${nativeVehiclesPageLimit}&page=1&skipExpiryCheck=true`;
+    }
+    const legacyFull =
+      typeof import.meta !== 'undefined' &&
+      String((import.meta as any).env?.VITE_VEHICLES_LEGACY_FULL_FETCH || '').toLowerCase() === 'true';
+    if (legacyFull) {
+      return '/vehicles?limit=0&skipExpiryCheck=true';
+    }
+    const pageSize = this.getWebVehiclesPageSize();
+    return `/vehicles?limit=${pageSize}&page=1&skipExpiryCheck=true`;
+  }
+
   // Vehicle operations
   async getVehicles(includeAllStatuses: boolean = false, forceRefresh: boolean = false): Promise<Vehicle[]> {
-    // In development, use API when Supabase is configured so real vehicle images from Storage load
     const useApiInDev =
       this.isDevelopment &&
       typeof import.meta !== 'undefined' &&
@@ -470,18 +508,34 @@ class DataService {
       return this.getVehiclesLocal();
     }
 
-    // Loading the full dataset (limit=0) can produce very large JSON payloads.
-    // On Android WebView this may block the JS thread long enough to trigger an ANR.
     const isNativeWebView = isCapacitorNative();
-    // Mobile: use paginated first page (smaller payload, faster) then expand via expandPublishedVehiclesIfPaginated.
-    // limit=0 skips pagination on the server; pairing limit=0 with page=1 is confusing in logs and unnecessary here.
+    const inflightKey = `${includeAllStatuses}\0${forceRefresh}\0${isNativeWebView}\0${useApiInDev}`;
+    const existing = this.vehiclesFetchInflight.get(inflightKey);
+    if (existing) {
+      return existing;
+    }
+
+    const run = this.executeGetVehicles(includeAllStatuses, forceRefresh, useApiInDev, isNativeWebView);
+    this.vehiclesFetchInflight.set(inflightKey, run);
+    void run.finally(() => {
+      if (this.vehiclesFetchInflight.get(inflightKey) === run) {
+        this.vehiclesFetchInflight.delete(inflightKey);
+      }
+    });
+    return run;
+  }
+
+  private async executeGetVehicles(
+    includeAllStatuses: boolean,
+    forceRefresh: boolean,
+    useApiInDev: boolean,
+    isNativeWebView: boolean
+  ): Promise<Vehicle[]> {
     const nativeVehiclesPageLimit = 30;
     const maxNativeVehiclesCacheChars = 2_000_000; // ~2MB; generous limit so full dataset fits in cache
 
-    // STEP 1: Check cache first for instant response (unless forceRefresh or dev with Supabase)
     const cacheKey = 'reRideVehicles_prod';
     if (isNativeWebView) {
-      // If a previous version cached a very large vehicle list, avoid parsing it on startup.
       try {
         const raw = localStorage.getItem(cacheKey);
         if (raw && raw.length > maxNativeVehiclesCacheChars) {
@@ -489,63 +543,52 @@ class DataService {
           console.warn(`⚠️ Cleared oversized native vehicle cache (${raw.length} chars)`);
         }
       } catch {
-        // Ignore localStorage errors; we'll just fall back to empty cache.
+        /* ignore */
       }
     }
     const cachedVehicles = this.getLocalStorageData<Vehicle[]>(cacheKey, []);
-    
-      // In dev with Supabase, skip cache so we always get fresh vehicles with correct image URLs
-      // CRITICAL FIX: For admin operations, bypass cache and fetch fresh data
-      // On native mobile, do not return cache immediately because old cache can diverge from website listings.
-      // We still keep cache as fallback if API fails.
-      if (cachedVehicles.length > 0 && !forceRefresh && !useApiInDev && !isNativeWebView) {
-        // Fetch fresh data in background (don't await) - use pagination for speed
-        // On Android WebView we intentionally keep this small to avoid ANR from huge JSON payloads.
-        const endpoint = includeAllStatuses
-          ? '/vehicles?action=admin-all'
-          : isNativeWebView
-            ? `/vehicles?limit=${nativeVehiclesPageLimit}&page=1&skipExpiryCheck=true`
-            : '/vehicles?limit=0&skipExpiryCheck=true';
-        this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
-          .then(async (response) => {
-            try {
-              const vehicles = await this.expandPublishedVehiclesIfPaginated(
-                response,
-                includeAllStatuses,
-                isNativeWebView
-              );
-              if (Array.isArray(vehicles) && vehicles.length >= 0) {
-                this.setLocalStorageData(cacheKey, vehicles);
-                console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
-                if (typeof window !== 'undefined' && window.dispatchEvent) {
-                  window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles } }));
-                }
-              } else if (vehicles.length === 0) {
-                console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');
+
+    if (cachedVehicles.length > 0 && !forceRefresh && !useApiInDev && !isNativeWebView) {
+      const endpoint = this.buildPublishedVehiclesFirstPageEndpoint(
+        includeAllStatuses,
+        isNativeWebView,
+        nativeVehiclesPageLimit
+      );
+      this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint)
+        .then(async (response) => {
+          try {
+            const vehicles = await this.expandPublishedVehiclesIfPaginated(
+              response,
+              includeAllStatuses,
+              isNativeWebView
+            );
+            if (Array.isArray(vehicles) && vehicles.length >= 0) {
+              this.setLocalStorageData(cacheKey, vehicles);
+              console.log(`✅ Background refresh: Updated cache with ${vehicles.length} vehicles`);
+              if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('vehiclesCacheUpdated', { detail: { vehicles } }));
               }
-            } catch (parseErr) {
-              console.warn('⚠️ Invalid background refresh response format:', parseErr);
+            } else if (vehicles.length === 0) {
+              console.warn('⚠️ Background refresh returned 0 vehicles. Keeping cached data.');
             }
-          })
-        .catch(error => {
+          } catch (parseErr) {
+            console.warn('⚠️ Invalid background refresh response format:', parseErr);
+          }
+        })
+        .catch((error) => {
           console.warn('Background vehicle refresh failed (using cache):', error);
         });
-      
-      // Return cached data immediately
+
       console.log(`✅ Returning ${cachedVehicles.length} cached vehicles instantly`);
       return cachedVehicles;
     }
 
-    // STEP 2: No cache - fetch from API (first load or cache expired)
-    // Use limit=0 to get all vehicles (backward compatible) on web;
-    // on Android WebView we use a small page to avoid ANR from large payloads.
     try {
-      // Use limit=0 to get all vehicles as array (not paginated object)
-      const endpoint = includeAllStatuses
-        ? '/vehicles?action=admin-all'
-        : isNativeWebView
-          ? `/vehicles?limit=${nativeVehiclesPageLimit}&page=1&skipExpiryCheck=true`
-          : '/vehicles?limit=0&skipExpiryCheck=true';
+      const endpoint = this.buildPublishedVehiclesFirstPageEndpoint(
+        includeAllStatuses,
+        isNativeWebView,
+        nativeVehiclesPageLimit
+      );
       const response = await this.makeApiRequest<Vehicle[] | { vehicles: Vehicle[]; pagination?: any }>(endpoint);
 
       const vehicles = await this.expandPublishedVehiclesIfPaginated(
@@ -562,7 +605,7 @@ class DataService {
       console.log(
         `✅ Loaded ${vehicles.length} vehicles from production API (response type: ${Array.isArray(response) ? 'array' : 'paginated'}${forceRefresh ? ', forced refresh' : ''})`
       );
-      
+
       if (vehicles.length === 0) {
         console.warn('⚠️ API returned 0 vehicles. This might indicate:');
         console.warn('   1. No vehicles exist in the database');
@@ -572,25 +615,23 @@ class DataService {
         if (includeAllStatuses) {
           console.warn('   5. Admin query might be failing - check SUPABASE_SERVICE_ROLE_KEY');
         }
-      } else {
-        // Log breakdown by status for admin queries
-        if (includeAllStatuses) {
-          const statusCounts = vehicles.reduce((acc, v) => {
+      } else if (includeAllStatuses) {
+        const statusCounts = vehicles.reduce(
+          (acc, v) => {
             acc[v.status] = (acc[v.status] || 0) + 1;
             return acc;
-          }, {} as Record<string, number>);
-          console.log(`📊 Vehicle status breakdown:`, statusCounts);
-        }
+          },
+          {} as Record<string, number>
+        );
+        console.log(`📊 Vehicle status breakdown:`, statusCounts);
       }
-      
-      // Cache the API data
+
       this.setLocalStorageData(cacheKey, vehicles);
       return vehicles;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ Production API failed to load vehicles:', errorMessage);
-      
-      // Check for specific error types to provide better diagnostics
+
       if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('Network error')) {
         console.error('💡 API Server Connection Issue:');
         console.error('   The API server may not be running.');
@@ -604,21 +645,18 @@ class DataService {
         console.error('   Authentication may be required or token expired.');
         console.error('   Solution: Try logging in again');
       }
-      
-      // Return cached data if available (even if stale)
+
       if (cachedVehicles.length > 0) {
         console.warn(`⚠️ Using stale cached data (${cachedVehicles.length} vehicles) due to API failure`);
         return cachedVehicles;
       }
-      
-      // If no cached data, log detailed error
+
       console.error('❌ No cached production data available. API error details:', {
         message: errorMessage,
         endpoint: includeAllStatuses ? '/vehicles?action=admin-all' : '/vehicles',
         timestamp: new Date().toISOString()
       });
-      
-      // Show user-friendly error in console (won't break the app)
+
       if (typeof window !== 'undefined') {
         console.error('💡 Troubleshooting:');
         console.error('   1. Check if API server is running: npm run dev:api');
@@ -628,13 +666,34 @@ class DataService {
         console.error('   5. Ensure database is seeded with vehicles');
         console.error('   6. Run diagnostic: node scripts/diagnose-issues.js');
       }
-      
-      // Rethrow 503 so caller (e.g. refreshVehicles) can show a specific "check Supabase env" message
+
       const status = (error as any)?.status ?? (error as any)?.code;
       if (status === 503) {
         throw error;
       }
       return [];
+    }
+  }
+
+  /**
+   * Server-side discovery counts for home rails (small JSON). Returns null if the API does not support it (older dev servers) or on error.
+   */
+  async getStorefrontAggregates(): Promise<StorefrontDiscoveryAggregates | null> {
+    try {
+      const raw = await this.makeApiRequest<{
+        success?: boolean;
+        categories?: Record<string, number>;
+        cities?: Record<string, number>;
+      }>('/vehicles?aggregate=storefront', {}, 8);
+      if (!raw || raw.success === false || (!raw.categories && !raw.cities)) {
+        return null;
+      }
+      return {
+        categories: (raw.categories || {}) as StorefrontDiscoveryAggregates['categories'],
+        cities: raw.cities || {},
+      };
+    } catch {
+      return null;
     }
   }
 

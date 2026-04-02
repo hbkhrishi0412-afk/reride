@@ -33,15 +33,15 @@ interface MobileVehicleDetailProps {
 export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   vehicle,
   onBack,
-  comparisonList,
+  comparisonList = [],
   onToggleCompare,
-  wishlist,
+  wishlist = [],
   onToggleWishlist,
   currentUser,
-  users,
+  users = [],
   onViewSellerProfile,
   onStartChat,
-  recommendations,
+  recommendations = [],
   onSelectVehicle
 }) => {
   const [showGallery, setShowGallery] = useState(false);
@@ -53,8 +53,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
 
   const safeVehicle = useMemo(() => ({
     ...vehicle,
-    images: vehicle.images || [],
-    features: vehicle.features || [],
+    images: Array.isArray(vehicle.images) ? vehicle.images : [],
+    features: Array.isArray(vehicle.features) ? vehicle.features : [],
     description: vehicle.description || '',
     engine: vehicle.engine || '',
     transmission: vehicle.transmission || '',
@@ -122,7 +122,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   };
 
   const filteredRecommendations = useMemo(() => {
-    return recommendations.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
+    const list = Array.isArray(recommendations) ? recommendations : [];
+    return list.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
   }, [recommendations, safeVehicle.id]);
 
   // Calculate EMI for display
@@ -357,7 +358,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     <div>
                       <h3 className="text-lg font-semibold text-green-600 mb-2">✓ Pros</h3>
                       <ul className="space-y-1">
-                        {prosAndCons.pros.map((pro, idx) => (
+                        {(Array.isArray(prosAndCons.pros) ? prosAndCons.pros : []).map((pro, idx) => (
                           <li key={idx} className="text-gray-700 flex items-start gap-2">
                             <span className="text-green-500 mt-1">•</span>
                             <span>{pro}</span>
@@ -368,7 +369,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                     <div>
                       <h3 className="text-lg font-semibold text-red-600 mb-2">✗ Cons</h3>
                       <ul className="space-y-1">
-                        {prosAndCons.cons.map((con, idx) => (
+                        {(Array.isArray(prosAndCons.cons) ? prosAndCons.cons : []).map((con, idx) => (
                           <li key={idx} className="text-gray-700 flex items-start gap-2">
                             <span className="text-red-500 mt-1">•</span>
                             <span>{con}</span>
