@@ -1,9 +1,7 @@
 import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
 import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
-import { getFirstValidImage, getValidImages, getSafeImageSrc } from '../utils/imageUtils';
-
-const DEFAULT_PLACEHOLDER = 'https://via.placeholder.com/800x600?text=Car+Image';
+import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
 import StarRating from './StarRating';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
@@ -533,8 +531,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   onError={(e) => {
                                     const target = e.target as HTMLImageElement;
                                     // Only set placeholder if not already a placeholder to avoid infinite loops
-                                    if (!target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
-                                      target.src = DEFAULT_PLACEHOLDER;
+                                    if (!isInlineImagePlaceholder(target.src) && !target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
+                                      target.src = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
                                     }
                                   }}
                                   loading="lazy"
@@ -569,7 +567,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                           onClick={() => setCurrentIndex(index)}
                                           onError={(e) => {
                                             const target = e.target as HTMLImageElement;
-                                            target.src = 'https://via.placeholder.com/112x80?text=Image';
+                                            target.src = VEHICLE_THUMB_PLACEHOLDER_DATA_URI;
                                           }}
                                         />
                                     ))}

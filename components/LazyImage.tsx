@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { getOptimizedImageUrl } from '../utils/imageUtils';
+import { getOptimizedImageUrl, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
 
 // Detect format support once
 let formatSupport: { webp: boolean; avif: boolean } | null = null;
@@ -114,9 +114,9 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
   }, []);
 
   // Ensure src is valid before optimizing
-  const validSrc = src && src.trim() !== '' ? src : (placeholder || 'https://via.placeholder.com/800x600?text=Car+Image');
+  const validSrc = src && src.trim() !== '' ? src : (placeholder || VEHICLE_IMAGE_PLACEHOLDER_DATA_URI);
   const optimizedSrc = isInView ? getOptimizedImageUrl(validSrc, width, quality) : '';
-  const displaySrc = hasError ? (placeholder || 'https://via.placeholder.com/800x600?text=Car+Image') : optimizedSrc;
+  const displaySrc = hasError ? (placeholder || VEHICLE_IMAGE_PLACEHOLDER_DATA_URI) : optimizedSrc;
 
   const handleLoad = () => {
     setIsLoaded(true);
@@ -126,7 +126,7 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
   const handleError = (e?: React.SyntheticEvent<HTMLImageElement, Event>) => {
     // Prevent infinite error loops
     const target = e?.target as HTMLImageElement;
-    if (target && !target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
+    if (target && !isInlineImagePlaceholder(target.src) && !target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
       // Try to convert Supabase storage path if it looks like one
       if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
         // This might be a Supabase storage path that wasn't converted
@@ -175,7 +175,7 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
         console.warn('⚠️ LazyImage: Image failed to load:', {
           src: target.src,
           originalSrc: src,
-          isPlaceholder: target.src.includes('placeholder.com') || target.src.includes('text=Car')
+          isPlaceholder: isInlineImagePlaceholder(target.src) || target.src.includes('placeholder.com') || target.src.includes('text=Car')
         });
       }
     }
@@ -184,7 +184,7 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
   };
 
   // Use a default placeholder if src is empty or invalid
-  const defaultPlaceholder = 'https://via.placeholder.com/800x600?text=Car+Image';
+  const defaultPlaceholder = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
   const finalSrc = displaySrc || (src && src.trim() !== '' ? src : defaultPlaceholder);
 
   return (
@@ -210,6 +210,8 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
       {isInView && !hasError && finalSrc && (() => {
         const optimizedUrl = getOptimizedImageUrl(finalSrc, width, quality);
         const supports = formatSupportState || detectFormatSupport();
+        const crossOrigin =
+          optimizedUrl.startsWith('http://') || optimizedUrl.startsWith('https://') ? 'anonymous' : undefined;
         
         // Use <picture> element for format selection if browser supports it
         // Otherwise fall back to single img with optimized URL
@@ -244,7 +246,7 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
                 onLoad={handleLoad}
                 onError={handleError}
                 decoding="async"
-                crossOrigin="anonymous"
+                crossOrigin={crossOrigin}
               />
             </picture>
           );
@@ -265,15 +267,19 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
             onLoad={handleLoad}
             onError={handleError}
             decoding="async"
-            crossOrigin="anonymous"
+            crossOrigin={crossOrigin}
           />
         );
       })()}
 
       {/* Fallback for browsers without Intersection Observer or immediate load */}
-      {(typeof window === 'undefined' || !window.IntersectionObserver) && !hasError && finalSrc && (
+      {(typeof window === 'undefined' || !window.IntersectionObserver) && !hasError && finalSrc && (() => {
+        const fbUrl = getOptimizedImageUrl(finalSrc, width, quality);
+        const fbCross =
+          fbUrl.startsWith('http://') || fbUrl.startsWith('https://') ? 'anonymous' : undefined;
+        return (
         <img
-          src={getOptimizedImageUrl(finalSrc, width, quality)}
+          src={fbUrl}
           alt={alt}
           className={`w-full h-full`}
           style={{ objectFit: 'cover' }}
@@ -281,8 +287,10 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
           fetchPriority={fetchPriority}
           onLoad={handleLoad}
           onError={handleError}
+          crossOrigin={fbCross}
         />
-      )}
+        );
+      })()}
     </div>
   );
 });

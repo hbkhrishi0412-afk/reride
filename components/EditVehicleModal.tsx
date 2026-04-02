@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Vehicle } from '../types';
 import { getSupabaseClient } from '../lib/supabase.js';
+import { VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI } from '../utils/imageUtils';
 
 interface EditVehicleModalProps {
     vehicle: Vehicle;
@@ -445,7 +446,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                                                 onError={(e) => {
                                                                     // Fallback to placeholder if image fails to load
                                                                     const target = e.target as HTMLImageElement;
-                                                                    target.src = 'https://via.placeholder.com/200x150?text=Image+Not+Available';
+                                                                    target.src = VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI;
                                                                 }}
                                                             />
                                                             <button 

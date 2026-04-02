@@ -103,7 +103,6 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
           background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.96) 100%)',
           backdropFilter: 'blur(40px) saturate(180%)',
           WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-          borderTop: '0.5px solid rgba(0, 0, 0, 0.08)',
           boxShadow: '0 -6px 24px rgba(0, 0, 0, 0.1), 0 -2px 8px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9)'
         }}
       >
