@@ -49,7 +49,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const [searchQuery, setSearchQuery] = useState('');
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
-  const touchStartData = useRef<Map<number, { x: number; y: number; time: number }>>(new Map());
+  /** Tap vs horizontal-scroll: carousel scroll steals small finger movement; track scrollLeft + slop. */
+  const touchStartData = useRef<Map<number, { x: number; y: number; time: number; scrollLeft: number }>>(new Map());
 
   const publishedVehicles = useMemo(
     () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published' && vehicle.listingType !== 'rental'),
@@ -293,11 +294,16 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
             >
             {displayedFeaturedVehicles.map((vehicle, idx) => {
+              const TAP_MOVE_PX = 28;
+              const TAP_MAX_MS = 600;
+              const SCROLL_EPS = 12;
+
               const handleTouchStart = (e: React.TouchEvent) => {
                 touchStartData.current.set(vehicle.id, {
                   x: e.touches[0].clientX,
                   y: e.touches[0].clientY,
-                  time: Date.now()
+                  time: Date.now(),
+                  scrollLeft: carouselRef.current?.scrollLeft ?? 0
                 });
               };
               
@@ -314,25 +320,27 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 const deltaX = Math.abs(touchEnd.x - touchStart.x);
                 const deltaY = Math.abs(touchEnd.y - touchStart.y);
                 const deltaTime = touchEnd.time - touchStart.time;
+                const scrollDelta = Math.abs(
+                  (carouselRef.current?.scrollLeft ?? 0) - touchStart.scrollLeft
+                );
                 
-                // If it's a tap (small movement, short time) and not a scroll
-                if (deltaX < 10 && deltaY < 10 && deltaTime < 300) {
+                // Tap: little finger movement, short press, and carousel did not meaningfully scroll
+                if (
+                  deltaX < TAP_MOVE_PX &&
+                  deltaY < TAP_MOVE_PX &&
+                  deltaTime < TAP_MAX_MS &&
+                  scrollDelta < SCROLL_EPS
+                ) {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (onSelectVehicle) {
-                    onSelectVehicle(vehicle);
-                  }
+                  onSelectVehicle?.(vehicle);
                 }
                 
                 touchStartData.current.delete(vehicle.id);
               };
               
-              const handleClick = (e: React.MouseEvent) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (onSelectVehicle) {
-                  onSelectVehicle(vehicle);
-                }
+              const handleClick = () => {
+                onSelectVehicle?.(vehicle);
               };
               
               return (

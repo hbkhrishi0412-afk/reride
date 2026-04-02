@@ -2,7 +2,21 @@
  * Image utility functions for handling image sources and validation
  */
 
-const DEFAULT_PLACEHOLDER = 'https://via.placeholder.com/800x600?text=Car+Image';
+/** Inline SVG — no external fetch (avoids blocked networks / ERR_CONNECTION_CLOSED on via.placeholder.com). */
+const vehiclePlaceholderSvg = (w: number, h: number, label: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect fill="#e5e7eb" width="100%" height="100%"/><g fill="#9ca3af" font-family="system-ui,sans-serif"><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="${Math.max(14, Math.round(Math.min(w, h) * 0.06))}">${label.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}</text></g></svg>`;
+
+export const VEHICLE_IMAGE_PLACEHOLDER_DATA_URI = `data:image/svg+xml,${encodeURIComponent(vehiclePlaceholderSvg(800, 600, 'No image'))}`;
+
+export const VEHICLE_THUMB_PLACEHOLDER_DATA_URI = `data:image/svg+xml,${encodeURIComponent(vehiclePlaceholderSvg(112, 80, 'No image'))}`;
+
+export const VEHICLE_SMALL_CARD_PLACEHOLDER_DATA_URI = `data:image/svg+xml,${encodeURIComponent(vehiclePlaceholderSvg(200, 150, 'No image'))}`;
+
+/** True for our inline placeholders (skip network recovery / infinite onError loops). */
+export const isInlineImagePlaceholder = (url: string | undefined | null): boolean =>
+  typeof url === 'string' && url.startsWith('data:image/svg+xml,');
+
+const DEFAULT_PLACEHOLDER = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
 
 /**
  * Detects browser support for modern image formats

@@ -1232,12 +1232,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Use React Router navigate instead of manual history.pushState
+      let detailSelectedId: number | undefined = view === View.DETAIL ? selectedVehicle?.id : undefined;
+      if (view === View.DETAIL && detailSelectedId == null) {
+        try {
+          const raw = sessionStorage.getItem('selectedVehicle');
+          if (raw) {
+            const v = JSON.parse(raw) as { id?: number };
+            if (typeof v?.id === 'number') detailSelectedId = v.id;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
       routerNavigate(newPath, {
         state: {
           view,
           previousView: currentView,
           timestamp: Date.now(),
-          selectedVehicleId: view === View.DETAIL ? selectedVehicle?.id : undefined,
+          selectedVehicleId: detailSelectedId,
         },
       });
     } catch {
@@ -1352,18 +1364,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPreviousView(routerState.previousView);
     }
 
-    // Restore selectedVehicle for DETAIL view
+    // Restore selectedVehicle for DETAIL view (catalog + sessionStorage — fixes stale router state after selectVehicle)
     if (newView === View.DETAIL) {
+      const trySessionStorageForPath = () => {
+        try {
+          const idMatch = path.match(/\/vehicle\/(\d+)/);
+          if (!idMatch) return;
+          const parsedId = parseInt(idMatch[1], 10);
+          const stored = sessionStorage.getItem('selectedVehicle');
+          if (!stored) return;
+          const v = JSON.parse(stored) as { id?: number };
+          if (v?.id === parsedId) setSelectedVehicle(v as Vehicle);
+        } catch {
+          /* ignore */
+        }
+      };
+
       const vehicleId = routerState?.selectedVehicleId;
       if (vehicleId) {
         const vehicleToRestore = vehicles.find(v => v.id === vehicleId);
         if (vehicleToRestore) setSelectedVehicle(vehicleToRestore);
+        else trySessionStorageForPath();
       } else if (path.startsWith('/vehicle/')) {
         const idMatch = path.match(/\/vehicle\/(\d+)/);
         if (idMatch) {
           const parsedId = parseInt(idMatch[1], 10);
           const found = vehicles.find(v => v.id === parsedId);
           if (found) setSelectedVehicle(found);
+          else trySessionStorageForPath();
         }
       }
     } else {
@@ -1382,6 +1410,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 100);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.key]);
+
+  // When the catalog finishes loading, resolve /vehicle/:id if the list sync effect ran too early
+  useEffect(() => {
+    if (currentView !== View.DETAIL) return;
+    const path = (location?.pathname ?? '/') || '/';
+    const m = path.match(/\/vehicle\/(\d+)/);
+    if (!m) return;
+    const id = parseInt(m[1], 10);
+    if (selectedVehicle?.id === id) return;
+    const found = vehicles.find((v) => v.id === id);
+    if (found) {
+      setSelectedVehicle(found);
+      return;
+    }
+    try {
+      const raw = sessionStorage.getItem('selectedVehicle');
+      if (!raw) return;
+      const v = JSON.parse(raw) as Vehicle;
+      if (v?.id === id) setSelectedVehicle(v);
+    } catch {
+      /* ignore */
+    }
+  }, [currentView, location?.pathname, vehicles, selectedVehicle?.id]);
 
   // CRITICAL: Listen for force loading completion event (safety mechanism)
   useEffect(() => {
@@ -4918,17 +4969,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Verify it was stored correctly
         const verifyStored = sessionStorage.getItem('selectedVehicle');
         if (!verifyStored || verifyStored !== vehicleJson) {
-          console.error('❌ Vehicle storage verification failed');
-          return;
-        }
-        
-        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ Vehicle sessionStorage verification mismatch; continuing with in-memory state');
+        } else if (process.env.NODE_ENV === 'development') {
           console.log('🚗 Vehicle stored and verified in sessionStorage:', vehicle.id, vehicle.make, vehicle.model);
         }
       } catch (error) {
         console.error('❌ Failed to store vehicle in sessionStorage:', error);
-        // Don't continue if we can't store - navigation will fail
-        return;
+        // Continue: in-memory selectedVehicle still powers the detail screen; refresh may not restore.
       }
       
       // Set the selected vehicle state (async, but sessionStorage is already set and verified)
@@ -4938,6 +4985,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (process.env.NODE_ENV === 'development') {
         console.log('🚗 Navigating to DETAIL view with vehicle:', vehicle.id, vehicle.make, vehicle.model);
       }
+      
+      // User-initiated open must never be dropped: location sync sets isHandlingPopStateRef for ~100ms
+      // after route changes, and navigate() used to bail out entirely during that window.
+      isHandlingPopStateRef.current = false;
       
       // Navigate to DETAIL view immediately
       // The navigate function will check sessionStorage first (which we just set and verified),
