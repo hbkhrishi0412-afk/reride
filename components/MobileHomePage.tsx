@@ -5,6 +5,13 @@ import { matchesCity } from '../utils/cityMapping';
 import { FALLBACK_VEHICLES } from '../constants/fallback';
 import MobileVehicleCard from './MobileVehicleCard';
 import LazyImage from './LazyImage';
+import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
+import {
+  HOME_DESKTOP_CITY_STYLE,
+  HOME_DISCOVERY_CATEGORIES,
+  HOME_DISCOVERY_CITY_ORDER,
+  HOME_MOBILE_CITY_GRADIENT,
+} from '../constants/homeDiscovery';
 
 interface MobileHomePageProps {
   onSearch: (query: string) => void;
@@ -46,6 +53,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   onNavigate,
   onSelectCity
 }) => {
+  const { data: storefrontAgg } = useStorefrontAggregates();
   const [searchQuery, setSearchQuery] = useState('');
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -57,39 +65,48 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
     [allVehicles]
   );
 
-  // Memoize static data to prevent recreation on every render
-  const baseCities = useMemo(() => [
-    { name: 'Delhi NCR', abbr: 'DN' },
-    { name: 'Hyderabad', abbr: 'HY' },
-    { name: 'Bangalore', abbr: 'BA' },
-    { name: 'Pune', abbr: 'PU' },
-    { name: 'Mumbai', abbr: 'MU' },
-  ], []);
+  const cities = useMemo(
+    () =>
+      HOME_DISCOVERY_CITY_ORDER.map((name) => {
+        const client = publishedVehicles.filter((vehicle) =>
+          matchesCity(vehicle.city, name)
+        ).length;
+        const apiCount = storefrontAgg?.cities[name];
+        return {
+          name,
+          abbr: HOME_DESKTOP_CITY_STYLE[name].abbr,
+          count: apiCount !== undefined ? apiCount : client,
+        };
+      }),
+    [publishedVehicles, storefrontAgg?.cities]
+  );
 
-  const cities = useMemo(() => baseCities.map(city => ({
-    ...city,
-    count: publishedVehicles.filter(vehicle => matchesCity(vehicle.city, city.name)).length,
-  })), [baseCities, publishedVehicles]);
+  const categoryCounts = useMemo(
+    () =>
+      publishedVehicles.reduce((acc, vehicle) => {
+        if (vehicle?.category) {
+          acc[vehicle.category] = (acc[vehicle.category] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<VehicleCategory, number>),
+    [publishedVehicles]
+  );
 
-  const baseCategories = useMemo(() => [
-    { name: 'Four Wheeler', icon: '🚗', id: VehicleCategory.FOUR_WHEELER },
-    { name: 'Two Wheeler', icon: '🏍️', id: VehicleCategory.TWO_WHEELER },
-    { name: 'Three Wheeler', icon: '🛺', id: VehicleCategory.THREE_WHEELER },
-    { name: 'Commercial', icon: '🚚', id: VehicleCategory.COMMERCIAL },
-    { name: 'Farm', icon: '🚜', id: VehicleCategory.FARM },
-  ], []);
-
-  const categoryCounts = useMemo(() => publishedVehicles.reduce((acc, vehicle) => {
-    if (vehicle?.category) {
-      acc[vehicle.category] = (acc[vehicle.category] || 0) + 1;
-    }
-    return acc;
-  }, {} as Record<VehicleCategory, number>), [publishedVehicles]);
-
-  const categories = useMemo(() => baseCategories.map(category => ({
-    ...category,
-    count: categoryCounts[category.id] || 0
-  })), [baseCategories, categoryCounts]);
+  const categories = useMemo(
+    () =>
+      HOME_DISCOVERY_CATEGORIES.map((category) => {
+        const client = categoryCounts[category.id] || 0;
+        const apiCount = storefrontAgg?.categories[category.id];
+        return {
+          name: category.name,
+          icon: category.icon,
+          id: category.id,
+          mobileCardGradient: category.mobileCardGradient,
+          count: apiCount !== undefined ? apiCount : client,
+        };
+      }),
+    [categoryCounts, storefrontAgg?.categories]
+  );
 
   // Track carousel scroll position with throttling for performance
   useEffect(() => {
@@ -484,143 +501,139 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       )}
 
       {/* Categories Section - Compact Mobile Tiles */}
-      <div className="px-4 py-6 bg-gradient-to-b from-white to-gray-50">
+      <section
+        className="px-4 py-6 bg-gradient-to-b from-white to-gray-50"
+        aria-labelledby="mobile-home-categories-heading"
+      >
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Browse by Category</h2>
+            <h2 id="mobile-home-categories-heading" className="text-2xl font-bold text-gray-900">
+              Browse by Category
+            </h2>
             <p className="text-xs text-gray-500 mt-1">Quick taps to filter</p>
           </div>
           <button
+            type="button"
             onClick={() => onNavigate(ViewEnum.USED_CARS)}
-            className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-orange-50 active:scale-95 transition-all"
+            className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-orange-50 active:scale-95 transition-all motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             View All
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
         </div>
         <div
-          className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide"
+          className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide snap-x snap-mandatory scroll-pl-1"
           style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
         >
           {categories.map((category, index) => {
-            // Define gradient backgrounds for each category
-            const categoryGradients: Record<VehicleCategory, string> = {
-              [VehicleCategory.FOUR_WHEELER]: 'from-blue-500 to-indigo-600',
-              [VehicleCategory.TWO_WHEELER]: 'from-red-500 to-pink-600',
-              [VehicleCategory.THREE_WHEELER]: 'from-yellow-500 to-orange-600',
-              [VehicleCategory.COMMERCIAL]: 'from-purple-500 to-violet-600',
-              [VehicleCategory.FARM]: 'from-green-500 to-emerald-600',
-              [VehicleCategory.CONSTRUCTION]: 'from-gray-500 to-slate-600',
-            };
-            
-            const gradient = categoryGradients[category.id] || 'from-gray-500 to-gray-600';
+            const gradient = category.mobileCardGradient;
             const hasVehicles = category.count > 0;
-            
+
             return (
               <button
                 key={category.id}
+                type="button"
                 onClick={() => {
                   onSelectCategory(category.id);
                   onNavigate(ViewEnum.USED_CARS);
                 }}
-                className="group relative flex-shrink-0 flex flex-col items-center gap-2.5 p-3 bg-white rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-all duration-300 hover:shadow-lg w-[112px]"
+                className="group relative flex-shrink-0 flex flex-col items-center gap-2.5 p-3 bg-white rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition-all duration-300 hover:shadow-lg w-[112px] snap-start motion-reduce:transition-none motion-reduce:active:scale-100 motion-reduce:hover:shadow-sm"
                 style={{
                   animationDelay: `${index * 50}ms`,
-                  minHeight: '96px'
+                  minHeight: '96px',
                 }}
               >
-                {/* Gradient Background on Hover */}
-                <div className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-2xl opacity-0 group-active:opacity-5 group-hover:opacity-10 transition-opacity duration-300`}></div>
-                
-                {/* Icon Container with Gradient */}
-                <div className={`relative w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-110 transition-all duration-300`}>
-                  <span className="text-2xl relative z-10">{category.icon}</span>
-                  {/* Shine effect */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-xl"></div>
+                <div
+                  className={`absolute inset-0 bg-gradient-to-br ${gradient} rounded-2xl opacity-0 group-active:opacity-5 group-hover:opacity-10 transition-opacity duration-300 motion-reduce:transition-none`}
+                />
+
+                <div
+                  className={`relative w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md group-hover:shadow-lg group-hover:scale-110 transition-all duration-300 motion-reduce:transition-none motion-reduce:group-hover:scale-100`}
+                >
+                  <span className="text-2xl relative z-10" aria-hidden="true">
+                    {category.icon}
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-xl" />
                 </div>
-                
-                {/* Category Name */}
-                <span className="text-[11px] font-bold text-gray-900 text-center leading-tight group-hover:text-orange-600 transition-colors duration-300">
+
+                <span className="text-[11px] font-bold text-gray-900 text-center leading-tight group-hover:text-orange-600 transition-colors duration-300 motion-reduce:transition-none">
                   {category.name}
                 </span>
-                
-                {/* Car Count Badge */}
-                <div className={`flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all duration-300 ${
-                  hasVehicles 
-                    ? 'bg-orange-100 text-orange-600 group-hover:bg-orange-200' 
-                    : 'bg-gray-100 text-gray-500'
-                }`}>
+
+                <div
+                  className={`flex items-center justify-center px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all duration-300 motion-reduce:transition-none ${
+                    hasVehicles
+                      ? 'bg-orange-100 text-orange-600 group-hover:bg-orange-200'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
                   <span>{category.count}</span>
                   <span className="ml-0.5">cars</span>
                 </div>
-                
-                {/* Active Indicator */}
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:transition-none" />
               </button>
             );
           })}
         </div>
-      </div>
+      </section>
 
       {/* Cities Section - Smaller Mobile Location Tiles */}
-      <div className="px-4 py-6 bg-gradient-to-b from-white to-gray-50">
+      <section
+        className="px-4 py-6 bg-gradient-to-b from-white to-gray-50"
+        aria-labelledby="mobile-home-locations-heading"
+      >
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">Explore by Location</h2>
+            <h2 id="mobile-home-locations-heading" className="text-2xl font-bold text-gray-900 mb-1">
+              Explore by Location
+            </h2>
             <p className="text-xs text-gray-500">Find vehicles near you</p>
           </div>
           <button
+            type="button"
             onClick={() => onNavigate(ViewEnum.USED_CARS)}
-            className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-orange-50 active:scale-95 transition-all"
+            className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-orange-50 active:scale-95 transition-all motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             View All
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
         </div>
-        <div className="flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 scrollbar-hide" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-          {cities.map((city, idx) => {
-            // Define vibrant, premium gradients for each city - matching the design
-            // Using inline styles to ensure colors always render correctly
-            const gradientStyles = [
-              // Purple gradient (Hyderabad) - #A855F7 to #7C3AED to #6D28D9
-              { background: 'linear-gradient(135deg, #A855F7 0%, #9333EA 50%, #7C3AED 100%)' },
-              // Pink/Red gradient (Bangalore) - #EC4899 to #F43F5E to #DC2626
-              { background: 'linear-gradient(135deg, #EC4899 0%, #F43F5E 50%, #DC2626 100%)' },
-              // Green gradient (Pune) - #4ADE80 to #10B981 to #14B8A6
-              { background: 'linear-gradient(135deg, #4ADE80 0%, #10B981 50%, #14B8A6 100%)' },
-              // Purple/Violet gradient (Mumbai) - #8B5CF6 to #9333EA to #D946EF
-              { background: 'linear-gradient(135deg, #8B5CF6 0%, #9333EA 50%, #D946EF 100%)' },
-              // Orange gradient (fallback) - #F97316 to #EA580C to #DC2626
-              { background: 'linear-gradient(135deg, #F97316 0%, #EA580C 50%, #DC2626 100%)' },
-            ];
-            const gradientStyle = gradientStyles[idx % gradientStyles.length];
+        <div
+          className="flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 scrollbar-hide snap-x snap-mandatory scroll-pl-4"
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+        >
+          {cities.map((city) => {
+            const gradientStyle = {
+              background: HOME_MOBILE_CITY_GRADIENT[city.name as (typeof HOME_DISCOVERY_CITY_ORDER)[number]],
+            };
             const hasVehicles = city.count > 0;
-            
+
             return (
               <button
-                key={idx}
+                key={city.name}
+                type="button"
+                aria-label={`${city.name}, ${city.count} vehicles`}
                 onClick={() => {
                   onSelectCity(city.name);
                   onNavigate(ViewEnum.USED_CARS);
                 }}
-                className="group flex-shrink-0 rounded-full p-4 text-white w-[118px] h-[118px] active:scale-95 transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-2 relative overflow-hidden border border-white/30 flex items-center justify-center"
+                className="group flex-shrink-0 rounded-full p-4 text-white w-[118px] h-[118px] active:scale-95 transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-2 relative overflow-hidden border border-white/30 flex items-center justify-center snap-start motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 motion-reduce:hover:shadow-xl"
                 style={{
                   ...gradientStyle,
-                  boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1)'
+                  boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1)',
                 }}
               >
-                {/* Animated Background Pattern */}
-                <div className="absolute inset-0 opacity-10">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-3xl transform translate-x-8 -translate-y-8 group-hover:scale-150 transition-transform duration-500"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full blur-2xl transform -translate-x-6 translate-y-6 group-hover:scale-125 transition-transform duration-500"></div>
+                <div className="absolute inset-0 opacity-10 motion-reduce:hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full blur-3xl transform translate-x-8 -translate-y-8 group-hover:scale-150 transition-transform duration-500 motion-reduce:transition-none" />
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full blur-2xl transform -translate-x-6 translate-y-6 group-hover:scale-125 transition-transform duration-500 motion-reduce:transition-none" />
                 </div>
-                
-                {/* Shine effect on hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+
+                <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 motion-reduce:transition-none" />
                 
                 {/* Content */}
                 <div className="relative z-10 flex flex-col items-center justify-center text-center">
@@ -653,9 +666,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                     </span>
                   </div>
                   
-                  {/* Arrow indicator on hover */}
-                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300 motion-reduce:hidden">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
                   </div>
@@ -664,7 +676,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             );
           })}
         </div>
-      </div>
+      </section>
 
       {/* Recommendations */}
       {recommendations.length > 0 && (

@@ -294,6 +294,10 @@ interface VehicleCacheEntry {
 const vehicleCache = new Map<string, VehicleCacheEntry>();
 const VEHICLE_CACHE_TTL = 30000; // 30 seconds
 
+/** Short TTL cache for home discovery counts (category / city) — avoids full-table scans on the client. */
+let storefrontAggregateCache: { body: Record<string, unknown>; timestamp: number } | null = null;
+const STOREFRONT_AGGREGATE_CACHE_TTL_MS = 45000;
+
 // Clean up expired vehicle cache entries
 const cleanupVehicleCache = () => {
   const now = Date.now();
@@ -3138,6 +3142,32 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
   // VEHICLE CRUD OPERATIONS
   if (req.method === 'GET') {
     try {
+      if (String(req.query.aggregate || '') === 'storefront') {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
+        const now = Date.now();
+        if (
+          storefrontAggregateCache &&
+          now - storefrontAggregateCache.timestamp < STOREFRONT_AGGREGATE_CACHE_TTL_MS
+        ) {
+          return res.status(200).json(storefrontAggregateCache.body);
+        }
+        try {
+          const counts = await vehicleService.getStorefrontDiscoveryCounts();
+          const body = { success: true, ...counts };
+          storefrontAggregateCache = { body, timestamp: now };
+          return res.status(200).json(body);
+        } catch (aggErr) {
+          const msg = aggErr instanceof Error ? aggErr.message : String(aggErr);
+          console.error('❌ storefront aggregate failed:', msg);
+          return res.status(500).json({
+            success: false,
+            reason: 'Failed to load discovery counts',
+            details: process.env.NODE_ENV === 'development' ? msg : undefined,
+          });
+        }
+      }
+
       if (action === 'city-stats' && req.query.city) {
         // Sanitize city input
         const sanitizedCity = await sanitizeString(String(req.query.city));

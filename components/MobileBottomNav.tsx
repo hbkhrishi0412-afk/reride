@@ -148,7 +148,8 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
               <button
                 key={item.id}
                 onClick={handleClick}
-                className="flex flex-col items-center justify-center flex-1 h-full relative group"
+                type="button"
+                className="flex flex-col items-center justify-center flex-1 h-full relative group outline-none focus:outline-none focus-visible:outline-none"
                 style={{ 
                   minHeight: '48px',
                   transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
@@ -172,10 +173,9 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                       className="absolute inset-0 rounded-2xl"
                       style={{
                         background: 'linear-gradient(135deg, rgba(255, 107, 53, 0.15) 0%, rgba(255, 132, 86, 0.1) 100%)',
-                        boxShadow: '0 6px 16px rgba(255, 107, 53, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 107, 53, 0.1)',
+                        boxShadow: '0 6px 16px rgba(255, 107, 53, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.7)',
                         animation: 'fadeInScale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                        margin: '3px 4px',
-                        border: '0.5px solid rgba(255, 107, 53, 0.15)'
+                        margin: '3px 4px'
                       }}
                     />
                     {/* Subtle inner glow */}

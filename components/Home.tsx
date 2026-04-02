@@ -4,6 +4,12 @@ import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import { matchesCity } from '../utils/cityMapping';
 import LazyImage from './LazyImage';
 import QuickViewModal from './QuickViewModal';
+import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
+import {
+    HOME_DESKTOP_CITY_STYLE,
+    HOME_DISCOVERY_CATEGORIES,
+    HOME_DISCOVERY_CITY_ORDER,
+} from '../constants/homeDiscovery';
 
 interface HomeProps {
     onSearch: (query: string) => void;
@@ -29,6 +35,7 @@ const Home: React.FC<HomeProps> = ({
     wishlist,
     onNavigate,
     onSelectCity,
+    onSelectCategory,
     comparisonList,
     recommendations,
     onSearch,
@@ -36,6 +43,7 @@ const Home: React.FC<HomeProps> = ({
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
+    const { data: storefrontAgg } = useStorefrontAggregates();
 
     // Preload the first featured vehicle image (LCP element) for better performance
     useEffect(() => {
@@ -58,14 +66,6 @@ const Home: React.FC<HomeProps> = ({
         }
     }, [featuredVehicles]);
 
-    const cities = [
-        { name: 'Delhi NCR', abbr: 'DN', cars: 0, gradient: 'from-amber-400 via-orange-400 to-yellow-500', accent: 'text-amber-950' },
-        { name: 'Hyderabad', abbr: 'HY', cars: 0, gradient: 'from-purple-400 via-purple-500 to-indigo-500', accent: 'text-purple-950' },
-        { name: 'Bangalore', abbr: 'BA', cars: 0, gradient: 'from-sky-400 via-blue-500 to-indigo-500', accent: 'text-indigo-950' },
-        { name: 'Pune', abbr: 'PU', cars: 0, gradient: 'from-emerald-400 via-teal-500 to-cyan-500', accent: 'text-emerald-950' },
-        { name: 'Mumbai', abbr: 'MU', cars: 1, gradient: 'from-pink-400 via-rose-500 to-fuchsia-500', accent: 'text-rose-950' },
-    ];
-
     const publishedVehicles = allVehicles.filter(v => v && v.status === 'published');
 
     const recentVehicles = useMemo(() => {
@@ -78,32 +78,58 @@ const Home: React.FC<HomeProps> = ({
         });
         return sorted.slice(0, 8);
     }, [publishedVehicles]);
-    const citiesWithCounts = cities.map(city => ({
-        ...city,
-        cars: publishedVehicles.filter(vehicle => matchesCity(vehicle.city, city.name)).length
-    }));
+
+    const citiesBase = useMemo(
+        () =>
+            HOME_DISCOVERY_CITY_ORDER.map((name) => ({
+                name,
+                ...HOME_DESKTOP_CITY_STYLE[name],
+                cars: 0,
+            })),
+        []
+    );
+
+    const citiesWithCounts = useMemo(() => {
+        return citiesBase.map((city) => {
+            const clientCount = publishedVehicles.filter((vehicle) =>
+                matchesCity(vehicle.city, city.name)
+            ).length;
+            const apiCount = storefrontAgg?.cities[city.name];
+            const cars = apiCount !== undefined ? apiCount : clientCount;
+            return { ...city, cars };
+        });
+    }, [citiesBase, publishedVehicles, storefrontAgg?.cities]);
+
     const sortedCities = [...citiesWithCounts].sort((a, b) => b.cars - a.cars);
     const topCities = sortedCities.slice(0, 6);
 
-    const categoryCounts = publishedVehicles.reduce((acc, vehicle) => {
-        if (vehicle?.category) {
-            acc[vehicle.category] = (acc[vehicle.category] || 0) + 1;
-        }
-        return acc;
-    }, {} as Record<VehicleCategory, number>);
+    const categoryCounts = useMemo(
+        () =>
+            publishedVehicles.reduce((acc, vehicle) => {
+                if (vehicle?.category) {
+                    acc[vehicle.category] = (acc[vehicle.category] || 0) + 1;
+                }
+                return acc;
+            }, {} as Record<VehicleCategory, number>),
+        [publishedVehicles]
+    );
 
-    const categories = [
-        { name: 'Four Wheeler', icon: '🚗', id: VehicleCategory.FOUR_WHEELER, gradient: 'from-blue-400 via-sky-500 to-indigo-500', accent: 'text-indigo-950' },
-        { name: 'Two Wheeler', icon: '🏍️', id: VehicleCategory.TWO_WHEELER, gradient: 'from-green-400 via-emerald-500 to-teal-500', accent: 'text-emerald-950' },
-        { name: 'Three Wheeler', icon: '🛺', id: VehicleCategory.THREE_WHEELER, gradient: 'from-orange-400 via-amber-500 to-orange-600', accent: 'text-amber-950' },
-        { name: 'Commercial', icon: '🚚', id: VehicleCategory.COMMERCIAL, gradient: 'from-purple-400 via-violet-500 to-fuchsia-500', accent: 'text-purple-950' },
-        { name: 'Farm', icon: '🚜', id: VehicleCategory.FARM, gradient: 'from-yellow-400 via-amber-500 to-orange-500', accent: 'text-amber-950' },
-    ];
-
-    const categoriesWithCounts = categories.map(category => ({
-        ...category,
-        vehicles: categoryCounts[category.id] || 0,
-    }));
+    const categoriesWithCounts = useMemo(
+        () =>
+            HOME_DISCOVERY_CATEGORIES.map((category) => {
+                const clientCount = categoryCounts[category.id] || 0;
+                const apiCount = storefrontAgg?.categories[category.id];
+                const vehicles = apiCount !== undefined ? apiCount : clientCount;
+                return {
+                    name: category.name,
+                    icon: category.icon,
+                    id: category.id,
+                    gradient: category.gradient,
+                    vehicles,
+                };
+            }),
+        [categoryCounts, storefrontAgg?.categories]
+    );
 
     const featuredListRef = useRef<HTMLDivElement>(null);
 
@@ -849,12 +875,16 @@ const Home: React.FC<HomeProps> = ({
                         <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">Find the perfect vehicle type that matches your needs and lifestyle</p>
                     </div>
 
-                    <div className="flex flex-wrap justify-center gap-3 md:gap-4">
-                        {categoriesWithCounts.map((category, index) => (
+                        <div className="flex flex-wrap justify-center gap-3 md:gap-4">
+                            {categoriesWithCounts.map((category, index) => (
                             <button
                                 key={index}
-                                onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                                className="group inline-flex items-center gap-3 px-4 md:px-5 py-3 rounded-full bg-white border border-gray-200 shadow-sm hover:border-blue-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                                type="button"
+                                onClick={() => {
+                                    onSelectCategory(category.id);
+                                    onNavigate(ViewEnum.USED_CARS);
+                                }}
+                                className="group inline-flex items-center gap-3 px-4 md:px-5 py-3 rounded-full bg-white border border-gray-200 shadow-sm hover:border-blue-600 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                             >
                                 <div className={`flex h-10 w-10 items-center justify-center rounded-full text-lg bg-gradient-to-br ${category.gradient} text-white shadow-inner`}>
                                     <span>{category.icon}</span>

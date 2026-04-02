@@ -172,6 +172,13 @@ a:focus,
   outline-offset: 2px;
 }
 
+/* Bottom nav tabs: selection uses pill background only; global orange focus ring reads as a harsh box */
+nav[data-testid="mobile-bottom-nav"] button:focus,
+nav[data-testid="mobile-bottom-nav"] button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 /* Ensure input fields are interactive */
 .sell-car-input {
   pointer-events: auto;

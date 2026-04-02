@@ -1,6 +1,8 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
 import type { Vehicle } from '../types.js';
 import { VehicleCategory } from '../types.js';
+import { CITY_MAPPING } from '../utils/cityMapping.js';
+import { HOME_DISCOVERY_CITY_ORDER } from '../constants/homeDiscovery.js';
 
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
@@ -385,6 +387,89 @@ export const supabaseVehicleService = {
     }
     
     return (data || []).map(supabaseRowToVehicle);
+  },
+
+  /**
+   * Parallel COUNT queries for home “Browse by category” / “Explore by location” rails.
+   * Excludes rental listings when metadata supports it; falls back if the filter errors.
+   */
+  async getStorefrontDiscoveryCounts(): Promise<{
+    categories: Record<string, number>;
+    cities: Record<string, number>;
+  }> {
+    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+
+    const categoryIds = [
+      VehicleCategory.FOUR_WHEELER,
+      VehicleCategory.TWO_WHEELER,
+      VehicleCategory.THREE_WHEELER,
+      VehicleCategory.COMMERCIAL,
+      VehicleCategory.FARM,
+    ];
+
+    const applyNonRental = (q: any) =>
+      q.or('metadata->>listingType.is.null,metadata->>listingType.neq.rental');
+
+    const countForCategory = async (cat: VehicleCategory, useRentalExclusion: boolean): Promise<number> => {
+      let q = supabase
+        .from('vehicles')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'published')
+        .eq('category', cat);
+      if (useRentalExclusion) {
+        q = applyNonRental(q);
+      }
+      const { count, error } = await q;
+      if (error && useRentalExclusion) {
+        return countForCategory(cat, false);
+      }
+      if (error) {
+        console.warn('⚠️ storefront category count failed:', cat, error.message);
+        return 0;
+      }
+      return count ?? 0;
+    };
+
+    const countForCityDisplay = async (displayName: string, useRentalExclusion: boolean): Promise<number> => {
+      const aliases = CITY_MAPPING[displayName] || [displayName];
+      const orClause = aliases.map((a) => `city.ilike.%${a}%`).join(',');
+      let q = supabase
+        .from('vehicles')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'published')
+        .or(orClause);
+      if (useRentalExclusion) {
+        q = applyNonRental(q);
+      }
+      const { count, error } = await q;
+      if (error && useRentalExclusion) {
+        return countForCityDisplay(displayName, false);
+      }
+      if (error) {
+        console.warn('⚠️ storefront city count failed:', displayName, error.message);
+        return 0;
+      }
+      return count ?? 0;
+    };
+
+    const [categoryResults, cityResults] = await Promise.all([
+      Promise.all(categoryIds.map((cat) => countForCategory(cat, true))),
+      Promise.all(
+        [...HOME_DISCOVERY_CITY_ORDER].map((displayName) => countForCityDisplay(displayName, true))
+      ),
+    ]);
+
+    const categories: Record<string, number> = {};
+    categoryIds.forEach((cat, i) => {
+      categories[cat] = categoryResults[i] ?? 0;
+    });
+
+    const cities: Record<string, number> = {};
+    HOME_DISCOVERY_CITY_ORDER.forEach((name, i) => {
+      cities[name] = cityResults[i] ?? 0;
+    });
+
+    return { categories, cities };
   },
 
   // Count vehicles by status (much faster than fetching all and counting)

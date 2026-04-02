@@ -309,6 +309,48 @@ function buildStoragePublicUrl(filePath) {
   return `${baseUrl}/storage/v1/object/public/Images/${normalized}`;
 }
 
+/** Mirrors `utils/cityMapping` for dev aggregate endpoint (Node has no TS import). */
+function matchesCityForStorefrontAggregates(vehicleCity, displayCity) {
+  if (!displayCity) return true;
+  if (!vehicleCity) return false;
+  const normalize = (city) => String(city).split(',')[0].trim().toLowerCase();
+  const normalizedVehicleCity = normalize(vehicleCity);
+  const normalizedDisplayCity = normalize(displayCity);
+  const CITY_MAPPING = {
+    'Delhi NCR': ['Delhi', 'New Delhi', 'Delhi NCR', 'NCR'],
+    Mumbai: ['Mumbai', 'Bombay'],
+    Bangalore: ['Bangalore', 'Bengaluru'],
+    Pune: ['Pune'],
+    Hyderabad: ['Hyderabad'],
+  };
+  const possibleNames = (CITY_MAPPING[displayCity] || [displayCity]).map(normalize);
+  return (
+    possibleNames.some((name) => name === normalizedVehicleCity) ||
+    normalizedVehicleCity === normalizedDisplayCity ||
+    possibleNames.some(
+      (name) => normalizedVehicleCity.includes(name) || name.includes(normalizedVehicleCity)
+    )
+  );
+}
+
+function computeStorefrontAggregatesFromVehicleList(list) {
+  const published = list.filter(
+    (v) => v && v.status === 'published' && v.listingType !== 'rental'
+  );
+  const normCat = (c) => String(c || '').toLowerCase().replace(/_/g, '-');
+  const categoryIds = ['four-wheeler', 'two-wheeler', 'three-wheeler', 'commercial', 'farm'];
+  const categories = {};
+  for (const c of categoryIds) {
+    categories[c] = published.filter((v) => normCat(v.category) === c).length;
+  }
+  const cityOrder = ['Delhi NCR', 'Hyderabad', 'Bangalore', 'Pune', 'Mumbai'];
+  const cities = {};
+  for (const name of cityOrder) {
+    cities[name] = published.filter((v) => matchesCityForStorefrontAggregates(v.city, name)).length;
+  }
+  return { success: true, categories, cities };
+}
+
 // Fetch vehicles from Supabase when env is set (so local dev shows real images)
 async function fetchVehiclesFromSupabase() {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -379,6 +421,13 @@ async function fetchVehiclesFromSupabase() {
 // Vehicle Data API endpoints
 app.get('/api/vehicles', async (req, res) => {
   const { type } = req.query;
+
+  if (req.query.aggregate === 'storefront') {
+    const supabaseVehicles = await fetchVehiclesFromSupabase();
+    const list =
+      supabaseVehicles && supabaseVehicles.length > 0 ? supabaseVehicles : mockVehicles;
+    return res.json(computeStorefrontAggregatesFromVehicleList(list));
+  }
   
   if (type === 'data') {
     console.log('🚗 GET /api/vehicles?type=data - Returning vehicle data');
