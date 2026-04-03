@@ -1,10 +1,10 @@
 // Enhanced Service Worker with Advanced Caching Strategies
-// Version: 2.0.0
+// Version: 2.1.0 — bump cache names when brand icons change so SW serves fresh assets
 
-const CACHE_NAME = 'reride-v2';
-const RUNTIME_CACHE = 'reride-runtime-v2';
-const IMAGE_CACHE = 'reride-images-v2';
-const API_CACHE = 'reride-api-v2';
+const CACHE_NAME = 'reride-v3';
+const RUNTIME_CACHE = 'reride-runtime-v3';
+const IMAGE_CACHE = 'reride-images-v3';
+const API_CACHE = 'reride-api-v3';
 
 // Cache duration (in seconds)
 const CACHE_DURATIONS = {

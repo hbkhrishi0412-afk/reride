@@ -24,8 +24,8 @@ const LoginPortal: React.FC<LoginPortalProps> = ({ onNavigate }) => {
           {/* Logo and Welcome */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-6">
-              <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-3xl flex items-center justify-center border border-white/30">
-                <Logo className="scale-150 filter brightness-0 invert" showText={false} />
+              <div className="rounded-2xl bg-white/95 p-3 shadow-lg ring-1 ring-white/40">
+                <Logo size="lg" showText onClick={() => onNavigate(View.USED_CARS)} />
               </div>
             </div>
             <h1 className="text-3xl font-bold text-white mb-2 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
@@ -89,7 +89,7 @@ const LoginPortal: React.FC<LoginPortalProps> = ({ onNavigate }) => {
   return (
     <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl text-center">
       <div className="flex justify-center mb-4">
-        <Logo className="scale-125" showText={false} />
+        <Logo className="scale-110" size="lg" showText onClick={() => onNavigate(View.USED_CARS)} />
       </div>
       <h2 className="text-2xl font-extrabold text-reride-text-dark dark:text-reride-text-dark">Welcome to ReRide</h2>
       <p className="mt-2 text-brand-gray-600 dark:text-reride-text">Please select your role to continue.</p>

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle, User, Conversation, VehicleData, ChatMessage, VehicleDocument } from '../types';
 import { View, VehicleCategory } from '../types';
 import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
@@ -20,6 +21,8 @@ import PricingGuidance from './PricingGuidance';
 import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
+import { VehicleOfferBanner } from './VehicleOfferBanner';
+import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
 // Firebase status utilities removed - using Supabase
 
@@ -81,6 +84,7 @@ const ComboboxInput: React.FC<{
   disabled?: boolean;
   tooltip?: string;
 }> = ({ label, name, value, onChange, options, placeholder, error, required = false, disabled = false, tooltip }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value || '');
   const [filteredOptions, setFilteredOptions] = useState<string[]>([]);
@@ -232,7 +236,9 @@ const ComboboxInput: React.FC<{
             })}
             {filteredOptions.length > 10 && (
               <div className="px-4 py-2 text-xs text-gray-500 text-center">
-                +{filteredOptions.length - 10} more options
+                {t('sellerDashboard.comboboxMoreOptions', {
+                  count: filteredOptions.length - 10,
+                })}
               </div>
             )}
           </div>
@@ -290,6 +296,7 @@ const PlanStatusCard: React.FC<{
     featuredListingsCount: number;
     onNavigate: (view: View) => void;
 }> = memo(({ seller, activeListingsCount, featuredListingsCount, onNavigate }) => {
+    const { t } = useTranslation();
     const [plan, setPlan] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     // Real-time update state for expiry dates
@@ -313,7 +320,7 @@ const PlanStatusCard: React.FC<{
                 console.error('Failed to load plan details:', error);
                 // Fallback to basic plan info
                 setPlan({
-                    name: 'Free Plan',
+                    name: t('sellerDashboard.freePlanName'),
                     listingLimit: 3,
                     price: 0
                 });
@@ -322,16 +329,16 @@ const PlanStatusCard: React.FC<{
             }
         };
         loadPlan();
-    }, [seller.subscriptionPlan]);
+    }, [seller.subscriptionPlan, t]);
     
     if (loading || !plan) {
         return (
             <div className="text-white p-6 rounded-lg shadow-lg flex flex-col h-full" style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}>
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">Plan Status</h3>
+                    <h3 className="text-lg font-semibold">{t('sellerDashboard.planStatus')}</h3>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 </div>
-                <p className="text-sm opacity-90">Loading plan details...</p>
+                <p className="text-sm opacity-90">{t('sellerDashboard.loadingPlan')}</p>
             </div>
         );
     }
@@ -350,11 +357,14 @@ const PlanStatusCard: React.FC<{
     return (
         <div className="text-white p-6 rounded-lg shadow-lg flex flex-col h-full" style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}>
             <h3 className="text-lg font-bold flex justify-between items-center">
-                <span>Your Plan: <span className="text-reride-text-dark">{plan.name}</span></span>
+                <span>
+                  {t('sellerDashboard.yourPlanLabel')}{' '}
+                  <span className="text-reride-text-dark">{plan.name}</span>
+                </span>
             </h3>
             <div className="mt-4 space-y-3 text-sm flex-grow">
                 <div className="flex justify-between">
-                    <span>Active Listings:</span>
+                    <span>{t('sellerDashboard.activeListingsLabel')}</span>
                     <span className="font-semibold">{activeListingsCount} / {plan.listingLimit === 'unlimited' ? '∞' : plan.listingLimit}</span>
                 </div>
                 <div className="w-full rounded-full h-2 mb-2" style={{ background: 'rgba(30, 136, 229, 0.1)' }}>
@@ -364,13 +374,17 @@ const PlanStatusCard: React.FC<{
                     ></div>
                 </div>
                 <div className="flex justify-between">
-                    <span>Featured Credits:</span>
-                    <span className="font-semibold">{effectiveFeaturedCredits} remaining</span>
+                    <span>{t('sellerDashboard.featuredCreditsLabel')}</span>
+                    <span className="font-semibold">
+                      {t('sellerDashboard.featuredRemaining', { count: effectiveFeaturedCredits })}
+                    </span>
                 </div>
                  <div className="flex justify-between">
-                    <span>Free Certifications:</span>
+                    <span>{t('sellerDashboard.freeCertificationsLabel')}</span>
                     <span className="font-semibold">
-                        {Math.max((plan.freeCertifications ?? 0) - (seller.usedCertifications || 0), 0)} remaining
+                      {t('sellerDashboard.featuredRemaining', {
+                        count: Math.max((plan.freeCertifications ?? 0) - (seller.usedCertifications || 0), 0),
+                      })}
                     </span>
                 </div>
 
@@ -378,7 +392,7 @@ const PlanStatusCard: React.FC<{
                 <div className="mt-4 pt-4 border-t border-reride-white/20 space-y-2">
                     {seller.planActivatedDate && (
                         <div className="flex justify-between text-xs">
-                            <span>Plan Activated:</span>
+                            <span>{t('sellerDashboard.planActivated')}</span>
                             <span className="font-semibold">
                                 {new Date(seller.planActivatedDate).toLocaleDateString('en-IN', { 
                                     year: 'numeric', 
@@ -389,7 +403,7 @@ const PlanStatusCard: React.FC<{
                         </div>
                     )}
                     <div className="flex justify-between text-xs">
-                        <span>Expiry Date:</span>
+                        <span>{t('sellerDashboard.expiryDate')}</span>
                         {seller.planExpiryDate ? (
                             <span className={`font-semibold ${
                                 (() => {
@@ -411,22 +425,30 @@ const PlanStatusCard: React.FC<{
                                     const isExpired = expiryDate < currentTime;
                                     const daysRemaining = Math.ceil((expiryDate.getTime() - currentTime.getTime()) / (1000 * 60 * 60 * 24));
                                     if (isExpired) {
-                                        return <span className="ml-2 text-red-200 font-bold">(Expired)</span>;
+                                        return (
+                                          <span className="ml-2 text-red-200 font-bold">{t('sellerDashboard.expired')}</span>
+                                        );
                                     }
                                     if (daysRemaining <= 30 && daysRemaining > 0) {
-                                        return <span className="ml-2 text-orange-200">({daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left)</span>;
+                                        return (
+                                          <span className="ml-2 text-orange-200">
+                                            {daysRemaining === 1
+                                              ? t('sellerDashboard.dayLeft')
+                                              : t('sellerDashboard.daysLeft', { count: daysRemaining })}
+                                          </span>
+                                        );
                                     }
                                     return null;
                                 })()}
                             </span>
                         ) : (
-                            <span className="font-semibold text-gray-300 text-xs">Not set</span>
+                            <span className="font-semibold text-gray-300 text-xs">{t('sellerDashboard.notSet')}</span>
                         )}
                     </div>
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-reride-white/20">
-                    <h4 className="font-semibold mb-2">Plan Features:</h4>
+                    <h4 className="font-semibold mb-2">{t('sellerDashboard.planFeatures')}</h4>
                     <ul className="space-y-2 text-xs">
                         {(plan.features || []).map((feature: string) => (
                             <li key={feature} className="flex items-start">
@@ -444,7 +466,7 @@ const PlanStatusCard: React.FC<{
                     onClick={() => onNavigate(View.PRICING)}
                     className="mt-6 w-full bg-white text-reride-orange font-bold py-2 px-4 rounded-lg hover:bg-white transition-colors"
                 >
-                    {planIsExpired ? 'Renew Plan' : 'Upgrade Plan'}
+                    {planIsExpired ? t('sellerDashboard.renewPlan') : t('sellerDashboard.upgradePlan')}
                 </button>
             )}
         </div>
@@ -476,6 +498,14 @@ const initialFormState: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'> = 
   },
   certifiedInspection: null,
   certificationStatus: 'none',
+  offerEnabled: false,
+  offerTitle: '',
+  offerStartDate: '',
+  offerEndDate: '',
+  offerDateLabel: '',
+  offerDescription: '',
+  offerHighlight: '',
+  offerDisclaimer: '',
 };
 
 const FormFieldset: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
@@ -506,6 +536,7 @@ interface VehicleFormProps {
 
 // Settings View Component for Bank Partner Selection
 const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void | Promise<void> }> = ({ seller, onUpdateSeller }) => {
+  const { t } = useTranslation();
   const [selectedBanks, setSelectedBanks] = useState<string[]>(seller?.partnerBanks || []);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -523,7 +554,7 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
   if (!seller || !seller.email) {
     return (
       <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-        <p className="text-gray-600">Unable to load seller information. Please refresh the page.</p>
+        <p className="text-gray-600">{t('sellerDashboard.unableLoadSeller')}</p>
       </div>
     );
   }
@@ -571,7 +602,7 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       console.error('Failed to save bank partners:', error);
-      alert('Failed to save bank partners. Please try again.');
+      alert(t('sellerDashboard.saveBanksFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -579,7 +610,9 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
 
   return (
     <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Settings</h2>
+      <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">
+        {t('sellerDashboard.settingsTitle')}
+      </h2>
       
       <div className="space-y-6">
         {/* Finance Partner Banks Section */}
@@ -589,11 +622,9 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
-              Finance Partner Banks
+              {t('sellerDashboard.financePartnerBanks')}
             </h3>
-            <p className="text-sm text-gray-600">
-              Select the banks you are partnered with for vehicle financing. This information will be displayed to potential buyers on your listings.
-            </p>
+            <p className="text-sm text-gray-600">{t('sellerDashboard.financePartnerHint')}</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
@@ -633,7 +664,9 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
 
           {selectedBanks.length > 0 && (
             <div className="mb-4 p-3 bg-purple-50 rounded-lg">
-              <p className="text-sm font-medium text-purple-900 mb-2">Selected Partners ({selectedBanks.length}):</p>
+              <p className="text-sm font-medium text-purple-900 mb-2">
+                {t('sellerDashboard.selectedPartners', { count: selectedBanks.length })}
+              </p>
               <div className="flex flex-wrap gap-2">
                 {selectedBanks.map((bank) => (
                   <span
@@ -644,7 +677,7 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
                     <button
                       onClick={() => handleBankToggle(bank)}
                       className="ml-2 text-purple-600 hover:text-purple-800"
-                      aria-label={`Remove ${bank}`}
+                      aria-label={t('sellerDashboard.removeBankAria', { bank })}
                     >
                       ×
                     </button>
@@ -656,9 +689,9 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
 
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500">
-              {selectedBanks.length === 0 
-                ? 'No banks selected. Buyers won\'t see finance partner information.' 
-                : `This information will be displayed on all your vehicle listings.`}
+              {selectedBanks.length === 0
+                ? t('sellerDashboard.hintNoBanks')
+                : t('sellerDashboard.hintListingsShow')}
             </p>
             <button
               onClick={handleSave}
@@ -671,7 +704,7 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
                   : 'bg-purple-600 text-white hover:bg-purple-700'
               }`}
             >
-              {isSaving ? 'Saving...' : saveSuccess ? '✓ Saved' : 'Save Changes'}
+              {isSaving ? t('sellerDashboard.saving') : saveSuccess ? t('sellerDashboard.saved') : t('sellerDashboard.saveChanges')}
             </button>
           </div>
         </div>
@@ -681,6 +714,7 @@ const SettingsView: React.FC<{ seller: User; onUpdateSeller: (details: { dealers
 };
 
 const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVehicle, onUpdateVehicle, onCancel, vehicleData, seller, onFeatureListing, allVehicles }) => {
+    const { t } = useTranslation();
     const [formData, setFormData] = useState(editingVehicle ? { 
         ...initialFormState, 
         ...editingVehicle, 
@@ -1436,6 +1470,122 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 </div>
             </FormFieldset>
 
+            <FormFieldset title={t('sellerListing.section.offer')}>
+                <p className="text-sm text-reride-text-dark dark:text-reride-text-dark mb-4">{t('sellerListing.offer.hint')}</p>
+                <div className="flex items-center gap-3 mb-4">
+                    <input
+                        id="offer-enabled"
+                        type="checkbox"
+                        checked={!!formData.offerEnabled}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, offerEnabled: e.target.checked }))}
+                        className="h-5 w-5 rounded border-gray-300"
+                    />
+                    <label htmlFor="offer-enabled" className="text-sm font-medium text-reride-text-dark dark:text-reride-text-dark cursor-pointer">
+                        {t('sellerListing.offer.enable')}
+                    </label>
+                </div>
+                <div className={`space-y-4 ${formData.offerEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
+                    <div>
+                        <label htmlFor="offer-title" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                            {t('sellerListing.label.offerTitle')}
+                        </label>
+                        <input
+                            id="offer-title"
+                            name="offerTitle"
+                            type="text"
+                            value={formData.offerTitle ?? ''}
+                            onChange={handleChange}
+                            placeholder={t('vehicle.detail.offer.specialOffer')}
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                        />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="offer-start" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                                {t('sellerListing.label.offerStartDate')}
+                            </label>
+                            <input
+                                id="offer-start"
+                                name="offerStartDate"
+                                type="date"
+                                value={formData.offerStartDate ?? ''}
+                                onChange={handleChange}
+                                className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="offer-end" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                                {t('sellerListing.label.offerEndDate')}
+                            </label>
+                            <input
+                                id="offer-end"
+                                name="offerEndDate"
+                                type="date"
+                                value={formData.offerEndDate ?? ''}
+                                onChange={handleChange}
+                                className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label htmlFor="offer-date-label" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                            {t('sellerListing.label.offerDateLabel')}
+                        </label>
+                        <input
+                            id="offer-date-label"
+                            name="offerDateLabel"
+                            type="text"
+                            value={formData.offerDateLabel ?? ''}
+                            onChange={handleChange}
+                            placeholder={t('sellerListing.placeholder.offerDateLabel')}
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="offer-description" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                            {t('sellerListing.label.offerDescription')}
+                        </label>
+                        <input
+                            id="offer-description"
+                            name="offerDescription"
+                            type="text"
+                            value={formData.offerDescription ?? ''}
+                            onChange={handleChange}
+                            placeholder={t('vehicle.detail.offer.loanOffersOnAllCars')}
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="offer-highlight" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                            {t('sellerListing.label.offerHighlight')}
+                        </label>
+                        <input
+                            id="offer-highlight"
+                            name="offerHighlight"
+                            type="text"
+                            value={formData.offerHighlight ?? ''}
+                            onChange={handleChange}
+                            placeholder={t('vehicle.detail.offer.roiStartingAt')}
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="offer-disclaimer" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
+                            {t('sellerListing.label.offerDisclaimer')}
+                        </label>
+                        <input
+                            id="offer-disclaimer"
+                            name="offerDisclaimer"
+                            type="text"
+                            value={formData.offerDisclaimer ?? ''}
+                            onChange={handleChange}
+                            placeholder={t('sellerListing.placeholder.offerDisclaimer')}
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                        />
+                    </div>
+                </div>
+            </FormFieldset>
+
             <FormFieldset title="Promotion">
                 {(!editingVehicle || !editingVehicle.isFeatured) && (
                     <div className="p-4 bg-reride-orange dark:bg-reride-orange/20 border border-reride-orange dark:border-reride-orange rounded-lg">
@@ -1486,6 +1636,11 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                       <div className="pointer-events-none">
                          <VehicleCard vehicle={previewVehicle} onSelect={() => {}} onToggleCompare={() => {}} isSelectedForCompare={false} onToggleWishlist={() => {}} isInWishlist={false} isCompareDisabled={true} onViewSellerProfile={() => {}} onQuickView={() => {}} />
                       </div>
+                      {isSellerListingOfferVisible(previewVehicle) ? (
+                        <div className="pointer-events-none mt-4">
+                          <VehicleOfferBanner vehicle={previewVehicle} />
+                        </div>
+                      ) : null}
                   </div>
                    {aiSuggestions && Object.keys(aiSuggestions.featureSuggestions).length > 0 && (
                      <div>
@@ -1716,6 +1871,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // but are not currently used in this component. They may be used in future features or passed to child components.
   void onRequestCertification;
   void onTestDriveResponse;
+
+  const { t } = useTranslation();
   
   // CRITICAL: All hooks must be called before any conditional returns (React Rules of Hooks)
   // Initialize all state hooks first
@@ -1793,13 +1950,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Seller Information Missing</h2>
-          <p className="text-gray-600 mb-6">Unable to load dashboard. Please try logging in again.</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('sellerDashboard.infoMissing')}</h2>
+          <p className="text-gray-600 mb-6">{t('sellerDashboard.loadFailed')}</p>
           <button
             onClick={() => onNavigate(View.SELLER_LOGIN)}
             className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
           >
-            Go to Login
+            {t('sellerDashboard.goToLogin')}
           </button>
         </div>
       </div>
@@ -1812,13 +1969,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Configuration Error</h2>
-          <p className="text-gray-600 mb-6">Dashboard is missing required functions. Please contact support.</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('sellerDashboard.configError')}</h2>
+          <p className="text-gray-600 mb-6">{t('sellerDashboard.configErrorBody')}</p>
           <button
             onClick={() => window.location.reload()}
             className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
           >
-            Reload Page
+            {t('sellerDashboard.reloadPage')}
           </button>
         </div>
       </div>
@@ -3275,7 +3432,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         if (!seller) {
           return (
             <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-              <p className="text-gray-600">Loading seller information...</p>
+              <p className="text-gray-600">{t('sellerDashboard.loadingSellerInfo')}</p>
             </div>
           );
         }
@@ -3290,9 +3447,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         return (
           <div className="text-center py-8">
             <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
-              Page Not Found
+              {t('sellerDashboard.pageNotFound')}
             </h2>
-            <p className="text-gray-600">The requested dashboard section could not be found.</p>
+            <p className="text-gray-600">{t('sellerDashboard.sectionNotFound')}</p>
           </div>
         );
     }
@@ -3341,18 +3498,18 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             </div>
             <div className="ml-3 flex-1">
               <h3 className="text-sm font-medium text-yellow-800">
-                Database Connection Issue
+                {t('sellerDashboard.databaseIssue')}
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
                 <p>
                   {(() => {
                     try {
-                      // Supabase error message - Firebase removed
-                      return databaseStatus?.error || 'Supabase database is not available. Please check your configuration.';
+                      return (
+                        databaseStatus?.error || t('sellerDashboard.databaseErrorSupabase')
+                      );
                     } catch (error) {
-                      // Fallback error message
                       console.warn('⚠️ Error getting database error message:', error);
-                      return 'Database is not available. Please check your configuration.';
+                      return t('sellerDashboard.databaseErrorGeneric');
                     }
                   })()}
                 </p>
@@ -3377,7 +3534,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   </svg>
                 </div>
                 <h3 className="text-lg font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
-                  Dashboard
+                  {t('nav.dashboard')}
                 </h3>
               </div>
               
@@ -3387,7 +3544,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"/>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"/>
                   </svg>
-                  <span>Overview</span>
+                  <span>{t('sellerDashboard.nav.overview')}</span>
                 </div>
               </NavItem>
               
@@ -3396,7 +3553,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                   </svg>
-                  <span>Analytics</span>
+                  <span>{t('sellerDashboard.nav.analytics')}</span>
                 </div>
               </NavItem>
               
@@ -3405,7 +3562,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                   </svg>
-                  <span>My Listings</span>
+                  <span>{t('sellerDashboard.nav.myListings')}</span>
                 </div>
               </NavItem>
               
@@ -3414,7 +3571,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                   </svg>
-                  <span>Reports</span>
+                  <span>{t('sellerDashboard.nav.reports')}</span>
                 </div>
               </NavItem>
               
@@ -3423,7 +3580,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
                   </svg>
-                  <span>Sales History</span>
+                  <span>{t('sellerDashboard.nav.salesHistory')}</span>
                 </div>
               </NavItem>
               
@@ -3432,7 +3589,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
                   </svg>
-                  <span>Add Vehicle</span>
+                  <span>{t('sellerDashboard.nav.addVehicle')}</span>
                 </div>
               </NavItem>
               
@@ -3441,7 +3598,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                   </svg>
-                  <span>Inquiries</span>
+                  <span>{t('sellerDashboard.nav.inquiries')}</span>
                 </div>
               </NavItem>
               
@@ -3451,7 +3608,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                   </svg>
-                  <span>Settings</span>
+                  <span>{t('sellerDashboard.nav.settings')}</span>
                 </div>
               </NavItem>
             </div>
@@ -3478,15 +3635,15 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                         </svg>
                       </div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-2">Unable to Load Dashboard Content</h3>
-                      <p className="text-gray-600 mb-4">
-                        An error occurred while loading the dashboard. Please try refreshing the page.
-                      </p>
+                      <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                        {t('sellerDashboard.loadContentFailed')}
+                      </h3>
+                      <p className="text-gray-600 mb-4">{t('sellerDashboard.loadContentBody')}</p>
                       <button
                         onClick={() => window.location.reload()}
                         className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
                       >
-                        Refresh Page
+                        {t('sellerDashboard.refreshPage')}
                       </button>
                     </div>
                   );

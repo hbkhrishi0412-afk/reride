@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { User, Vehicle, SavedSearch, Conversation } from '../types';
 import { View } from '../types';
 import * as buyerService from '../services/buyerService';
@@ -31,6 +32,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   comparisonList,
   onViewSellerProfile,
 }) => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'alerts'>('overview');
   // Removed unused showSaveSearchModal state
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(
@@ -91,32 +93,35 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     setSavedSearches(buyerService.getSavedSearches(currentUser.email));
   }, [currentUser.email]);
 
-  const stats = [
-    {
-      label: 'Wishlist',
-      value: wishlist.length,
-      icon: '❤️',
-      action: () => onNavigate(View.WISHLIST),
-    },
-    {
-      label: 'Messages',
-      value: conversations.length,
-      icon: '💬',
-      action: () => onNavigate(View.INBOX),
-    },
-    {
-      label: 'Saved Searches',
-      value: savedSearches.length,
-      icon: '🔍',
-      action: () => setActiveTab('searches'),
-    },
-    {
-      label: 'Recently Viewed',
-      value: recentlyViewed.length,
-      icon: '👁️',
-      action: () => setActiveTab('activity'),
-    },
-  ];
+  const stats = useMemo(
+    () => [
+      {
+        label: t('buyerDashboard.stat.wishlist'),
+        value: wishlist.length,
+        icon: '❤️',
+        action: () => onNavigate(View.WISHLIST),
+      },
+      {
+        label: t('buyerDashboard.stat.messages'),
+        value: conversations.length,
+        icon: '💬',
+        action: () => onNavigate(View.INBOX),
+      },
+      {
+        label: t('buyerDashboard.stat.savedSearches'),
+        value: savedSearches.length,
+        icon: '🔍',
+        action: () => setActiveTab('searches'),
+      },
+      {
+        label: t('buyerDashboard.stat.recentlyViewed'),
+        value: recentlyViewed.length,
+        icon: '👁️',
+        action: () => setActiveTab('activity'),
+      },
+    ],
+    [t, wishlist.length, conversations.length, savedSearches.length, recentlyViewed.length, onNavigate]
+  );
 
   // Safety check: show login prompt when no currentUser (after all hooks)
   if (!currentUser) {
@@ -124,13 +129,13 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
       <div className="min-h-screen bg-gray-50 dark:bg-brand-gray-900 flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text mb-4">
-            Please log in to view your dashboard
+            {t('buyerDashboard.loginPrompt')}
           </h2>
           <button
             onClick={() => onNavigate(View.LOGIN_PORTAL)}
             className="btn-brand-primary text-white px-6 py-2 rounded-lg"
           >
-            Go to Login
+            {t('buyerDashboard.goToLogin')}
           </button>
         </div>
       </div>
@@ -157,7 +162,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   </svg>
                 </div>
                 <h3 className="text-lg font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">
-                  Dashboard
+                  {t('nav.dashboard')}
                 </h3>
               </div>
               
@@ -172,7 +177,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                 </svg>
-                <span className="font-medium">Overview</span>
+                <span className="font-medium">{t('buyerDashboard.tab.overview')}</span>
               </button>
               
               <button
@@ -186,7 +191,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                 </svg>
-                <span className="font-medium">Saved Searches</span>
+                <span className="font-medium">{t('buyerDashboard.tab.savedSearches')}</span>
               </button>
               
               <button
@@ -200,7 +205,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                <span className="font-medium">Recent Activity</span>
+                <span className="font-medium">{t('buyerDashboard.tab.recentActivity')}</span>
               </button>
               
               <button
@@ -214,7 +219,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12.828 7H4.828z"/>
                 </svg>
-                <span className="font-medium">Alerts</span>
+                <span className="font-medium">{t('buyerDashboard.tab.alerts')}</span>
                 {priceDrops.length + newMatches.length > 0 && (
                   <span className="bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold rounded-full px-2 py-0.5 ml-auto">
                     {priceDrops.length + newMatches.length}
@@ -229,10 +234,10 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-reride-text-dark dark:text-reride-text mb-2">
-            My Dashboard
+            {t('buyerDashboard.myDashboard')}
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Welcome back, {currentUser.name}! Here's your activity overview.
+            {t('buyerDashboard.welcomeSubtitle', { name: currentUser.name })}
           </p>
         </div>
 
@@ -264,14 +269,14 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
               <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
-              New Alerts
+              {t('buyerDashboard.newAlerts')}
             </h2>
 
             {/* Price Drops */}
             {priceDrops.length > 0 && (
               <div className="mb-4">
                 <h3 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-2">
-                  🔽 Price Drops ({priceDrops.length})
+                  🔽 {t('buyerDashboard.priceDropsHeading', { count: priceDrops.length })}
                 </h3>
                 {priceDrops.map(drop => {
                   const vehicle = vehicles.find(v => v.id === drop.vehicleId);
@@ -294,7 +299,9 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         </span>
                         {' '}
                         <span className="text-green-600">
-                          (Save ₹{savings.toLocaleString('en-IN')})
+                          {t('buyerDashboard.saveAmount', {
+                            amount: savings.toLocaleString('en-IN'),
+                          })}
                         </span>
                       </p>
                     </div>
@@ -307,7 +314,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {newMatches.length > 0 && (
               <div>
                 <h3 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-2">
-                  ✨ New Matches for Your Searches
+                  ✨ {t('buyerDashboard.newMatchesHeading')}
                 </h3>
                 {newMatches.map(result => {
                   const search = savedSearches.find(s => s.id === result.searchId);
@@ -321,7 +328,9 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         {search.name}
                       </p>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {result.matches.length} new {result.matches.length === 1 ? 'match' : 'matches'} found
+                        {result.matches.length === 1
+                          ? t('buyerDashboard.oneNewMatch')
+                          : t('buyerDashboard.nNewMatches', { count: result.matches.length })}
                       </p>
                     </div>
                   );
@@ -343,13 +352,13 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
-                        ❤️ Your Wishlist
+                        ❤️ {t('buyerDashboard.yourWishlist')}
                       </h3>
                       <button
                         onClick={() => onNavigate(View.WISHLIST)}
                         className="text-reride-orange hover:underline text-sm font-semibold"
                       >
-                        View All →
+                        {t('buyerDashboard.viewAllArrow')}
                       </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -375,7 +384,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 {recentlyViewed.length > 0 && (
                   <div>
                     <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-4">
-                      👁️ Recently Viewed
+                      👁️ {t('buyerDashboard.recentlyViewed')}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {recentlyViewed.map(vehicle => (
@@ -403,20 +412,20 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
-                    Your Saved Searches
+                    {t('buyerDashboard.yourSavedSearches')}
                   </h3>
                 </div>
 
                 {savedSearches.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-gray-500 dark:text-gray-400 mb-4">
-                      No saved searches yet. Save your search criteria to get alerts on new matches!
+                      {t('buyerDashboard.noSavedSearches')}
                     </p>
                     <button
                       onClick={() => onNavigate(View.USED_CARS)}
                       className="btn-brand-primary text-white px-6 py-2 rounded-lg"
                     >
-                      Browse Vehicles
+                      {t('buyerDashboard.browseVehicles')}
                     </button>
                   </div>
                 ) : (
@@ -434,7 +443,9 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                                 {search.name}
                               </h4>
                               <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {matches.length} {matches.length === 1 ? 'match' : 'matches'} found
+                                {matches.length === 1
+                                  ? t('buyerDashboard.oneMatchFound')
+                                  : t('buyerDashboard.nMatchesFound', { count: matches.length })}
                               </p>
                             </div>
                             <button
@@ -451,17 +462,20 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           <div className="flex flex-wrap gap-2 mb-3">
                             {search.filters.make && (
                               <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
-                                Make: {search.filters.make}
+                                {t('buyerDashboard.filter.make', { value: search.filters.make })}
                               </span>
                             )}
                             {search.filters.model && (
                               <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
-                                Model: {search.filters.model}
+                                {t('buyerDashboard.filter.model', { value: search.filters.model })}
                               </span>
                             )}
                             {(search.filters.minPrice || search.filters.maxPrice) && (
                               <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
-                                Price: ₹{(search.filters.minPrice || 0).toLocaleString()} - ₹{(search.filters.maxPrice || 0).toLocaleString()}
+                                {t('buyerDashboard.filter.price', {
+                                  min: (search.filters.minPrice || 0).toLocaleString('en-IN'),
+                                  max: (search.filters.maxPrice || 0).toLocaleString('en-IN'),
+                                })}
                               </span>
                             )}
                           </div>
@@ -475,7 +489,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                               className="rounded"
                             />
                             <span className="text-sm text-gray-700 dark:text-gray-300">
-                              Email me about new matches
+                              {t('buyerDashboard.emailAlerts')}
                             </span>
                           </label>
                         </div>
@@ -490,11 +504,11 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {activeTab === 'activity' && (
               <div>
                 <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-6">
-                  Recent Activity
+                  {t('buyerDashboard.recentActivity')}
                 </h3>
                 {recentlyViewed.length === 0 ? (
                   <p className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    No recent activity. Start browsing vehicles to see them here!
+                    {t('buyerDashboard.noRecentActivity')}
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -521,18 +535,18 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             {activeTab === 'alerts' && (
               <div>
                 <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-6">
-                  Your Alerts
+                  {t('buyerDashboard.yourAlerts')}
                 </h3>
                 {priceDrops.length === 0 && newMatches.length === 0 ? (
                   <p className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    No alerts at the moment. We'll notify you when there are price drops on your wishlist or new matches for your saved searches!
+                    {t('buyerDashboard.noAlerts')}
                   </p>
                 ) : (
                   <div className="space-y-6">
                     {priceDrops.length > 0 && (
                       <div>
                         <h4 className="font-semibold text-reride-text-dark dark:text-reride-text mb-4">
-                          🔽 Price Drops
+                          🔽 {t('buyerDashboard.priceDropsSection')}
                         </h4>
                         <div className="space-y-3">
                           {priceDrops.map(drop => {
@@ -565,6 +579,34 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                                     </p>
                                   </div>
                                 </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {newMatches.length > 0 && (
+                      <div className={priceDrops.length > 0 ? 'mt-6' : ''}>
+                        <h4 className="font-semibold text-reride-text-dark dark:text-reride-text mb-4">
+                          ✨ {t('buyerDashboard.newMatchesHeading')}
+                        </h4>
+                        <div className="space-y-3">
+                          {newMatches.map(result => {
+                            const search = savedSearches.find(s => s.id === result.searchId);
+                            if (!search) return null;
+                            return (
+                              <div
+                                key={result.searchId}
+                                className="bg-white dark:bg-brand-gray-700 rounded-lg p-4"
+                              >
+                                <p className="font-semibold text-reride-text-dark dark:text-reride-text mb-1">
+                                  {search.name}
+                                </p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  {result.matches.length === 1
+                                    ? t('buyerDashboard.oneNewMatch')
+                                    : t('buyerDashboard.nNewMatches', { count: result.matches.length })}
+                                </p>
                               </div>
                             );
                           })}

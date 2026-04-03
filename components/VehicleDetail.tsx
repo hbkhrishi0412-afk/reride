@@ -1,4 +1,5 @@
 import React, { useState, useMemo, memo, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle, ProsAndCons, User, CertifiedInspection, VehicleDocument } from '../types';
 import { generateProsAndCons } from '../services/geminiService';
 import { getFirstValidImage, getValidImages, getSafeImageSrc, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, VEHICLE_THUMB_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
@@ -7,6 +8,7 @@ import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
 import VerificationBadge from './VerificationBadge';
 import QuickViewModal from './QuickViewModal';
+import { VehicleOfferBanner } from './VehicleOfferBanner';
 import VehicleHistory from './VehicleHistory';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
@@ -39,22 +41,31 @@ const ICONS = {
 };
 
 const SocialShareButtons: React.FC = () => {
-    const [copyStatus, setCopyStatus] = useState('Copy Link');
+    const { t } = useTranslation();
+    const [copyState, setCopyState] = useState<'default' | 'copied' | 'failed'>('default');
 
     const handleCopyLink = () => {
+        const reset = () => setCopyState('default');
         if (navigator.clipboard) {
             navigator.clipboard.writeText(window.location.href).then(() => {
-                setCopyStatus('Copied!');
-                setTimeout(() => setCopyStatus('Copy Link'), 2000);
+                setCopyState('copied');
+                setTimeout(reset, 2000);
             }, () => {
-                setCopyStatus('Failed!');
-                setTimeout(() => setCopyStatus('Copy Link'), 2000);
+                setCopyState('failed');
+                setTimeout(reset, 2000);
             });
         } else {
-            setCopyStatus('Failed!');
-            setTimeout(() => setCopyStatus('Copy Link'), 2000);
+            setCopyState('failed');
+            setTimeout(reset, 2000);
         }
     };
+
+    const copyLabel =
+        copyState === 'copied'
+            ? t('vehicle.share.copied')
+            : copyState === 'failed'
+              ? t('vehicle.share.failed')
+              : t('vehicle.share.copyLink');
 
     return (
         <div className="flex-1">
@@ -63,7 +74,7 @@ const SocialShareButtons: React.FC = () => {
                 className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold bg-gray-100 text-gray-700 px-3 py-2.5 rounded-lg hover:bg-gray-200 transition-colors"
             >
                 {ICONS.link}
-                <span>{copyStatus}</span>
+                <span>{copyLabel}</span>
             </button>
         </div>
     );
@@ -261,6 +272,7 @@ const CertifiedInspectionReport: React.FC<{ report: CertifiedInspection }> = ({ 
 
 
 export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: onBackToHome, comparisonList, onToggleCompare, onAddSellerRating, wishlist, onToggleWishlist, currentUser, onFlagContent, users, onViewSellerProfile, onStartChat, recommendations, onSelectVehicle, updateVehicle: updateVehicleProp }) => {
+  const { t } = useTranslation();
   console.log('🎯 VehicleDetail component rendering with vehicle:', vehicle);
   console.log('🎯 Vehicle data:', { id: vehicle?.id, make: vehicle?.make, model: vehicle?.model, price: vehicle?.price });
   
@@ -490,31 +502,36 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to Listings
+                {t('vehicle.detail.backToListings')}
               </button>
 
-              {/* Offer Banner - Reride Style */}
-              <div className="mb-6 bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg p-4 text-white">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                    <span className="text-lg sm:text-xl font-bold">🎉 SPECIAL OFFER</span>
-                    <span className="text-gray-200">•</span>
-                    <span className="text-xs sm:text-sm whitespace-nowrap">8 - 31 DEC</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs sm:text-sm flex-wrap">
-                    <span className="whitespace-nowrap">LOAN OFFERS ON ALL CARS</span>
-                    <span className="font-bold whitespace-nowrap">ROI STARTING AT 10.5%*</span>
-                  </div>
-                </div>
-              </div>
+              <VehicleOfferBanner vehicle={safeVehicle} className="mb-6" />
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
                   {/* Left Column: Media and Details */}
                   <div className="lg:col-span-2 space-y-4">
                     {safeVehicle.videoUrl && (
                       <div className="flex space-x-2 border-b-2 border-gray-200">
-                        <button onClick={() => setActiveMediaTab('images')} className={`py-2 px-4 font-semibold transition-colors ${activeMediaTab === 'images' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-gray-600'}`}>Images</button>
-                        <button onClick={() => setActiveMediaTab('video')} className={`py-2 px-4 font-semibold transition-colors ${activeMediaTab === 'video' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-gray-600'}`}>Video</button>
+                        <button
+                          onClick={() => setActiveMediaTab('images')}
+                          className={`py-2 px-4 font-semibold transition-colors ${
+                            activeMediaTab === 'images'
+                              ? 'border-b-2 border-purple-600 text-purple-600'
+                              : 'text-gray-600'
+                          }`}
+                        >
+                          {t('vehicle.detail.media.images')}
+                        </button>
+                        <button
+                          onClick={() => setActiveMediaTab('video')}
+                          className={`py-2 px-4 font-semibold transition-colors ${
+                            activeMediaTab === 'video'
+                              ? 'border-b-2 border-purple-600 text-purple-600'
+                              : 'text-gray-600'
+                          }`}
+                        >
+                          {t('vehicle.detail.media.video')}
+                        </button>
                       </div>
                     )}
                     {activeMediaTab === 'images' ? (
@@ -539,12 +556,20 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 />
                                 {validImages.length > 1 && (
                                     <>
-                                        <button onClick={handlePrevImage} className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100" aria-label="Previous image">
+                        <button
+                          onClick={handlePrevImage}
+                          className="absolute top-1/2 left-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100"
+                          aria-label={t('vehicle.detail.media.previousImage')}
+                        >
                                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                           </svg>
                                         </button>
-                                        <button onClick={handleNextImage} className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100" aria-label="Next image">
+                        <button
+                          onClick={handleNextImage}
+                          className="absolute top-1/2 right-4 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-all focus:opacity-100"
+                          aria-label={t('vehicle.detail.media.nextImage')}
+                        >
                                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                           </svg>
@@ -580,14 +605,18 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
-                              <p className="text-lg font-medium">No images available</p>
+                              <p className="text-lg font-medium">
+                                {t('vehicle.detail.media.noImagesAvailable')}
+                              </p>
                             </div>
                           </div>
                         )}
                       </>
                     ) : (
                       <div className="w-full aspect-video bg-black rounded-xl shadow-lg overflow-hidden animate-fade-in">
-                        <video src={safeVehicle.videoUrl} controls className="w-full h-full object-cover">Your browser does not support the video tag.</video>
+                        <video src={safeVehicle.videoUrl} controls className="w-full h-full object-cover">
+                          Your browser does not support the video tag.
+                        </video>
                       </div>
                     )}
                     
@@ -603,7 +632,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 : 'text-gray-600 hover:text-gray-900'
                             }`}
                           >
-                            OVERVIEW
+                            {t('vehicle.detail.tabs.overview')}
                             {activeTab === 'overview' && (
                               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
                             )}
@@ -617,7 +646,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   : 'text-gray-600 hover:text-gray-900'
                               }`}
                             >
-                              REPORT
+                              {t('vehicle.detail.tabs.report')}
                               {activeTab === 'report' && (
                                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
                               )}
@@ -631,7 +660,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 : 'text-gray-600 hover:text-gray-900'
                             }`}
                           >
-                            FEATURE & SPECS
+                            {t('vehicle.detail.tabs.featureSpecs')}
                             {activeTab === 'features' && (
                               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600"></span>
                             )}
@@ -647,33 +676,41 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               {/* Left Column - Overview Content */}
                               <div className="lg:col-span-2 space-y-6">
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                  <KeySpec label="Make Year" value={safeVehicle.year} />
-                                  <KeySpec label="Registration" value={safeVehicle.registrationYear} />
-                                  <KeySpec label="Fuel Type" value={safeVehicle.fuelType} />
-                                  <KeySpec label="Km Driven" value={typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'} />
-                                  <KeySpec label="Transmission" value={safeVehicle.transmission} />
-                                  <KeySpec label="Owners" value={safeVehicle.noOfOwners} />
-                                  <KeySpec label="Insurance" value={(() => {
+                                  <KeySpec label={t('vehicle.year')} value={safeVehicle.year} />
+                                  <KeySpec
+                                    label={t('vehicle.spec.registrationYear')}
+                                    value={safeVehicle.registrationYear}
+                                  />
+                                  <KeySpec label={t('vehicle.fuel')} value={safeVehicle.fuelType} />
+                                  <KeySpec
+                                    label={t('vehicle.mileage')}
+                                    value={typeof safeVehicle.mileage === 'number' ? safeVehicle.mileage.toLocaleString('en-IN') : '0'}
+                                  />
+                                  <KeySpec label={t('vehicle.transmission')} value={safeVehicle.transmission} />
+                                  <KeySpec label={t('vehicle.spec.ownersShort')} value={safeVehicle.noOfOwners} />
+                                  <KeySpec label={t('vehicle.detail.specs.insurance')} value={(() => {
                                     const insurance = safeVehicle.insuranceValidity;
-                                    if (!insurance || insurance.trim() === '') return 'Not specified';
+                                    if (!insurance || insurance.trim() === '') return t('vehicle.detail.insurance.notSpecified');
                                     // Validate insurance date - if it's a date format, check if it makes sense
                                     if (insurance.match(/^\d{4}-\d{2}-\d{2}$/)) {
                                       const insuranceDate = new Date(insurance);
                                       const vehicleYear = safeVehicle.year || safeVehicle.registrationYear;
                                       // If insurance date is before vehicle year, it's invalid
                                       if (vehicleYear && insuranceDate.getFullYear() < vehicleYear) {
-                                        return 'Invalid date';
+                                        return t('vehicle.detail.insurance.invalidDate');
                                       }
                                       // Format date nicely
                                       return insuranceDate.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
                                     }
                                     return insurance;
                                   })()} />
-                                  <KeySpec label="RTO" value={safeVehicle.rto} />
+                                  <KeySpec label={t('vehicle.detail.specs.rto')} value={safeVehicle.rto} />
                                 </div>
                                 {safeVehicle.description && (
                                   <div>
-                                    <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-2">Description</h4>
+                                    <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-2">
+                                      {t('vehicle.detail.descriptionLabel')}
+                                    </h4>
                                     <p className="text-reride-text-dark dark:text-reride-text-dark whitespace-pre-line">{safeVehicle.description}</p>
                                   </div>
                                 )}
@@ -687,11 +724,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                                       </svg>
-                                      Finance Partners
+                                      {t('vehicle.detail.financePartners.title')}
                                     </h3>
                                     {seller.partnerBanks && seller.partnerBanks.length > 0 ? (
                                       <div className="space-y-3">
-                                        <p className="text-xs text-gray-600">This seller is partnered with the following banks for vehicle financing:</p>
+                                        <p className="text-xs text-gray-600">
+                                          {t('vehicle.detail.financePartners.description')}
+                                        </p>
                                         <div className="grid grid-cols-2 gap-3">
                                           {seller.partnerBanks.map((bank, index) => (
                                             <div
@@ -701,7 +740,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                               <div className="flex items-center justify-center w-full h-16">
                                                 {getBankLogo(bank, 'md')}
                                               </div>
-                                              <span className="text-xs font-semibold text-purple-700 text-center leading-tight line-clamp-2">
+                                <span className="text-xs font-semibold text-purple-700 text-center leading-tight line-clamp-2">
                                                 {bank}
                                               </span>
                                             </div>
@@ -713,7 +752,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
-                                        <span>No finance partners available for this seller.</span>
+                                        <span>{t('vehicle.detail.financePartners.none')}</span>
                                       </div>
                                     )}
                                   </div>
@@ -729,11 +768,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                                     </svg>
-                                    Finance Partners
+                                    {t('vehicle.detail.financePartners.title')}
                                   </h3>
                                   {seller.partnerBanks && seller.partnerBanks.length > 0 ? (
                                     <div className="space-y-3">
-                                      <p className="text-xs text-gray-600">This seller is partnered with the following banks for vehicle financing:</p>
+                                      <p className="text-xs text-gray-600">
+                                        {t('vehicle.detail.financePartners.description')}
+                                      </p>
                                       <div className="grid grid-cols-2 gap-3">
                                         {seller.partnerBanks.map((bank, index) => (
                                           <div
@@ -755,7 +796,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                       </svg>
-                                      <span>No finance partners available for this seller.</span>
+                                      <span>{t('vehicle.detail.financePartners.none')}</span>
                                     </div>
                                   )}
                                 </div>
@@ -774,23 +815,27 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                           <div className="p-6 space-y-8">
                             {/* Detailed Specifications */}
                             <div>
-                              <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Detailed Specifications</h3>
+                              <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
+                                {t('vehicle.detail.detailedSpecifications')}
+                              </h3>
                               <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                                <SpecDetail label="Engine" value={safeVehicle.engine} />
-                                <SpecDetail label="Displacement" value={safeVehicle.displacement} />
-                                <SpecDetail label="Transmission" value={safeVehicle.transmission} />
-                                <SpecDetail label="Fuel Type" value={safeVehicle.fuelType} />
-                                <SpecDetail label="Mileage / Range" value={safeVehicle.fuelEfficiency} />
-                                <SpecDetail label="Ground Clearance" value={safeVehicle.groundClearance} />
-                                <SpecDetail label="Boot Space" value={safeVehicle.bootSpace} />
-                                <SpecDetail label="Color" value={safeVehicle.color} />
+                                <SpecDetail label={t('compare.field.engine')} value={safeVehicle.engine} />
+                                <SpecDetail label={t('compare.field.displacement')} value={safeVehicle.displacement} />
+                                <SpecDetail label={t('vehicle.transmission')} value={safeVehicle.transmission} />
+                                <SpecDetail label={t('vehicle.fuel')} value={safeVehicle.fuelType} />
+                                <SpecDetail label={t('vehicle.detail.mileageLabel')} value={safeVehicle.fuelEfficiency} />
+                                <SpecDetail label={t('vehicle.detail.specs.groundClearance')} value={safeVehicle.groundClearance} />
+                                <SpecDetail label={t('vehicle.detail.specs.bootSpace')} value={safeVehicle.bootSpace} />
+                                <SpecDetail label={t('compare.field.color')} value={safeVehicle.color} />
                               </dl>
                             </div>
 
                             {/* Features, Pros & Cons */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                               <div>
-                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Included Features</h4>
+                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
+                                  {t('vehicle.detail.includedFeatures')}
+                                </h4>
                                 {safeVehicle.features.length > 0 ? (
                                   <div className="flex flex-wrap gap-3">
                                     {safeVehicle.features.map(feature => (
@@ -800,25 +845,38 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                       </div>
                                     ))}
                                   </div>
-                                ) : <p className="text-reride-text">No features listed.</p>}
+                                ) : <p className="text-reride-text">{t('vehicle.detail.noFeaturesListed')}</p>}
                               </div>
                               <div>
-                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">AI Expert Analysis</h4>
+                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
+                                  {t('vehicle.detail.aiExpertAnalysis')}
+                                </h4>
                                 {isGeneratingProsCons ? (
-                                  <div className="flex items-center gap-2 text-reride-text"><div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin" style={{ borderColor: '#FF6B35' }}></div> Generating...</div>
+                                  <div className="flex items-center gap-2 text-reride-text">
+                                    <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin" style={{ borderColor: '#FF6B35' }}></div>
+                                    {t('vehicle.detail.ai.generating')}
+                                  </div>
                                 ) : prosAndCons ? (
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                      <h5 className="font-semibold text-reride-orange mb-2">Pros</h5>
+                                      <h5 className="font-semibold text-reride-orange mb-2">{t('vehicle.detail.ai.pros')}</h5>
                                       <ul className="list-disc list-inside space-y-1 text-sm">{prosAndCons.pros.map((p, i) => <li key={i}>{p}</li>)}</ul>
                                     </div>
                                     <div>
-                                      <h5 className="font-semibold text-reride-orange mb-2">Cons</h5>
+                                      <h5 className="font-semibold text-reride-orange mb-2">{t('vehicle.detail.ai.cons')}</h5>
                                       <ul className="list-disc list-inside space-y-1 text-sm">{prosAndCons.cons.map((c, i) => <li key={i}>{c}</li>)}</ul>
                                     </div>
                                   </div>
                                 ) : (
-                                  <button onClick={handleGenerateProsCons} className="text-sm font-bold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>Generate Pros & Cons</button>
+                                  <button
+                                    onClick={handleGenerateProsCons}
+                                    className="text-sm font-bold hover:underline transition-colors"
+                                    style={{ color: '#FF6B35' }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--reride-blue)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--reride-orange)')}
+                                  >
+                                    {t('vehicle.detail.ai.generateProsConsDesktop')}
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -831,12 +889,14 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                     <div className="mt-6 space-y-6">
                     {/* ✅ FIX: Removed duplicate section - Vehicle History & Documents */}
                     {(safeVehicle.serviceRecords || safeVehicle.accidentHistory || safeVehicle.documents) && (
-                        <CollapsibleSection title="Vehicle History & Documents">
+                        <CollapsibleSection title={t('vehicle.detail.historyAndDocs')}>
                             {(safeVehicle.serviceRecords || safeVehicle.accidentHistory) && (
                                 <VehicleHistory serviceRecords={safeVehicle.serviceRecords || []} accidentHistory={safeVehicle.accidentHistory || []} />
                             )}
                             {safeVehicle.documents && safeVehicle.documents.length > 0 && <div className="mt-6">
-                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Available Documents</h4>
+                                <h4 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
+                                  {t('vehicle.detail.availableDocuments')}
+                                </h4>
                                 <div className="flex flex-wrap gap-4">
                                     {safeVehicle.documents.map(doc => <DocumentChip key={doc.name} doc={doc} />)}
                                 </div>
@@ -870,7 +930,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 ? 'text-red-500 hover:text-red-600' 
                                 : 'text-gray-400 hover:text-red-500'
                             }`}
-                            aria-label={isInWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                            aria-label={isInWishlist ? t('vehicle.card.wishlistRemove') : t('vehicle.card.wishlistAdd')}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill={isInWishlist ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
                               <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
@@ -893,7 +953,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          <span>{safeVehicle.location || `${safeVehicle.city || ''}, ${safeVehicle.state || ''}`.trim() || 'Location not specified'}</span>
+                          <span>
+                            {safeVehicle.location ||
+                              `${safeVehicle.city || ''}, ${safeVehicle.state || ''}`.trim() ||
+                              t('vehicle.detail.locationNotSpecified')}
+                          </span>
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                           </svg>
@@ -918,12 +982,14 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1.5 mt-0.5">
-                                  <span className="text-xs text-gray-500">{getFollowersCount(seller.email)} Followers</span>
+                                  <span className="text-xs text-gray-500">
+                                    {getFollowersCount(seller.email)} {t('vehicle.detail.followers')}
+                                  </span>
                                   <button 
                                     onClick={() => onViewSellerProfile(seller.email)} 
                                     className="text-xs font-semibold text-purple-600 hover:text-purple-700 hover:underline transition-colors"
                                   >
-                                    View Profile
+                                    {t('vehicle.detail.viewProfile')}
                                   </button>
                                 </div>
                               </div>
@@ -961,13 +1027,15 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                         {/* Pricing */}
                         <div>
                           <div className="flex items-center gap-1.5 mb-1.5">
-                            <span className="text-base text-gray-600">Fixed on road price</span>
+                            <span className="text-base text-gray-600">{t('vehicle.detail.price.fixedOnRoadPrice')}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </div>
                           <p className="text-3xl font-bold text-gray-900">₹{safeVehicle.price.toLocaleString('en-IN')}</p>
-                          <p className="text-base text-gray-500 mt-1">Includes RC transfer, Insurance & more</p>
+                          <p className="text-base text-gray-500 mt-1">
+                            {t('vehicle.detail.price.includesRcTransfer')}
+                          </p>
                         </div>
 
                         {/* EMI Details */}
@@ -990,7 +1058,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 }}
                                 className="text-base text-purple-600 font-semibold hover:underline"
                               >
-                                {showEMICalculator ? 'Hide EMI Calculator' : 'Calculate your EMI'}
+                                {showEMICalculator ? t('vehicle.detail.hideEmiCalculator') : t('vehicle.detail.price.calculateEmi')}
                               </button>
                             </div>
                           </div>
@@ -999,7 +1067,11 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                             </svg>
-                            <span className="text-base text-gray-700 leading-tight">Save extra ₹{Math.round(baseEMI * 12 * 0.0125).toLocaleString('en-IN')} in loan interest with 1.25% lower rate</span>
+                            <span className="text-base text-gray-700 leading-tight">
+                              {t('vehicle.detail.price.saveExtraLoanInterest', {
+                                amount: Math.round(baseEMI * 12 * 0.0125).toLocaleString('en-IN'),
+                              })}
+                            </span>
                           </div>
                         </div>
 
@@ -1019,10 +1091,10 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                 </svg>
-                                Comparing
+                                {t('vehicle.detail.comparing')}
                               </>
                             ) : (
-                              'Compare'
+                              t('vehicle.detail.compare')
                             )}
                           </button>
                           <SocialShareButtons />
@@ -1038,7 +1110,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                             </svg>
-                            Chat with Seller
+                            {t('vehicle.detail.chatWithSeller')}
                           </button>
                         </div>
 
@@ -1047,11 +1119,18 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
               </div>
 
               <div className="text-center mt-12">
-                  <button onClick={handleFlagClick} className="text-xs text-reride-text hover:text-reride-orange">Report this listing</button>
+                  <button
+                    onClick={handleFlagClick}
+                    className="text-xs text-reride-text hover:text-reride-orange"
+                  >
+                    {t('vehicle.detail.reportThisListing')}
+                  </button>
               </div>
 
               {filteredRecommendations.length > 0 && <div className="mt-12">
-                  <h2 className="text-3xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Similar Vehicles</h2>
+                  <h2 className="text-3xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">
+                    {t('vehicle.detail.similarVehicles')}
+                  </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                       {filteredRecommendations.map(v => (
                           <VehicleCard key={v.id} vehicle={v} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(v.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(v.id)} isCompareDisabled={!comparisonList.includes(v.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} onQuickView={setQuickViewVehicle}/>

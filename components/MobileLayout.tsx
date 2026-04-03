@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import MobileHeader from './MobileHeader';
 import MobileBottomNav from './MobileBottomNav';
+import MobileBrandTopBar from './MobileBrandTopBar';
 import type { User } from '../types';
 import { View as ViewEnum } from '../types';
 
@@ -43,27 +44,28 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const shouldRenderHeader = showHeader || showMenu;
-  const headerHeight = showHeader ? 56 : 0;
+  const headerRowPx = showHeader ? 56 : 0;
+  const brandBarInnerPx = 48;
   const bottomNavHeight = showBottomNav ? 70 : 0; // Updated to match refined premium nav height
-  
+
   // Memoize computed styles to prevent recalculation
   const mainStyles = useMemo(() => {
-    const mainMarginTop = showHeader ? `${headerHeight}px` : '0px';
     const safeAreaTop = 'env(safe-area-inset-top, 0px)';
     const safeAreaBottom = 'env(safe-area-inset-bottom, 0px)';
-    
+    const topChrome = `calc(${safeAreaTop} + ${brandBarInnerPx}px + ${headerRowPx}px)`;
+
     return {
-      height: `calc(100vh - ${headerHeight}px - ${bottomNavHeight}px)`,
-      marginTop: mainMarginTop,
+      height: `calc(100vh - ${safeAreaTop} - ${brandBarInnerPx}px - ${headerRowPx}px - ${bottomNavHeight}px)`,
+      marginTop: topChrome,
       marginBottom: `${bottomNavHeight}px`,
-      paddingTop: safeAreaTop,
+      paddingTop: 0,
       paddingBottom: safeAreaBottom,
       paddingLeft: 'env(safe-area-inset-left, 0px)',
       paddingRight: 'env(safe-area-inset-right, 0px)',
       WebkitOverflowScrolling: 'touch' as const,
       overscrollBehavior: 'contain' as const,
     };
-  }, [headerHeight, bottomNavHeight, showHeader]);
+  }, [brandBarInnerPx, headerRowPx, bottomNavHeight]);
 
   // Check if this is the Home or Login view to allow gradient background
   const shouldShowGradient = useMemo(() => {
@@ -84,6 +86,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
         background: 'transparent'
       } : {}}
     >
+      <MobileBrandTopBar onNavigate={onNavigate} wishlistCount={wishlistCount} />
       {shouldRenderHeader && (
         <MobileHeader
           onNavigate={onNavigate}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { getFirstValidImage, getValidImages, getSafeImageSrc } from '../utils/imageUtils';
 
@@ -21,6 +22,7 @@ interface QuickViewModalProps {
 }
 
 const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSelectVehicle, onToggleCompare, onToggleWishlist, comparisonList, wishlist }) => {
+  const { t } = useTranslation();
   const [mainImage, setMainImage] = useState(() => vehicle ? getFirstValidImage(vehicle.images, vehicle.id) : '');
 
   useEffect(() => {
@@ -83,7 +85,12 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSel
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-fade-in" onClick={onClose} style={{ zIndex: 9999 }}>
       <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 w-full max-w-4xl max-h-[90vh] flex flex-col md:flex-row overflow-hidden relative" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-600 hover:text-gray-800 bg-white/80 backdrop-blur-sm rounded-full w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-lg z-10 text-xl transition-all duration-300 transform hover:scale-110">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('common.close')}
+          className="absolute top-4 right-4 text-gray-600 hover:text-gray-800 bg-white/80 backdrop-blur-sm rounded-full w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-lg z-10 text-xl transition-all duration-300 transform hover:scale-110"
+        >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -92,7 +99,11 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSel
         {/* Premium Image Section */}
         <div className="w-full md:w-1/2 p-6 flex flex-col">
           <div className="relative overflow-hidden rounded-2xl mb-4">
-            <img src={getSafeImageSrc(mainImage)} alt={`${vehicle.make || 'Vehicle'} ${vehicle.model || ''}`} className="w-full h-64 md:h-80 object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500" />
+            <img
+              src={getSafeImageSrc(mainImage)}
+              alt={`${vehicle.make || t('vehicle.quickView.vehicleFallback')} ${vehicle.model || ''}`}
+              className="w-full h-64 md:h-80 object-cover rounded-2xl group-hover:scale-105 transition-transform duration-500"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent rounded-2xl"></div>
           </div>
           {vehicle.images && vehicle.images.length > 1 && (
@@ -101,7 +112,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSel
                 <img
                   key={index}
                   src={img}
-                  alt={`Thumbnail ${index + 1}`}
+                  alt={t('vehicle.quickView.thumbnail', { index: index + 1 })}
                   className={`cursor-pointer rounded-xl border-2 h-16 w-full object-cover transition-all duration-300 hover:scale-105 ${
                     mainImage === img 
                       ? 'border-blue-500 shadow-lg' 
@@ -118,31 +129,54 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSel
         <div className="w-full md:w-1/2 p-6 flex flex-col overflow-y-auto">
           <div className="mb-6">
             <h2 className="text-3xl font-black bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent mb-2">
-              {vehicle.year || 'N/A'} {vehicle.make || 'Vehicle'} {vehicle.model || ''}
+              {vehicle.year || t('compare.notAvailable')}{' '}
+              {vehicle.make || t('vehicle.quickView.vehicleFallback')} {vehicle.model || ''}
             </h2>
-            <p className="text-lg text-gray-600 font-medium">{vehicle.variant || 'Standard'}</p>
+            <p className="text-lg text-gray-600 font-medium">
+              {vehicle.variant || t('vehicle.quickView.variantDefault')}
+            </p>
             <div className="mt-4">
               <span className="text-4xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                ₹{(vehicle.price / 100000).toFixed(2)} Lakh
+                {t('vehicle.tile.priceLakh', { value: (vehicle.price / 100000).toFixed(2) })}
               </span>
-              <p className="text-sm text-gray-500 mt-1">EMI from ₹{(vehicle.price / 60 / 1000).toFixed(1)}k/month</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {t('vehicle.quickView.emiFrom', { k: (vehicle.price / 60 / 1000).toFixed(1) })}
+              </p>
             </div>
           </div>
 
           <div className="space-y-2 my-4">
-            <KeySpec label="Mileage" value={`${vehicle.mileage ? vehicle.mileage.toLocaleString('en-IN') : 'N/A'} kms`} />
-            <KeySpec label="Fuel Type" value={vehicle.fuelType || 'N/A'} />
-            <KeySpec label="Transmission" value={vehicle.transmission || 'N/A'} />
-            <KeySpec label="Registration Year" value={vehicle.registrationYear || 'N/A'} />
-            <KeySpec label="No. of Owners" value={vehicle.noOfOwners || 'N/A'} />
+            <KeySpec
+              label={t('vehicle.detail.mileageLabel')}
+              value={t('vehicle.spec.mileageKms', {
+                value: vehicle.mileage ? vehicle.mileage.toLocaleString('en-IN') : t('compare.notAvailable'),
+              })}
+            />
+            <KeySpec
+              label={t('vehicle.fuel')}
+              value={vehicle.fuelType || t('compare.notAvailable')}
+            />
+            <KeySpec
+              label={t('vehicle.transmission')}
+              value={vehicle.transmission || t('compare.notAvailable')}
+            />
+            <KeySpec
+              label={t('vehicle.spec.registrationYear')}
+              value={String(vehicle.registrationYear ?? t('compare.notAvailable'))}
+            />
+            <KeySpec
+              label={t('vehicle.spec.ownersShort')}
+              value={String(vehicle.noOfOwners ?? t('compare.notAvailable'))}
+            />
           </div>
 
           <div className="mt-auto pt-6 space-y-3">
-             <button onClick={handleFullDetailsClick} className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-xl text-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg">
-                View Full Details
+             <button type="button" onClick={handleFullDetailsClick} className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-xl text-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg">
+                {t('vehicle.quickView.viewFullDetails')}
             </button>
             <div className="flex gap-3">
                 <button
+                    type="button"
                     onClick={() => onToggleWishlist(vehicle.id)}
                     className={`w-full font-bold py-3 px-6 rounded-xl text-lg transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2 ${
                       isInWishlist 
@@ -153,9 +187,10 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSel
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                     </svg>
-                    {isInWishlist ? 'In Wishlist' : 'Add to Wishlist'}
+                    {isInWishlist ? t('vehicle.quickView.inWishlist') : t('vehicle.quickView.addToWishlist')}
                 </button>
                  <button
+                    type="button"
                     onClick={() => onToggleCompare(vehicle.id)}
                     disabled={isCompareDisabled}
                     className={`w-full font-bold py-3 px-6 rounded-xl text-lg transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2 ${
@@ -167,7 +202,7 @@ const QuickViewModal: React.FC<QuickViewModalProps> = ({ vehicle, onClose, onSel
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
                     </svg>
-                    {isComparing ? 'Comparing' : 'Compare'}
+                    {isComparing ? t('vehicle.quickView.comparing') : t('vehicle.quickView.compare')}
                 </button>
             </div>
           </div>

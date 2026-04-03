@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface EMICalculatorProps {
   principal?: number;
@@ -19,6 +20,7 @@ export default function EMICalculator({
   onEmiChange,
   className = '',
 }: EMICalculatorProps) {
+  const { t } = useTranslation();
   const [principal, setPrincipal] = useState(initialPrincipal);
   const [rate, setRate] = useState(DEFAULT_RATE);
   const [tenureMonths, setTenureMonths] = useState(DEFAULT_TENURE_MONTHS);
@@ -79,7 +81,7 @@ export default function EMICalculator({
       </div>
       <div className="mt-4 border-t border-gray-100 pt-4">
         <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Monthly EMI</span>
+          <span className="text-gray-600">{t('vehicle.detail.price.monthlyEmi')}</span>
           <span className="font-semibold text-orange-600">₹{Math.round(emi).toLocaleString('en-IN')}</span>
         </div>
         <div className="mt-1 flex justify-between text-sm">

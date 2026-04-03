@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, User } from '../types';
 import { login, register } from '../services/userService';
 import { signInWithGoogle } from '../services/authService';
@@ -29,6 +30,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   forcedRole,
   hideRolePicker
 }) => {
+  const { t, i18n } = useTranslation();
   const { isMobileApp } = useIsMobileApp();
   const initialRole: UserRole = (forcedRole ?? (allowedRoles[0] as UserRole));
   const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
@@ -41,40 +43,56 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Role configurations
-  const roleConfig = {
-    customer: {
-      title: 'Customer',
-      description: 'Buy vehicles and connect with sellers',
-      icon: '🛒',
-      color: 'bg-blue-500',
-      loginTitle: 'Welcome Back, Customer!',
-      registerTitle: 'Join as a Customer'
-    },
-    seller: {
-      title: 'Seller',
-      description: 'List vehicles and manage your business',
-      icon: '🏪',
-      color: 'bg-green-500',
-      loginTitle: 'Seller Dashboard Login',
-      registerTitle: 'Create Seller Account'
-    },
-    admin: {
-      title: 'Admin',
-      description: 'Manage platform and oversee operations',
-      icon: '⚙️',
-      color: 'bg-purple-500',
-      loginTitle: 'Admin Panel Login',
-      registerTitle: 'Admin Registration'
-    },
-    // Placeholder config for service provider to avoid undefined access
-    service_provider: {
-      title: 'Service Provider',
-      description: 'Manage car services',
-      icon: '🛠️',
-      color: 'bg-blue-500',
-      loginTitle: 'Service Provider Login',
-      registerTitle: 'Service Provider'
+  const roleConfig = useMemo(
+    () => ({
+      customer: {
+        title: t('auth.role.customer.title'),
+        description: t('auth.role.customer.description'),
+        icon: '🛒',
+        color: 'bg-blue-500',
+        loginTitle: t('auth.role.customer.loginTitle'),
+        registerTitle: t('auth.role.customer.registerTitle'),
+      },
+      seller: {
+        title: t('auth.role.seller.title'),
+        description: t('auth.role.seller.description'),
+        icon: '🏪',
+        color: 'bg-green-500',
+        loginTitle: t('auth.role.seller.loginTitle'),
+        registerTitle: t('auth.role.seller.registerTitle'),
+      },
+      admin: {
+        title: t('auth.role.admin.title'),
+        description: t('auth.role.admin.description'),
+        icon: '⚙️',
+        color: 'bg-purple-500',
+        loginTitle: t('auth.role.admin.loginTitle'),
+        registerTitle: t('auth.role.admin.registerTitle'),
+      },
+      service_provider: {
+        title: t('auth.role.service_provider.title'),
+        description: t('auth.role.service_provider.description'),
+        icon: '🛠️',
+        color: 'bg-blue-500',
+        loginTitle: t('auth.role.service_provider.loginTitle'),
+        registerTitle: t('auth.role.service_provider.registerTitle'),
+      },
+    }),
+    [t, i18n.language]
+  );
+
+  const registerRoleLabel = (role: UserRole): string => {
+    switch (role) {
+      case 'customer':
+        return t('auth.roleRegister.customer');
+      case 'seller':
+        return t('auth.roleRegister.seller');
+      case 'service_provider':
+        return t('auth.roleRegister.service');
+      case 'admin':
+        return t('auth.roleRegister.admin');
+      default:
+        return roleConfig[role]?.title ?? role;
     }
   };
 
@@ -98,7 +116,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       let result: { success: boolean, user?: User, reason?: string, detectedRole?: string };
 
       if (mode === 'login') {
-        if (!email || !password) throw new Error('Please enter both email and password.');
+        if (!email || !password) throw new Error(t('auth.error.emailPasswordRequired'));
         // Prevent submit for service provider placeholder
         if (selectedRole === 'service_provider') {
           onNavigate(View.CAR_SERVICE_LOGIN);
@@ -106,7 +124,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         }
         result = await login({ email, password, role: selectedRole });
       } else {
-        if (!name || !mobile || !email || !password) throw new Error('Please fill in all registration fields.');
+        if (!name || !mobile || !email || !password) throw new Error(t('auth.error.registerFieldsRequired'));
         // Prevent register for service provider placeholder
         if (selectedRole === 'service_provider') {
           onNavigate(View.CAR_SERVICE_LOGIN);
@@ -128,12 +146,12 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         }
       } else {
         // Check if user is a service provider trying to login through regular form
-        const errorMessage = result.reason || 'An unknown error occurred.';
+        const errorMessage = result.reason || t('auth.error.unknown');
         const isServiceProvider = (result as any).isServiceProvider;
         
         if (isServiceProvider) {
           // Redirect to service provider login page
-          setError('Service providers must login through the Service Provider login page.');
+          setError(t('auth.error.serviceProviderLogin'));
           setTimeout(() => {
             onNavigate(View.CAR_SERVICE_LOGIN);
           }, 2000);
@@ -145,13 +163,18 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         if (detectedRole && allowedRoles.includes(detectedRole as UserRole)) {
           // Auto-switch to detected role and show helpful message
           setSelectedRole(detectedRole as UserRole);
-          setError(`Please select "${detectedRole.charAt(0).toUpperCase() + detectedRole.slice(1)}" as your account type and try again.`);
+          const dr = detectedRole as UserRole;
+          setError(
+            t('auth.error.selectRoleTryAgain', {
+              roleLabel: roleConfig[dr]?.title ?? detectedRole,
+            })
+          );
         } else {
           throw new Error(errorMessage);
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to authenticate.');
+      setError(err instanceof Error ? err.message : t('auth.error.failedAuthenticate'));
     } finally {
       setIsLoading(false);
     }
@@ -164,7 +187,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     try {
       // Google sign-in is only available for customer and seller roles
       if (selectedRole === 'admin') {
-        throw new Error('Google sign-in is not available for admin accounts');
+        throw new Error(t('auth.error.googleNotAdmin'));
       }
 
       const result = await signInWithGoogle();
@@ -197,9 +220,9 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         return;
       }
 
-      throw new Error(result.reason || 'Failed to sign in with Google');
+      throw new Error(result.reason || t('auth.error.googleFailed'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
+      setError(err instanceof Error ? err.message : t('auth.error.googleSignInFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -244,13 +267,13 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       return (
         <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">OTP Login Not Available</h2>
-            <p className="text-gray-600 mb-6">OTP login is not available for admin accounts. Please use email and password login.</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">{t('auth.otpNotAvailableTitle')}</h2>
+            <p className="text-gray-600 mb-6">{t('auth.otpNotAvailableBody')}</p>
             <button
               onClick={() => setMode('login')}
               className="w-full px-4 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
             >
-              Back to Login
+              {t('auth.backToLogin')}
             </button>
           </div>
         </div>
@@ -318,10 +341,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 </div>
               </div>
               <h1 className="text-2xl font-extrabold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-1">
-                {isLogin ? 'Welcome Back' : 'Create Account'}
+                {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
               </h1>
               <p className="mt-1 text-sm font-medium text-gray-600">
-                {isLogin ? 'Sign in to continue' : 'Get started with ReRide'}
+                {isLogin ? t('auth.signInContinue') : t('auth.getStarted')}
               </p>
             </div>
             <form className="space-y-4" onSubmit={handleSubmit}>
@@ -329,7 +352,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
                 <div>
                   <label htmlFor="mobile-account-type" className="block text-sm font-semibold text-gray-700 mb-2">
-                    {isLogin ? 'Account Type' : 'I want to'} <span className="text-orange-600">*</span>
+                    {isLogin ? t('auth.accountType') : t('auth.iWantTo')} <span className="text-orange-600">*</span>
                   </label>
                   <select
                     id="mobile-account-type"
@@ -340,28 +363,9 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     required
                   >
                     {allowedRoles.map((role) => {
-                      let displayText = '';
-                      if (isLogin) {
-                        displayText = roleConfig[role].title;
-                      } else {
-                        // Map roles to display text for registration
-                        switch (role) {
-                          case 'customer':
-                            displayText = 'Buy vehicles';
-                            break;
-                          case 'seller':
-                            displayText = 'Sell vehicles';
-                            break;
-                          case 'service_provider':
-                            displayText = 'Provide services';
-                            break;
-                          case 'admin':
-                            displayText = 'Admin';
-                            break;
-                          default:
-                            displayText = (roleConfig as Record<string, { title: string }>)[role]?.title ?? role;
-                        }
-                      }
+                      const displayText = isLogin
+                        ? roleConfig[role].title
+                        : registerRoleLabel(role);
                       return (
                         <option key={role} value={role}>
                           {displayText}
@@ -375,7 +379,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 <>
                   <div>
                     <label htmlFor="mobile-name" className="block text-sm font-semibold text-gray-700 mb-2">
-                      Full Name <span className="text-red-500">*</span>
+                      {t('auth.fullName')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       id="mobile-name"
@@ -383,14 +387,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                       autoComplete="name"
                       required
                       className={mobileFormInputClass}
-                      placeholder="Enter your full name"
+                      placeholder={t('auth.placeholder.fullName')}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                     />
                   </div>
                   <div>
                     <label htmlFor="mobile-tel" className="block text-sm font-semibold text-gray-700 mb-2">
-                      Mobile Number <span className="text-red-500">*</span>
+                      {t('auth.mobileNumber')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       id="mobile-tel"
@@ -398,7 +402,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                       autoComplete="tel"
                       required
                       className={mobileFormInputClass}
-                      placeholder="Enter your mobile number"
+                      placeholder={t('auth.placeholder.mobile')}
                       value={mobile}
                       onChange={(e) => setMobile(e.target.value)}
                     />
@@ -407,7 +411,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               )}
               <div>
                 <label htmlFor="mobile-email" className="block text-sm font-semibold text-gray-700 mb-2">
-                  Email Address <span className="text-red-500">*</span>
+                  {t('auth.emailAddress')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="mobile-email"
@@ -415,21 +419,21 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   autoComplete="email"
                   required
                   className={mobileFormInputClass}
-                  placeholder="Enter your email"
+                  placeholder={t('auth.placeholder.email')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
               <div>
                 <label htmlFor="mobile-password" className="block text-sm font-semibold text-gray-700 mb-2">
-                  Password <span className="text-red-500">*</span>
+                  {t('auth.password')} <span className="text-red-500">*</span>
                 </label>
                 <PasswordInput
                   id="mobile-password"
                   name="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder={t('auth.placeholder.password')}
                   className={mobileFormInputClass}
                   autoComplete={isLogin ? "current-password" : "new-password"}
                   required
@@ -447,14 +451,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded cursor-pointer"
                   />
-                  <span className="ml-2 text-gray-700">Remember me</span>
+                  <span className="ml-2 text-gray-700">{t('auth.rememberMe')}</span>
                 </label>
                 <button
                   type="button"
                   onClick={onForgotPassword}
                   className="text-orange-600 hover:text-orange-700 font-medium"
                 >
-                  Forgot password?
+                  {t('auth.forgotPassword')}
                 </button>
               </div>
             )}
@@ -491,11 +495,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Processing...
+                    {t('auth.processing')}
                   </>
                 ) : (
                   <>
-                    {isLogin ? 'Sign In' : 'Create Account'}
+                    {isLogin ? t('auth.signIn') : t('auth.createAccount')}
                     <svg className="ml-2 w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -512,7 +516,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 <div className="w-full border-t border-gray-200"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white/95 backdrop-blur-sm text-gray-500 font-medium">Or continue with</span>
+                <span className="px-4 bg-white/95 backdrop-blur-sm text-gray-500 font-medium">{t('auth.orContinueWith')}</span>
               </div>
             </div>
 
@@ -529,7 +533,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
-                Google
+                {t('auth.google')}
               </button>
 
               <button
@@ -541,7 +545,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
-                Phone OTP
+                {t('auth.phoneOtp')}
               </button>
             </div>
           </div>
@@ -549,13 +553,13 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           {/* Toggle between Login and Register */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              {isLogin ? t('auth.noAccount') : t('auth.haveAccount')}
               <button
                 type="button"
                 onClick={toggleMode}
                 className="font-semibold text-orange-600 hover:text-orange-700"
               >
-                {isLogin ? 'Create Account' : 'Sign In'}
+                {isLogin ? t('auth.createAccount') : t('auth.signIn')}
               </button>
             </p>
           </div>
@@ -567,7 +571,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               onClick={() => onNavigate(View.USED_CARS)}
               className="text-sm text-gray-500 hover:text-gray-700"
             >
-              Continue as guest →
+              {t('auth.continueGuest')}
             </button>
           </div>
           </div>
@@ -611,10 +615,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               </div>
             </div>
             <h2 className="text-3xl font-extrabold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-2">
-              {isLogin ? 'Welcome Back' : 'Create Account'}
+              {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
             </h2>
             <p className="mt-2 text-sm font-medium text-gray-600">
-              {isLogin ? 'Sign in to continue to your account' : 'Get started with ReRide today'}
+              {isLogin ? t('auth.signInContinueAccount') : t('auth.getStartedToday')}
             </p>
           </div>
 
@@ -623,7 +627,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
               <div>
                 <label htmlFor="account-type" className="block text-sm font-semibold text-gray-700 mb-2">
-                  {isLogin ? 'Account Type' : 'I want to'} <span className="text-orange-600">*</span>
+                  {isLogin ? t('auth.accountType') : t('auth.iWantTo')} <span className="text-orange-600">*</span>
                 </label>
                 <select
                   id="account-type"
@@ -634,28 +638,9 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   required
                 >
                   {allowedRoles.map((role) => {
-                    let displayText = '';
-                    if (isLogin) {
-                      displayText = roleConfig[role].title;
-                    } else {
-                      // Map roles to display text for registration
-                      switch (role) {
-                        case 'customer':
-                          displayText = 'Buy vehicles';
-                          break;
-                        case 'seller':
-                          displayText = 'Sell vehicles';
-                          break;
-                        case 'service_provider':
-                          displayText = 'Provide services';
-                          break;
-                        case 'admin':
-                          displayText = 'Admin';
-                          break;
-                        default:
-                          displayText = (roleConfig as Record<string, { title: string }>)[role]?.title ?? role;
-                      }
-                    }
+                    const displayText = isLogin
+                      ? roleConfig[role].title
+                      : registerRoleLabel(role);
                     return (
                       <option key={role} value={role}>
                         {displayText}
@@ -669,7 +654,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <>
                 <div>
                   <label htmlFor="full-name" className="block text-sm font-semibold text-gray-700 mb-2">
-                    Full Name <span className="text-red-500">*</span>
+                    {t('auth.fullName')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="full-name"
@@ -678,14 +663,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     autoComplete="name"
                     required
                     className={formInputClass}
-                    placeholder="Enter your full name"
+                    placeholder={t('auth.placeholder.fullName')}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
                 </div>
                 <div>
                   <label htmlFor="mobile-number" className="block text-sm font-semibold text-gray-700 mb-2">
-                    Mobile Number <span className="text-red-500">*</span>
+                    {t('auth.mobileNumber')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="mobile-number"
@@ -694,7 +679,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     autoComplete="tel"
                     required
                     className={formInputClass}
-                    placeholder="Enter your mobile number"
+                    placeholder={t('auth.placeholder.mobile')}
                     value={mobile}
                     onChange={(e) => setMobile(e.target.value)}
                   />
@@ -703,7 +688,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             )}
             <div>
               <label htmlFor="email-address" className="block text-sm font-semibold text-gray-700 mb-2">
-                Email Address <span className="text-red-500">*</span>
+                {t('auth.emailAddress')} <span className="text-red-500">*</span>
               </label>
               <input
                 id="email-address"
@@ -712,21 +697,21 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 autoComplete="email"
                 required
                 className={formInputClass}
-                placeholder="Enter your email"
+                placeholder={t('auth.placeholder.email')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div>
               <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
-                Password <span className="text-red-500">*</span>
+                {t('auth.password')} <span className="text-red-500">*</span>
               </label>
               <PasswordInput
                 id="password"
                 name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                placeholder={t('auth.placeholder.password')}
                 className={formInputClass}
                 autoComplete={isLogin ? "current-password" : "new-password"}
                 required
@@ -745,14 +730,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded cursor-pointer"
                   />
-                  <span className="ml-2 text-gray-700">Remember me</span>
+                  <span className="ml-2 text-gray-700">{t('auth.rememberMe')}</span>
                 </label>
                 <button
                   type="button"
                   onClick={onForgotPassword}
                   className="text-orange-600 hover:text-orange-700 font-medium"
                 >
-                  Forgot password?
+                  {t('auth.forgotPassword')}
                 </button>
               </div>
             )}
@@ -783,10 +768,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Processing...
+                  {t('auth.processing')}
                 </span>
               ) : (
-                isLogin ? 'Sign In' : 'Create Account'
+                isLogin ? t('auth.signIn') : t('auth.createAccount')
               )}
             </button>
           </form>
@@ -798,7 +783,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 <div className="w-full border-t border-gray-200"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white/95 backdrop-blur-sm text-gray-500 font-medium">Or continue with</span>
+                <span className="px-4 bg-white/95 backdrop-blur-sm text-gray-500 font-medium">{t('auth.orContinueWith')}</span>
               </div>
             </div>
 
@@ -815,7 +800,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
-                Google
+                {t('auth.google')}
               </button>
 
               <button
@@ -827,7 +812,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
-                Phone OTP
+                {t('auth.phoneOtp')}
               </button>
             </div>
           </div>
@@ -835,13 +820,13 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           {/* Toggle between Login and Register */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              {isLogin ? t('auth.noAccount') : t('auth.haveAccount')}
               <button
                 type="button"
                 onClick={toggleMode}
                 className="font-semibold text-orange-600 hover:text-orange-700"
               >
-                {isLogin ? 'Create Account' : 'Sign In'}
+                {isLogin ? t('auth.createAccount') : t('auth.signIn')}
               </button>
             </p>
           </div>
@@ -853,7 +838,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               onClick={() => onNavigate(View.USED_CARS)}
               className="text-sm text-gray-500 hover:text-gray-700"
             >
-              Continue as guest →
+              {t('auth.continueGuest')}
             </button>
           </div>
         </div>

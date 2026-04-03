@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { MobileFilterSheet } from './MobileFilterSheet';
+import { useTranslation } from 'react-i18next';
 
 interface MobileEMICalculatorProps {
   price: number;
@@ -14,6 +15,7 @@ export const MobileEMICalculator: React.FC<MobileEMICalculatorProps> = ({
   price,
   onClose
 }) => {
+  const { t } = useTranslation();
   const minDownPayment = Math.round(price * 0.1);
   const maxLoanAmount = price - minDownPayment;
 
@@ -61,7 +63,7 @@ export const MobileEMICalculator: React.FC<MobileEMICalculatorProps> = ({
         {/* Results Card */}
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-6 text-white">
           <div className="text-center mb-4">
-            <p className="text-sm opacity-90 mb-1">Monthly EMI</p>
+            <p className="text-sm opacity-90 mb-1">{t('vehicle.detail.price.monthlyEmi')}</p>
             <p className="text-4xl font-bold">{formatCurrency(emi)}</p>
           </div>
           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/20">

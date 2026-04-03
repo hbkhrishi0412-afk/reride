@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { NewCarModel, NewCarVariant } from '../data/newCarsData.js';
 
 interface CarSpecModalProps {
@@ -24,8 +25,9 @@ const SpecDetail: React.FC<{ label: string, value: string | number | undefined }
 );
 
 const FeatureList: React.FC<{ features: string[] }> = ({ features }) => {
+    const { t } = useTranslation();
     if (features.length === 0) {
-        return <p className="text-sm text-reride-text italic">No features listed for this category.</p>;
+        return <p className="text-sm text-reride-text italic">{t('vehicle.specModal.noFeaturesForCategory')}</p>;
     }
     return (
         <ul className="list-disc list-inside space-y-1 text-sm text-reride-text-dark dark:text-reride-text-dark">

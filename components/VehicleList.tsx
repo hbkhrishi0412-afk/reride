@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import VehicleCard from './VehicleCard.js';
 import MobileVehicleCard from './MobileVehicleCard.js';
 import MobileFilterSheet from './MobileFilterSheet.js';
@@ -93,18 +94,71 @@ const VehicleCardSkeleton: React.FC = () => (
     </div>
 );
 
-const sortOptions = {
-  YEAR_DESC: 'Newest First',
-  RATING_DESC: 'Sort By Rating',
-  PRICE_ASC: 'Price: Low to High',
-  PRICE_DESC: 'Price: High to Low',
-  MILEAGE_ASC: 'Mileage: Low to High',
-};
-
 const MIN_PRICE = 50000;
 const MAX_PRICE = 5000000;
 const MIN_MILEAGE = 0;
 const MAX_MILEAGE = 200000;
+
+/** Haystack for client text match when AI parse fails or returns wrong casing. */
+function vehicleSearchHaystack(v: Vehicle): string {
+  return [
+    v.make,
+    v.model,
+    v.variant,
+    v.year != null ? String(v.year) : '',
+    v.registrationYear != null ? String(v.registrationYear) : '',
+    v.city,
+    v.location,
+    v.state,
+    v.description,
+    v.fuelType,
+    v.transmission,
+    v.color,
+    ...(Array.isArray(v.features) ? v.features : []),
+  ]
+    .filter((x) => x != null && String(x).trim() !== '')
+    .join(' ')
+    .toLowerCase();
+}
+
+/** Every token (length ≥2) must appear in haystack; single-char queries match as substring. */
+function vehicleMatchesSearchText(v: Vehicle, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = vehicleSearchHaystack(v);
+  const tokens = q.split(/\s+/).filter((t) => t.length >= 2);
+  if (tokens.length === 0) return hay.includes(q);
+  return tokens.every((t) => hay.includes(t));
+}
+
+function resolveMakeFromList(parsed: string | undefined, makes: string[]): string | null {
+  if (!parsed?.trim() || makes.length === 0) return null;
+  const p = parsed.trim().toLowerCase();
+  const exact = makes.find((m) => m.toLowerCase().trim() === p);
+  if (exact) return exact;
+  return makes.find((m) => p.includes(m.toLowerCase()) || m.toLowerCase().includes(p)) ?? null;
+}
+
+function resolveModelFromVehicles(
+  parsed: string | undefined,
+  canonicalMake: string,
+  vehicleList: Vehicle[]
+): string | null {
+  if (!parsed?.trim() || !canonicalMake) return null;
+  const models = [
+    ...new Set(
+      (vehicleList || [])
+        .filter((v) => v.make && v.make.toLowerCase() === canonicalMake.toLowerCase())
+        .map((v) => v.model)
+        .filter(Boolean)
+    ),
+  ] as string[];
+  if (models.length === 0) return null;
+  const p = parsed.trim().toLowerCase();
+  const exact = models.find((m) => m.toLowerCase().trim() === p);
+  if (exact) return exact;
+  return models.find((m) => p.includes(m.toLowerCase()) || m.toLowerCase().includes(p)) ?? null;
+}
 
 const VehicleList: React.FC<VehicleListProps> = React.memo(({ 
   vehicles, 
@@ -228,6 +282,17 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   // Mobile app detection
   const { isMobileApp } = useIsMobileApp();
+  const { t, i18n } = useTranslation();
+  const sortOptions = useMemo(
+    () => ({
+      YEAR_DESC: t('listings.sort.yearDesc'),
+      RATING_DESC: t('listings.sort.ratingDesc'),
+      PRICE_ASC: t('listings.sort.priceAsc'),
+      PRICE_DESC: t('listings.sort.priceDesc'),
+      MILEAGE_ASC: t('listings.sort.mileageAsc'),
+    }),
+    [t, i18n.language]
+  );
 
   const aiSearchRef = useRef<HTMLDivElement>(null);
   const featuresFilterRef = useRef<HTMLDivElement>(null);
@@ -622,34 +687,35 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     setShowSuggestions(false);
     setIsAiSearching(true);
     const parsedFilters = await parseSearchQuery(query);
-    
-    if (parsedFilters.make && uniqueMakes.includes(parsedFilters.make)) {
-      const newMake = parsedFilters.make;
-      setMakeFilter(newMake);
-      const modelsForMake = [...new Set((vehicles || []).filter(v => v.make === newMake).map(v => v.model))];
-      if (parsedFilters.model && modelsForMake.includes(parsedFilters.model)) setModelFilter(parsedFilters.model);
-      else setModelFilter('');
+
+    const resolvedMake = resolveMakeFromList(parsedFilters.make, uniqueMakes);
+    if (resolvedMake) {
+      setMakeFilter(resolvedMake);
+      const resolvedModel = resolveModelFromVehicles(parsedFilters.model, resolvedMake, vehicles || []);
+      setModelFilter(resolvedModel ?? '');
     } else if (parsedFilters.model && makeFilter) {
-        const currentModels = [...new Set((vehicles || []).filter(v => v.make === makeFilter).map(v => v.model))];
-        if (currentModels.includes(parsedFilters.model)) setModelFilter(parsedFilters.model);
+      const resolvedModel = resolveModelFromVehicles(parsedFilters.model, makeFilter, vehicles || []);
+      if (resolvedModel) setModelFilter(resolvedModel);
     }
-    
+
     if (parsedFilters.minPrice || parsedFilters.maxPrice) {
       setPriceRange({ min: parsedFilters.minPrice || MIN_PRICE, max: parsedFilters.maxPrice || MAX_PRICE });
     }
     if (parsedFilters.features) {
-        const validFeatures = parsedFilters.features.filter(f => allFeatures.includes(f));
-        setSelectedFeatures(validFeatures);
+      const validFeatures = parsedFilters.features
+        .map((f) => allFeatures.find((af) => af.toLowerCase() === f.toLowerCase().trim()))
+        .filter((x): x is string => Boolean(x));
+      setSelectedFeatures(validFeatures);
     }
-    
+
     setIsAiSearching(false);
   };
-  
+
   useEffect(() => {
-      if (initialSearchQuery) {
-          handleAiSearch(initialSearchQuery);
-      }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!initialSearchQuery?.trim()) return;
+    setAiSearchQuery(initialSearchQuery);
+    void handleAiSearch(initialSearchQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchQuery]);
 
   useEffect(() => {
@@ -967,11 +1033,11 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   const handleSaveSearch = () => {
     if (!currentUser) {
-      alert('Please login to save searches');
+      alert(t('listings.loginToSaveSearch'));
       return;
     }
 
-    const searchName = prompt('Enter a name for this search:');
+    const searchName = prompt(t('listings.saveSearchPrompt'));
     if (!searchName) return;
 
     const filters: SearchFilters = {
@@ -994,12 +1060,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       if (onSaveSearch) {
         onSaveSearch(savedSearch);
       }
-      alert('Search saved successfully!');
+      alert(t('listings.saveSearchSuccess'));
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         logError('Error saving search:', error);
       }
-      alert('Failed to save search. Please try again.');
+      alert(t('listings.saveSearchFailed'));
     }
   };
 
@@ -1076,7 +1142,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           );
           if (!allFeaturesMatch) return false;
         }
-        
+
+        if (!vehicleMatchesSearchText(vehicle, aiSearchQuery)) return false;
+
         return true;
     });
 
@@ -1138,7 +1206,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             default: return b.year - a.year;
         }
     });
-  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, selectedFeatures, sortOrder, isWishlistMode, wishlist, colorFilter, stateFilter, isStateFilterUserSet]);
+  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, selectedFeatures, sortOrder, isWishlistMode, wishlist, colorFilter, stateFilter, isStateFilterUserSet, aiSearchQuery]);
   
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -1457,17 +1525,17 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 <label htmlFor="features-filter-button" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Features</label>
                 <button id="features-filter-button" type="button" onClick={() => isMobile ? setIsMobileFeaturesOpen(p => !p) : setIsFeaturesOpen(p => !p)} className={`${formElementClass} flex justify-between items-center text-left min-h-[50px]`}>
                     <div className="flex flex-wrap gap-1 items-center">
-                        {state.selectedFeatures.length > 0 ? ( state.selectedFeatures.slice(0, 2).map(feature => ( <span key={feature} className="text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1.5" style={{ background: '#FF6B35' }}>{feature} <button type="button" onClick={(e) => { e.stopPropagation(); handleFeatureToggleLocal(feature); }} className="bg-white/20 hover:bg-white/40 rounded-full h-4 w-4 flex items-center justify-center text-white" aria-label={`Remove ${feature}`}>&times;</button></span>)) ) : ( <span className="text-reride-text dark:text-reride-text">Select features...</span> )}
-                        {state.selectedFeatures.length > 2 && ( <span className="text-xs font-semibold text-reride-text dark:text-reride-text">+{state.selectedFeatures.length - 2} more</span> )}
+                        {state.selectedFeatures.length > 0 ? ( state.selectedFeatures.slice(0, 2).map(feature => ( <span key={feature} className="text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1.5" style={{ background: '#FF6B35' }}>{feature} <button type="button" onClick={(e) => { e.stopPropagation(); handleFeatureToggleLocal(feature); }} className="bg-white/20 hover:bg-white/40 rounded-full h-4 w-4 flex items-center justify-center text-white" aria-label={t('listings.removeFeatureAria', { feature })}>&times;</button></span>)) ) : ( <span className="text-reride-text dark:text-reride-text">{t('listings.selectFeaturesPlaceholder')}</span> )}
+                        {state.selectedFeatures.length > 2 && ( <span className="text-xs font-semibold text-reride-text dark:text-reride-text">{t('listings.moreFeatures', { count: state.selectedFeatures.length - 2 })}</span> )}
                     </div>
                     <svg className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${(isMobile ? isMobileFeaturesOpen : isFeaturesOpen) ? 'transform rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
                 </button>
                 {(isMobile ? isMobileFeaturesOpen : isFeaturesOpen) && (
                     <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200-200 dark:border-gray-200-300 z-20 overflow-hidden animate-fade-in">
-                        <div className="p-2"><input ref={featuresSearchInputRef} type="text" placeholder="Search features..." value={isMobile ? tempFilters.featureSearch : featureSearch} onChange={e => { isMobile ? setTempFilters(p => ({...p, featureSearch: e.target.value})) : setFeatureSearch(e.target.value) }} className="block w-full p-2 border border-gray-200-300 dark:border-gray-200-500 rounded-md bg-white text-sm focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }} /></div>
+                        <div className="p-2"><input ref={featuresSearchInputRef} type="text" placeholder={t('listings.searchFeaturesPlaceholder')} value={isMobile ? tempFilters.featureSearch : featureSearch} onChange={e => { isMobile ? setTempFilters(p => ({...p, featureSearch: e.target.value})) : setFeatureSearch(e.target.value) }} className="block w-full p-2 border border-gray-200-300 dark:border-gray-200-500 rounded-md bg-white text-sm focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }} /></div>
                         <div className="max-h-48 overflow-y-auto">
                             {(isMobile ? tempFilteredFeatures : filteredFeatures).map(feature => ( <label key={feature} className="flex items-center space-x-3 cursor-pointer group p-3 transition-colors hover:bg-reride-off-white dark:hover:bg-brand-gray-600"><input type="checkbox" checked={state.selectedFeatures.includes(feature)} onChange={() => handleFeatureToggleLocal(feature)} className="h-4 w-4 rounded border-gray-200-300 dark:border-gray-200-500 bg-transparent" style={{ accentColor: '#FF6B35' }} /><span className="text-sm text-reride-text-dark dark:text-brand-gray-200">{feature}</span></label> ))}
-                            {(isMobile ? tempFilteredFeatures.length === 0 : filteredFeatures.length === 0) && ( <p className="p-3 text-sm text-center text-reride-text dark:text-reride-text">No features found.</p> )}
+                            {(isMobile ? tempFilteredFeatures.length === 0 : filteredFeatures.length === 0) && ( <p className="p-3 text-sm text-center text-reride-text dark:text-reride-text">{t('listings.noFeaturesFound')}</p> )}
                         </div>
                     </div>
                 )}
@@ -1475,7 +1543,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             {!isMobile && (
               <div className="space-y-2 mt-2">
                 <button onClick={handleResetFilters} className="w-full bg-reride-light-gray dark:bg-brand-gray-700 text-reride-text-dark dark:text-brand-gray-200 font-bold py-3 px-4 rounded-lg hover:bg-brand-gray-300 dark:hover:bg-brand-gray-600 transition-colors">
-                  Reset Filters
+                  {t('listings.resetFilters')}
                 </button>
                 <button 
                   onClick={handleSaveSearch} 
@@ -1484,7 +1552,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                   </svg>
-                  Save Search
+                  {t('listings.saveSearchButton')}
                 </button>
               </div>
             )}
@@ -1590,9 +1658,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 )}
               </button>
               <div className="flex-1">
-                <p className="text-xs text-gray-500 font-medium">Showing</p>
+                <p className="text-xs text-gray-500 font-medium">{t('listings.showing')}</p>
                 <p className="text-sm font-bold text-gray-900">
-                  {paginatedVehicles.length} of {processedVehicles.length}
+                  {paginatedVehicles.length} {t('listings.of')} {processedVehicles.length}
                 </p>
               </div>
             </div>
@@ -1658,7 +1726,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     {isLoadingMore ? (
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin border-orange-500"></div>
-                        <span className="text-gray-600 text-sm">Loading more...</span>
+                        <span className="text-gray-600 text-sm">{t('listings.loadingMore')}</span>
                       </div>
                     ) : (
                       <div className="h-20" />
@@ -1667,7 +1735,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 )}
                 {!hasMore && processedVehicles.length > BASE_ITEMS_PER_PAGE && (
                   <div className="text-center py-4 text-xs text-gray-600">
-                    Showing all {processedVehicles.length} vehicles
+                    {t('listings.showingAll', { count: processedVehicles.length })}
                   </div>
                 )}
               </>
@@ -1685,15 +1753,15 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">Unable to load vehicles</h3>
-                    <p className="text-gray-600 text-sm mb-4">Check your connection and try again.</p>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">{t('listings.loadErrorTitle')}</h3>
+                    <p className="text-gray-600 text-sm mb-4">{t('listings.loadErrorHint')}</p>
                     <button
                       type="button"
                       onClick={() => onRetryLoadVehicles()}
                       className="px-5 py-2.5 rounded-xl font-semibold text-white transition-all active:scale-95"
                       style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
                     >
-                      Retry
+                      {t('listings.retry')}
                     </button>
                   </>
                 ) : (
@@ -1703,8 +1771,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">No Vehicles Found</h3>
-                    <p className="text-gray-600 text-sm">Try adjusting your filters or search query</p>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">{t('listings.noVehiclesTitle')}</h3>
+                    <p className="text-gray-600 text-sm">{t('listings.noVehiclesHint')}</p>
                   </>
                 )}
               </div>
@@ -1716,7 +1784,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         <MobileFilterSheet
           isOpen={isFilterModalOpen}
           onClose={handleCloseFilterModal}
-          title="Filters"
+          title={t('listings.filtersTitle')}
           footer={
             <div className="flex gap-3 px-4 pb-4">
               <button 
@@ -1726,7 +1794,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
                 }}
               >
-                Reset
+                {t('listings.reset')}
               </button>
               <button 
                 onClick={handleApplyFilters} 
@@ -1736,7 +1804,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)'
                 }}
               >
-                Apply Filters
+                {t('listings.applyFilters')}
                 {activeFilterCount > 0 && (
                   <span className="ml-2 bg-white/30 text-white text-xs font-bold rounded-full px-2 py-0.5">
                     {activeFilterCount}
@@ -1781,7 +1849,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                       <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
                     </svg>
                   </div>
-                  <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">Filters</h2>
+                  <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">{t('listings.filtersTitle')}</h2>
                 </div>
                 {renderFilterControls(false)}
               </div>
@@ -1844,18 +1912,18 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   )}
                 </button>
                 <p className="text-xs text-gray-600 dark:text-gray-400 flex-shrink-0 ml-1">
-                  <span className="text-gray-500 dark:text-gray-400">Showing</span>{' '}
+                  <span className="text-gray-500 dark:text-gray-400">{t('listings.showing')}</span>{' '}
                   <span className="font-bold text-gray-900 dark:text-white">{paginatedVehicles.length}</span>{' '}
-                  <span className="text-gray-500 dark:text-gray-400">of</span>{' '}
+                  <span className="text-gray-500 dark:text-gray-400">{t('listings.of')}</span>{' '}
                   <span className="font-bold text-gray-900 dark:text-white">{processedVehicles.length}</span>
                 </p>
               </div>
               <div className="flex items-center gap-2 lg:gap-3 w-full sm:w-auto justify-between sm:justify-end">
                 <div className="flex items-center p-0.5 bg-reride-off-white dark:bg-brand-gray-700 rounded-md">
-                  <button title="Grid View" onClick={() => setViewMode('grid')} className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white shadow' : 'text-reride-text hover:text-reride-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'grid' ? { color: '#FF6B35' } : undefined}>
+                  <button title={t('listings.viewGrid')} onClick={() => setViewMode('grid')} className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white shadow' : 'text-reride-text hover:text-reride-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'grid' ? { color: '#FF6B35' } : undefined}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                   </button>
-                  <button title="List View" onClick={() => setViewMode('tile')} className={`p-1.5 rounded transition-colors ${viewMode === 'tile' ? 'bg-white shadow' : 'text-reride-text hover:text-reride-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'tile' ? { color: '#FF6B35' } : undefined}>
+                  <button title={t('listings.viewList')} onClick={() => setViewMode('tile')} className={`p-1.5 rounded transition-colors ${viewMode === 'tile' ? 'bg-white shadow' : 'text-reride-text hover:text-reride-text-dark dark:hover:text-brand-gray-200'}`} style={viewMode === 'tile' ? { color: '#FF6B35' } : undefined}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M2 4a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 9a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zM2 14a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" /></svg>
                   </button>
                 </div>
@@ -1929,7 +1997,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     {isLoadingMore ? (
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 border-4 border-dashed rounded-full animate-spin border-orange-500"></div>
-                        <span className="text-gray-600">Loading more vehicles...</span>
+                        <span className="text-gray-600">{t('listings.loadingMoreDesktop')}</span>
                       </div>
                     ) : (
                       <div className="h-20" /> // Spacer for intersection observer
@@ -1939,7 +2007,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 {/* Show total count */}
                 {!hasMore && processedVehicles.length > BASE_ITEMS_PER_PAGE && (
                   <div className="col-span-full text-center py-4 text-sm text-gray-600">
-                    Showing all {processedVehicles.length} vehicles
+                    {t('listings.showingAll', { count: processedVehicles.length })}
                   </div>
                 )}
               </>
@@ -1947,21 +2015,21 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
                 {sourceVehicleCount === 0 && onRetryLoadVehicles ? (
                   <>
-                    <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">Unable to load vehicles</h3>
-                    <p className="text-reride-text dark:text-reride-text mt-2">Check your connection and try again.</p>
+                    <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">{t('listings.loadErrorTitle')}</h3>
+                    <p className="text-reride-text dark:text-reride-text mt-2">{t('listings.loadErrorHint')}</p>
                     <button
                       type="button"
                       onClick={() => onRetryLoadVehicles()}
                       className="mt-4 px-5 py-2.5 rounded-xl font-semibold text-white transition-all hover:opacity-90"
                       style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
                     >
-                      Retry
+                      {t('listings.retry')}
                     </button>
                   </>
                 ) : (
                   <>
-                    <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">No Vehicles Found</h3>
-                    <p className="text-reride-text dark:text-reride-text mt-2">Try adjusting your filters or using the AI search to find your perfect vehicle.</p>
+                    <h3 className="text-xl font-semibold text-reride-text-dark dark:text-brand-gray-200">{t('listings.noVehiclesTitle')}</h3>
+                    <p className="text-reride-text dark:text-reride-text mt-2">{t('listings.noVehiclesHintDesktop')}</p>
                   </>
                 )}
               </div>
@@ -1975,20 +2043,20 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         <MobileFilterSheet
           isOpen={isFilterModalOpen}
           onClose={handleCloseFilterModal}
-          title="Filters"
+          title={t('listings.filtersTitle')}
           footer={
             <div className="flex gap-3">
               <button 
                 onClick={handleResetTempFilters} 
                 className="flex-1 native-button native-button-secondary font-semibold py-3"
               >
-                Reset
+                {t('listings.reset')}
               </button>
               <button 
                 onClick={handleApplyFilters} 
                 className="flex-1 native-button native-button-primary font-semibold py-3"
               >
-                Apply Filters
+                {t('listings.applyFilters')}
                 {activeFilterCount > 0 && (
                   <span className="ml-2 bg-white/30 text-white text-xs font-bold rounded-full px-2 py-0.5">
                     {activeFilterCount}
@@ -2013,7 +2081,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               }}
             >
                 <div className="p-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0 safe-top">
-                    <h2 className="text-xl font-bold text-gray-900">Filters</h2>
+                    <h2 className="text-xl font-bold text-gray-900">{t('listings.filtersTitle')}</h2>
                     <button 
                       onClick={handleCloseFilterModal} 
                       className="p-2 -mr-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-100 active:opacity-70 native-transition"
@@ -2033,13 +2101,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                       onClick={handleResetTempFilters} 
                       className="flex-1 native-button native-button-secondary font-semibold py-3"
                     >
-                      Reset
+                      {t('listings.reset')}
                     </button>
                     <button 
                       onClick={handleApplyFilters} 
                       className="flex-1 native-button native-button-primary font-semibold py-3"
                     >
-                      Apply Filters
+                      {t('listings.applyFilters')}
                       {activeFilterCount > 0 && (
                         <span className="ml-2 bg-white/30 text-white text-xs font-bold rounded-full px-2 py-0.5">
                           {activeFilterCount}

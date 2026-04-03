@@ -79,7 +79,9 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
+        const target = e.target;
+        const { name } = target;
+        const value = target.type === 'checkbox' ? (target as HTMLInputElement).checked : target.value;
         
         // Clear error when user starts typing
         if (errors[name]) {
@@ -87,7 +89,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         }
         
         // For numeric fields, store as string during editing, parse only on blur or submit
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => ({ ...prev, [name]: value } as Vehicle));
     };
 
     const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -274,7 +276,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
         </div>
     );
 
-    type TabId = 'basic' | 'specs' | 'media' | 'quality';
+    type TabId = 'basic' | 'specs' | 'media' | 'quality' | 'offer';
     const TabButton = ({ tab, label, icon }: { tab: TabId; label: string; icon: string }) => (
         <button
             type="button"
@@ -315,6 +317,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                         <TabButton tab="specs" label="Specifications" icon="⚙️" />
                         <TabButton tab="media" label="Media & Features" icon="📷" />
                         <TabButton tab="quality" label="Quality Report" icon="✅" />
+                        <TabButton tab="offer" label="Listing Offer" icon="🎁" />
                     </div>
 
                     {/* Content Area */}
@@ -568,6 +571,61 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
                                             </div>
                                         )}
                                     </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'offer' && (
+                            <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg space-y-4">
+                                <h3 className="text-lg font-semibold text-reride-text-dark dark:text-white mb-2 flex items-center gap-2">
+                                    <span>🎁</span> Listing offer
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    Shown on the vehicle page when enabled, dates are valid, and at least one text line is filled.
+                                </p>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        id="edit-offer-enabled"
+                                        type="checkbox"
+                                        name="offerEnabled"
+                                        checked={!!formData.offerEnabled}
+                                        onChange={handleChange}
+                                        className="h-5 w-5 rounded border-gray-300"
+                                    />
+                                    <label htmlFor="edit-offer-enabled" className="text-sm font-medium text-reride-text-dark dark:text-white cursor-pointer">
+                                        Enable offer for this listing
+                                    </label>
+                                </div>
+                                <div className={`space-y-4 pt-2 ${formData.offerEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
+                                    <FormInput label="Headline" name="offerTitle" value={formData.offerTitle ?? ''} placeholder="e.g. Special offer" />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <FormInput label="Start date" name="offerStartDate" type="date" value={formData.offerStartDate ?? ''} />
+                                        <FormInput label="End date" name="offerEndDate" type="date" value={formData.offerEndDate ?? ''} />
+                                    </div>
+                                    <FormInput
+                                        label="Date label (optional)"
+                                        name="offerDateLabel"
+                                        value={formData.offerDateLabel ?? ''}
+                                        placeholder="e.g. 8 - 31 DEC"
+                                    />
+                                    <FormInput
+                                        label="Description line"
+                                        name="offerDescription"
+                                        value={formData.offerDescription ?? ''}
+                                        placeholder="e.g. Loan offers on all cars"
+                                    />
+                                    <FormInput
+                                        label="Highlight line"
+                                        name="offerHighlight"
+                                        value={formData.offerHighlight ?? ''}
+                                        placeholder="e.g. ROI starting from 10.5%*"
+                                    />
+                                    <FormInput
+                                        label="Disclaimer (small text)"
+                                        name="offerDisclaimer"
+                                        value={formData.offerDisclaimer ?? ''}
+                                        placeholder="Terms and conditions apply"
+                                    />
                                 </div>
                             </div>
                         )}

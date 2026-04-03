@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle, User } from '../types.js';
 import { getFollowersCount, getFollowingCount } from '../services/buyerEngagementService.js';
 
@@ -17,6 +18,7 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
   onPhoneView,
   onStartChat 
 }) => {
+  const { t } = useTranslation();
   const [showPhone, setShowPhone] = useState(false);
 
   const handleShowPhone = () => {
@@ -152,19 +154,25 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
             </p>
           </div>
           <div>
-            <p className="text-gray-600 dark:text-gray-400">Following</p>
+            <p className="text-gray-600 dark:text-gray-400">
+              {t('vehicle.detail.following')}
+            </p>
             <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {getFollowingCount(seller.email)}
             </p>
           </div>
           <div>
-            <p className="text-gray-600 dark:text-gray-400">Member Since</p>
+            <p className="text-gray-600 dark:text-gray-400">
+              {t('vehicle.detail.memberSince')}
+            </p>
             <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {new Date(seller.joinedDate || seller.createdAt).getFullYear()}
             </p>
           </div>
           <div>
-            <p className="text-gray-600 dark:text-gray-400">Active Listings</p>
+            <p className="text-gray-600 dark:text-gray-400">
+              {t('vehicle.detail.activeListings')}
+            </p>
             <p className="font-semibold text-reride-text-dark dark:text-reride-text">
               {seller.activeListings || 0}
             </p>
@@ -182,7 +190,7 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          Chat with Seller
+          {t('vehicle.detail.chatWithSeller')}
         </button>
 
         {/* Show Phone Number */}
@@ -234,7 +242,8 @@ const SellerContactCard: React.FC<SellerContactCardProps> = ({
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
           <p>
-            <strong>Safety Tip:</strong> Always meet in a public place and verify documents before making any payment.
+            <strong>{t('vehicle.detail.safetyTip.title')}</strong>{' '}
+            {t('vehicle.detail.safetyTip.body')}
           </p>
         </div>
       </div>

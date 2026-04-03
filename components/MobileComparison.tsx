@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 
@@ -24,6 +25,7 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
   onSelectVehicle,
   onBack
 }) => {
+  const { t, i18n } = useTranslation();
   const comparisonVehicles = useMemo(() => {
     return vehicles.filter(v => comparisonList.includes(v.id));
   }, [vehicles, comparisonList]);
@@ -37,6 +39,41 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
     }).format(value);
   };
 
+  const specs = useMemo(
+    () => [
+      { label: t('compare.field.price'), key: 'price', format: (v: Vehicle) => formatCurrency(v.price) },
+      { label: t('compare.field.year'), key: 'year', format: (v: Vehicle) => v.year.toString() },
+      {
+        label: t('vehicle.detail.mileageLabel'),
+        key: 'mileage',
+        format: (v: Vehicle) =>
+          `${v.mileage.toLocaleString('en-IN')} ${t('vehicle.unit.km')}`,
+      },
+      { label: t('compare.field.fuelType'), key: 'fuelType', format: (v: Vehicle) => v.fuelType },
+      {
+        label: t('compare.field.transmission'),
+        key: 'transmission',
+        format: (v: Vehicle) => v.transmission,
+      },
+      {
+        label: t('compare.field.engine'),
+        key: 'engine',
+        format: (v: Vehicle) => v.engine || t('compare.notAvailable'),
+      },
+      {
+        label: t('compare.field.color'),
+        key: 'color',
+        format: (v: Vehicle) => v.color || t('compare.notAvailable'),
+      },
+      {
+        label: t('compare.field.noOfOwners'),
+        key: 'noOfOwners',
+        format: (v: Vehicle) => (v.noOfOwners || 1).toString(),
+      },
+    ],
+    [t, i18n.language]
+  );
+
   if (comparisonVehicles.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 pb-24 flex items-center justify-center">
@@ -49,23 +86,12 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
           </svg>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">No vehicles to compare</h2>
-          <p className="text-gray-600">Add vehicles to compare their features</p>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">{t('compare.mobile.emptyTitle')}</h2>
+          <p className="text-gray-600">{t('compare.mobile.emptyHint')}</p>
         </div>
       </div>
     );
   }
-
-  const specs = [
-    { label: 'Price', key: 'price', format: (v: Vehicle) => formatCurrency(v.price) },
-    { label: 'Year', key: 'year', format: (v: Vehicle) => v.year.toString() },
-    { label: 'Mileage', key: 'mileage', format: (v: Vehicle) => `${v.mileage.toLocaleString()} km` },
-    { label: 'Fuel Type', key: 'fuelType', format: (v: Vehicle) => v.fuelType },
-    { label: 'Transmission', key: 'transmission', format: (v: Vehicle) => v.transmission },
-    { label: 'Engine', key: 'engine', format: (v: Vehicle) => v.engine || 'N/A' },
-    { label: 'Color', key: 'color', format: (v: Vehicle) => v.color || 'N/A' },
-    { label: 'No. of Owners', key: 'noOfOwners', format: (v: Vehicle) => (v.noOfOwners || 1).toString() },
-  ];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -81,7 +107,7 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-gray-900">Compare Vehicles</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t('compare.pageTitle')}</h1>
         </div>
       )}
 
@@ -154,7 +180,7 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
       {/* Features Comparison */}
       {comparisonVehicles.some(v => v.features && v.features.length > 0) && (
         <div className="bg-white border-t border-gray-200 mt-4 p-4">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Features</h2>
+          <h2 className="text-lg font-bold text-gray-900 mb-4">{t('compare.featuresSection')}</h2>
           <div className="space-y-3">
             {comparisonVehicles.map((vehicle) => (
               <div key={vehicle.id}>
@@ -176,7 +202,7 @@ export const MobileComparison: React.FC<MobileComparisonProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No features listed</p>
+                  <p className="text-sm text-gray-500">{t('compare.mobile.noFeatures')}</p>
                 )}
               </div>
             ))}

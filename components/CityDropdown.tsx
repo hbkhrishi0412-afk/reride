@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Vehicle } from '../types';
 import { getDisplayNameForCity, CITY_MAPPING } from '../utils/cityMapping';
 
@@ -9,6 +10,7 @@ interface CityDropdownProps {
 }
 
 const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, onViewAllCars }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
 
@@ -66,7 +68,7 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
         onClick={() => setIsOpen(!isOpen)}
         className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-1"
       >
-        Buy Car
+        {t('nav.buyCar')}
         <svg 
           className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
           fill="none" 
@@ -108,7 +110,7 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
                     className="w-full text-left px-3 py-2 text-white font-semibold hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
                     type="button"
                   >
-                    View all cars
+                    {t('nav.buyDropdown.viewAllCars')}
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
@@ -121,7 +123,7 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
                       className="w-full text-left px-3 py-2 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
                       type="button"
                     >
-                      Used cars in {city}
+                      {t('nav.buyDropdown.usedCarsInCity', { city })}
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
@@ -138,7 +140,7 @@ const CityDropdown: React.FC<CityDropdownProps> = ({ allVehicles, onCitySelect, 
                       className="w-full text-left px-3 py-2 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
                       type="button"
                     >
-                      Used cars in {city}
+                      {t('nav.buyDropdown.usedCarsInCity', { city })}
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>

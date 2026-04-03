@@ -1,122 +1,63 @@
 import React from 'react';
+import { BRAND_ICON_192 } from '../lib/brandAssets';
 
 interface LogoProps {
   className?: string;
   onClick?: () => void;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showText?: boolean;
+  /** `onDark` = light wordmark for orange/gradient bars (e.g. mobile drawer) */
+  variant?: 'default' | 'onDark';
 }
 
-const Logo: React.FC<LogoProps> = ({ 
-  className = "", 
-  onClick, 
+const Logo: React.FC<LogoProps> = ({
+  className = '',
+  onClick,
   size = 'lg',
-  showText = true 
+  showText = true,
+  variant = 'default',
 }) => {
-  // Size configurations
+  /* Lockup: app-style tile + wordmark (cap height slightly below tile height), like a horizontal brand bar */
   const sizeConfig = {
-    sm: { icon: 24, text: 'text-sm', spacing: 'gap-1' },
-    md: { icon: 32, text: 'text-lg', spacing: 'gap-2' },
-    lg: { icon: 40, text: 'text-xl', spacing: 'gap-2' },
-    xl: { icon: 48, text: 'text-2xl', spacing: 'gap-3' }
+    sm: { box: 24, text: 'text-sm leading-none tracking-wide', spacing: 'gap-2' },
+    md: { box: 32, text: 'text-lg leading-none tracking-wide', spacing: 'gap-2.5' },
+    lg: { box: 40, text: 'text-xl leading-none tracking-wide', spacing: 'gap-3' },
+    xl: { box: 48, text: 'text-2xl leading-none tracking-wide', spacing: 'gap-3' },
   };
 
   const config = sizeConfig[size];
-  const iconSize = config.icon;
-  
-  // Generate unique IDs for gradients to avoid conflicts
-  const pinGradientId = `pinGradient-${size}-${Math.random().toString(36).substr(2, 5)}`;
-  const carGradientId = `carGradient-${size}-${Math.random().toString(36).substr(2, 5)}`;
+  const box = config.box;
+  const isOnDark = variant === 'onDark';
 
   return (
-    <button 
+    <button
+      type="button"
       onClick={onClick}
-      className={`flex items-center ${config.spacing} transition-all duration-300 hover:scale-105 ${className}`}
+      className={`flex flex-row items-center ${config.spacing} transition-all duration-300 hover:scale-105 ${className}`}
     >
-      {/* Logo Icon Container */}
-      <div 
-        className="relative flex items-center justify-center"
-        style={{ width: iconSize, height: iconSize }}
+      <div
+        className={`relative shrink-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ${
+          isOnDark ? 'ring-white/30' : 'ring-black/5'
+        }`}
+        style={{ width: box, height: box }}
       >
-        {/* White rounded square background */}
-        <div 
-          className="absolute inset-0 bg-white rounded-lg shadow-sm"
-          style={{ borderRadius: '8px' }}
+        <img
+          src={BRAND_ICON_192}
+          alt={showText ? '' : 'ReRide'}
+          width={box}
+          height={box}
+          draggable={false}
+          className="h-full w-full object-cover"
+          decoding="async"
         />
-        
-        {/* Car and Location Pin SVG */}
-        <svg
-          width={iconSize * 0.7}
-          height={iconSize * 0.7}
-          viewBox="0 0 100 100"
-          className="relative z-10"
-        >
-          {/* Location Pin */}
-          <g transform="translate(50, 20)">
-            {/* Pin body - split blue/orange */}
-            <path
-              d="M-8,0 C-8,-8 -4,-12 0,-12 C4,-12 8,-8 8,0 L8,12 C8,16 4,20 0,20 C-4,20 -8,16 -8,12 Z"
-              fill={`url(#${pinGradientId})`}
-            />
-            {/* Pin center circle */}
-            <circle cx="0" cy="4" r="3" fill="white" />
-          </g>
-
-          {/* Car */}
-          <g transform="translate(50, 60)">
-            {/* Car body outline */}
-            <path
-              d="M-20,-8 L-12,-16 L12,-16 L20,-8 L20,8 L-20,8 Z"
-              fill="none"
-              stroke={`url(#${carGradientId})`}
-              strokeWidth="2"
-            />
-            
-            {/* Front wheel (orange) */}
-            <circle cx="-12" cy="8" r="6" fill="#FF6B35" />
-            <circle cx="-12" cy="8" r="3" fill="white" />
-            
-            {/* Rear wheel (blue) */}
-            <circle cx="12" cy="8" r="6" fill="#2196F3" />
-            <circle cx="12" cy="8" r="3" fill="white" />
-            
-            {/* Windshield */}
-            <path
-              d="M-8,-8 L-4,-12 L4,-12 L8,-8"
-              fill="none"
-              stroke={`url(#${carGradientId})`}
-              strokeWidth="1.5"
-            />
-            
-            {/* Headlight */}
-            <circle cx="18" cy="-4" r="2" fill="#FF6B35" />
-          </g>
-
-          {/* Gradients */}
-          <defs>
-            {/* Pin gradient - blue to orange */}
-            <linearGradient id={pinGradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#2196F3" />
-              <stop offset="100%" stopColor="#FF6B35" />
-            </linearGradient>
-            
-            {/* Car gradient - orange to blue */}
-            <linearGradient id={carGradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#FF6B35" />
-              <stop offset="100%" stopColor="#2196F3" />
-            </linearGradient>
-          </defs>
-        </svg>
       </div>
 
-      {/* Text */}
       {showText && (
-        <span 
-          className={`font-bold text-blue-600 ${config.text}`}
-          style={{ 
+        <span
+          className={`font-extrabold ${isOnDark ? 'text-white drop-shadow-sm' : 'text-slate-900'} ${config.text}`}
+          style={{
             fontFamily: 'Nunito Sans, sans-serif',
             fontWeight: '800',
-            letterSpacing: '0.5px'
           }}
         >
           RERIDE

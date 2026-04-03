@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { sendOTP, verifyOTP, syncWithBackend, initializeRecaptcha, cleanupRecaptcha } from '../services/authService';
 import { User } from '../types';
 import useIsMobileApp from '../hooks/useIsMobileApp';
@@ -10,6 +11,7 @@ interface OTPLoginProps {
 }
 
 const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
+  const { t } = useTranslation();
   const { isMobileApp } = useIsMobileApp();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
@@ -35,13 +37,13 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
 
     try {
       if (!phoneNumber) {
-        throw new Error('Please enter your phone number');
+        throw new Error(t('auth.otp.error.phoneRequired'));
       }
 
       // Validate Indian phone number format
       const phoneRegex = /^[6-9]\d{9}$/;
       if (!phoneRegex.test(phoneNumber.replace(/^(\+91)?/, ''))) {
-        throw new Error('Please enter a valid 10-digit Indian mobile number');
+        throw new Error(t('auth.otp.error.invalidPhone'));
       }
 
       const result = await sendOTP(phoneNumber);
@@ -50,10 +52,10 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
         setConfirmationResult(result.confirmationResult);
         setOtpSent(true);
       } else {
-        throw new Error(result.reason || 'Failed to send OTP');
+        throw new Error(result.reason || t('auth.otp.error.sendFailed'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send OTP');
+      setError(err instanceof Error ? err.message : t('auth.otp.error.sendFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -66,11 +68,11 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
 
     try {
       if (!confirmationResult) {
-        throw new Error('Please request OTP first');
+        throw new Error(t('auth.otp.error.requestOtpFirst'));
       }
 
       if (!otp || otp.length !== 6) {
-        throw new Error('Please enter the 6-digit OTP');
+        throw new Error(t('auth.otp.error.invalidOtpLength'));
       }
 
       const result = await verifyOTP(confirmationResult, otp, role);
@@ -86,13 +88,13 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
         if (backendResult.success && backendResult.user) {
           onLogin(backendResult.user);
         } else {
-          throw new Error(backendResult.reason || 'Failed to authenticate with backend');
+          throw new Error(backendResult.reason || t('auth.otp.error.backendAuth'));
         }
       } else {
-        throw new Error(result.reason || 'Invalid OTP');
+        throw new Error(result.reason || t('auth.otp.error.invalidOtp'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to verify OTP');
+      setError(err instanceof Error ? err.message : t('auth.otp.error.verifyFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -111,10 +113,10 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
       <div className="space-y-6">
         <div className="text-center">
           <h3 className="text-2xl font-bold text-white mb-2 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
-            Login with Mobile OTP
+            {t('auth.otp.title')}
           </h3>
           <p className="text-sm text-white/90 font-medium">
-            We'll send you a one-time password
+            {t('auth.otp.subtitle')}
           </p>
         </div>
 
@@ -129,7 +131,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                   id="phone-number"
                   type="tel"
                   maxLength={10}
-                  placeholder="Enter 10-digit number"
+                  placeholder={t('auth.otp.placeholder10')}
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
                   className="flex-1 px-5 py-4 text-base bg-white/95 backdrop-blur-sm border-0.5 border-white/30 rounded-r-2xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white transition-all"
@@ -150,7 +152,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                 onClick={onCancel}
                 className="flex-1 py-4 px-4 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl text-white font-semibold transition-all active:scale-95"
               >
-                Cancel
+                {t('auth.otp.cancel')}
               </button>
               <button
                 type="submit"
@@ -167,7 +169,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                   if (!isLoading) e.currentTarget.style.transform = 'scale(1)';
                 }}
               >
-                {isLoading ? 'Sending...' : 'Send OTP'}
+                {isLoading ? t('auth.otp.sending') : t('auth.otp.send')}
               </button>
             </div>
           </form>
@@ -178,14 +180,14 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                 id="otp"
                 type="text"
                 maxLength={6}
-                placeholder="Enter 6-digit OTP"
+                placeholder={t('auth.otp.placeholder6')}
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                 className="w-full px-5 py-4 text-3xl text-center tracking-[0.5em] bg-white/95 backdrop-blur-sm border-0.5 border-white/30 rounded-2xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white transition-all font-bold"
                 required
               />
               <p className="text-xs text-white/80 mt-3 text-center font-medium">
-                Sent to +91 {phoneNumber}
+                {t('auth.otp.sentTo', { phone: phoneNumber })}
               </p>
             </div>
 
@@ -202,7 +204,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                 disabled={isLoading}
                 className="flex-1 py-4 px-4 bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl text-white font-semibold transition-all active:scale-95 disabled:opacity-50"
               >
-                Resend OTP
+                {t('auth.otp.resend')}
               </button>
               <button
                 type="submit"
@@ -219,7 +221,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                   if (!isLoading) e.currentTarget.style.transform = 'scale(1)';
                 }}
               >
-                {isLoading ? 'Verifying...' : 'Verify OTP'}
+                {isLoading ? t('auth.otp.verifying') : t('auth.otp.verify')}
               </button>
             </div>
           </form>
@@ -236,10 +238,10 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
     <div className="space-y-6">
       <div className="text-center">
         <h3 className="text-2xl font-bold text-reride-text-dark mb-2">
-          Login with Mobile OTP
+          {t('auth.otp.title')}
         </h3>
         <p className="text-sm text-gray-600">
-          We'll send you a one-time password
+          {t('auth.otp.subtitle')}
         </p>
       </div>
 
@@ -247,7 +249,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
         <form onSubmit={handleSendOTP} className="space-y-4">
           <div>
             <label htmlFor="phone-number" className="block text-sm font-medium text-gray-700 mb-2">
-              Mobile Number
+              {t('auth.otp.mobileNumber')}
             </label>
             <div className="flex">
               <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
@@ -257,7 +259,7 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
                 id="phone-number"
                 type="tel"
                 maxLength={10}
-                placeholder="Enter 10-digit mobile number"
+                placeholder={t('auth.otp.placeholder10Desktop')}
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
                 className="flex-1 px-4 py-3 border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-reride-orange"
@@ -274,14 +276,14 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
               onClick={onCancel}
               className="flex-1 py-3 px-4 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              Cancel
+              {t('auth.otp.cancel')}
             </button>
             <button
               type="submit"
               disabled={isLoading}
               className="flex-1 py-3 px-4 bg-reride-orange text-white rounded-md hover:bg-reride-orange-dark focus:outline-none focus:ring-2 focus:ring-reride-orange focus:ring-offset-2 transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Sending...' : 'Send OTP'}
+              {isLoading ? t('auth.otp.sending') : t('auth.otp.send')}
             </button>
           </div>
         </form>
@@ -289,20 +291,20 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
         <form onSubmit={handleVerifyOTP} className="space-y-4">
           <div>
             <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
-              Enter OTP
+              {t('auth.otp.enterOtpLabel')}
             </label>
             <input
               id="otp"
               type="text"
               maxLength={6}
-              placeholder="Enter 6-digit OTP"
+              placeholder={t('auth.otp.placeholder6')}
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
               className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-reride-orange text-center text-2xl tracking-widest"
               required
             />
             <p className="text-xs text-gray-600 mt-2">
-              Sent to +91 {phoneNumber}
+              {t('auth.otp.sentTo', { phone: phoneNumber })}
             </p>
           </div>
 
@@ -315,14 +317,14 @@ const OTPLogin: React.FC<OTPLoginProps> = ({ onLogin, role, onCancel }) => {
               disabled={isLoading}
               className="flex-1 py-3 px-4 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
-              Resend OTP
+              {t('auth.otp.resend')}
             </button>
             <button
               type="submit"
               disabled={isLoading}
               className="flex-1 py-3 px-4 bg-reride-orange text-white rounded-md hover:bg-reride-orange-dark focus:outline-none focus:ring-2 focus:ring-reride-orange focus:ring-offset-2 transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Verifying...' : 'Verify OTP'}
+              {isLoading ? t('auth.otp.verifying') : t('auth.otp.verify')}
             </button>
           </div>
         </form>

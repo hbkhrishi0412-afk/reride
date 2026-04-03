@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../lib/i18n';
 import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom';
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
 import { View, VehicleCategory as CategoryEnum } from '../types';
@@ -48,13 +50,13 @@ function getUserFriendlyErrorMessage(error: unknown, defaultMessage: string): st
     }
     // Check for common error patterns
     if (error.message.includes('network') || error.message.includes('fetch')) {
-      return 'Unable to connect to the server. Please check your internet connection.';
+      return i18n.t('errors.network');
     }
     if (error.message.includes('timeout')) {
-      return 'Request timed out. Please try again.';
+      return i18n.t('errors.timeout');
     }
     if (error.message.includes('permission') || error.message.includes('unauthorized')) {
-      return 'You do not have permission to perform this action.';
+      return i18n.t('errors.permission');
     }
     return defaultMessage;
   }
@@ -319,6 +321,7 @@ export const useApp = () => {
 // Component export - Fast Refresh compatible with displayName
 // Note: Context providers should NOT be memoized as they need to re-render when state changes
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useTranslation();
   // React Router hooks for proper URL management
   const routerNavigate = useRouterNavigate();
   const location = useLocation();
@@ -631,7 +634,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (current && vehicles.length === 0) {
           // Only show notification if we truly have no data
           logWarn('⚠️ EMERGENCY: No vehicles loaded after 3s');
-          addToast('Loading vehicles...', 'info');
+          addToast(t('toast.loadingVehicles'), 'info');
           return false;
         }
         return current;
@@ -639,7 +642,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 3000); // Reduced from 5000 to 3000 for faster response
     
     return () => clearTimeout(emergencyTimeout);
-  }, [addToast, vehicles.length]); // Add vehicles.length dependency
+  }, [addToast, vehicles.length, t]); // Add vehicles.length dependency
 
   const handleLogout = useCallback(async () => {
     try {
@@ -685,7 +688,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentView(View.HOME);
       
       // Show success message
-      addToast('You have been logged out.', 'info');
+      addToast(t('toast.loggedOut'), 'info');
     } catch (error) {
       logError('Error during logout:', error);
       // Even if there's an error, clear local state
@@ -698,9 +701,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('reRideCurrentUser');
       setCurrentView(View.HOME);
       setActiveChat(null);
-      addToast('You have been logged out.', 'info');
+      addToast(t('toast.loggedOut'), 'info');
     }
-  }, [addToast, setComparisonList, setWishlist]);
+  }, [addToast, setComparisonList, setWishlist, t]);
 
   // Listen for userDataUpdated events to sync currentUser state when plan expiry changes
   useEffect(() => {
@@ -733,14 +736,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         hasEmail: !!user?.email, 
         hasRole: !!user?.role 
       });
-      addToast('Login failed: Invalid user data. Please try again.', 'error');
+      addToast(t('toast.loginInvalidUser'), 'error');
       return;
     }
     
     // Ensure role is valid
     if (!['customer', 'seller', 'admin'].includes(user.role)) {
       logError('❌ Invalid role in handleLogin:', user.role);
-      addToast('Login failed: Invalid user role. Please try again.', 'error');
+      addToast(t('toast.loginInvalidRole'), 'error');
       return;
     }
     
@@ -768,7 +771,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localMatches: storedInLocal ? JSON.parse(storedInLocal).email === user.email : false
     });
     
-    addToast(`Welcome back, ${user.name}!`, 'success');
+    addToast(t('toast.welcomeBack', { name: user.name }), 'success');
     
     // Navigate based on user role
     // Directly set view since we've already validated the user
@@ -784,7 +787,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       setCurrentView(View.HOME);
     }
-  }, [addToast]);
+  }, [addToast, t]);
 
   // After Supabase Google OAuth redirect: session exists; sync profile with ReRide API and log in
   useEffect(() => {
@@ -812,13 +815,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           handleLogin(result.user);
         } else {
           googleOAuthSyncDoneRef.current = false;
-          addToast(result.reason || 'Could not finish Google sign-in', 'error');
+          addToast(result.reason || t('toast.googleSignInFailed'), 'error');
           await supabase.auth.signOut();
         }
       } catch (e) {
         googleOAuthSyncDoneRef.current = false;
         logError('Google OAuth backend sync failed:', e);
-        addToast('Could not finish Google sign-in', 'error');
+        addToast(t('toast.googleSignInFailed'), 'error');
         await supabase.auth.signOut();
       }
     };
@@ -837,7 +840,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [handleLogin, addToast]);
+  }, [handleLogin, addToast, t]);
 
   // Supabase session exists (e.g. after app update / storage mismatch) but ReRide user not in memory — resync profile
   useEffect(() => {
@@ -895,14 +898,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         hasEmail: !!user?.email, 
         hasRole: !!user?.role 
       });
-      addToast('Registration failed: Invalid user data. Please try again.', 'error');
+      addToast(t('toast.registerInvalidUser'), 'error');
       return;
     }
     
     // Ensure role is valid
     if (!['customer', 'seller', 'admin'].includes(user.role)) {
       logError('❌ Invalid role in handleRegister:', user.role);
-      addToast('Registration failed: Invalid user role. Please try again.', 'error');
+      addToast(t('toast.registerInvalidRole'), 'error');
       return;
     }
     
@@ -923,7 +926,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localMatches: storedInLocal ? JSON.parse(storedInLocal).email === user.email : false
     });
     
-    addToast(`Welcome to ReRide, ${user.name}!`, 'success');
+    addToast(t('toast.welcomeNewUser', { name: user.name }), 'success');
     
     // Navigate based on user role
     // Directly set view since we've already validated the user
@@ -939,7 +942,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       setCurrentView(View.HOME);
     }
-  }, [addToast]);
+  }, [addToast, t]);
 
   const updateUserLocation = useCallback((location: string) => {
     const nextLocation = (location ?? '').trim();
@@ -1278,7 +1281,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setVehicles((prev) => mergeVehicleCatalog(prev, next, !!isAdmin));
       setVehiclesCatalogReady(true);
       if (list.length > 0) {
-        addToast(`Loaded ${list.length} vehicles`, 'success');
+        addToast(t('toast.loadedVehiclesCount', { count: list.length }), 'success');
       }
     } catch (err) {
       setVehiclesCatalogReady(true);
@@ -1286,11 +1289,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const msg = err instanceof Error ? err.message : String(err);
       const is503OrSupabase = (err as any)?.status === 503 || (err as any)?.code === 503 || /supabase|503|service temporarily unavailable/i.test(msg);
       const toastMsg = is503OrSupabase
-        ? 'Service unavailable. If you manage this site, set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel → Environment Variables (Production), then redeploy.'
-        : (msg && msg.length < 120 ? msg : 'Could not load vehicles. Check your connection and try again.');
+        ? t('toast.serviceUnavailableAdmin')
+        : (msg && msg.length < 120 ? msg : t('toast.vehiclesLoadFailedShort'));
       addToast(toastMsg, 'error');
     }
-  }, [currentUser?.role, setVehicles, addToast]);
+  }, [currentUser?.role, setVehicles, addToast, t]);
 
   // Auto-navigate to appropriate dashboard after login/registration
   // This ensures the view is set correctly even if state updates are async
@@ -1990,7 +1993,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // PERFORMANCE: Recommendations are now computed via useMemo, no need to clear
           setIsLoading(false);
           if (process.env.NODE_ENV === 'development') {
-            addToast('Some data failed to load. The app will continue with available data.', 'warning');
+            addToast(t('toast.someDataFailedLoad'), 'warning');
           }
         }
       }
@@ -2004,7 +2007,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // PERFORMANCE: Only depend on user role, not entire currentUser object
     // Use optional chaining in dependency to handle null/undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addToast, currentUser?.role]);
+  }, [addToast, currentUser?.role, t]);
 
   // Supabase Realtime: sync conversation updates so when the other party sends a message we see it without refetch
   useSupabaseRealtime({
@@ -2202,11 +2205,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (status === 503 || /Supabase|SERVICE_ROLE_KEY|not configured/i.test(message)) {
             addToast(
-              'Listings are empty because the server database is not available (Supabase config missing). If you manage this site, set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then redeploy.',
+              t('toast.listingsEmptyDbUnavailable'),
               'error'
             );
           } else {
-            addToast('Could not load vehicles. Please check your connection and try again.', 'error');
+            addToast(t('toast.vehiclesLoadFailed'), 'error');
           }
         }
 
@@ -2232,11 +2235,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (status === 503 || /Supabase|SERVICE_ROLE_KEY|not configured/i.test(message)) {
             addToast(
-              'Dealer details are empty because the server database is not available (Supabase config missing). If you manage this site, set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, then redeploy.',
+              t('toast.dealersEmptyDbUnavailable'),
               'error'
             );
           } else if (currentUser?.role === 'admin') {
-            addToast('Could not load users. Please try again.', 'error');
+            addToast(t('toast.usersLoadFailed'), 'error');
           }
           if (currentUser?.role === 'admin') {
             const cachedUsers = localStorage.getItem('reRideUsers_prod');
@@ -2310,7 +2313,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         showNotification(title, {
           body: notification.message,
-          icon: '/favicon.ico',
+          icon: '/icon-192.png',
           tag: `notification-${notification.id}`,
           requireInteraction: false
         }).catch(err => {
@@ -2357,7 +2360,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (result.success > 0) {
             console.log(`✅ Successfully synced ${result.success} items to Supabase`);
             if (process.env.NODE_ENV === 'development') {
-              addToast(`Synced ${result.success} items to server`, 'success');
+              addToast(t('toast.syncedItemsCount', { count: result.success }), 'success');
             }
           }
           
@@ -2390,7 +2393,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearInterval(syncInterval);
       }
     };
-  }, [addToast]);
+  }, [addToast, t]);
 
   // Sync vehicle data across tabs and periodically refresh from API
   useEffect(() => {
@@ -3194,16 +3197,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('🔄 App came online, syncing data...');
       dataService.syncWhenOnline().then(() => {
         console.log('✅ Data sync completed');
-        addToast('Data synchronized successfully', 'success');
+        addToast(t('toast.dataSyncSuccess'), 'success');
       }).catch((error) => {
         console.warn('⚠️ Data sync failed:', error);
-        addToast('Data sync failed, but app is still functional', 'warning');
+        addToast(t('toast.dataSyncPartial'), 'warning');
       });
     };
 
     const handleOffline = () => {
       console.log('📴 App went offline');
-      addToast('You are now offline. Changes will sync when connection is restored.', 'info');
+      addToast(t('toast.nowOffline'), 'info');
     };
 
     window.addEventListener('online', handleOnline);
@@ -3213,7 +3216,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [addToast]);
+  }, [addToast, t]);
 
   const updateVehicleHandler = useCallback(async (id: number, updates: Partial<Vehicle>, options: VehicleUpdateOptions = {}) => {
     // Prevent duplicate updates for the same vehicle
@@ -3231,7 +3234,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const vehicleToUpdate = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
       if (!vehicleToUpdate) {
         updatingVehiclesRef.current.delete(id);
-        addToast('Vehicle not found', 'error');
+        addToast(t('toast.vehicleNotFound'), 'error');
         return;
       }
 
@@ -3247,13 +3250,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const isNowFeatured = Boolean(result?.isFeatured);
       const statusChanged = updates.status !== undefined && updates.status !== vehicleToUpdate.status;
       const { successMessage, skipToast } = options;
-      let fallbackMessage = 'Vehicle updated successfully';
+      let fallbackMessage = t('toast.vehicleUpdatedSuccess');
       if (statusChanged) {
-        fallbackMessage = `Vehicle status updated to ${updates.status}`;
+        fallbackMessage = t('toast.vehicleStatusUpdated', { status: String(updates.status) });
       } else if (!wasFeatured && isNowFeatured) {
-        fallbackMessage = 'Vehicle featured successfully';
+        fallbackMessage = t('toast.vehicleFeaturedSuccess');
       } else if (wasFeatured && !isNowFeatured) {
-        fallbackMessage = 'Vehicle unfeatured successfully';
+        fallbackMessage = t('toast.vehicleUnfeaturedSuccess');
       }
 
       // Log audit entry for vehicle update
@@ -3273,14 +3276,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (process.env.NODE_ENV === 'development') {
         console.error('❌ Failed to update vehicle:', error);
       }
-      addToast('Failed to update vehicle. Please try again.', 'error');
+      addToast(t('toast.vehicleUpdateFailed'), 'error');
     } finally {
       // Always remove from updating set, even if there was an error
       updatingVehiclesRef.current.delete(id);
     }
     // PERFORMANCE: Setters (setVehicles, setAuditLog) are stable and don't need to be in deps
     // But including them is harmless and makes the intent clear
-  }, [vehicles, addToast, currentUser]);
+  }, [vehicles, addToast, currentUser, t]);
 
   const contextValue: AppContextType = useMemo(() => ({
     // State
@@ -3468,7 +3471,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } catch (error) {
         console.error('❌ Failed to sync user update to API:', error);
-        addToast(`Failed to sync update to server: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+        addToast(
+          t('toast.vehicleSyncFailedDetail', {
+            detail: error instanceof Error ? error.message : t('toast.unknownError'),
+          }),
+          'error',
+        );
         // Don't throw - local state is already updated
       }
       
@@ -3478,7 +3486,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const entry = logAction(actor, 'Update User', email, `Updated fields: ${updateFieldsList}`);
       setAuditLog(prev => [entry, ...prev]);
       
-      addToast(`User ${email} updated successfully`, 'success');
+      addToast(t('toast.userUpdated', { email }), 'success');
     },
     onCreateUser: async (userData: Omit<User, 'status'>): Promise<{ success: boolean, reason: string }> => {
       try {
@@ -3511,7 +3519,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!apiResult.success || !response.ok) {
             const errorReason = apiResult.reason || 'Unknown error';
             console.error('❌ Failed to create user in Supabase:', errorReason);
-            addToast(`User creation failed: ${errorReason}`, 'error');
+            addToast(t('toast.userCreateFailedDetail', { reason: errorReason }), 'error');
             // Don't create locally - Supabase creation failed
             throw new Error(errorReason);
           }
@@ -3545,7 +3553,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           
           console.log('✅ User created and saved to Supabase:', createdUser.email);
-          addToast(`User ${createdUser.name} created successfully`, 'success');
+          addToast(t('toast.userCreated', { name: createdUser.name }), 'success');
           
           // Log audit entry for user creation (inside try block where createdUser is in scope)
           const actor = currentUser?.name || currentUser?.email || 'System';
@@ -3554,7 +3562,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch (apiError) {
           console.error('❌ Error creating user in Supabase:', apiError);
           const errorMsg = apiError instanceof Error ? apiError.message : 'Failed to create user';
-          addToast(`User creation failed: ${errorMsg}`, 'error');
+          addToast(t('toast.userCreateFailedDetail', { reason: errorMsg }), 'error');
           // Don't create locally - Supabase creation failed
           throw apiError;
         }
@@ -3581,10 +3589,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const entry = logAction(actor, 'Update User Plan', email, `Changed plan from ${previousPlan} to ${plan}`);
           setAuditLog(prev => [entry, ...prev]);
           
-          addToast(`Plan updated for ${email}`, 'success');
+          addToast(t('toast.planUpdated', { email }), 'success');
         } catch (error) {
           logError('Failed to update user plan:', error);
-          const message = getUserFriendlyErrorMessage(error, 'Failed to update user plan. Please try again.');
+          const message = getUserFriendlyErrorMessage(error, i18n.t('toast.planUpdateFailed'));
           addToast(message, 'error');
         }
       },
@@ -3606,10 +3614,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const entry = logAction(actor, 'Toggle User Status', email, `Changed status from ${user.status} to ${newStatus}`);
           setAuditLog(prev => [entry, ...prev]);
           
-          addToast(`User status toggled for ${email}`, 'success');
+          addToast(t('toast.userStatusToggled', { email }), 'success');
         } catch (error) {
           console.error('Failed to toggle user status:', error);
-          addToast('Failed to toggle user status', 'error');
+          addToast(t('toast.userStatusToggleFailed'), 'error');
         }
       },
       onToggleVehicleStatus: async (vehicleId: number) => {
@@ -3627,16 +3635,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setAuditLog(prev => [entry, ...prev]);
         } catch (error) {
           logError('Failed to toggle vehicle status:', error);
-          const message = getUserFriendlyErrorMessage(error, 'Failed to toggle vehicle status. Please try again.');
+          const message = getUserFriendlyErrorMessage(error, i18n.t('toast.vehicleStatusUpdateFailed'));
           addToast(message, 'error');
-          addToast('Failed to update vehicle status', 'error');
         }
       },
       onToggleVehicleFeature: async (vehicleId: number) => {
         try {
           const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v && v.id === vehicleId) : undefined;
           if (!vehicle) {
-            addToast('Vehicle not found', 'error');
+            addToast(t('toast.vehicleNotFound'), 'error');
             return;
           }
 
@@ -3680,7 +3687,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           if (result?.alreadyFeatured) {
-            addToast('Vehicle is already featured.', 'info');
+            addToast(t('toast.vehicleAlreadyFeatured'), 'info');
             return;
           }
 
@@ -3714,10 +3721,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const entry = logAction(actor, 'Feature Vehicle', vehicleInfo, `Featured vehicle. Credits remaining: ${remainingCredits}`);
               setAuditLog(prev => [entry, ...prev]);
 
-              addToast(
-                `Vehicle featured successfully. Credits remaining: ${remainingCredits}`,
-                'success'
-              );
+              addToast(t('toast.vehicleFeaturedWithCredits', { credits: remainingCredits }), 'success');
             } else {
               // Log audit entry for vehicle feature
               const actor = currentUser?.name || currentUser?.email || 'System';
@@ -3725,14 +3729,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const entry = logAction(actor, 'Feature Vehicle', vehicleInfo, 'Vehicle featured successfully');
               setAuditLog(prev => [entry, ...prev]);
               
-              addToast('Vehicle featured successfully', 'success');
+              addToast(t('toast.vehicleFeaturedSuccess'), 'success');
             }
           } else {
-            addToast('Failed to feature vehicle. Please try again.', 'error');
+            addToast(t('toast.featureVehicleFailed'), 'error');
           }
         } catch (error) {
           console.error('Failed to toggle vehicle feature:', error);
-          addToast('Failed to update vehicle feature status', 'error');
+          addToast(t('toast.featureStatusFailed'), 'error');
         }
       },
     onResolveFlag: async (type: 'vehicle' | 'conversation', id: number | string) => {
@@ -3740,7 +3744,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (type === 'vehicle') {
           const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v.id === id) : undefined;
           if (!vehicle) {
-            addToast('Vehicle not found', 'error');
+            addToast(t('toast.vehicleNotFound'), 'error');
             return;
           }
 
@@ -3757,7 +3761,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else {
           const conversation = Array.isArray(conversations) ? conversations.find(conv => conv && conv.id === id) : undefined;
           if (!conversation) {
-            addToast('Conversation not found', 'error');
+            addToast(t('toast.conversationNotFound'), 'error');
             return;
           }
 
@@ -3776,10 +3780,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const entry = logAction(actor, 'Resolve Flag', `Conversation ${id}`, `Resolved flag on ${type}`);
           setAuditLog(prev => [entry, ...prev]);
         }
-        addToast(`Flag resolved for ${type}`, 'success');
+        addToast(
+          type === 'vehicle' ? t('toast.flagResolvedVehicle') : t('toast.flagResolvedConversation'),
+          'success',
+        );
       } catch (error) {
         console.error('Failed to resolve flag:', error);
-        addToast(`Failed to resolve ${type} flag`, 'error');
+        addToast(
+          type === 'vehicle' ? t('toast.flagResolveFailedVehicle') : t('toast.flagResolveFailedConversation'),
+          'error',
+        );
       }
     },
     onUpdateSettings: (settings: PlatformSettings) => {
@@ -3791,7 +3801,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const entry = logAction(actor, 'Update Platform Settings', 'Platform', `Updated settings: ${changedSettings}`);
       setAuditLog(prev => [entry, ...prev]);
       
-      addToast('Platform settings updated', 'success');
+      addToast(t('toast.settingsUpdated'), 'success');
     },
     onSendBroadcast: (message: string) => {
       setNotifications(prev => [...prev, {
@@ -3810,7 +3820,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const entry = logAction(actor, 'Send Broadcast', 'All Users', `Message: ${messagePreview}`);
       setAuditLog(prev => [entry, ...prev]);
       
-      addToast('Broadcast sent to all users', 'success');
+      addToast(t('toast.broadcastSent'), 'success');
     },
     onExportUsers: () => {
       try {
@@ -3834,10 +3844,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const entry = logAction(actor, 'Export Users', 'Users Data', `Exported ${users.length} users to CSV`);
         setAuditLog(prev => [entry, ...prev]);
         
-        addToast(`Exported ${users.length} users successfully`, 'success');
+        addToast(t('toast.exportUsersSuccess', { count: users.length }), 'success');
       } catch (error) {
         console.error('Export failed:', error);
-        addToast('Export failed. Please try again.', 'error');
+        addToast(t('toast.exportFailed'), 'error');
       }
     },
     onImportUsers: async (usersToImport: Omit<User, 'id'>[]) => {
@@ -3934,10 +3944,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAuditLog(prev => [entry, ...prev]);
         
         if (successCount > 0) {
-          addToast(`Successfully imported ${successCount} user(s)`, 'success');
+          addToast(t('toast.importUsersSuccess', { count: successCount }), 'success');
         }
         if (errorCount > 0) {
-          addToast(`${errorCount} user(s) failed to import`, 'warning');
+          addToast(t('toast.importUsersPartialWarning', { count: errorCount }), 'warning');
         }
       } catch (error) {
         console.error('Import failed:', error);
@@ -3966,10 +3976,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const entry = logAction(actor, 'Export Vehicles', 'Vehicles Data', `Exported ${vehicles.length} vehicles to CSV`);
         setAuditLog(prev => [entry, ...prev]);
         
-        addToast(`Exported ${vehicles.length} vehicles successfully`, 'success');
+        addToast(t('toast.exportVehiclesSuccess', { count: vehicles.length }), 'success');
       } catch (error) {
         console.error('Export failed:', error);
-        addToast('Export failed. Please try again.', 'error');
+        addToast(t('toast.exportFailed'), 'error');
       }
     },
     onImportVehicles: async (vehiclesToImport: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => {
@@ -4013,10 +4023,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAuditLog(prev => [entry, ...prev]);
         
         if (successCount > 0) {
-          addToast(`Successfully imported ${successCount} vehicle(s)`, 'success');
+          addToast(t('toast.importVehiclesSuccess', { count: successCount }), 'success');
         }
         if (errorCount > 0) {
-          addToast(`${errorCount} vehicle(s) failed to import`, 'warning');
+          addToast(t('toast.importVehiclesPartialWarning', { count: errorCount }), 'warning');
         }
       } catch (error) {
         console.error('Import failed:', error);
@@ -4046,10 +4056,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const entry = logAction(actor, 'Export Sales', 'Sales Data', `Exported ${soldVehicles.length} sales records to CSV`);
         setAuditLog(prev => [entry, ...prev]);
         
-        addToast(`Exported ${soldVehicles.length} sales records successfully`, 'success');
+        addToast(t('toast.exportSalesSuccess', { count: soldVehicles.length }), 'success');
       } catch (error) {
         console.error('Export failed:', error);
-        addToast('Export failed. Please try again.', 'error');
+        addToast(t('toast.exportFailed'), 'error');
       }
     },
     onUpdateVehicleData: async (newData: VehicleData) => {
@@ -4060,7 +4070,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         if (!success) {
           // Supabase update failed - don't update local state
-          addToast('Vehicle data update failed. Please try again.', 'error');
+          addToast(t('toast.vehicleDataUpdateFailed'), 'error');
           throw new Error('Failed to update vehicle data in Supabase');
         }
         
@@ -4072,7 +4082,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const entry = logAction(actor, 'Update Vehicle Data', 'Vehicle Data', 'Updated vehicle data configuration');
         setAuditLog(prev => [entry, ...prev]);
         
-        addToast('Vehicle data updated successfully', 'success');
+        addToast(t('toast.vehicleDataUpdated'), 'success');
         console.log('✅ Vehicle data updated via API:', newData);
       } catch (error) {
         // Error already handled with specific toast message in inner catch block (line 1908)
@@ -4087,7 +4097,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setUsers(prev => Array.isArray(prev) ? prev.map(user => 
         user && user.email === email ? { ...user, isVerified: !user.isVerified } : user
       ) : []);
-      addToast(`Verification status toggled for ${email}`, 'success');
+      addToast(t('toast.verificationToggled', { email }), 'success');
     },
     onUpdateSupportTicket: async (ticket: SupportTicket) => {
       try {
@@ -4100,10 +4110,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSupportTickets(prev => Array.isArray(prev) ? prev.map(t =>
           t && t.id === ticket.id ? ticket : t
         ) : []);
-        addToast('Support ticket updated', 'success');
+        addToast(t('toast.supportTicketUpdated'), 'success');
       } catch (error) {
         console.error('Failed to update support ticket:', error);
-        addToast('Failed to update support ticket', 'error');
+        addToast(t('toast.supportTicketUpdateFailed'), 'error');
         throw error;
       }
     },
@@ -4126,10 +4136,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return updated;
         });
         
-        addToast('FAQ added successfully', 'success');
+        addToast(t('toast.faqAdded'), 'success');
       } catch (error) {
         console.error('❌ Failed to add FAQ to Supabase:', error);
-        addToast('FAQ creation failed. Please try again.', 'error');
+        addToast(t('toast.faqAddFailed'), 'error');
         // Don't add locally - Supabase creation failed
         throw error;
       }
@@ -4159,10 +4169,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           saveFaqs(updated);
           return updated;
         });
-        addToast('FAQ updated successfully', 'success');
+        addToast(t('toast.faqUpdated'), 'success');
       } catch (error) {
         console.error('❌ Failed to update FAQ in Supabase:', error);
-        addToast('FAQ update failed. Please try again.', 'error');
+        addToast(t('toast.faqUpdateFailed'), 'error');
         // Don't update locally - Supabase update failed
         throw error;
       }
@@ -4183,10 +4193,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           saveFaqs(updated);
           return updated;
         });
-        addToast('FAQ deleted successfully', 'success');
+        addToast(t('toast.faqDeleted'), 'success');
       } catch (error) {
         console.error('❌ Failed to delete FAQ from Supabase:', error);
-        addToast('FAQ deletion failed. Please try again.', 'error');
+        addToast(t('toast.faqDeleteFailed'), 'error');
         // Don't delete locally - Supabase delete failed
         throw error;
       }
@@ -4195,7 +4205,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const vehicle = Array.isArray(vehicles) ? vehicles.find(v => v && v.id === vehicleId) : undefined;
         if (!vehicle) {
-          addToast('Vehicle not found', 'error');
+          addToast(t('toast.vehicleNotFound'), 'error');
           return;
         }
 
@@ -4214,10 +4224,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const entry = logAction(actor, `Certification ${decision === 'approved' ? 'Approve' : 'Reject'}`, vehicleInfo, `Certification ${decision} for vehicle`);
         setAuditLog(prev => [entry, ...prev]);
 
-        addToast(`Certification ${decision} for vehicle`, 'success');
+        addToast(
+          decision === 'approved' ? t('toast.certificationApproved') : t('toast.certificationRejected'),
+          'success',
+        );
       } catch (error) {
         console.error('Failed to update certification:', error);
-        addToast('Certification update failed', 'error');
+        addToast(t('toast.certificationUpdateFailed'), 'error');
       }
     },
     
@@ -4227,21 +4240,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...prev,
         [vehicleId]: [...(prev[vehicleId] || []), rating]
       }));
-      addToast('Rating added successfully', 'success');
+      addToast(t('toast.ratingAdded'), 'success');
     },
     addSellerRating: (sellerEmail: string, rating: number) => {
       setSellerRatings(prev => ({
         ...prev,
         [sellerEmail]: [...(prev[sellerEmail] || []), rating]
       }));
-      addToast('Seller rating added successfully', 'success');
+      addToast(t('toast.sellerRatingAdded'), 'success');
     },
     sendMessage: async (conversationId: string, message: string) => {
       console.log('🔧 sendMessage called:', { conversationId, message, currentUser: currentUser?.email });
       
       if (!currentUser) {
         console.warn('⚠️ Cannot send message: no current user');
-        addToast('You must be logged in to send messages.', 'error');
+        addToast(t('toast.loginRequiredMessages'), 'error');
         return;
       }
 
@@ -4257,7 +4270,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const conversation = conversations.find(conv => conv.id === conversationId);
         if (!conversation) {
           console.warn('⚠️ Conversation not found:', conversationId);
-          addToast('Conversation not found. Please refresh and try again.', 'error');
+          addToast(t('toast.conversationNotFoundRefresh'), 'error');
           return;
         }
 
@@ -4321,7 +4334,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         if (!sendResult.success) {
           console.error('❌ Failed to send message via real-time service:', sendResult.error);
-          addToast('Failed to send message. Please check your connection.', 'error');
+          addToast(t('toast.failedSendMessageConnection'), 'error');
           // Message is still in local state, so user sees it
           // It will be synced when connection is restored
         } else {
@@ -4393,7 +4406,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       } catch (error) {
         console.error('Error in sendMessage:', error);
-        addToast('Failed to send message. Please try again.', 'error');
+        addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },
     sendMessageWithType: async (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => {
@@ -4401,7 +4414,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       if (!currentUser) {
         console.warn('⚠️ Cannot send message: no current user');
-        addToast('You must be logged in to send messages.', 'error');
+        addToast(t('toast.loginRequiredMessages'), 'error');
         return;
       }
 
@@ -4417,7 +4430,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const conversation = conversations.find(conv => conv.id === conversationId);
         if (!conversation) {
           console.warn('⚠️ Conversation not found:', conversationId);
-          addToast('Conversation not found. Please refresh and try again.', 'error');
+          addToast(t('toast.conversationNotFoundRefresh'), 'error');
           return;
         }
 
@@ -4562,7 +4575,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       } catch (error) {
         console.error('Error in sendMessageWithType:', error);
-        addToast('Failed to send message. Please try again.', 'error');
+        addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },
     markAsRead: async (conversationId: string) => {
@@ -4614,7 +4627,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           conv && conv.id === id ? { ...conv, isFlagged: true, flagReason: reason } : conv
         ) : []);
       }
-      addToast(`Content flagged for review${reason ? ': ' + reason : ''}`, 'warning');
+      addToast(t('toast.contentFlagged', { reasonSuffix: reason ? ': ' + reason : '' }), 'warning');
     },
     updateUser: async (email: string, updates: Partial<User>) => {
       try {
@@ -4679,9 +4692,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 ? errorReason 
                 : `${errorReason}. Please log in again and try again.`;
               if (updates.password) {
-                addToast(`Password update failed: ${cleanReason}`, 'error');
+                addToast(t('toast.passwordUpdateFailedReason', { reason: cleanReason }), 'error');
               } else {
-                addToast(`Profile update failed: ${cleanReason}`, 'error');
+                addToast(t('toast.profileUpdateFailedReason', { reason: cleanReason }), 'error');
               }
               // Don't update localStorage - Supabase update failed, so we shouldn't save locally
               // Throw a specific error that we can check in catch block to avoid duplicate messages
@@ -4692,9 +4705,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (response.status === 500) {
               console.error('❌ 500 Server Error - Supabase update failed.');
               if (updates.password) {
-                addToast('Password update failed: Server error. Please try again.', 'error');
+                addToast(t('toast.passwordUpdateFailedServer'), 'error');
               } else {
-                addToast('Profile update failed: Server error. Please try again.', 'error');
+                addToast(t('toast.profileUpdateFailedServer'), 'error');
               }
               // Don't update localStorage - Supabase update failed
               throw new Error('Server error. Please try again.');
@@ -4799,9 +4812,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           // Show success message
           if (updates.password) {
-            addToast('Password updated successfully!', 'success');
+            addToast(t('toast.passwordUpdatedSuccess'), 'success');
           } else {
-            addToast('Profile updated successfully!', 'success');
+            addToast(t('toast.profileUpdatedSuccess'), 'success');
           }
           
         } catch (apiError) {
@@ -4822,9 +4835,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (errorMsg.includes('503') || errorMsg.includes('Database connection failed') || errorMsg.includes('SUPABASE')) {
               console.error('❌ Supabase connection failed:', errorMsg);
               if (updates.password) {
-                addToast('Password update failed: Supabase connection error. Please try again.', 'error');
+                addToast(t('toast.passwordUpdateFailedSupabase'), 'error');
               } else {
-                addToast('Profile update failed: Supabase connection error. Please try again.', 'error');
+                addToast(t('toast.profileUpdateFailedSupabase'), 'error');
               }
             } else if (errorMsg.includes('fetch') || 
                 errorMsg.includes('network') ||
@@ -4833,21 +4846,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               // Network errors
               console.error('❌ Network error updating user:', errorMsg);
               if (updates.password) {
-                addToast('Password update failed: Network error. Please check your connection and try again.', 'error');
+                addToast(t('toast.passwordUpdateFailedNetwork'), 'error');
               } else {
-                addToast('Profile update failed: Network error. Please check your connection and try again.', 'error');
+                addToast(t('toast.profileUpdateFailedNetwork'), 'error');
               }
             } else if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
               // 404 errors
               console.error('❌ API endpoint not found:', errorMsg);
               if (updates.password) {
-                addToast('Password update failed: API endpoint not found. Please check deployment.', 'error');
+                addToast(t('toast.passwordUpdateFailedNotFound'), 'error');
               } else {
-                addToast('Profile update failed: API endpoint not found. Please check deployment.', 'error');
+                addToast(t('toast.profileUpdateFailedNotFound'), 'error');
               }
             } else if (errorMsg.includes('400')) {
               console.error('❌ Invalid profile data:', apiError);
-              addToast(`Update failed: Invalid data - ${errorMsg.replace('400: ', '')}`, 'error');
+              addToast(
+                t('toast.updateInvalidData', { detail: errorMsg.replace('400: ', '') }),
+                'error',
+              );
             } else if (errorMsg.includes('Authentication failed') || errorMsg.includes('Please log in again') || errorMsg.includes('session has expired')) {
               // Authentication errors - already handled above, but catch here for safety
               // Avoid duplicate messages - check if we already showed an error
@@ -4858,34 +4874,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   ? errorMsg 
                   : `${errorMsg}. Please log in again and try again.`;
                 if (updates.password) {
-                  addToast(`Password update failed: ${cleanMsg}`, 'error');
+                  addToast(t('toast.passwordUpdateFailedReason', { reason: cleanMsg }), 'error');
                 } else {
-                  addToast(`Profile update failed: ${cleanMsg}`, 'error');
+                  addToast(t('toast.profileUpdateFailedReason', { reason: cleanMsg }), 'error');
                 }
               }
             } else if (errorMsg.includes('500') || errorMsg.includes('Database error') || errorMsg.includes('Internal server') || errorMsg.includes('Server error')) {
               console.error('❌ Server/Database error updating user:', apiError);
               if (updates.password) {
-                addToast('Password update failed: Server error. Please try again.', 'error');
+                addToast(t('toast.passwordUpdateFailedServer'), 'error');
               } else {
-                addToast('Profile update failed: Server error. Please try again.', 'error');
+                addToast(t('toast.profileUpdateFailedServer'), 'error');
               }
             } else {
               console.warn('⚠️ Failed to update profile in Supabase:', errorMsg);
               // Format Supabase error for user display
               const displayError = formatSupabaseError(errorMsg);
               if (updates.password) {
-                addToast(`Password update failed: ${displayError}`, 'error');
+                addToast(t('toast.passwordUpdateFailedDisplay', { error: displayError }), 'error');
               } else {
-                addToast(`Profile update failed: ${displayError}`, 'error');
+                addToast(t('toast.profileUpdateFailedDisplay', { error: displayError }), 'error');
               }
             }
           } else {
             console.warn('⚠️ Failed to update profile in Supabase - unknown error type');
             if (updates.password) {
-              addToast('Password update failed. Please try again or check server logs.', 'error');
+              addToast(t('toast.passwordUpdateFailedCheckLogs'), 'error');
             } else {
-              addToast('Profile update failed. Please try again.', 'error');
+              addToast(t('toast.profileUpdateFailedTryAgain'), 'error');
             }
           }
           
@@ -4910,7 +4926,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAuditLog(prev => [entry, ...prev]);
       
       setUsers(prev => Array.isArray(prev) ? prev.filter(user => user && user.email !== email) : []);
-      addToast('User deleted successfully', 'success');
+      addToast(t('toast.userDeletedSuccess'), 'success');
     },
     updateVehicle: async (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => {
       await updateVehicleHandler(id, updates, options);
@@ -4932,14 +4948,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           // Update local state
           setVehicles(prev => Array.isArray(prev) ? prev.filter(vehicle => vehicle && vehicle.id !== id) : []);
-          addToast('Vehicle deleted successfully', 'success');
+          addToast(t('toast.vehicleDeletedSuccess'), 'success');
           console.log('✅ Vehicle deleted via API:', result);
         } else {
-          addToast('Failed to delete vehicle', 'error');
+          addToast(t('toast.deleteVehicleFailed'), 'error');
         }
       } catch (error) {
         console.error('❌ Failed to delete vehicle:', error);
-        addToast('Failed to delete vehicle. Please try again.', 'error');
+        addToast(t('toast.deleteVehicleFailedRetry'), 'error');
       }
     },
     selectVehicle: (vehicle: Vehicle) => {
@@ -5072,7 +5088,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return updated;
       });
       
-      addToast(`Offer ${response} successfully`, 'success');
+      addToast(
+        response === 'accepted'
+          ? t('toast.offerAccepted')
+          : response === 'rejected'
+            ? t('toast.offerRejected')
+            : t('toast.offerCountered'),
+        'success',
+      );
     },
   }), [
     currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady, currentUser,
@@ -5088,7 +5111,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
     setNotifications, addToast, removeToast, navigate, goBack, refreshVehicles, handleLogin, handleLogout,
-    updateVehicleHandler
+    updateVehicleHandler,
+    t,
   ]);
 
   return (

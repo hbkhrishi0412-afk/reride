@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Vehicle } from '../types';
 
 interface SellerDropdownProps {
@@ -14,6 +15,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
   onSellOnline, 
   onSellScrapCar 
 }) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [cities, setCities] = useState<string[]>([]);
 
@@ -56,7 +58,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
         onClick={() => setIsOpen(!isOpen)}
         className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-1"
       >
-        Sell Car
+        {t('nav.sellCar')}
         <svg 
           className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
           fill="none" 
@@ -85,7 +87,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
                     onClick={handleSellOnlineClick}
                     className="w-full text-left px-3 py-2 text-white font-semibold hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
                   >
-                    Sell Car Online
+                    {t('nav.sellDropdown.sellOnline')}
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
@@ -97,7 +99,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
                       onClick={() => handleCityClick(city)}
                       className="w-full text-left px-3 py-2 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
                     >
-                      Sell cars in {city}
+                      {t('nav.sellDropdown.sellInCity', { city })}
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
@@ -113,7 +115,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
                       onClick={() => handleCityClick(city)}
                       className="w-full text-left px-3 py-2 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
                     >
-                      Sell cars in {city}
+                      {t('nav.sellDropdown.sellInCity', { city })}
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
@@ -125,7 +127,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
                     onClick={handleScrapCarClick}
                     className="w-full text-left px-3 py-2 text-white hover:bg-purple-700 rounded-lg transition-colors duration-200 flex items-center justify-between"
                   >
-                    Sell Scrap Car
+                    {t('nav.sellDropdown.scrapCar')}
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>

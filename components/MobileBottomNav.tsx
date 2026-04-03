@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 
@@ -24,10 +25,11 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
   inboxCount = 0,
   onToggleMenu
 }) => {
+  const { t, i18n } = useTranslation();
   const navItems = useMemo(() => [
     {
       id: 'home',
-      label: 'Home',
+      label: t('nav.home'),
       view: ViewEnum.HOME,
       icon: (active: boolean) => (
         <svg className="w-6 h-6" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={active ? 0 : 2}>
@@ -38,7 +40,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
     },
     {
       id: 'buy',
-      label: 'Buy',
+      label: t('nav.bottomBuy'),
       view: ViewEnum.USED_CARS,
       icon: (active: boolean) => (
         <svg className="w-6 h-6" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={active ? 0 : 2}>
@@ -48,7 +50,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
     },
     {
       id: 'car-service',
-      label: 'Car service',
+      label: t('nav.bottomService'),
       view: ViewEnum.CAR_SERVICES,
       icon: (active: boolean) => (
         <svg className="w-6 h-6" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={active ? 0 : 2}>
@@ -58,7 +60,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
     },
     {
       id: 'sell',
-      label: 'Sell',
+      label: t('nav.bottomSell'),
       view: ViewEnum.SELL_CAR, // Navigate to seller type selection page first
       icon: (active: boolean) => (
         <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
@@ -70,7 +72,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
     },
     {
       id: 'messages',
-      label: 'Messages',
+      label: t('nav.messages'),
       view: ViewEnum.INBOX,
       icon: (active: boolean) => (
         <svg className="w-6 h-6" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={active ? 0 : 2}>
@@ -81,7 +83,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
     },
     {
       id: 'menu',
-      label: 'Menu',
+      label: t('nav.bottomMenu'),
       view: ViewEnum.HOME,
       icon: (active: boolean) => (
         <svg className="w-6 h-6" fill={active ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={active ? 0 : 2.5}>
@@ -89,7 +91,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
         </svg>
       )
     }
-  ], [currentUser, inboxCount, wishlistCount]);
+  ], [t, i18n.language, currentUser, inboxCount, wishlistCount]);
 
   return (
     <>

@@ -1,4 +1,5 @@
 import React, { useState, memo, useMemo, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { User, Vehicle, Conversation, Notification } from '../types';
 import { View as ViewEnum } from '../types';
 import { planService } from '../services/planService';
@@ -87,6 +88,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   onBoostListing,
   onRequestCertification
 }) => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editFormData, setEditFormData] = useState<Vehicle | null>(null);
@@ -210,14 +212,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           setPlan(planDetails);
         } catch (error) {
           console.error('Failed to load plan details:', error);
-          setPlan({ name: 'Free Plan', listingLimit: 1, price: 0 });
+          setPlan({ name: t('sellerDashboard.freePlanName'), listingLimit: 1, price: 0 });
         } finally {
           setPlanLoading(false);
         }
       };
       loadPlan();
     }
-  }, [isSeller, currentUser.subscriptionPlan]);
+  }, [isSeller, currentUser.subscriptionPlan, t]);
 
   // Initialize bank partners
   useEffect(() => {
@@ -242,17 +244,20 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const reportedCount = safeReportedVehicles.length;
   const featuredListingsCount = safeUserVehicles.filter(v => v && v.isFeatured).length;
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: '📊', count: null },
-    { id: 'listings', label: 'Listings', icon: '🚗', count: totalListings },
-    { id: 'messages', label: 'Messages', icon: '💬', count: unreadMessages },
-    { id: 'inquiries', label: 'Inquiries', icon: '📥', count: totalInquiries },
-    { id: 'analytics', label: 'Analytics', icon: '📈', count: null },
-    { id: 'salesHistory', label: 'Sales', icon: '💰', count: soldListings },
-    { id: 'reports', label: 'Reports', icon: '🚩', count: reportedCount },
-    { id: 'settings', label: 'Settings', icon: '⚙️', count: null },
-    { id: 'profile', label: 'Profile', icon: '👤', count: null },
-  ];
+  const tabs = useMemo(
+    () => [
+      { id: 'overview' as const, label: t('sellerDashboard.mobile.tab.overview'), icon: '📊', count: null },
+      { id: 'listings' as const, label: t('sellerDashboard.mobile.tab.listings'), icon: '🚗', count: totalListings },
+      { id: 'messages' as const, label: t('sellerDashboard.mobile.tab.messages'), icon: '💬', count: unreadMessages },
+      { id: 'inquiries' as const, label: t('sellerDashboard.mobile.tab.inquiries'), icon: '📥', count: totalInquiries },
+      { id: 'analytics' as const, label: t('sellerDashboard.mobile.tab.analytics'), icon: '📈', count: null },
+      { id: 'salesHistory' as const, label: t('sellerDashboard.mobile.tab.sales'), icon: '💰', count: soldListings },
+      { id: 'reports' as const, label: t('sellerDashboard.mobile.tab.reports'), icon: '🚩', count: reportedCount },
+      { id: 'settings' as const, label: t('sellerDashboard.mobile.tab.settings'), icon: '⚙️', count: null },
+      { id: 'profile' as const, label: t('sellerDashboard.mobile.tab.profile'), icon: '👤', count: null },
+    ],
+    [t, totalListings, unreadMessages, totalInquiries, soldListings, reportedCount]
+  );
 
   const renderOverview = () => (
     <div className="space-y-5 pb-4">
@@ -268,12 +273,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         <div className="flex items-center justify-between mb-2">
           <div>
             <h2 className="text-xl font-bold mb-1 tracking-tight" style={{ letterSpacing: '-0.02em' }}>
-              Welcome back, {currentUser.name?.split(' ')[0]}!
+              {t('sellerDashboard.mobile.welcome', { name: currentUser.name?.split(' ')[0] || '' })}
             </h2>
             <p className="text-white/90 text-sm leading-relaxed font-medium">
-              {isSeller ? 'Manage your vehicle listings' : 
-               isAdmin ? 'Monitor platform activity' : 
-               'Track your car search journey'}
+              {isSeller
+                ? t('sellerDashboard.mobile.manageListings')
+                : isAdmin
+                  ? t('sellerDashboard.mobile.monitorPlatform')
+                  : t('sellerDashboard.mobile.trackBuyerJourney')}
             </p>
           </div>
           <div 
@@ -307,10 +314,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </span>
             )}
             </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Listings</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
+            {t('sellerDashboard.mobile.tab.listings')}
+          </p>
           <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalListings}</p>
           {activeListings > 0 && (
-            <p className="text-xs text-gray-500 mt-1">{activeListings} active</p>
+            <p className="text-xs text-gray-500 mt-1">{t('sellerDashboard.mobile.nActive', { count: activeListings })}</p>
           )}
         </div>
 
@@ -328,10 +337,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </span>
             )}
             </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Messages</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
+            {t('sellerDashboard.mobile.tab.messages')}
+          </p>
           <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{unreadMessages}</p>
           {safeConversations.length > 0 && (
-            <p className="text-xs text-gray-500 mt-1">{safeConversations.length} total</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {t('sellerDashboard.mobile.nTotal', { count: safeConversations.length })}
+            </p>
           )}
         </div>
 
@@ -341,10 +354,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <span className="text-xl">👁️</span>
             </div>
             </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Total Views</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
+            {t('sellerDashboard.mobile.totalViews')}
+          </p>
           <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalViews}</p>
           {totalViews > 0 && (
-            <p className="text-xs text-gray-500 mt-1">Across all listings</p>
+            <p className="text-xs text-gray-500 mt-1">{t('sellerDashboard.mobile.viewsHint')}</p>
           )}
           </div>
 
@@ -354,10 +369,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <span className="text-xl">✅</span>
             </div>
           </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>Sold</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
+            {t('sellerDashboard.mobile.soldStat')}
+          </p>
           <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{soldListings}</p>
           {soldListings > 0 && (
-            <p className="text-xs text-gray-500 mt-1">{Math.round((soldListings / totalListings) * 100)}% success</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {t('sellerDashboard.mobile.soldSuccess', {
+                percent: Math.round((soldListings / totalListings) * 100),
+              })}
+            </p>
           )}
         </div>
       </div>
@@ -374,19 +395,25 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         >
           <div className="relative z-10">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">Your Plan: {plan.name}</h3>
+              <h3 className="text-lg font-bold">
+                {t('sellerDashboard.yourPlanLabel')} {plan.name}
+              </h3>
               {(plan.id !== 'premium' || (currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date())) && (
                 <button
                   onClick={() => onNavigate(ViewEnum.PRICING)}
                   className="px-4 py-2 bg-white/20 backdrop-blur-sm text-white font-semibold rounded-lg text-sm active:scale-95 transition-transform"
                 >
-                  {currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date() ? 'Renew' : 'Upgrade'}
+                  {currentUser.planExpiryDate && new Date(currentUser.planExpiryDate) < new Date()
+                    ? t('sellerDashboard.renewPlan')
+                    : t('sellerDashboard.upgradePlan')}
                 </button>
               )}
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between items-center">
-                <span className="opacity-90">Active Listings:</span>
+                <span className="opacity-90">
+                  {t('vehicle.detail.activeListings')}:
+                </span>
                 <span className="font-bold">{activeListings} / {plan.listingLimit === 'unlimited' ? '∞' : plan.listingLimit}</span>
               </div>
               <div className="w-full rounded-full h-2 bg-white/20">
@@ -529,8 +556,10 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     <div className="space-y-5 pb-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-bold text-gray-900">Your Listings</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{totalListings} total • {activeListings} active</p>
+          <h3 className="text-lg font-bold text-gray-900">{t('sellerListing.yourListings')}</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {t('sellerListing.listingsSummary', { total: totalListings, active: activeListings })}
+          </p>
         </div>
         {isSeller && (
           <button 
@@ -542,7 +571,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             style={{ letterSpacing: '-0.01em' }}
           >
             <span className="text-base">➕</span>
-            <span>Add Vehicle</span>
+            <span>{t('sellerListing.addVehicle')}</span>
           </button>
         )}
       </div>
@@ -552,9 +581,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           <div className="w-20 h-20 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-4xl">🚗</span>
           </div>
-          <h4 className="text-xl font-bold text-gray-900 mb-2">No listings yet</h4>
+          <h4 className="text-xl font-bold text-gray-900 mb-2">{t('sellerListing.noListingsTitle')}</h4>
           <p className="text-gray-600 text-sm mb-6 leading-relaxed max-w-sm mx-auto">
-            {isSeller ? 'Start by adding your first vehicle to reach potential buyers' : 'You haven\'t saved any vehicles yet'}
+            {isSeller ? t('sellerListing.noListingsSeller') : t('sellerListing.noListingsBuyer')}
           </p>
           {isSeller && (
             <button 
@@ -564,7 +593,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               }}
               className="native-button native-button-primary px-8 py-3 font-semibold"
             >
-              Add Your First Vehicle
+              {t('sellerListing.addFirstVehicle')}
             </button>
           )}
         </div>
@@ -598,13 +627,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                       vehicle.status === 'sold' ? 'bg-gray-100 text-gray-800' :
                       'bg-yellow-100 text-yellow-800'
                     }`}>
-                      {vehicle.status === 'published' ? '✅ Active' : vehicle.status === 'sold' ? '✅ Sold' : '⏳ Pending'}
+                      {vehicle.status === 'published'
+                        ? t('sellerListing.badgeActive')
+                        : vehicle.status === 'sold'
+                          ? t('sellerListing.badgeSold')
+                          : t('sellerListing.badgePending')}
                     </span>
                     {vehicle.mileage && (
                       <span className="text-xs text-gray-500">📏 {vehicle.mileage.toLocaleString('en-IN')} km</span>
                     )}
                     {vehicle.views && (
-                      <span className="text-xs text-gray-500">👁️ {vehicle.views} views</span>
+                      <span className="text-xs text-gray-500">👁️ {t('sellerListing.views', { count: vehicle.views })}</span>
                     )}
                   </div>
                 </div>
@@ -912,7 +945,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Active Listings</span>
+                <span className="text-sm font-medium text-gray-700">
+                  {t('vehicle.detail.activeListings')}
+                </span>
                 <span className="text-xs text-gray-500">{activeListings}</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2">
@@ -1621,19 +1656,19 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     const newErrors: Record<string, string> = {};
     
     if (!addFormData.make || addFormData.make.trim() === '') {
-      newErrors.make = 'Make is required';
+      newErrors.make = t('sellerListing.error.makeRequired');
     }
     if (!addFormData.model || addFormData.model.trim() === '') {
-      newErrors.model = 'Model is required';
+      newErrors.model = t('sellerListing.error.modelRequired');
     }
     if (!addFormData.year || addFormData.year < 1900 || addFormData.year > new Date().getFullYear() + 1) {
-      newErrors.year = 'Please enter a valid year';
+      newErrors.year = t('sellerListing.error.year');
     }
     if (!addFormData.price || addFormData.price <= 0) {
-      newErrors.price = 'Price must be greater than 0';
+      newErrors.price = t('sellerListing.error.price');
     }
     if (addFormData.mileage < 0) {
-      newErrors.mileage = 'Mileage cannot be negative';
+      newErrors.mileage = t('sellerListing.error.mileage');
     }
 
     setAddErrors(newErrors);
@@ -1667,13 +1702,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       <div className="space-y-5 pb-4">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-bold text-gray-900">Add New Vehicle</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Fill in the details below</p>
+            <h3 className="text-lg font-bold text-gray-900">{t('sellerListing.addTitle')}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{t('sellerListing.addSubtitle')}</p>
           </div>
           <button 
             onClick={() => setActiveTab('listings')}
             className="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             ✕
           </button>
@@ -1682,18 +1717,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         <form onSubmit={handleAddSubmit} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 space-y-6">
           {/* Basic Information */}
           <div className="space-y-4">
-            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">Basic Information</h4>
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.basic')}</h4>
             
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Make <span className="text-red-500">*</span>
+                {t('sellerListing.label.make')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="make"
                 value={addFormData.make}
                 onChange={handleAddFormChange}
-                placeholder="e.g., Tata, Hyundai, Maruti"
+                placeholder={t('sellerListing.placeholder.make')}
                 className={`native-input ${addErrors.make ? 'bg-red-50' : ''}`}
                 required
               />
@@ -1702,14 +1737,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Model <span className="text-red-500">*</span>
+                {t('sellerListing.label.model')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="model"
                 value={addFormData.model}
                 onChange={handleAddFormChange}
-                placeholder="e.g., Nexon, Creta, Swift"
+                placeholder={t('sellerListing.placeholder.model')}
                 className={`native-input ${addErrors.model ? 'bg-red-50' : ''}`}
                 required
               />
@@ -1719,14 +1754,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Year <span className="text-red-500">*</span>
+                  {t('sellerListing.label.year')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   name="year"
                   value={addFormData.year}
                   onChange={handleAddFormChange}
-                  placeholder="2024"
+                  placeholder={t('sellerListing.placeholder.year')}
                   min="1900"
                   max={new Date().getFullYear() + 1}
                   className={`native-input ${addErrors.year ? 'bg-red-50' : ''}`}
@@ -1737,14 +1772,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Variant
+                  {t('sellerListing.label.variant')}
                 </label>
                 <input
                   type="text"
                   name="variant"
                   value={addFormData.variant || ''}
                   onChange={handleAddFormChange}
-                  placeholder="e.g., XZ+, VX"
+                  placeholder={t('sellerListing.placeholder.variant')}
                   className="native-input"
                 />
               </div>
@@ -1753,14 +1788,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Price (₹) <span className="text-red-500">*</span>
+                  {t('sellerListing.label.price')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   name="price"
                   value={addFormData.price || ''}
                   onChange={handleAddFormChange}
-                  placeholder="1500000"
+                  placeholder={t('sellerListing.placeholder.price')}
                   min="0"
                   className={`native-input ${addErrors.price ? 'bg-red-50' : ''}`}
                   required
@@ -1775,14 +1810,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Mileage (km) <span className="text-red-500">*</span>
+                  {t('sellerListing.label.mileage')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   name="mileage"
                   value={addFormData.mileage || ''}
                   onChange={handleAddFormChange}
-                  placeholder="25000"
+                  placeholder={t('sellerListing.placeholder.mileage')}
                   min="0"
                   className={`native-input ${addErrors.mileage ? 'bg-red-50' : ''}`}
                   required
@@ -1794,11 +1829,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
           {/* Specifications */}
           <div className="space-y-4 pt-6 border-t border-gray-200">
-            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">Specifications</h4>
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.specs')}</h4>
             
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Fuel Type
+                {t('sellerListing.label.fuelType')}
               </label>
               <select
                 name="fuelType"
@@ -1806,17 +1841,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 onChange={handleAddFormChange}
                 className="native-input bg-white"
               >
-                <option value="Petrol">Petrol</option>
-                <option value="Diesel">Diesel</option>
-                <option value="Electric">Electric</option>
-                <option value="Hybrid">Hybrid</option>
-                <option value="CNG">CNG</option>
+                <option value="Petrol">{t('sellerListing.fuel.petrol')}</option>
+                <option value="Diesel">{t('sellerListing.fuel.diesel')}</option>
+                <option value="Electric">{t('sellerListing.fuel.electric')}</option>
+                <option value="Hybrid">{t('sellerListing.fuel.hybrid')}</option>
+                <option value="CNG">{t('sellerListing.fuel.cng')}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Transmission
+                {t('sellerListing.label.transmission')}
               </label>
               <select
                 name="transmission"
@@ -1824,31 +1859,31 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 onChange={handleAddFormChange}
                 className="native-input bg-white"
               >
-                <option value="Manual">Manual</option>
-                <option value="Automatic">Automatic</option>
-                <option value="AMT">AMT</option>
-                <option value="CVT">CVT</option>
+                <option value="Manual">{t('sellerListing.transmission.manual')}</option>
+                <option value="Automatic">{t('sellerListing.transmission.automatic')}</option>
+                <option value="AMT">{t('sellerListing.transmission.amt')}</option>
+                <option value="CVT">{t('sellerListing.transmission.cvt')}</option>
               </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Color
+                  {t('sellerListing.label.color')}
                 </label>
                 <input
                   type="text"
                   name="color"
                   value={addFormData.color || ''}
                   onChange={handleAddFormChange}
-                  placeholder="e.g., White, Black"
+                  placeholder={t('sellerListing.placeholder.color')}
                   className="native-input"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  No. of Owners
+                  {t('sellerListing.label.owners')}
                 </label>
                 <input
                   type="number"
@@ -1864,33 +1899,33 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
           {/* Location */}
           <div className="space-y-4 pt-6 border-t border-gray-200">
-            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">Location</h4>
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.location')}</h4>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  City
+                  {t('sellerListing.label.city')}
                 </label>
                 <input
                   type="text"
                   name="city"
                   value={addFormData.city || ''}
                   onChange={handleAddFormChange}
-                  placeholder="e.g., Mumbai"
+                  placeholder={t('sellerListing.placeholder.city')}
                   className="native-input"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  State
+                  {t('sellerListing.label.state')}
                 </label>
                 <input
                   type="text"
                   name="state"
                   value={addFormData.state || ''}
                   onChange={handleAddFormChange}
-                  placeholder="e.g., Maharashtra"
+                  placeholder={t('sellerListing.placeholder.state')}
                   className="native-input"
                 />
               </div>
@@ -1899,18 +1934,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
           {/* Description */}
           <div className="space-y-4 pt-6 border-t border-gray-200">
-            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">Description</h4>
+            <h4 className="font-bold text-gray-900 text-base border-b border-gray-200 pb-3">{t('sellerListing.section.description')}</h4>
             
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Description
+                {t('sellerListing.label.description')}
               </label>
               <textarea
                 name="description"
                 value={addFormData.description || ''}
                 onChange={handleAddFormChange}
                 rows={4}
-                placeholder="Describe the condition, features, and any additional information..."
+                placeholder={t('sellerListing.placeholder.description')}
                 className="native-input resize-none"
               />
             </div>
@@ -1923,14 +1958,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               onClick={() => setActiveTab('listings')}
               className="flex-1 native-button native-button-secondary"
             >
-              Cancel
+              {t('sellerListing.cancel')}
             </button>
             <button
               type="submit"
               disabled={isAddingVehicle}
               className="flex-1 native-button native-button-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isAddingVehicle ? 'Adding...' : 'Add Vehicle'}
+              {isAddingVehicle ? t('sellerListing.submitting') : t('sellerListing.submit')}
             </button>
           </div>
         </form>
@@ -1943,16 +1978,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Edit Vehicle</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{t('sellerListing.editTitle')}</h3>
         <button 
               onClick={() => setActiveTab('listings')}
           className="p-2 text-gray-400 hover:text-gray-600"
+          aria-label={t('common.close')}
         >
           ✕
         </button>
       </div>
           <div className="bg-white rounded-lg p-4 shadow-sm text-center py-8">
-            <p className="text-gray-500">No vehicle selected for editing.</p>
+            <p className="text-gray-500">{t('sellerListing.editNoSelection')}</p>
           </div>
         </div>
       );
@@ -1963,16 +1999,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       return (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Edit Vehicle</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{t('sellerListing.editTitle')}</h3>
           <button 
               onClick={() => setActiveTab('listings')}
               className="p-2 text-gray-400 hover:text-gray-600"
+              aria-label={t('common.close')}
           >
               ✕
           </button>
         </div>
           <div className="bg-white rounded-lg p-4 shadow-sm text-center py-8">
-            <p className="text-gray-500">No vehicle selected for editing.</p>
+            <p className="text-gray-500">{t('sellerListing.editNoSelection')}</p>
       </div>
     </div>
   );
@@ -2003,19 +2040,19 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       const newErrors: Record<string, string> = {};
       
       if (!formData.make || formData.make.trim() === '') {
-        newErrors.make = 'Make is required';
+        newErrors.make = t('sellerListing.error.makeRequired');
       }
       if (!formData.model || formData.model.trim() === '') {
-        newErrors.model = 'Model is required';
+        newErrors.model = t('sellerListing.error.modelRequired');
       }
       if (!formData.year || formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
-        newErrors.year = 'Please enter a valid year';
+        newErrors.year = t('sellerListing.error.year');
       }
       if (!formData.price || formData.price <= 0) {
-        newErrors.price = 'Price must be greater than 0';
+        newErrors.price = t('sellerListing.error.price');
       }
       if (formData.mileage < 0) {
-        newErrors.mileage = 'Mileage cannot be negative';
+        newErrors.mileage = t('sellerListing.error.mileage');
       }
 
       setEditErrors(newErrors);
@@ -2046,10 +2083,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Edit Vehicle</h3>
+        <h3 className="text-lg font-semibold text-gray-900">{t('sellerListing.editTitle')}</h3>
         <button 
           onClick={() => setActiveTab('listings')}
           className="p-2 text-gray-400 hover:text-gray-600"
+          aria-label={t('common.close')}
         >
           ✕
         </button>
@@ -2058,11 +2096,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         <form onSubmit={handleSubmit} className="bg-white rounded-lg p-4 shadow-sm space-y-4">
           {/* Basic Information */}
           <div className="space-y-4">
-            <h4 className="font-semibold text-gray-900 border-b pb-2">Basic Information</h4>
+            <h4 className="font-semibold text-gray-900 border-b pb-2">{t('sellerListing.section.basic')}</h4>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Make <span className="text-red-500">*</span>
+                {t('sellerListing.label.make')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -2077,7 +2115,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Model <span className="text-red-500">*</span>
+                {t('sellerListing.label.model')} <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -2093,7 +2131,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Year <span className="text-red-500">*</span>
+                  {t('sellerListing.label.year')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -2108,7 +2146,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Variant
+                  {t('sellerListing.label.variant')}
                 </label>
                 <input
                   type="text"
@@ -2123,7 +2161,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price (₹) <span className="text-red-500">*</span>
+                  {t('sellerListing.label.price')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -2138,7 +2176,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mileage (km) <span className="text-red-500">*</span>
+                  {t('sellerListing.label.mileage')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -2155,11 +2193,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
           {/* Specifications */}
           <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">Specifications</h4>
+            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.specs')}</h4>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fuel Type
+                {t('sellerListing.label.fuelType')}
               </label>
               <select
                 name="fuelType"
@@ -2167,17 +2205,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
-                <option value="Petrol">Petrol</option>
-                <option value="Diesel">Diesel</option>
-                <option value="Electric">Electric</option>
-                <option value="Hybrid">Hybrid</option>
-                <option value="CNG">CNG</option>
+                <option value="Petrol">{t('sellerListing.fuel.petrol')}</option>
+                <option value="Diesel">{t('sellerListing.fuel.diesel')}</option>
+                <option value="Electric">{t('sellerListing.fuel.electric')}</option>
+                <option value="Hybrid">{t('sellerListing.fuel.hybrid')}</option>
+                <option value="CNG">{t('sellerListing.fuel.cng')}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Transmission
+                {t('sellerListing.label.transmission')}
               </label>
               <select
                 name="transmission"
@@ -2185,17 +2223,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
-                <option value="Manual">Manual</option>
-                <option value="Automatic">Automatic</option>
-                <option value="AMT">AMT</option>
-                <option value="CVT">CVT</option>
+                <option value="Manual">{t('sellerListing.transmission.manual')}</option>
+                <option value="Automatic">{t('sellerListing.transmission.automatic')}</option>
+                <option value="AMT">{t('sellerListing.transmission.amt')}</option>
+                <option value="CVT">{t('sellerListing.transmission.cvt')}</option>
               </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Color
+                  {t('sellerListing.label.color')}
                 </label>
                 <input
                   type="text"
@@ -2208,7 +2246,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  No. of Owners
+                  {t('sellerListing.label.owners')}
                 </label>
                 <input
                   type="number"
@@ -2224,12 +2262,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
           {/* Location */}
           <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">Location</h4>
+            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.location')}</h4>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  City
+                  {t('sellerListing.label.city')}
                 </label>
                 <input
                   type="text"
@@ -2242,7 +2280,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  State
+                  {t('sellerListing.label.state')}
                 </label>
                 <input
                   type="text"
@@ -2257,11 +2295,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
           {/* Description */}
           <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">Description</h4>
+            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.description')}</h4>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
+                {t('sellerListing.label.description')}
               </label>
               <textarea
                 name="description"
@@ -2269,18 +2307,114 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 onChange={handleChange}
                 rows={4}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="Describe the condition, features, and any additional information..."
+                placeholder={t('sellerListing.placeholder.description')}
               />
+            </div>
+          </div>
+
+          {/* Listing offer */}
+          <div className="space-y-4 pt-4 border-t">
+            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.offer')}</h4>
+            <p className="text-xs text-gray-600">{t('sellerListing.offer.hint')}</p>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!formData.offerEnabled}
+                onChange={(e) =>
+                  setEditFormData((prev) => (prev ? { ...prev, offerEnabled: e.target.checked } : prev))
+                }
+                className="h-5 w-5 rounded border-gray-300"
+              />
+              <span className="text-sm font-medium text-gray-800">{t('sellerListing.offer.enable')}</span>
+            </label>
+            <div className={`space-y-3 ${formData.offerEnabled ? '' : 'opacity-50 pointer-events-none'}`}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerTitle')}</label>
+                <input
+                  type="text"
+                  name="offerTitle"
+                  value={formData.offerTitle ?? ''}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('vehicle.detail.offer.specialOffer')}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerStartDate')}</label>
+                  <input
+                    type="date"
+                    name="offerStartDate"
+                    value={formData.offerStartDate ?? ''}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerEndDate')}</label>
+                  <input
+                    type="date"
+                    name="offerEndDate"
+                    value={formData.offerEndDate ?? ''}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerDateLabel')}</label>
+                <input
+                  type="text"
+                  name="offerDateLabel"
+                  value={formData.offerDateLabel ?? ''}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('sellerListing.placeholder.offerDateLabel')}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerDescription')}</label>
+                <input
+                  type="text"
+                  name="offerDescription"
+                  value={formData.offerDescription ?? ''}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('vehicle.detail.offer.loanOffersOnAllCars')}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerHighlight')}</label>
+                <input
+                  type="text"
+                  name="offerHighlight"
+                  value={formData.offerHighlight ?? ''}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('vehicle.detail.offer.roiStartingAt')}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('sellerListing.label.offerDisclaimer')}</label>
+                <input
+                  type="text"
+                  name="offerDisclaimer"
+                  value={formData.offerDisclaimer ?? ''}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder={t('sellerListing.placeholder.offerDisclaimer')}
+                />
+              </div>
             </div>
           </div>
 
           {/* Status */}
           <div className="space-y-4 pt-4 border-t">
-            <h4 className="font-semibold text-gray-900">Listing Status</h4>
+            <h4 className="font-semibold text-gray-900">{t('sellerListing.section.listingStatus')}</h4>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status
+                {t('sellerListing.label.status')}
               </label>
               <select
                 name="status"
@@ -2288,9 +2422,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
-                <option value="published">Published</option>
-                <option value="unpublished">Unpublished</option>
-                <option value="sold">Sold</option>
+                <option value="published">{t('sellerListing.status.published')}</option>
+                <option value="unpublished">{t('sellerListing.status.unpublished')}</option>
+                <option value="sold">{t('sellerListing.status.sold')}</option>
               </select>
             </div>
           </div>
@@ -2302,14 +2436,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               onClick={() => setActiveTab('listings')}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
             >
-              Cancel
+              {t('sellerListing.cancel')}
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
               className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
+              {isSubmitting ? t('sellerListing.saving') : t('sellerListing.saveChanges')}
           </button>
         </div>
         </form>
@@ -2575,7 +2709,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
         {/* Bank Partners Section */}
         <div className="native-card p-5">
-          <h4 className="font-bold text-gray-900 mb-3 text-base">Finance Partners</h4>
+          <h4 className="font-bold text-gray-900 mb-3 text-base">{t('vehicle.detail.financePartners.title')}</h4>
           <p className="text-sm text-gray-600 mb-4">
             Select banks you partner with for vehicle financing. This information will be displayed on your listings.
           </p>
