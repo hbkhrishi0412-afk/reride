@@ -116,6 +116,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
       }}
       data-testid="vehicle-card"
       onMouseEnter={(e) => {
+        void import('./VehicleDetail.js');
+        void import('./MobileVehicleDetail.js');
         e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
         e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
         e.currentTarget.style.borderColor = '#1E88E5';

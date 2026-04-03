@@ -77,8 +77,21 @@ export const SECURITY_CONFIG = {
           'https://localhost',
           'capacitor://localhost'
         ],
-    ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    ALLOWED_HEADERS: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-App-Client'],
+    ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
+    ALLOWED_HEADERS: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-CSRF-Token',
+      'X-App-Client',
+      'Accept',
+      'Accept-Language',
+      'If-None-Match',
+      'sentry-trace',
+      'baggage',
+      'traceparent',
+      'tracestate',
+    ],
     CREDENTIALS: true,
     MAX_AGE: 86400 // 24 hours
   },
@@ -120,7 +133,8 @@ export const SECURITY_CONFIG = {
         ].join('; '),
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'geolocation=(self), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
-    'Cross-Origin-Embedder-Policy': process.env.NODE_ENV === 'production' ? 'require-corp' : 'unsafe-none',
+    // require-corp on JSON API responses can break cross-origin fetch in some WebViews; keep API embeddable.
+    'Cross-Origin-Embedder-Policy': 'unsafe-none',
     'Cross-Origin-Opener-Policy': 'same-origin',
     // Must allow cross-origin reads: Capacitor WebView (https://localhost) fetches this API on www.reride.co.in.
     // same-origin caused fetch() to fail in the native app with "Failed to fetch" / network errors.

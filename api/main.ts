@@ -58,7 +58,6 @@ import {
   generateAccessToken, 
   generateRefreshToken, 
   validateUserInput,
-  getSecurityHeaders,
   sanitizeObject,
   sanitizeString,
   validateEmail,
@@ -67,6 +66,7 @@ import {
   type TokenPayload
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
+import { attachApiCors } from '../utils/attach-api-cors.js';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
 import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../utils/csrf.js';
 import { checkUpstashRateLimit } from '../lib/rate-limit-upstash.js';
@@ -336,83 +336,32 @@ async function mainHandler(
   req: VercelRequest,
   res: VercelResponse,
 ) {
-  const primaryOrigin =
-    process.env.PRIMARY_ORIGIN ||
-    process.env.ALLOWED_ORIGIN ||
-    'https://www.reride.co.in';
-  // Set security headers
-  const securityHeaders = getSecurityHeaders();
-  Object.entries(securityHeaders).forEach(([key, value]) => {
-    res.setHeader(key, value);
-  });
-  
-  // Set CORS headers with proper security
+  attachApiCors(req, res);
+
   const rawOrigin = req.headers.origin;
-  const origin =
+  const originHeader =
     typeof rawOrigin === 'string'
       ? rawOrigin
       : Array.isArray(rawOrigin)
         ? rawOrigin[0]
         : undefined;
-  const originLc = origin?.toLowerCase() ?? '';
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isLocalhost = origin && (
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1') ||
-    origin.includes('::1')
-  );
-  // Capacitor Android/iOS WebView always uses these origins (androidScheme: 'https' or capacitor://)
-  const isCapacitorApp =
-    origin === 'https://localhost' ||
-    origin === 'https://127.0.0.1' ||
-    origin === 'capacitor://localhost' ||
-    origin === 'ionic://localhost' ||
-    origin === 'http://localhost' ||
-    origin === 'http://127.0.0.1' ||
-    originLc === 'https://appassets.androidplatform.net' ||
-    originLc.includes('appassets.androidplatform.net');
-
-  // Allow: config whitelist, dev localhost, OR Capacitor mobile app (in prod too)
-  if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost) || isCapacitorApp) {
-    res.setHeader('Access-Control-Allow-Origin', origin as string);
-  } else if (isProduction && origin) {
-    // In production, check if origin matches any allowed production domain
-    const isAllowedProductionOrigin = config.CORS.ALLOWED_ORIGINS.some(allowedOrigin => 
-      origin === allowedOrigin || origin?.includes(allowedOrigin.replace('https://', ''))
-    );
-    if (isAllowedProductionOrigin) {
-      res.setHeader('Access-Control-Allow-Origin', origin as string);
-    } else {
-      // Fallback to primary production domain
-      res.setHeader('Access-Control-Allow-Origin', primaryOrigin);
+  let isPackagedAndroidWebView = false;
+  if (originHeader) {
+    try {
+      isPackagedAndroidWebView =
+        new URL(originHeader).hostname.toLowerCase() === 'appassets.androidplatform.net';
+    } catch {
+      /* ignore */
     }
-  } else if (!isProduction) {
-    // In development, allow all origins as fallback
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-  } else {
-    // Production fallback - use primary domain
-    res.setHeader('Access-Control-Allow-Origin', primaryOrigin);
   }
-  
-  res.setHeader('Access-Control-Allow-Methods', config.CORS.ALLOWED_METHODS.join(', '));
-  res.setHeader('Access-Control-Allow-Headers', config.CORS.ALLOWED_HEADERS.join(', '));
-  res.setHeader('Access-Control-Allow-Credentials', config.CORS.CREDENTIALS.toString());
-  res.setHeader('Access-Control-Max-Age', config.CORS.MAX_AGE.toString());
-  // Let caches store per-Origin CORS responses (esp. credentialed / multi-origin API).
-  const prevVary = res.getHeader('Vary');
-  const varyParts: string[] =
-    typeof prevVary === 'string'
-      ? prevVary.split(',').map((s) => s.trim()).filter(Boolean)
-      : Array.isArray(prevVary)
-        ? prevVary.flatMap((v) => String(v).split(',')).map((s) => s.trim()).filter(Boolean)
-        : [];
-  if (!varyParts.some((p) => p.toLowerCase() === 'origin')) {
-    varyParts.push('Origin');
-  }
-  res.setHeader('Vary', varyParts.join(', '));
-  
-  // Always set JSON content type to prevent HTML responses
-  res.setHeader('Content-Type', 'application/json');
+  const isCapacitorApp =
+    originHeader === 'https://localhost' ||
+    originHeader === 'https://127.0.0.1' ||
+    originHeader === 'capacitor://localhost' ||
+    originHeader === 'ionic://localhost' ||
+    originHeader === 'http://localhost' ||
+    originHeader === 'http://127.0.0.1' ||
+    isPackagedAndroidWebView;
 
   // Handle CORS preflight (OPTIONS) and browser checks (HEAD)
   // This MUST be checked before any routing to prevent 405 errors
@@ -855,12 +804,57 @@ async function mainHandler(
   }
 }
 
+/** Vercel may pass query values as string | string[] */
+function firstQueryParam(val: string | string[] | undefined): string | undefined {
+  if (val === undefined) return undefined;
+  return Array.isArray(val) ? val[0] : val;
+}
+
 // Users handler - preserves exact functionality from users.ts
 async function handleUsers(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
   try {
     // FIX: Handle HEAD requests immediately to prevent 405 errors
     if (req.method === 'HEAD') {
       return res.status(200).end();
+    }
+
+    // Public dealer list must not 503 when Supabase is misconfigured (mobile WebView + /dealers).
+    if (req.method === 'GET') {
+      const pubAction = firstQueryParam(req.query.action);
+      const pubEmail = firstQueryParam(req.query.email);
+      const pubRole = firstQueryParam(req.query.role);
+      if (pubRole === 'seller' && !pubAction && !pubEmail) {
+        if (!USE_SUPABASE) {
+          return res.status(200).json([]);
+        }
+        try {
+          logInfo('📊 GET /users?role=seller: Public access - fetching sellers...');
+          const sellers = await userService.findByRole('seller');
+          logInfo(`✅ Fetched ${sellers.length} sellers from database`);
+          const normalizedSellers = sellers
+            .map((user) => {
+              const normalized = normalizeUser(user);
+              if (!normalized) {
+                logWarn(`⚠️ Seller filtered out during normalization:`, {
+                  email: user.email,
+                  id: user.id,
+                  hasId: !!user.id,
+                  hasEmail: !!user.email,
+                  hasRole: !!user.role,
+                });
+              }
+              return normalized;
+            })
+            .filter((u): u is NormalizedUser => u !== null);
+          logInfo(
+            `✅ Returning ${normalizedSellers.length} normalized sellers (${sellers.length - normalizedSellers.length} filtered out)`,
+          );
+          return res.status(200).json(normalizedSellers);
+        } catch (error) {
+          logError('❌ Error fetching sellers:', error);
+          return res.status(200).json([]);
+        }
+      }
     }
 
     // Check Supabase availability (required for vehicles, users, etc.)
@@ -2019,40 +2013,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
   // GET - Get users (authenticated)
   if (req.method === 'GET') {
-    const { action, email, role } = req.query;
+    const action = firstQueryParam(req.query.action);
+    const email = firstQueryParam(req.query.email);
+    const role = firstQueryParam(req.query.role);
     
-    // PUBLIC ACCESS: Allow fetching sellers without authentication (for Dealers page)
-    if (role === 'seller' && !action && !email) {
-      try {
-        logInfo('📊 GET /users?role=seller: Public access - fetching sellers...');
-        const sellers = await userService.findByRole('seller');
-        logInfo(`✅ Fetched ${sellers.length} sellers from database`);
-        
-        // SECURITY FIX: Normalize all sellers to remove passwords
-        const normalizedSellers = sellers.map(user => {
-          const normalized = normalizeUser(user);
-          if (!normalized) {
-            logWarn(`⚠️ Seller filtered out during normalization:`, { 
-              email: user.email, 
-              id: user.id, 
-              hasId: !!user.id, 
-              hasEmail: !!user.email,
-              hasRole: !!user.role 
-            });
-          }
-          return normalized;
-        }).filter((u): u is NormalizedUser => u !== null);
-        
-        logInfo(`✅ Returning ${normalizedSellers.length} normalized sellers (${sellers.length - normalizedSellers.length} filtered out)`);
-        return res.status(200).json(normalizedSellers);
-      } catch (error) {
-        logError('❌ Error fetching sellers:', error);
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        logError('❌ Error details:', { message: errorMessage, stack: error instanceof Error ? error.stack : undefined });
-        // Return empty array on error instead of 500 to prevent page crashes
-        return res.status(200).json([]);
-      }
-    }
+    // PUBLIC ACCESS: /users?role=seller is handled at the top of this handler (before Supabase gate).
     
     // For non-admin requests without auth, return empty array instead of 401
     // This prevents console errors when users aren't logged in
@@ -7621,6 +7586,11 @@ export default async function handler(
     
     // Ensure response headers are set
     if (!res.headersSent) {
+      try {
+        attachApiCors(req, res);
+      } catch {
+        /* avoid masking original error if CORS helper fails */
+      }
       res.setHeader('Content-Type', 'application/json');
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown fatal error';

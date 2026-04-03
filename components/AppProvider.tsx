@@ -97,10 +97,29 @@ interface HistoryState {
   selectedVehicleId?: number;
 }
 
+/** Compare vehicle ids from URL, JSON, or API (number vs numeric string). */
+function vehicleIdsEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  const na = Number(a);
+  const nb = Number(b);
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+
+/** React Router pathname for packaged WebView (`/index.html`) → logical app path. */
+function normalizeRouterPath(path: string): string {
+  if (path == null || typeof path !== 'string') return '/';
+  const p = path.trim();
+  const lower = p.toLowerCase();
+  if (lower === '/index.html' || lower.endsWith('/index.html')) {
+    return '/';
+  }
+  return p;
+}
+
 // Helper function to map URL paths to views (safe for Capacitor/WebView)
 function pathToView(path: string): View {
   if (path == null || typeof path !== 'string') return View.HOME;
-  const normalizedPath = path.toLowerCase().trim();
+  const normalizedPath = normalizeRouterPath(path).toLowerCase().trim();
   
   // Exact matches first
   if (normalizedPath === '/' || normalizedPath === '') return View.HOME;
@@ -114,7 +133,6 @@ function pathToView(path: string): View {
   if (normalizedPath === '/rental') return View.RENTAL;
   if (normalizedPath === '/dealers') return View.DEALER_PROFILES;
   if (normalizedPath.startsWith('/vehicle/')) {
-    // Extract vehicle ID from path like /vehicle/123
     return View.DETAIL;
   }
   if (normalizedPath === '/vehicle') return View.DETAIL;
@@ -1235,13 +1253,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Use React Router navigate instead of manual history.pushState
-      let detailSelectedId: number | undefined = view === View.DETAIL ? selectedVehicle?.id : undefined;
-      if (view === View.DETAIL && detailSelectedId == null) {
+      let detailSelectedId: number | undefined =
+        view === View.DETAIL && selectedVehicle?.id != null
+          ? Number(selectedVehicle.id)
+          : undefined;
+      if (view === View.DETAIL && (detailSelectedId == null || !Number.isFinite(detailSelectedId))) {
         try {
           const raw = sessionStorage.getItem('selectedVehicle');
           if (raw) {
-            const v = JSON.parse(raw) as { id?: number };
-            if (typeof v?.id === 'number') detailSelectedId = v.id;
+            const v = JSON.parse(raw) as { id?: number | string };
+            const n = v?.id != null ? Number(v.id) : NaN;
+            if (Number.isFinite(n)) detailSelectedId = n;
           }
         } catch {
           /* ignore */
@@ -1314,41 +1336,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser, currentView]);
 
-  // Map initial path on first load to views (safe for Capacitor/WebView)
+  // Map initial path once on mount (React Router pathname — correct for HashRouter + BrowserRouter).
+  // NEVER depend on selectedVehicle: re-running reset currentView from URL while pathname lags
+  // navigation sends users back to HOME instead of vehicle detail.
   useEffect(() => {
     try {
-      const path = (typeof window !== 'undefined' && window.location?.pathname) ? window.location.pathname : '/';
-      const initialView = pathToView(path);
-      setCurrentView(initialView);
-      
-      // Initialize history state with current view (only on first load)
-      if (window.history.state === null || !window.history.state.view) {
-        const initialState: HistoryState = { 
-          view: initialView, 
-          previousView: View.HOME, 
-          timestamp: Date.now() 
-        };
-        
-        // If DETAIL view, try to extract vehicle ID from URL
-        if (initialView === View.DETAIL && path.startsWith('/vehicle/')) {
-          const vehicleIdMatch = path.match(/\/vehicle\/(\d+)/);
-          if (vehicleIdMatch) {
-            const vehicleId = parseInt(vehicleIdMatch[1], 10);
-            initialState.selectedVehicleId = vehicleId;
-          }
-        }
-        
-        window.history.replaceState(initialState, '', path);
-      }
+      const path = normalizeRouterPath((location?.pathname ?? '/') || '/');
+      setCurrentView(pathToView(path));
     } catch (error) {
-      logDebug('Failed to update browser history state (non-critical):', error);
+      logDebug('Failed initial URL → view sync:', error);
     }
-  }, [selectedVehicle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time sync; location sync effect handles later navigations
+  }, []);
 
   // Sync React Router location changes with app view state
   // This replaces the manual popstate handler — React Router manages browser history
   useEffect(() => {
-    const path = (location?.pathname ?? '/') || '/';
+    const path = normalizeRouterPath((location?.pathname ?? '/') || '/');
     const routerState = location?.state as HistoryState | null;
     let newView: View;
     try {
@@ -1371,30 +1375,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (newView === View.DETAIL) {
       const trySessionStorageForPath = () => {
         try {
-          const idMatch = path.match(/\/vehicle\/(\d+)/);
+          const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
           if (!idMatch) return;
-          const parsedId = parseInt(idMatch[1], 10);
+          const parsedId = Number(idMatch[1]);
+          if (!Number.isFinite(parsedId)) return;
           const stored = sessionStorage.getItem('selectedVehicle');
           if (!stored) return;
-          const v = JSON.parse(stored) as { id?: number };
-          if (v?.id === parsedId) setSelectedVehicle(v as Vehicle);
+          const v = JSON.parse(stored) as { id?: number | string };
+          if (vehicleIdsEqual(v?.id, parsedId)) setSelectedVehicle(v as Vehicle);
         } catch {
           /* ignore */
         }
       };
 
       const vehicleId = routerState?.selectedVehicleId;
-      if (vehicleId) {
-        const vehicleToRestore = vehicles.find(v => v.id === vehicleId);
+      if (vehicleId != null && Number.isFinite(Number(vehicleId))) {
+        const numericId = Number(vehicleId);
+        const vehicleToRestore = vehicles.find((v) => vehicleIdsEqual(v.id, numericId));
         if (vehicleToRestore) setSelectedVehicle(vehicleToRestore);
         else trySessionStorageForPath();
-      } else if (path.startsWith('/vehicle/')) {
-        const idMatch = path.match(/\/vehicle\/(\d+)/);
+      } else if (path.includes('/vehicle/')) {
+        const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
         if (idMatch) {
-          const parsedId = parseInt(idMatch[1], 10);
-          const found = vehicles.find(v => v.id === parsedId);
-          if (found) setSelectedVehicle(found);
-          else trySessionStorageForPath();
+          const parsedId = Number(idMatch[1]);
+          if (Number.isFinite(parsedId)) {
+            const found = vehicles.find((v) => vehicleIdsEqual(v.id, parsedId));
+            if (found) setSelectedVehicle(found);
+            else trySessionStorageForPath();
+          }
         }
       }
     } else {
@@ -1417,12 +1425,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // When the catalog finishes loading, resolve /vehicle/:id if the list sync effect ran too early
   useEffect(() => {
     if (currentView !== View.DETAIL) return;
-    const path = (location?.pathname ?? '/') || '/';
-    const m = path.match(/\/vehicle\/(\d+)/);
+    const path = normalizeRouterPath((location?.pathname ?? '/') || '/');
+    const m = path.match(/\/vehicle\/([^/?#]+)/);
     if (!m) return;
-    const id = parseInt(m[1], 10);
-    if (selectedVehicle?.id === id) return;
-    const found = vehicles.find((v) => v.id === id);
+    const id = Number(m[1]);
+    if (!Number.isFinite(id)) return;
+    if (vehicleIdsEqual(selectedVehicle?.id, id)) return;
+    const found = vehicles.find((v) => vehicleIdsEqual(v.id, id));
     if (found) {
       setSelectedVehicle(found);
       return;
@@ -1431,7 +1440,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const raw = sessionStorage.getItem('selectedVehicle');
       if (!raw) return;
       const v = JSON.parse(raw) as Vehicle;
-      if (v?.id === id) setSelectedVehicle(v);
+      if (vehicleIdsEqual(v?.id, id)) setSelectedVehicle(v);
     } catch {
       /* ignore */
     }
@@ -4963,15 +4972,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.log('🚗 selectVehicle called for:', vehicle.id, vehicle.make, vehicle.model);
       }
       
-      // Validate vehicle object
-      if (!vehicle || !vehicle.id) {
+      // Validate vehicle object (id may arrive as string from some API paths)
+      if (!vehicle || vehicle.id === undefined || vehicle.id === null) {
         console.error('❌ selectVehicle called with invalid vehicle:', vehicle);
         return;
       }
+      const idNum = Number(vehicle.id);
+      if (!Number.isFinite(idNum)) {
+        console.error('❌ selectVehicle: vehicle.id is not a valid number:', vehicle.id);
+        return;
+      }
+      const vehicleNorm: Vehicle =
+        typeof vehicle.id === 'number' && vehicle.id === idNum ? vehicle : { ...vehicle, id: idNum };
       
       // Track recently viewed for customers (async, non-blocking)
       if (currentUser?.role === 'customer' && currentUser?.email) {
-        buyerService.addToRecentlyViewed(currentUser.email, vehicle.id).catch(error => {
+        buyerService.addToRecentlyViewed(currentUser.email, idNum).catch(error => {
           logWarn('Failed to track recently viewed vehicle:', error);
         });
       }
@@ -4979,7 +4995,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // CRITICAL: Store vehicle in sessionStorage FIRST (synchronous, immediate)
       // This ensures the vehicle is available even if state update is delayed
       try {
-        const vehicleJson = JSON.stringify(vehicle);
+        const vehicleJson = JSON.stringify(vehicleNorm);
         sessionStorage.setItem('selectedVehicle', vehicleJson);
         
         // Verify it was stored correctly
@@ -4987,7 +5003,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!verifyStored || verifyStored !== vehicleJson) {
           console.warn('⚠️ Vehicle sessionStorage verification mismatch; continuing with in-memory state');
         } else if (process.env.NODE_ENV === 'development') {
-          console.log('🚗 Vehicle stored and verified in sessionStorage:', vehicle.id, vehicle.make, vehicle.model);
+          console.log('🚗 Vehicle stored and verified in sessionStorage:', vehicleNorm.id, vehicleNorm.make, vehicleNorm.model);
         }
       } catch (error) {
         console.error('❌ Failed to store vehicle in sessionStorage:', error);
@@ -4996,10 +5012,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Set the selected vehicle state (async, but sessionStorage is already set and verified)
       // The navigate function will check sessionStorage first, so state update timing doesn't matter
-      setSelectedVehicle(vehicle);
+      setSelectedVehicle(vehicleNorm);
       
       if (process.env.NODE_ENV === 'development') {
-        console.log('🚗 Navigating to DETAIL view with vehicle:', vehicle.id, vehicle.make, vehicle.model);
+        console.log('🚗 Navigating to DETAIL view with vehicle:', vehicleNorm.id, vehicleNorm.make, vehicleNorm.model);
       }
       
       // User-initiated open must never be dropped: location sync sets isHandlingPopStateRef for ~100ms
