@@ -9,6 +9,7 @@ import { getSellers } from '../services/userService';
 import { DealerMap, type CompanyLocation } from './DealerProfiles';
 import { getSellerMapCoordinates, normalizeIndianPincode } from '../utils/sellerLocation';
 import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imageUtils';
+import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter';
 
 // Fix for default marker icons in Leaflet (when map is used)
 if (typeof L !== 'undefined' && L.Icon?.Default?.prototype) {
@@ -29,6 +30,8 @@ interface MobileDealerProfilesPageProps {
   /** When set, "Call now" is allowed; otherwise guests are prompted to log in. */
   currentUser?: User | null;
   onRequireLogin?: () => void;
+  /** Header location — filters dealers to match the chosen region. */
+  userLocation?: string;
 }
 
 /** Mobile dealer card: same info as website (address, status, Call now, Reride Recommends) */
@@ -186,6 +189,7 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
   onViewProfile,
   currentUser,
   onRequireLogin,
+  userLocation,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
@@ -279,8 +283,11 @@ export const MobileDealerProfilesPage: React.FC<MobileDealerProfilesPageProps> =
         return !isShowroom;
       });
     }
+    if (userLocation?.trim()) {
+      filtered = filtered.filter((seller) => sellerMatchesHeaderRegion(seller, userLocation));
+    }
     return filtered;
-  }, [sellers, searchQuery, mapSearchQuery, companyTypeFilter]);
+  }, [sellers, searchQuery, mapSearchQuery, companyTypeFilter, userLocation]);
 
   const filteredSellersWithCoords = useMemo(
     () => sellersWithCoords.filter(item => filteredSellers.some(s => s.email === item.seller.email)),

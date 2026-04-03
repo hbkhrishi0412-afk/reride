@@ -2595,6 +2595,7 @@ const AppContent: React.FC = () => {
             <MobileDealerProfilesPage
               sellers={sellersFromUsers.length > 0 ? sellersFromUsers : undefined}
               vehicles={vehicles}
+              userLocation={userLocation}
               currentUser={currentUser}
               onRequireLogin={requireLoginForDealerInteraction}
               onViewProfile={(sellerEmail) => {
@@ -2616,6 +2617,7 @@ const AppContent: React.FC = () => {
           <DealerProfiles 
             sellers={sellersFromUsers.length > 0 ? sellersFromUsers : undefined} 
             vehicles={vehicles}
+            userLocation={userLocation}
             currentUser={currentUser}
             onRequireLogin={requireLoginForDealerInteraction}
             onViewProfile={(sellerEmail) => {
