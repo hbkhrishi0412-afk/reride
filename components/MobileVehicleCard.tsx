@@ -65,6 +65,10 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   return (
     <div
       onClick={handleSelect}
+      onTouchStart={() => {
+        void import('./VehicleDetail.js');
+        void import('./MobileVehicleDetail.js');
+      }}
       className="cursor-pointer"
       style={{
         background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%)',

@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageTransition from './components/PageTransition';
@@ -276,6 +277,7 @@ const preloadCriticalComponents = () => {
 };
 
 const AppContent: React.FC = () => {
+  const routerLocation = useLocation();
   // Detect if running as mobile app (standalone/installed PWA)
   const { isMobileApp } = useIsMobileApp();
   
@@ -725,39 +727,39 @@ const AppContent: React.FC = () => {
     hasRestoredChatRef.current = null;
   }, [currentUser?.email]);
 
-  // Handle deep linking on mount and URL changes
-  // Note: This works alongside the AppProvider's popstate handler
-  // This handler focuses on URL parameters (deep links), while AppProvider handles history state
+  // Query-string deep links (?view=detail&id=) once catalog can resolve id — never override /vehicle/:id SPA routes.
   useEffect(() => {
     const handleDeepLink = () => {
-      // Only process deep links if there's no history state (history state takes precedence)
-      if (window.history.state && window.history.state.view) {
-        // History state is handled by AppProvider, skip deep link parsing
+      const path = routerLocation.pathname || '';
+      if (path.includes('/vehicle/')) {
         return;
       }
-      
+      const st = window.history.state as { usr?: { view?: unknown }; view?: unknown } | null;
+      const embedded = st?.usr ?? st;
+      if (embedded && typeof embedded === 'object' && embedded !== null && 'view' in embedded) {
+        return;
+      }
+
       const params = parseDeepLink();
       if (params.view) {
-        // Convert string view to ViewEnum
         const viewEnum = Object.values(ViewEnum).find(v => v === params.view) as ViewEnum | undefined;
         if (viewEnum) {
           setCurrentView(viewEnum);
-          // Handle additional params
           if (params.id && viewEnum === ViewEnum.DETAIL) {
-            const vehicleId = typeof params.id === 'string' ? parseInt(params.id, 10) : params.id;
-            const vehicle = vehicles.find(v => v.id === vehicleId);
-            if (vehicle) {
-              selectVehicle(vehicle);
+            const vehicleId = typeof params.id === 'string' ? parseInt(params.id, 10) : Number(params.id);
+            if (Number.isFinite(vehicleId)) {
+              const vehicle = vehicles.find(v => Number(v.id) === vehicleId);
+              if (vehicle) {
+                selectVehicle(vehicle);
+              }
             }
           }
         }
       }
     };
 
-    // Handle initial deep link (only on mount, not on popstate)
-    // The popstate handler in AppProvider will handle browser back/forward
     handleDeepLink();
-  }, [vehicles, setCurrentView, selectVehicle]);
+  }, [vehicles, setCurrentView, selectVehicle, routerLocation.pathname]);
 
   // Restore persisted session on first load
   useEffect(() => {

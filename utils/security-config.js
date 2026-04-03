@@ -85,14 +85,21 @@ const SECURITY_CONFIG = {
           'https://reride-app.vercel.app',
           'https://reride--2-.vercel.app'
         ],
-    ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
     // Must match utils/security-config.ts — Capacitor / WebView sends X-App-Client; web sends X-CSRF-Token.
     ALLOWED_HEADERS: [
       'Content-Type',
       'Authorization',
       'X-Requested-With',
       'X-CSRF-Token',
-      'X-App-Client'
+      'X-App-Client',
+      'Accept',
+      'Accept-Language',
+      'If-None-Match',
+      'sentry-trace',
+      'baggage',
+      'traceparent',
+      'tracestate'
     ],
     CREDENTIALS: true,
     MAX_AGE: 86400 // 24 hours
@@ -107,7 +114,7 @@ const SECURITY_CONFIG = {
     'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';",
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
-    'Cross-Origin-Embedder-Policy': 'require-corp',
+    'Cross-Origin-Embedder-Policy': 'unsafe-none',
     'Cross-Origin-Opener-Policy': 'same-origin',
     // Capacitor WebView (https://localhost) must be allowed to read JSON from www.reride.co.in (see security-config.ts).
     'Cross-Origin-Resource-Policy': 'cross-origin'
