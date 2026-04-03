@@ -15,6 +15,19 @@
       ]
     },
     {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-cache, must-revalidate"
+        },
+        {
+          "key": "Vary",
+          "value": "Origin"
+        }
+      ]
+    },
+    {
       "source": "/api/vehicles",
       "headers": [
         {
@@ -27,7 +40,7 @@
         },
         {
           "key": "Vary",
-          "value": "Accept-Encoding"
+          "value": "Origin, Accept-Encoding"
         }
       ]
     },
@@ -37,6 +50,10 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200"
+        },
+        {
+          "key": "Vary",
+          "value": "Origin, Accept-Encoding"
         }
       ]
     },
@@ -50,7 +67,7 @@
       ]
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "headers": [
         {
           "key": "Cache-Control",

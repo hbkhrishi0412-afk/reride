@@ -347,7 +347,14 @@ async function mainHandler(
   });
   
   // Set CORS headers with proper security
-  const origin = req.headers.origin;
+  const rawOrigin = req.headers.origin;
+  const origin =
+    typeof rawOrigin === 'string'
+      ? rawOrigin
+      : Array.isArray(rawOrigin)
+        ? rawOrigin[0]
+        : undefined;
+  const originLc = origin?.toLowerCase() ?? '';
   const isProduction = process.env.NODE_ENV === 'production';
   const isLocalhost = origin && (
     origin.includes('localhost') ||
@@ -362,8 +369,8 @@ async function mainHandler(
     origin === 'ionic://localhost' ||
     origin === 'http://localhost' ||
     origin === 'http://127.0.0.1' ||
-    origin === 'https://appassets.androidplatform.net' ||
-    origin?.includes('appassets.androidplatform.net');
+    originLc === 'https://appassets.androidplatform.net' ||
+    originLc.includes('appassets.androidplatform.net');
 
   // Allow: config whitelist, dev localhost, OR Capacitor mobile app (in prod too)
   if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost) || isCapacitorApp) {
@@ -391,6 +398,18 @@ async function mainHandler(
   res.setHeader('Access-Control-Allow-Headers', config.CORS.ALLOWED_HEADERS.join(', '));
   res.setHeader('Access-Control-Allow-Credentials', config.CORS.CREDENTIALS.toString());
   res.setHeader('Access-Control-Max-Age', config.CORS.MAX_AGE.toString());
+  // Let caches store per-Origin CORS responses (esp. credentialed / multi-origin API).
+  const prevVary = res.getHeader('Vary');
+  const varyParts: string[] =
+    typeof prevVary === 'string'
+      ? prevVary.split(',').map((s) => s.trim()).filter(Boolean)
+      : Array.isArray(prevVary)
+        ? prevVary.flatMap((v) => String(v).split(',')).map((s) => s.trim()).filter(Boolean)
+        : [];
+  if (!varyParts.some((p) => p.toLowerCase() === 'origin')) {
+    varyParts.push('Origin');
+  }
+  res.setHeader('Vary', varyParts.join(', '));
   
   // Always set JSON content type to prevent HTML responses
   res.setHeader('Content-Type', 'application/json');
