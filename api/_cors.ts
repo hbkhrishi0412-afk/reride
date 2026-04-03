@@ -20,7 +20,14 @@ export function applyCors(req: VercelRequest, res: VercelResponse): boolean {
     res.setHeader(key, value);
   }
 
-  const origin = req.headers.origin;
+  const rawOrigin = req.headers.origin;
+  const origin =
+    typeof rawOrigin === 'string'
+      ? rawOrigin
+      : Array.isArray(rawOrigin)
+        ? rawOrigin[0]
+        : undefined;
+  const originLc = origin?.toLowerCase() ?? '';
   const isProduction = process.env.NODE_ENV === 'production';
   const isLocalhost =
     !!origin &&
@@ -32,8 +39,8 @@ export function applyCors(req: VercelRequest, res: VercelResponse): boolean {
     origin === 'capacitor://localhost' ||
     origin === 'ionic://localhost' ||
     origin === 'http://localhost' ||
-    origin === 'https://appassets.androidplatform.net' ||
-    origin?.includes('appassets.androidplatform.net');
+    originLc === 'https://appassets.androidplatform.net' ||
+    originLc.includes('appassets.androidplatform.net');
 
   if (config.CORS.ALLOWED_ORIGINS.includes(origin as string) || (!isProduction && isLocalhost) || isCapacitorApp) {
     res.setHeader('Access-Control-Allow-Origin', origin as string);
@@ -52,6 +59,18 @@ export function applyCors(req: VercelRequest, res: VercelResponse): boolean {
   res.setHeader('Access-Control-Allow-Headers', config.CORS.ALLOWED_HEADERS.join(', '));
   res.setHeader('Access-Control-Allow-Credentials', config.CORS.CREDENTIALS.toString());
   res.setHeader('Access-Control-Max-Age', config.CORS.MAX_AGE.toString());
+
+  const prevVary = res.getHeader('Vary');
+  const varyParts: string[] =
+    typeof prevVary === 'string'
+      ? prevVary.split(',').map((s) => s.trim()).filter(Boolean)
+      : Array.isArray(prevVary)
+        ? prevVary.flatMap((v) => String(v).split(',')).map((s) => s.trim()).filter(Boolean)
+        : [];
+  if (!varyParts.some((p) => p.toLowerCase() === 'origin')) {
+    varyParts.push('Origin');
+  }
+  res.setHeader('Vary', varyParts.join(', '));
 
   // Ensure we don't accidentally return HTML from a serverless runtime error page
   res.setHeader('Content-Type', 'application/json');

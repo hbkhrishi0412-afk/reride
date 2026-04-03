@@ -19,24 +19,15 @@ export const SECURITY_CONFIG = {
 
   // JWT Configuration
   JWT: {
-    // SECURITY: JWT_SECRET must be set in production - no fallback allowed
-    // In development, a default is provided for convenience
+    // Do not throw in production here — any read during module init would crash the serverless bundle.
+    // Use getSecurityConfig().JWT.SECRET (getter) for signing; it throws in prod when JWT_SECRET is unset.
     get SECRET() {
-      const secret = process.env.JWT_SECRET;
-      if (!secret) {
-        const isProd = process.env.NODE_ENV === 'production';
-        if (isProd) {
-          // SECURITY FIX: Throw error instead of using fallback in production
-          throw new Error(
-            'JWT_SECRET is required in production but is not set. ' +
-            'Please configure JWT_SECRET in your environment variables. ' +
-            'This is a security requirement and the application cannot start without it.'
-          );
-        }
-        // Development fallback - safe because it's only used in dev
-        return 'dev-only-secret-not-for-production';
+      const secret = process.env.JWT_SECRET?.trim();
+      if (secret) return secret;
+      if (process.env.NODE_ENV === 'production') {
+        return '';
       }
-      return secret;
+      return 'dev-only-secret-not-for-production';
     },
     // Token expiration times
     // Access tokens: shorter-lived for security (compromised tokens expire faster)
@@ -161,22 +152,13 @@ export const SECURITY_CONFIG = {
 };
 
 // Environment-specific overrides.
-// In production, JWT_SECRET is required: missing secret causes getSecurityConfig() to throw so the app fails fast.
+// JWT_SECRET must be set in production for auth — but getSecurityConfig() must NOT throw at call time:
+// Vercel loads api/main.ts as one bundle; throwing here prevents the function from booting, so every
+// request returns FUNCTION_INVOCATION_FAILED with no CORS headers (browsers report a CORS error).
+// Token helpers throw only when SECRET is actually read (see getter below).
 export const getSecurityConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
-  const envSecret = process.env.JWT_SECRET;
-  let secret: string;
-  if (envSecret) {
-    secret = envSecret;
-  } else if (isProduction) {
-    throw new Error(
-      'JWT_SECRET is required in production but is not set. ' +
-      'Configure JWT_SECRET in your environment (e.g. Vercel → Environment Variables). ' +
-      'The application will not start without it.'
-    );
-  } else {
-    secret = SECURITY_CONFIG.JWT.SECRET; // Dev fallback
-  }
+  const envSecret = process.env.JWT_SECRET?.trim() || '';
 
   const jwtStatic = SECURITY_CONFIG.JWT;
   return {
@@ -187,7 +169,16 @@ export const getSecurityConfig = () => {
       CLOCK_TOLERANCE_SECONDS: jwtStatic.CLOCK_TOLERANCE_SECONDS,
       ISSUER: jwtStatic.ISSUER,
       AUDIENCE: jwtStatic.AUDIENCE,
-      SECRET: secret
+      get SECRET(): string {
+        if (envSecret) return envSecret;
+        if (isProduction) {
+          throw new Error(
+            'JWT_SECRET is required in production but is not set. ' +
+              'Configure JWT_SECRET in your environment (e.g. Vercel → Environment Variables).'
+          );
+        }
+        return 'dev-only-secret-not-for-production';
+      },
     },
     LOGGING: {
       ...SECURITY_CONFIG.LOGGING,

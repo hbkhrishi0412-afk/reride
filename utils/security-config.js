@@ -19,26 +19,15 @@ const SECURITY_CONFIG = {
 
   // JWT Configuration
   JWT: {
-    // Lazy evaluation - only check JWT_SECRET when actually used, not at module load
-    // This prevents errors during module initialization
+    // Do not throw at read — module init must not crash. Use getSecurityConfig().JWT.SECRET for signing.
     get SECRET() {
-      const secret = process.env.JWT_SECRET;
-      if (!secret) {
-        if (process.env.NODE_ENV === 'production') {
-          // In production, log warning only once to reduce noise
-          if (!SECURITY_CONFIG.JWT._warned) {
-            console.warn('⚠️ JWT_SECRET not set in production. Using fallback. Please set JWT_SECRET in Vercel environment variables.');
-            SECURITY_CONFIG.JWT._warned = true;
-          }
-          // Return a fallback secret to prevent complete failure
-          // This should be fixed by setting JWT_SECRET in Vercel
-          return 'fallback-secret-please-set-jwt-secret-in-vercel';
-        }
-        return 'dev-only-secret-not-for-production';
+      const secret = (process.env.JWT_SECRET || '').trim();
+      if (secret) return secret;
+      if (process.env.NODE_ENV === 'production') {
+        return '';
       }
-      return secret;
+      return 'dev-only-secret-not-for-production';
     },
-    _warned: false, // Flag to prevent duplicate warnings
     // Token expiration times
     // Access tokens: shorter-lived for security (compromised tokens expire faster)
     // Refresh tokens: longer-lived for better UX (users don't need to re-login frequently)
@@ -148,15 +137,9 @@ const SECURITY_CONFIG = {
   }
 };
 
-// CRITICAL: Do not spread SECURITY_CONFIG.JWT - it invokes the SECRET getter and can crash in production.
 export const getSecurityConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
-  const envSecret = process.env.JWT_SECRET;
-  const secret = envSecret
-    ? envSecret
-    : isProduction
-      ? ''
-      : SECURITY_CONFIG.JWT.SECRET;
+  const envSecret = (process.env.JWT_SECRET || '').trim();
 
   const jwtStatic = SECURITY_CONFIG.JWT;
   return {
@@ -167,7 +150,16 @@ export const getSecurityConfig = () => {
       CLOCK_TOLERANCE_SECONDS: jwtStatic.CLOCK_TOLERANCE_SECONDS,
       ISSUER: jwtStatic.ISSUER,
       AUDIENCE: jwtStatic.AUDIENCE,
-      SECRET: secret
+      get SECRET() {
+        if (envSecret) return envSecret;
+        if (isProduction) {
+          throw new Error(
+            'JWT_SECRET is required in production but is not set. ' +
+              'Configure JWT_SECRET in your environment (e.g. Vercel → Environment Variables).'
+          );
+        }
+        return 'dev-only-secret-not-for-production';
+      },
     },
     LOGGING: {
       ...SECURITY_CONFIG.LOGGING,
