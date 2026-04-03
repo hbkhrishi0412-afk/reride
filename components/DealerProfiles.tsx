@@ -10,6 +10,7 @@ import {
   normalizeIndianPincode,
 } from '../utils/sellerLocation.js';
 import { resolveSellerLogoUrl, sellerInitialsAvatarDataUri } from '../utils/imageUtils.js';
+import { sellerMatchesHeaderRegion } from '../utils/dealerRegionFilter.js';
 
 // Fix for default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -25,6 +26,8 @@ interface DealerProfilesProps {
   onViewProfile: (sellerEmail: string) => void;
   currentUser?: User | null;
   onRequireLogin?: () => void;
+  /** Header location (e.g. Maharashtra, Mumbai) — filters dealer list and map markers. */
+  userLocation?: string;
 }
 
 type CompanyType = 'all' | 'car-service' | 'showroom';
@@ -551,7 +554,13 @@ const CompanyCard: React.FC<{
   );
 };
 
-const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, onViewProfile, currentUser, onRequireLogin }) => {
+const DealerProfiles: React.FC<DealerProfilesProps> = ({
+  sellers: propSellers,
+  onViewProfile,
+  currentUser,
+  onRequireLogin,
+  userLocation,
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [companyTypeFilter, setCompanyTypeFilter] = useState<CompanyType>('all');
@@ -672,8 +681,12 @@ const DealerProfiles: React.FC<DealerProfilesProps> = ({ sellers: propSellers, o
       });
     }
 
+    if (userLocation?.trim()) {
+      filtered = filtered.filter((seller) => sellerMatchesHeaderRegion(seller, userLocation));
+    }
+
     return filtered;
-  }, [sellers, searchQuery, mapSearchQuery, companyTypeFilter]);
+  }, [sellers, searchQuery, mapSearchQuery, companyTypeFilter, userLocation]);
 
   // Get filtered sellers with coordinates
   const filteredSellersWithCoords = useMemo(() => {

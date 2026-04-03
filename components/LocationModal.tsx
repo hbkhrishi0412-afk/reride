@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 // Removed blocking import - will lazy load location data when needed
 import { getDisplayNameForCity } from '../utils/cityMapping';
 
@@ -12,13 +12,19 @@ interface LocationModalProps {
 
 type LocationOption = 'detect' | 'all' | 'district' | 'city';
 
-const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation: _currentLocation, onLocationChange, addToast }) => {
+const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation, onLocationChange, addToast }) => {
     const [selectedOption, setSelectedOption] = useState<LocationOption>('detect');
     const [selectedDistrict, setSelectedDistrict] = useState('');
     const [selectedCity, setSelectedCity] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [isDetecting, setIsDetecting] = useState(false);
-    
+    const userEditedRef = useRef(false);
+    const prevIsOpenRef = useRef(false);
+
+    const markUserEdited = () => {
+        userEditedRef.current = true;
+    };
+
     // Lazy load location data
     const [indianStates, setIndianStates] = useState<Array<{name: string, code: string}>>([]);
     const [citiesByState, setCitiesByState] = useState<Record<string, string[]>>({});
@@ -48,19 +54,9 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         loadLocationData();
     }, []);
 
-    // Reset to default when modal opens and prevent body scroll
     useEffect(() => {
-        if (isOpen) {
-            setSearchTerm('');
-            setSelectedOption('detect');
-            setSelectedDistrict('');
-            setSelectedCity('');
-        }
         const body = document.body;
-        if (body) {
-            body.style.overflow = isOpen ? 'hidden' : '';
-        }
-
+        if (body) body.style.overflow = isOpen ? 'hidden' : '';
         return () => {
             if (document.body) document.body.style.overflow = '';
         };
@@ -75,21 +71,99 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         [citiesByState]
     );
 
-    // Filter cities based on search term
+    // Reflect header location when the modal opens; re-sync when lazy location data loads unless the user already changed something.
+    useEffect(() => {
+        if (!isOpen) {
+            prevIsOpenRef.current = false;
+            userEditedRef.current = false;
+            return;
+        }
+
+        const opening = !prevIsOpenRef.current;
+        prevIsOpenRef.current = true;
+        if (opening) userEditedRef.current = false;
+
+        if (userEditedRef.current) return;
+
+        const loc = currentLocation.trim();
+        if (!loc) {
+            setSelectedOption('detect');
+            setSelectedDistrict('');
+            setSelectedCity('');
+            setSearchTerm('');
+            return;
+        }
+        if (/^all of india$/i.test(loc)) {
+            setSelectedOption('all');
+            setSelectedDistrict('');
+            setSelectedCity('');
+            setSearchTerm('');
+            return;
+        }
+
+        const stateExact = indianStates.find((s) => s.name.toLowerCase() === loc.toLowerCase());
+        if (stateExact) {
+            setSelectedOption('district');
+            setSelectedDistrict(stateExact.code);
+            setSelectedCity('');
+            setSearchTerm('');
+            return;
+        }
+
+        const cityHit = allCities.find((c) => c.city.toLowerCase() === loc.toLowerCase());
+        if (cityHit) {
+            setSelectedOption('city');
+            setSelectedCity(cityHit.city);
+            setSelectedDistrict(cityHit.stateCode);
+            setSearchTerm('');
+            return;
+        }
+
+        for (const row of allCities) {
+            if (getDisplayNameForCity(row.city).toLowerCase() === loc.toLowerCase()) {
+                setSelectedOption('city');
+                setSelectedCity(row.city);
+                setSelectedDistrict(row.stateCode);
+                setSearchTerm('');
+                return;
+            }
+        }
+
+        setSelectedOption('city');
+        setSelectedCity(loc);
+        setSelectedDistrict('');
+        setSearchTerm('');
+    }, [isOpen, currentLocation, indianStates, allCities]);
+
+    // Filter cities based on search term (includes cities from states whose name matches)
     const filteredCities = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
         if (!term) {
-            // If no search term and district is selected, show cities from that district
             if (selectedOption === 'district' && selectedDistrict) {
                 return citiesByState[selectedDistrict]?.map(city => ({ city, stateCode: selectedDistrict })) || [];
             }
-            // Otherwise show popular cities
             return [];
         }
-        return allCities
-            .filter(({ city }) => city.toLowerCase().includes(term))
-            .slice(0, 50);
-    }, [searchTerm, allCities, selectedDistrict, selectedOption, citiesByState]);
+        const fromCities = allCities.filter(({ city }) => city.toLowerCase().includes(term));
+        const fromStates: Array<{ city: string; stateCode: string }> = [];
+        for (const s of indianStates) {
+            if (s.name.toLowerCase().includes(term)) {
+                for (const city of citiesByState[s.code] || []) {
+                    fromStates.push({ city, stateCode: s.code });
+                }
+            }
+        }
+        const seen = new Set<string>();
+        const merged: Array<{ city: string; stateCode: string }> = [];
+        for (const x of [...fromStates, ...fromCities]) {
+            const k = `${x.city}-${x.stateCode}`;
+            if (!seen.has(k)) {
+                seen.add(k);
+                merged.push(x);
+            }
+        }
+        return merged.slice(0, 80);
+    }, [searchTerm, allCities, selectedDistrict, selectedOption, citiesByState, indianStates]);
 
     // Get popular districts (major states)
     const popularDistricts = useMemo(() => {
@@ -249,18 +323,31 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             return;
         }
 
-        if (selectedOption === 'city' && selectedCity) {
-        const displayName = getDisplayNameForCity(selectedCity);
-        onLocationChange(displayName);
-            addToast(`Location set to ${displayName}`, 'success');
-        onClose();
-            return;
+        if (selectedOption === 'city') {
+            let city = selectedCity;
+            const term = searchTerm.trim();
+            if (!city && term) {
+                const exact = allCities.filter(({ city: c }) => c.toLowerCase() === term.toLowerCase());
+                if (exact.length === 1) city = exact[0].city;
+                else {
+                    const starts = allCities.filter(({ city: c }) => c.toLowerCase().startsWith(term.toLowerCase()));
+                    if (starts.length === 1) city = starts[0].city;
+                }
+            }
+            if (city) {
+                const displayName = getDisplayNameForCity(city);
+                onLocationChange(displayName);
+                addToast(`Location set to ${displayName}`, 'success');
+                onClose();
+                return;
+            }
         }
-        
-        addToast('Please select a location option', 'info');
+
+        addToast('Please select a city from the list or choose a state / All of India', 'info');
     };
 
     const handleCitySelect = (cityName: string) => {
+        markUserEdited();
         setSelectedOption('city');
         setSelectedCity(cityName);
         setSearchTerm('');
@@ -324,12 +411,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 type="text"
                                 value={searchTerm}
                             onChange={(e) => {
+                                markUserEdited();
                                 setSearchTerm(e.target.value);
                                 if (e.target.value) {
                                     setSelectedOption('city');
                                 }
                             }}
-                            placeholder="City or district"
+                            placeholder="City or state"
                             className="w-full pl-4 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                         <svg 
@@ -364,9 +452,8 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 value="detect"
                                 checked={selectedOption === 'detect'}
                                 onChange={() => {
+                                    markUserEdited();
                                     setSelectedOption('detect');
-                                    // Optionally trigger detection immediately
-                                    // handleDetectLocation();
                                 }}
                                 className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                             />
@@ -383,7 +470,10 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                 name="location"
                                 value="all"
                                 checked={selectedOption === 'all'}
-                                onChange={() => setSelectedOption('all')}
+                                onChange={() => {
+                                    markUserEdited();
+                                    setSelectedOption('all');
+                                }}
                                 className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                             />
                             <span className="text-sm text-gray-900">All of India</span>
@@ -399,6 +489,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                         value={`district-${district.code}`}
                                         checked={selectedOption === 'district' && selectedDistrict === district.code}
                                         onChange={() => {
+                                            markUserEdited();
                                             setSelectedOption('district');
                                             setSelectedDistrict(district.code);
                                         }}
@@ -415,6 +506,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                                 key={city}
                                                 className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
                                                 onClick={() => {
+                                                    markUserEdited();
                                                     setSelectedOption('city');
                                                     setSelectedCity(city);
                                                 }}
@@ -424,6 +516,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                                     name="location-city"
                                                     checked={selectedCity === city}
                                                     onChange={() => {
+                                                        markUserEdited();
                                                         setSelectedOption('city');
                                                         setSelectedCity(city);
                                                     }}
