@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import LazyImage from './LazyImage';
@@ -27,6 +28,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   isInCompare = false,
   showActions = true
 }) => {
+  const { t } = useTranslation();
   const handleWishlistClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (onToggleWishlist) {
@@ -96,12 +98,12 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
         <div className="absolute top-2 left-2 flex flex-col gap-1">
           {vehicle.isFeatured && (
             <span className="bg-orange-500 text-white px-2 py-1 rounded text-xs font-bold">
-              Featured
+              {t('vehicle.card.featured')}
             </span>
           )}
           {vehicle.certificationStatus === 'certified' && (
             <span className="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold">
-              Verified
+              {t('common.verified')}
             </span>
           )}
         </div>
@@ -113,7 +115,9 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
               <button
                 onClick={handleWishlistClick}
                 className="mobile-tap-target bg-white/90 backdrop-blur-sm rounded-full p-2 shadow-md active:scale-90 transition-transform"
-                aria-label={isInWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                aria-label={
+                  isInWishlist ? t('vehicle.card.wishlistRemove') : t('vehicle.card.wishlistAdd')
+                }
               >
                 <svg
                   className="w-5 h-5"
@@ -136,7 +140,9 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
                 className={`mobile-tap-target backdrop-blur-sm rounded-full p-2 shadow-md active:scale-90 transition-transform ${
                   isInCompare ? 'bg-orange-500/90' : 'bg-white/90'
                 }`}
-                aria-label={isInCompare ? 'Remove from compare' : 'Add to compare'}
+                aria-label={
+                  isInCompare ? t('vehicle.card.compareRemoveShort') : t('vehicle.card.compareAddShort')
+                }
               >
                 <svg
                   className="w-5 h-5"
@@ -188,9 +194,9 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
           <span className="native-text-caption">
             {vehicle.year} • {vehicle.fuelType}
           </span>
-          {vehicle.mileage && (
+            {vehicle.mileage && (
             <span className="native-text-caption">
-              • {vehicle.mileage.toLocaleString('en-IN')} km
+              • {vehicle.mileage.toLocaleString('en-IN')} {t('vehicle.unit.km')}
             </span>
           )}
           {vehicle.transmission && (
@@ -224,7 +230,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
             ))}
             {vehicle.features.length > 3 && (
               <span className="text-gray-500 text-xs px-2 py-0.5">
-                +{vehicle.features.length - 3} more
+                {t('vehicle.moreFeaturesShort', { count: vehicle.features.length - 3 })}
               </span>
             )}
           </div>

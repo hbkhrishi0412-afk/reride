@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View } from '../types.js';
 
 interface FooterProps {
@@ -6,6 +7,7 @@ interface FooterProps {
 }
 
 const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+  const { t } = useTranslation();
   const handleNav = (e: React.MouseEvent, view: View) => {
     e.preventDefault();
     onNavigate(view);
@@ -25,61 +27,61 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           {/* Brand Section */}
           <div className="md:col-span-2">
             <p className="text-gray-300 text-lg mb-4 max-w-md">
-              The premier AI-driven marketplace for your next vehicle. Trusted by over 1 million customers nationwide.
+              {t('footer.tagline')}
             </p>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2">
                 <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
                 </svg>
-                <span className="text-white font-semibold">Verified Platform</span>
+                <span className="text-white font-semibold">{t('footer.verifiedPlatform')}</span>
               </div>
               <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-2">
                 <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
                 </svg>
-                <span className="text-white font-semibold">Secure Payments</span>
+                <span className="text-white font-semibold">{t('footer.securePayments')}</span>
               </div>
             </div>
           </div>
           
           {/* Quick Links */}
           <div>
-            <h3 className="text-white font-bold text-lg mb-4">Quick Links</h3>
+            <h3 className="text-white font-bold text-lg mb-4">{t('footer.quickLinks')}</h3>
             <div className="space-y-3">
               <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                Buy Used Cars
+                {t('footer.buyUsedCars')}
               </a>
               <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                Sell Your Car
+                {t('footer.sellYourCar')}
               </a>
               <a href="#" onClick={(e) => handleNav(e, View.CAR_SERVICES)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                Car Services
+                {t('nav.carServices')}
               </a>
               <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                New Cars
+                {t('nav.newCars')}
               </a>
               <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                Dealer Network
+                {t('footer.dealerNetwork')}
               </a>
             </div>
           </div>
           
           {/* Support */}
           <div>
-            <h3 className="text-white font-bold text-lg mb-4">Support</h3>
+            <h3 className="text-white font-bold text-lg mb-4">{t('footer.support')}</h3>
             <div className="space-y-3">
               <a href="#" onClick={(e) => handleNav(e, View.SUPPORT)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                Contact Support
+                {t('footer.contactSupport')}
               </a>
               <a href="#" onClick={(e) => handleNav(e, View.FAQ)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                FAQ
+                {t('footer.faq')}
               </a>
               <a href="#" onClick={(e) => handleNav(e, View.PRIVACY_POLICY)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                Privacy Policy
+                {t('footer.privacy')}
               </a>
               <a href="#" onClick={(e) => handleNav(e, View.TERMS_OF_SERVICE)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                Terms of Service
+                {t('footer.terms')}
               </a>
             </div>
           </div>
@@ -89,17 +91,17 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         <div className="border-t border-gray-700 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-gray-400">
-              &copy; {new Date().getFullYear()} ReRide. All rights reserved.
+              {t('footer.copyright', { year: new Date().getFullYear() })}
             </p>
             <div className="flex items-center gap-6">
-              <span className="text-gray-400 text-sm">Made with ❤️ in India</span>
+              <span className="text-gray-400 text-sm">{t('footer.madeInIndia')}</span>
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
                   </svg>
                 </div>
-                <span className="text-gray-300 font-semibold">Premium Platform</span>
+                <span className="text-gray-300 font-semibold">{t('footer.premiumPlatform')}</span>
               </div>
             </div>
           </div>

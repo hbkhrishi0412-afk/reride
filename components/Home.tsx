@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VehicleCategory, View as ViewEnum, type Vehicle, type View } from '../types';
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import { matchesCity } from '../utils/cityMapping';
@@ -41,6 +42,7 @@ const Home: React.FC<HomeProps> = ({
     onSearch,
     allVehicles = []
 }) => {
+    const { t, i18n } = useTranslation();
     const [searchQuery, setSearchQuery] = useState('');
     const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
     const { data: storefrontAgg } = useStorefrontAggregates();
@@ -154,6 +156,64 @@ const Home: React.FC<HomeProps> = ({
 
     const showSkeletons = featuredVehicles.length === 0 && recommendations.length === 0 && recentVehicles.length === 0;
 
+    const whyChooseItems = useMemo(
+        () => [
+            { icon: '✅', title: t('home.why.checksTitle'), desc: t('home.why.checksDesc') },
+            { icon: '🛡️', title: t('home.why.verifiedTitle'), desc: t('home.why.verifiedDesc') },
+            { icon: '⚡', title: t('home.why.fastTitle'), desc: t('home.why.fastDesc') },
+            { icon: '💰', title: t('home.why.priceTitle'), desc: t('home.why.priceDesc') },
+        ],
+        [t, i18n.language]
+    );
+
+    const testimonialItems = useMemo(
+        () => [
+            {
+                name: t('home.testimonials.amitName'),
+                quote: t('home.testimonials.amitQuote'),
+                tag: t('home.testimonials.amitTag'),
+            },
+            {
+                name: t('home.testimonials.riyaName'),
+                quote: t('home.testimonials.riyaQuote'),
+                tag: t('home.testimonials.riyaTag'),
+            },
+            {
+                name: t('home.testimonials.karanName'),
+                quote: t('home.testimonials.karanQuote'),
+                tag: t('home.testimonials.karanTag'),
+            },
+        ],
+        [t, i18n.language]
+    );
+
+    const sellSteps = useMemo(
+        () => [
+            {
+                title: t('home.sell.step1Title'),
+                desc: t('home.sell.step1Desc'),
+                cta: t('home.sell.step1Cta'),
+                accent: 'from-purple-500 to-pink-500',
+                emoji: '⏱️',
+            },
+            {
+                title: t('home.sell.step2Title'),
+                desc: t('home.sell.step2Desc'),
+                cta: t('home.sell.step2Cta'),
+                accent: 'from-blue-500 to-cyan-500',
+                emoji: '📋',
+            },
+            {
+                title: t('home.sell.step3Title'),
+                desc: t('home.sell.step3Desc'),
+                cta: t('home.sell.step3Cta'),
+                accent: 'from-emerald-500 to-teal-500',
+                emoji: '💸',
+            },
+        ],
+        [t, i18n.language]
+    );
+
     const skeletonCard = (key: string) => (
         <div
             key={key}
@@ -206,7 +266,7 @@ const Home: React.FC<HomeProps> = ({
                             className="text-white font-medium"
                             style={{ fontSize: '14px', fontFamily: "'Poppins', sans-serif" }}
                         >
-                            Trusted by 1M+ Customers
+                            {t('home.trustBadge1M')}
                         </span>
                     </div>
 
@@ -220,7 +280,7 @@ const Home: React.FC<HomeProps> = ({
                             letterSpacing: '-0.02em'
                         }}
                     >
-                        Premium Used Cars
+                        {t('home.premiumUsedCars')}
                     </h1>
                     
                     {/* Subheading - Exact Match */}
@@ -234,7 +294,7 @@ const Home: React.FC<HomeProps> = ({
                             lineHeight: '1.6'
                         }}
                     >
-                        Discover exceptional vehicles with our comprehensive quality assurance and premium service
+                        {t('home.marketingSubhead')}
                     </p>
 
                     {/* Search Bar - Exact Match */}
@@ -254,7 +314,7 @@ const Home: React.FC<HomeProps> = ({
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                                placeholder="Search by brand, model, budget or features..."
+                                placeholder={t('search.placeholderHero')}
                                 className="flex-1 outline-none text-gray-700 placeholder-gray-500"
                                 style={{
                                     fontSize: '16px',
@@ -275,7 +335,7 @@ const Home: React.FC<HomeProps> = ({
                                 fontFamily: "'Poppins', sans-serif"
                             }}
                         >
-                            Search
+                            {t('common.search')}
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                             </svg>
@@ -317,7 +377,7 @@ const Home: React.FC<HomeProps> = ({
                                     lineHeight: '1.3'
                                 }}
                             >
-                                200+ Quality Checks
+                                {t('home.card.qualityTitle')}
                             </h3>
                             <p 
                                 className="text-center"
@@ -329,7 +389,7 @@ const Home: React.FC<HomeProps> = ({
                                     lineHeight: '1.4'
                                 }}
                             >
-                                Comprehensive inspection
+                                {t('home.card.qualityDesc')}
                             </p>
                         </div>
 
@@ -373,7 +433,7 @@ const Home: React.FC<HomeProps> = ({
                                     lineHeight: '1.3'
                                 }}
                             >
-                                Fixed Price
+                                {t('home.card.fixedTitle')}
                             </h3>
                             <p 
                                 className="text-center"
@@ -385,7 +445,7 @@ const Home: React.FC<HomeProps> = ({
                                     lineHeight: '1.4'
                                 }}
                             >
-                                No hidden costs
+                                {t('home.card.fixedDesc')}
                             </p>
                         </div>
 
@@ -422,7 +482,7 @@ const Home: React.FC<HomeProps> = ({
                                     lineHeight: '1.3'
                                 }}
                             >
-                                5-Day Money Back
+                                {t('home.card.moneyTitle')}
                             </h3>
                             <p 
                                 className="text-center"
@@ -434,7 +494,7 @@ const Home: React.FC<HomeProps> = ({
                                     lineHeight: '1.4'
                                 }}
                             >
-                                Risk-free purchase
+                                {t('home.card.moneyDesc')}
                             </p>
                         </div>
 
@@ -471,7 +531,7 @@ const Home: React.FC<HomeProps> = ({
                                     lineHeight: '1.3'
                                 }}
                             >
-                                Free RC Transfer
+                                {t('home.card.rcTitle')}
                             </h3>
                             <p 
                                 className="text-center"
@@ -483,7 +543,7 @@ const Home: React.FC<HomeProps> = ({
                                     lineHeight: '1.4'
                                 }}
                             >
-                                Complete documentation
+                                {t('home.card.rcDesc')}
                             </p>
                         </div>
                     </div>
@@ -509,16 +569,16 @@ const Home: React.FC<HomeProps> = ({
                                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M13 10V3L4 14h7v7l9-11h-7z" />
                                     </svg>
-                                    FEATURED COLLECTION
+                                    {t('home.featured.badge')}
                                 </button>
-                                <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Premium Vehicles</h2>
-                                <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">Handpicked vehicles that meet our highest standards of quality and performance</p>
+                                <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.featured.title')}</h2>
+                                <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">{t('home.featured.subtitle')}</p>
                             </div>
                             <button
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
                                 className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-purple-600 text-purple-700 font-bold text-sm hover:bg-purple-50 transition-all duration-200 hover:scale-105"
                             >
-                                View all vehicles
+                                {t('home.featured.viewAllVehicles')}
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
                                 </svg>
@@ -531,7 +591,7 @@ const Home: React.FC<HomeProps> = ({
                                     <button
                                         onClick={() => scrollFeatured('left')}
                                         className="hidden md:flex absolute -left-5 top-1/2 -translate-y-1/2 z-10 h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg border border-gray-200 hover:-translate-x-1 hover:shadow-xl transition-all"
-                                        aria-label="Scroll left"
+                                        aria-label={t('a11y.scrollLeft')}
                                     >
                                         <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
@@ -540,7 +600,7 @@ const Home: React.FC<HomeProps> = ({
                                     <button
                                         onClick={() => scrollFeatured('right')}
                                         className="hidden md:flex absolute -right-5 top-1/2 -translate-y-1/2 z-10 h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg border border-gray-200 hover:translate-x-1 hover:shadow-xl transition-all"
-                                        aria-label="Scroll right"
+                                        aria-label={t('a11y.scrollRight')}
                                     >
                                         <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
@@ -575,7 +635,7 @@ const Home: React.FC<HomeProps> = ({
                                                 <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                                                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                                                 </svg>
-                                                Verified
+                                                {t('common.verified')}
                                             </div>
                                             <button
                                                 onClick={(e) => {
@@ -611,14 +671,14 @@ const Home: React.FC<HomeProps> = ({
                                                 <span>•</span>
                                                 <span>{vehicle.fuelType}</span>
                                                 <span>•</span>
-                                                <span>{vehicle.transmission || 'Manual'}</span>
+                                                <span>{vehicle.transmission || t('common.manual')}</span>
                                             </div>
                                             <div className="flex items-center gap-1.5 text-blue-600">
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                                 </svg>
-                                                <span className="text-sm font-bold">{vehicle.city || 'N/A'}</span>
+                                                <span className="text-sm font-bold">{vehicle.city || t('common.notAvailable')}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -646,15 +706,15 @@ const Home: React.FC<HomeProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                 </svg>
                             </div>
-                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Discover Premium Vehicles</h2>
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">{t('home.featured.emptyTitle')}</h2>
                             <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">
-                                We're constantly adding new quality vehicles to our collection. Check back soon for the latest listings!
+                                {t('home.featured.emptyBody')}
                             </p>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
                                 className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-4 rounded-xl font-bold text-base md:text-lg flex items-center gap-2 mx-auto transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105"
                             >
-                                Browse All Vehicles
+                                {t('home.featured.browseAll')}
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                                 </svg>
@@ -670,14 +730,14 @@ const Home: React.FC<HomeProps> = ({
                     <div className="max-w-7xl mx-auto">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
                             <div>
-                                <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Recently Added</h2>
-                                <p className="text-gray-600 text-base md:text-lg">Fresh listings added in the last few days</p>
+                                <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.recent.title')}</h2>
+                                <p className="text-gray-600 text-base md:text-lg">{t('home.recent.subtitle')}</p>
                             </div>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 text-gray-800 font-semibold hover:border-purple-500 hover:text-purple-700 transition-colors"
                             >
-                                View all
+                                {t('home.recent.viewAll')}
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                 </svg>
@@ -701,7 +761,7 @@ const Home: React.FC<HomeProps> = ({
                                             eager={index === 0}
                                         />
                                         <div className="absolute top-3 left-3 bg-orange-500 text-white px-3 py-1 rounded-full text-xs font-black shadow-md">
-                                            New
+                                            {t('common.newBadge')}
                                         </div>
                                         <div className="absolute bottom-3 right-3 bg-gray-900/90 text-white px-3 py-1.5 rounded-xl shadow-lg">
                                             <span className="font-black text-sm">₹{(vehicle.price / 100000).toFixed(2)}L</span>
@@ -719,14 +779,14 @@ const Home: React.FC<HomeProps> = ({
                                         <div className="flex items-center gap-2 text-sm text-gray-600 mt-2">
                                             <span>{vehicle.mileage.toLocaleString()} km</span>
                                             <span>•</span>
-                                            <span>{vehicle.transmission || 'Manual'}</span>
+                                            <span>{vehicle.transmission || t('common.manual')}</span>
                                         </div>
                                         <div className="flex items-center gap-1 text-gray-600 mt-2">
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                             </svg>
-                                            <span className="text-sm font-semibold">{vehicle.city || 'N/A'}</span>
+                                            <span className="text-sm font-semibold">{vehicle.city || t('common.notAvailable')}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -755,23 +815,23 @@ const Home: React.FC<HomeProps> = ({
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
-                            EXPLORE BY LOCATION
+                            {t('home.cities.badge')}
                         </button>
-                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Find Cars Near You</h2>
-                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">Discover premium vehicles available in your city with local sellers and dealers</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">{t('home.cities.title')}</h2>
+                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">{t('home.cities.subtitle')}</p>
                     </div>
 
                     <div className="flex flex-col gap-4">
                         <div className="flex flex-wrap items-center justify-center md:justify-between gap-3">
                             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 text-purple-700 font-semibold text-sm">
                                 <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-                                Top cities first
+                                {t('home.cities.topFirst')}
                             </div>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
                                 className="inline-flex items-center gap-2 text-purple-700 font-semibold hover:underline decoration-2 underline-offset-4"
                             >
-                                View all locations
+                                {t('home.cities.viewAllLocations')}
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
                                 </svg>
@@ -796,7 +856,7 @@ const Home: React.FC<HomeProps> = ({
                                     </div>
                                     <div className="flex flex-col items-start text-left">
                                         <span className="text-sm font-semibold text-gray-900">{city.name}</span>
-                                        <span className="text-xs text-gray-500">{city.cars} cars</span>
+                                        <span className="text-xs text-gray-500">{t('home.cities.carCount', { count: city.cars })}</span>
                                     </div>
                                     <div className="ml-auto flex items-center gap-1 text-purple-600 text-xs font-semibold">
                                         <span>{city.abbr}</span>
@@ -814,12 +874,7 @@ const Home: React.FC<HomeProps> = ({
             {/* Why Choose Us */}
             <div className="py-14 px-4 bg-gradient-to-r from-slate-50 via-white to-slate-50 border-t border-b border-gray-100">
                 <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {[
-                        { icon: '✅', title: '200+ Checks', desc: 'Expert inspection on every car' },
-                        { icon: '🛡️', title: 'Verified Sellers', desc: 'Trust badges and ratings' },
-                        { icon: '⚡', title: 'Fast Handover', desc: 'Paperwork & RC assistance' },
-                        { icon: '💰', title: 'Best Price', desc: 'Upfront pricing, no surprises' },
-                    ].map((item, idx) => (
+                    {whyChooseItems.map((item, idx) => (
                         <div key={idx} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex gap-3 items-start hover:shadow-lg transition-shadow">
                             <div className="text-2xl">{item.icon}</div>
                             <div>
@@ -835,15 +890,11 @@ const Home: React.FC<HomeProps> = ({
             <div className="py-14 px-4 bg-white">
                 <div className="max-w-6xl mx-auto">
                     <div className="text-center mb-10">
-                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Loved by customers</h2>
-                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto">Hear it from the people who bought with us</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.testimonials.title')}</h2>
+                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto">{t('home.testimonials.subtitle')}</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {[
-                            { name: 'Amit, Bangalore', quote: 'Smooth buying experience and transparent pricing.', tag: 'SUV buyer' },
-                            { name: 'Riya, Pune', quote: 'Car condition matched the inspection report perfectly.', tag: 'First-time buyer' },
-                            { name: 'Karan, Delhi NCR', quote: 'Fast RC transfer and great support throughout.', tag: 'Upgrade buyer' },
-                        ].map((item, idx) => (
+                        {testimonialItems.map((item, idx) => (
                             <div key={idx} className="bg-gray-50 rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center gap-3 mb-3">
                                     <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center font-bold">
@@ -869,10 +920,10 @@ const Home: React.FC<HomeProps> = ({
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
                             </svg>
-                            VEHICLE CATEGORIES
+                            {t('home.categories.badge')}
                         </button>
-                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Browse by Category</h2>
-                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">Find the perfect vehicle type that matches your needs and lifestyle</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">{t('home.categories.title')}</h2>
+                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">{t('home.categories.subtitle')}</p>
                     </div>
 
                         <div className="flex flex-wrap justify-center gap-3 md:gap-4">
@@ -891,7 +942,7 @@ const Home: React.FC<HomeProps> = ({
                                 </div>
                                 <div className="flex flex-col items-start text-left">
                                     <span className="text-sm font-semibold text-gray-900">{category.name}</span>
-                                    <span className="text-xs text-gray-500">{category.vehicles} vehicles</span>
+                                    <span className="text-xs text-gray-500">{t('home.categories.vehicleCount', { count: category.vehicles })}</span>
                                 </div>
                                 <svg className="w-4 h-4 text-blue-600 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -905,32 +956,10 @@ const Home: React.FC<HomeProps> = ({
             {/* Sell Car Steps Section - as per provided design */}
             <div className="py-16 md:py-20 px-4 bg-white">
                 <div className="max-w-6xl mx-auto text-center">
-                    <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-12 tracking-tight">Selling your car made simple</h2>
+                    <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-12 tracking-tight">{t('home.sell.title')}</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-12 mb-12">
-                        {[
-                            {
-                                title: 'Instant online estimate',
-                                desc: 'Fill in a few details about your car for an instant estimate',
-                                cta: 'Get estimate',
-                                accent: 'from-purple-500 to-pink-500',
-                                emoji: '⏱️',
-                            },
-                            {
-                                title: 'Free evaluation',
-                                desc: 'Schedule the evaluation at your convenience, from the comfort of your home or workplace',
-                                cta: 'Schedule evaluation',
-                                accent: 'from-blue-500 to-cyan-500',
-                                emoji: '📋',
-                            },
-                            {
-                                title: 'Same day payment',
-                                desc: 'Complete payment and paper work on the spot',
-                                cta: 'Sell Car',
-                                accent: 'from-emerald-500 to-teal-500',
-                                emoji: '💸',
-                            },
-                        ].map((item, idx) => (
+                        {sellSteps.map((item, idx) => (
                             <div key={idx} className="flex flex-col items-center text-center gap-4">
                                 <div className="relative">
                                     <div className={`h-40 w-40 rounded-full bg-gradient-to-br ${item.accent} opacity-90 blur-2xl absolute inset-0`} />
@@ -958,7 +987,7 @@ const Home: React.FC<HomeProps> = ({
                             onClick={() => onNavigate(ViewEnum.SELL_CAR)}
                             className="inline-flex items-center gap-2 px-7 py-3 rounded-full bg-purple-700 text-white font-bold shadow-lg hover:bg-purple-800 transition-colors"
                         >
-                            Watch how it works
+                            {t('home.sell.watchHow')}
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M9 5l7 7-7 7" />
                             </svg>
@@ -967,7 +996,7 @@ const Home: React.FC<HomeProps> = ({
                             onClick={() => onNavigate(ViewEnum.SELL_CAR)}
                             className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-gray-300 text-gray-800 font-semibold hover:border-purple-500 hover:text-purple-700 transition-colors"
                         >
-                            Learn More
+                            {t('home.sell.learnMore')}
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
@@ -985,15 +1014,15 @@ const Home: React.FC<HomeProps> = ({
                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                                 </svg>
-                                TRENDING NOW
+                                {t('home.trending.badge')}
                             </button>
-                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">Popular Dealers</h2>
-                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">Discover who other buyers trust — trending dealers with great value</p>
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">{t('home.trending.title')}</h2>
+                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">{t('home.trending.subtitle')}</p>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-bold text-base md:text-lg flex items-center gap-2 mx-auto transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
                             >
-                                View All Dealers
+                                {t('home.trending.viewAll')}
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                                 </svg>
@@ -1020,11 +1049,11 @@ const Home: React.FC<HomeProps> = ({
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
-                        CAR SERVICE
+                        {t('home.service.badge')}
                     </button>
-                    <h2 className="text-4xl md:text-5xl font-black mb-6 leading-tight">Car Service</h2>
+                    <h2 className="text-4xl md:text-5xl font-black mb-6 leading-tight">{t('home.service.title')}</h2>
                     <p className="text-lg md:text-xl text-white/90 mb-12 max-w-3xl mx-auto leading-relaxed">
-                        Keep your vehicle in peak condition with certified technicians, fast turnarounds, and transparent pricing.
+                        {t('home.service.subtitle')}
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
                         <div className="bg-white/15 backdrop-blur-xl rounded-2xl p-8 border border-white/30 hover:bg-white/20 transition-all duration-300 hover:scale-105">
@@ -1033,8 +1062,8 @@ const Home: React.FC<HomeProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                 </svg>
                             </div>
-                            <h3 className="font-black text-lg mb-3">Certified Technicians</h3>
-                            <p className="text-white/90 text-base">Factory-trained experts for every make</p>
+                            <h3 className="font-black text-lg mb-3">{t('home.service.card1Title')}</h3>
+                            <p className="text-white/90 text-base">{t('home.service.card1Desc')}</p>
                         </div>
                         <div className="bg-white/15 backdrop-blur-xl rounded-2xl p-8 border border-white/30 hover:bg-white/20 transition-all duration-300 hover:scale-105">
                             <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-xl">
@@ -1042,8 +1071,8 @@ const Home: React.FC<HomeProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 </svg>
                             </div>
-                            <h3 className="font-black text-lg mb-3">Fast Service</h3>
-                            <p className="text-white/90 text-base">Same-day maintenance on common repairs</p>
+                            <h3 className="font-black text-lg mb-3">{t('home.service.card2Title')}</h3>
+                            <p className="text-white/90 text-base">{t('home.service.card2Desc')}</p>
                         </div>
                         <div className="bg-white/15 backdrop-blur-xl rounded-2xl p-8 border border-white/30 hover:bg-white/20 transition-all duration-300 hover:scale-105">
                             <div className="w-16 h-16 bg-pink-500 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-xl">
@@ -1051,8 +1080,8 @@ const Home: React.FC<HomeProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                             </div>
-                            <h3 className="font-black text-lg mb-3">Transparent Pricing</h3>
-                            <p className="text-white/90 text-base">Upfront estimates with zero surprises</p>
+                            <h3 className="font-black text-lg mb-3">{t('home.service.card3Title')}</h3>
+                            <p className="text-white/90 text-base">{t('home.service.card3Desc')}</p>
                         </div>
                     </div>
                 </div>

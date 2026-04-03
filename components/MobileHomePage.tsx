@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View as ViewEnum, VehicleCategory, type Vehicle } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import { matchesCity } from '../utils/cityMapping';
@@ -53,6 +54,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   onNavigate,
   onSelectCity
 }) => {
+  const { t } = useTranslation();
   const { data: storefrontAgg } = useStorefrontAggregates();
   const [searchQuery, setSearchQuery] = useState('');
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -205,14 +207,14 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         <div className="flex items-center justify-center mb-4">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full">
             <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-            <span className="text-white text-xs font-medium">Trusted by 1M+ Customers</span>
+            <span className="text-white text-xs font-medium">{t('home.trustBadge1M')}</span>
           </div>
         </div>
 
         {/* Heading */}
-        <h1 className="text-3xl font-bold text-white mb-2 text-center">Premium Used Cars</h1>
+        <h1 className="text-3xl font-bold text-white mb-2 text-center">{t('home.premiumUsedCars')}</h1>
         <p className="text-white/90 text-sm text-center mb-6 px-4">
-          Discover exceptional vehicles with comprehensive quality assurance
+          {t('mobile.home.heroSub')}
         </p>
 
         {/* Search Bar */}
@@ -226,18 +228,18 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search by brand, model, budget..."
-              aria-label="Search vehicles"
+              placeholder={t('search.placeholderMobile')}
+              aria-label={t('a11y.searchVehicles')}
               className="flex-1 outline-none text-gray-700 placeholder-gray-400"
               style={{ minHeight: '44px' }}
             />
             <button
               onClick={handleSearch}
-              aria-label="Search"
+              aria-label={t('common.search')}
               className="bg-orange-500 text-white px-4 py-2.5 rounded-xl font-semibold flex-shrink-0"
               style={{ minHeight: '44px' }}
             >
-              Search
+              {t('common.search')}
             </button>
           </div>
         </div>
@@ -248,25 +250,25 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             <svg className="w-6 h-6 text-white mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
-            <p className="text-white text-xs font-medium">200+ Checks</p>
+            <p className="text-white text-xs font-medium">{t('mobile.hero.checksPill')}</p>
           </div>
           <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
             <svg className="w-6 h-6 text-white mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-white text-xs font-medium">Fixed Price</p>
+            <p className="text-white text-xs font-medium">{t('mobile.hero.fixedPrice')}</p>
           </div>
           <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
             <svg className="w-6 h-6 text-white mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            <p className="text-white text-xs font-medium">Money Back</p>
+            <p className="text-white text-xs font-medium">{t('mobile.hero.moneyBack')}</p>
           </div>
           <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
             <svg className="w-6 h-6 text-white mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="text-white text-xs font-medium">Free RC</p>
+            <p className="text-white text-xs font-medium">{t('mobile.hero.freeRc')}</p>
           </div>
         </div>
       </div>
@@ -280,16 +282,16 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Featured Collection
+                {t('home.featured.badge')}
               </button>
-              <h2 className="text-3xl font-black text-gray-900 tracking-tight">Premium Vehicles</h2>
-              <p className="text-gray-600 text-sm leading-relaxed">Handpicked vehicles that meet our highest standards of quality and performance</p>
+              <h2 className="text-3xl font-black text-gray-900 tracking-tight">{t('home.featured.title')}</h2>
+              <p className="text-gray-600 text-sm leading-relaxed">{t('home.featured.subtitle')}</p>
             </div>
             <button
               onClick={() => onNavigate(ViewEnum.USED_CARS)}
               className="mt-3 inline-flex items-center gap-2 px-5 py-2 rounded-full border border-purple-600 text-purple-700 font-bold text-sm hover:bg-purple-50 transition-all duration-200 active:scale-95"
             >
-              View all vehicles
+              {t('home.featured.viewAllVehicles')}
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
@@ -398,7 +400,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                       <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
-                      Verified
+                      {t('common.verified')}
                     </div>
                     
                     {/* Wishlist Button - Premium Style */}
@@ -487,14 +489,14 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       ) : (
         <div className="px-4 py-6 bg-white">
           <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center">
-            <p className="text-gray-800 font-semibold mb-1">No featured vehicles yet</p>
-            <p className="text-gray-500 text-sm mb-4">Browse all cars to see what’s available.</p>
+            <p className="text-gray-800 font-semibold mb-1">{t('mobile.home.noFeatured')}</p>
+            <p className="text-gray-500 text-sm mb-4">{t('mobile.home.browseHint')}</p>
             <button
               onClick={() => onNavigate(ViewEnum.USED_CARS)}
               className="bg-orange-500 text-white px-4 py-2 rounded-lg font-semibold active:scale-95 transition-transform w-full"
               style={{ minHeight: '44px' }}
             >
-              Browse All Cars
+              {t('mobile.home.browseAllCars')}
             </button>
           </div>
         </div>
@@ -508,16 +510,16 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 id="mobile-home-categories-heading" className="text-2xl font-bold text-gray-900">
-              Browse by Category
+              {t('home.categories.title')}
             </h2>
-            <p className="text-xs text-gray-500 mt-1">Quick taps to filter</p>
+            <p className="text-xs text-gray-500 mt-1">{t('mobile.home.quickTaps')}</p>
           </div>
           <button
             type="button"
             onClick={() => onNavigate(ViewEnum.USED_CARS)}
             className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-orange-50 active:scale-95 transition-all motion-reduce:transition-none motion-reduce:active:scale-100"
           >
-            View All
+            {t('home.recent.viewAll')}
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
@@ -570,7 +572,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                   }`}
                 >
                   <span>{category.count}</span>
-                  <span className="ml-0.5">cars</span>
+                  <span className="ml-0.5">{t('mobile.home.carsSuffix')}</span>
                 </div>
 
                 <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 motion-reduce:transition-none" />
@@ -588,16 +590,16 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 id="mobile-home-locations-heading" className="text-2xl font-bold text-gray-900 mb-1">
-              Explore by Location
+              {t('mobile.home.exploreLocation')}
             </h2>
-            <p className="text-xs text-gray-500">Find vehicles near you</p>
+            <p className="text-xs text-gray-500">{t('mobile.home.nearYou')}</p>
           </div>
           <button
             type="button"
             onClick={() => onNavigate(ViewEnum.USED_CARS)}
             className="text-sm text-orange-500 font-semibold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-orange-50 active:scale-95 transition-all motion-reduce:transition-none motion-reduce:active:scale-100"
           >
-            View All
+            {t('home.recent.viewAll')}
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
@@ -617,7 +619,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               <button
                 key={city.name}
                 type="button"
-                aria-label={`${city.name}, ${city.count} vehicles`}
+                aria-label={t('mobile.home.cityAria', { name: city.name, count: city.count })}
                 onClick={() => {
                   onSelectCity(city.name);
                   onNavigate(ViewEnum.USED_CARS);
@@ -682,12 +684,12 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       {recommendations.length > 0 && (
         <div className="px-4 py-6 bg-gray-50">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Recommended For You</h2>
+            <h2 className="text-xl font-bold text-gray-900">{t('mobile.home.recommended')}</h2>
             <button
               onClick={() => onNavigate(ViewEnum.USED_CARS)}
               className="text-sm text-orange-500 font-semibold"
             >
-              View All
+              {t('home.recent.viewAll')}
             </button>
           </div>
           <div className="space-y-4">
@@ -708,14 +710,14 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
       {/* Sell Your Car CTA */}
       <div className="px-4 py-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white mb-8 rounded-2xl">
-        <h2 className="text-xl font-bold mb-2">Ready to Sell?</h2>
-        <p className="text-white/90 text-sm mb-4">List your vehicle and reach thousands of buyers</p>
+        <h2 className="text-xl font-bold mb-2">{t('mobile.home.readyToSell')}</h2>
+        <p className="text-white/90 text-sm mb-4">{t('mobile.home.listVehicle')}</p>
         <button
           onClick={() => onNavigate(ViewEnum.SELL_CAR)}
           className="w-full bg-white text-orange-500 py-3 rounded-xl font-semibold active:scale-95 transition-transform"
           style={{ minHeight: '48px' }}
         >
-          Sell Your Car
+          {t('nav.sellCar')}
         </button>
       </div>
     </div>

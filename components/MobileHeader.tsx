@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 import Logo from './Logo.js';
+import LanguageSwitcher from './LanguageSwitcher';
 
 interface MobileHeaderProps {
   onNavigate: (view: ViewEnum) => void;
@@ -32,6 +34,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   showMenu: showMenuProp,
   onToggleMenu
 }) => {
+  const { t } = useTranslation();
   const [internalShowMenu, setInternalShowMenu] = useState(false);
   const showMenu = showMenuProp !== undefined ? showMenuProp : internalShowMenu;
   const setShowMenu = onToggleMenu || setInternalShowMenu;
@@ -48,8 +51,12 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
   return (
     <>
       {/* Premium Mobile Header with Glassmorphism */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-14 safe-top" data-testid="mobile-header" style={{ 
-        paddingTop: 'env(safe-area-inset-top, 0px)',
+      <header
+        className="fixed left-0 right-0 z-[50] h-14"
+        data-testid="mobile-header"
+        style={{
+        top: 'calc(env(safe-area-inset-top, 0px) + 3rem)',
+        paddingTop: 0,
         background: isGradientView
           ? 'linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.1) 100%)'
           : 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 100%)',
@@ -171,11 +178,11 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
       {showMenu && (
         <>
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 animate-fade-in"
+            className="fixed inset-0 bg-black bg-opacity-50 z-[100] animate-fade-in"
             onClick={() => setShowMenu(false)}
           />
           <div 
-            className="fixed top-0 left-0 bottom-0 w-72 bg-white z-50 shadow-xl animate-slide-in-left" 
+            className="fixed top-0 left-0 bottom-0 w-72 bg-white z-[110] shadow-xl animate-slide-in-left" 
             data-testid="mobile-drawer"
           >
             <div className="h-full flex flex-col">
@@ -183,7 +190,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
               <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-orange-500 to-orange-600">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Logo size="sm" showText={false} />
+                    <Logo size="sm" showText variant="onDark" />
                     <div>
                       <p className="text-white font-semibold text-sm">
                         {currentUser?.name || 'Guest'}
@@ -209,17 +216,17 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
               <nav className="flex-1 overflow-y-auto py-2">
                 <MenuItem
                   icon={<HomeIcon />}
-                  label="Home"
+                  label={t('nav.home')}
                   onClick={() => { onNavigate(ViewEnum.HOME); setShowMenu(false); }}
                 />
                 <MenuItem
                   icon={<CarIcon />}
-                  label="Buy Car"
+                  label={t('nav.buyCar')}
                   onClick={() => { onNavigate(ViewEnum.USED_CARS); setShowMenu(false); }}
                 />
                 <MenuItem
                   icon={<SellCarIcon />}
-                  label="Sell Car"
+                  label={t('nav.sellCar')}
                   onClick={() => { 
                     if (currentUser?.role === 'seller') {
                       onNavigate(ViewEnum.SELLER_DASHBOARD);
@@ -231,17 +238,17 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 />
                 <MenuItem
                   icon={<NewCarIcon />}
-                  label="New Cars"
+                  label={t('nav.newCars')}
                   onClick={() => { onNavigate(ViewEnum.NEW_CARS); setShowMenu(false); }}
                 />
                 <MenuItem
                   icon={<DealerIcon />}
-                  label="Dealers"
+                  label={t('nav.dealers')}
                   onClick={() => { onNavigate(ViewEnum.DEALER_PROFILES); setShowMenu(false); }}
                 />
                 <MenuItem
                   icon={<ServiceIcon />}
-                  label="Car Services"
+                  label={t('nav.carServices')}
                   onClick={() => { onNavigate(ViewEnum.CAR_SERVICES); setShowMenu(false); }}
                 />
                 
@@ -251,25 +258,25 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   <>
                     <MenuItem
                       icon={<HeartIcon />}
-                      label="My Wishlist"
+                      label={t('nav.myWishlist')}
                       onClick={() => { onNavigate(ViewEnum.WISHLIST); setShowMenu(false); }}
                     />
                     <MenuItem
                       icon={<MessageIcon />}
-                      label="Messages"
+                      label={t('nav.messages')}
                       onClick={() => { onNavigate(ViewEnum.INBOX); setShowMenu(false); }}
                     />
                     {currentUser.role === 'seller' && (
                       <MenuItem
                         icon={<DashboardIcon />}
-                        label="Seller Dashboard"
+                        label={t('nav.sellerDashboard')}
                         onClick={() => { onNavigate(ViewEnum.SELLER_DASHBOARD); setShowMenu(false); }}
                       />
                     )}
                     {currentUser.role === 'customer' && (
                       <MenuItem
                         icon={<UserIcon />}
-                        label="My Dashboard"
+                        label={t('nav.myDashboard')}
                         onClick={() => { onNavigate(ViewEnum.BUYER_DASHBOARD); setShowMenu(false); }}
                       />
                     )}
@@ -277,14 +284,16 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                 )}
                 
                 <div className="border-t border-gray-200 my-2"></div>
+                <LanguageSwitcher variant="inline" onSelect={() => setShowMenu(false)} className="!px-0" />
+                <div className="border-t border-gray-200 my-2"></div>
                 <MenuItem
                   icon={<InfoIcon />}
-                  label="Support"
+                  label={t('nav.support')}
                   onClick={() => { onNavigate(ViewEnum.SUPPORT); setShowMenu(false); }}
                 />
                 <MenuItem
                   icon={<QuestionIcon />}
-                  label="FAQ"
+                  label={t('footer.faq')}
                   onClick={() => { onNavigate(ViewEnum.FAQ); setShowMenu(false); }}
                 />
                 
@@ -294,7 +303,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                     <div className="border-t border-gray-200 my-2"></div>
                     <MenuItem
                       icon={<LogoutIcon />}
-                      label="Logout"
+                      label={t('nav.logout')}
                       onClick={() => { onLogout(); setShowMenu(false); }}
                     />
                   </>
@@ -306,7 +315,7 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                     <div className="border-t border-gray-200 my-2"></div>
                     <MenuItem
                       icon={<LoginIcon />}
-                      label="Login"
+                      label={t('nav.login')}
                       onClick={() => { onNavigate(ViewEnum.LOGIN_PORTAL); setShowMenu(false); }}
                     />
                   </>

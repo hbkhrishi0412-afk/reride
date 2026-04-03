@@ -14,6 +14,7 @@ import ImportVehiclesModal from './ImportVehiclesModal';
 import ImportUsersModal from './ImportUsersModal';
 import AdminServiceOps from './AdminServiceOps';
 import ServiceManagement from './ServiceManagement';
+import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 
 // --- Seller Filter Dropdown Component ---
 interface SellerFilterDropdownProps {
@@ -1699,6 +1700,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Seller</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Price</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Status</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Offer</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
@@ -1717,6 +1719,22 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                     {vehicle.status}
                                                 </span>
                                     </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                {!vehicle.offerEnabled ? (
+                                                    <span className="text-gray-400">—</span>
+                                                ) : isSellerListingOfferVisible(vehicle) ? (
+                                                    <span className="px-2 py-0.5 inline-flex text-xs font-semibold rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200">
+                                                        Active
+                                                    </span>
+                                                ) : (
+                                                    <span
+                                                        className="px-2 py-0.5 inline-flex text-xs font-medium rounded-full bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-100"
+                                                        title="Offer is enabled but hidden from buyers (check dates or offer text)"
+                                                    >
+                                                        Inactive
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                                 <button 
                                                     onClick={(e) => {

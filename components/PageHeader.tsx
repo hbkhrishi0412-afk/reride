@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface PageHeaderProps {
   title: string;
@@ -11,7 +12,9 @@ interface PageHeaderProps {
 /**
  * Reusable page header with optional back link and right-side controls.
  */
-const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, onBack, backLabel = 'Back', rightSlot }) => {
+const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, onBack, backLabel, rightSlot }) => {
+  const { t } = useTranslation();
+  const resolvedBack = backLabel ?? t('common.back');
   return (
     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
       <div>
@@ -23,7 +26,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, onBack, backLa
             onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--reride-blue)')}
             onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--reride-orange)')}
           >
-            &larr; {backLabel}
+            &larr; {resolvedBack}
           </button>
         )}
         <h1 className="text-3xl font-extrabold text-reride-text-dark dark:text-reride-text-dark">{title}</h1>

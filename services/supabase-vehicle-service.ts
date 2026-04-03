@@ -143,7 +143,9 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
     'viewsLast7Days', 'viewsLast30Days', 'uniqueViewers', 'phoneViews',
     'shareCount', 'keywords', 'nearbyLandmarks', 'exactLocation',
     'distanceFromUser', 'photoQuality', 'hasMinimumPhotos',
-    'descriptionQuality', 'activeBoosts', 'hideExactLocation'
+    'descriptionQuality', 'activeBoosts', 'hideExactLocation',
+    'offerEnabled', 'offerTitle', 'offerStartDate', 'offerEndDate', 'offerDateLabel',
+    'offerDescription', 'offerHighlight', 'offerDisclaimer'
   ];
   
   metadataFields.forEach(field => {
@@ -506,7 +508,7 @@ export const supabaseVehicleService = {
     // This reduces data transfer and query time
     let query = supabase
       .from('vehicles')
-      .select('id, make, model, variant, year, price, mileage, category, seller_email, status, is_featured, images, description, engine, fuel_type, transmission, fuel_efficiency, color, registration_year, insurance_validity, insurance_type, rto, city, state, location, no_of_owners, displacement, ground_clearance, boot_space, features, created_at, updated_at, listing_expires_at, listing_status, views, inquiries_count, certification_status')
+      .select('id, make, model, variant, year, price, mileage, category, seller_email, status, is_featured, images, description, engine, fuel_type, transmission, fuel_efficiency, color, registration_year, insurance_validity, insurance_type, rto, city, state, location, no_of_owners, displacement, ground_clearance, boot_space, features, created_at, updated_at, listing_expires_at, listing_status, views, inquiries_count, certification_status, metadata')
       .eq('status', status); // Uses idx_vehicles_status_created_at index
     
     // Apply database-level sorting (much faster than in-memory sorting)

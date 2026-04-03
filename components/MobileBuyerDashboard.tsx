@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { User, Vehicle, Conversation } from '../types';
 import { View as ViewEnum } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
@@ -39,6 +40,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   onViewSellerProfile: _onViewSellerProfile,
   onLogout
 }) => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity'>('overview');
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
   const savedSearches = useMemo(
@@ -86,20 +88,30 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
     [conversations]
   );
 
+  const mobileTabs = useMemo(
+    () =>
+      [
+        { id: 'overview' as const, label: t('buyerDashboard.mobile.tab.overview') },
+        { id: 'searches' as const, label: t('buyerDashboard.mobile.tab.searches') },
+        { id: 'activity' as const, label: t('buyerDashboard.mobile.tab.activity') },
+      ],
+    [t]
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard</h1>
-            <p className="text-gray-600 text-sm">Your car journey</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">{t('nav.dashboard')}</h1>
+            <p className="text-gray-600 text-sm">{t('buyerDashboard.mobile.subtitle')}</p>
           </div>
           {onLogout && (
             <button
               onClick={onLogout}
               className="ml-4 p-2 text-gray-600 hover:text-red-600 active:opacity-70 transition-colors"
-              title="Logout"
+              title={t('nav.logout')}
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -113,8 +125,12 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
       <div className="mx-4 mt-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-5 text-white">
         <div className="flex items-start justify-between mb-2">
           <div className="flex-1">
-            <h2 className="text-xl font-bold mb-1">Welcome back, {currentUser.name?.split(' ')[0] || 'there'}!</h2>
-            <p className="text-white/90 text-sm">Track your car search journey</p>
+            <h2 className="text-xl font-bold mb-1">
+              {t('buyerDashboard.mobile.welcome', {
+                name: currentUser.name?.split(' ')[0] || t('buyerDashboard.mobile.guestName'),
+              })}
+            </h2>
+            <p className="text-white/90 text-sm">{t('buyerDashboard.mobile.trackJourney')}</p>
           </div>
           <div className="ml-4">
             <svg className="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,7 +144,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
       <div className="px-4 mt-4 grid grid-cols-2 gap-3">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-600 text-xs font-medium">SAVED</p>
+            <p className="text-gray-600 text-xs font-medium">{t('buyerDashboard.mobile.stat.saved')}</p>
             <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
             </svg>
@@ -138,7 +154,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-600 text-xs font-medium">MESSAGES</p>
+            <p className="text-gray-600 text-xs font-medium">{t('buyerDashboard.mobile.stat.messages')}</p>
             <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
@@ -148,7 +164,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-600 text-xs font-medium">VIEWED</p>
+            <p className="text-gray-600 text-xs font-medium">{t('buyerDashboard.mobile.stat.viewed')}</p>
             <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -159,7 +175,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-600 text-xs font-medium">COMPARED</p>
+            <p className="text-gray-600 text-xs font-medium">{t('buyerDashboard.mobile.stat.compared')}</p>
             <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
@@ -170,22 +186,22 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
 
       {/* Tabs */}
       <div className="bg-white border-b border-gray-200 mt-4 flex">
-        {(['overview', 'searches', 'activity'] as const).map((tab) => (
+        {mobileTabs.map(({ id, label }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={id}
+            onClick={() => setActiveTab(id)}
             className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${
-              activeTab === tab
+              activeTab === id
                 ? 'text-orange-500 border-b-2 border-orange-500'
                 : 'text-gray-600'
             }`}
           >
-            {tab === 'overview' && (
+            {id === 'overview' && (
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             )}
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {label}
           </button>
         ))}
       </div>
@@ -196,7 +212,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
           <div className="space-y-6">
             {/* Quick Actions Section */}
             <div className="bg-white rounded-xl p-4 shadow-sm">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">{t('buyerDashboard.mobile.quickActions')}</h3>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => onNavigate(ViewEnum.USED_CARS)}
@@ -205,7 +221,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                   <svg className="w-8 h-8 text-orange-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                  <p className="text-sm font-semibold text-gray-900">Browse Cars</p>
+                  <p className="text-sm font-semibold text-gray-900">{t('buyerDashboard.mobile.browseCars')}</p>
                 </button>
                 <button
                   onClick={() => onNavigate(ViewEnum.WISHLIST)}
@@ -214,7 +230,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                   <svg className="w-8 h-8 text-red-500 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                   </svg>
-                  <p className="text-sm font-semibold text-gray-900">Saved Vehicles</p>
+                  <p className="text-sm font-semibold text-gray-900">{t('buyerDashboard.mobile.savedVehicles')}</p>
                 </button>
               </div>
             </div>
@@ -223,12 +239,12 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
             {wishlistVehicles.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-bold text-gray-900">Saved Vehicles</h2>
+                  <h2 className="text-lg font-bold text-gray-900">{t('buyerDashboard.mobile.savedVehicles')}</h2>
                   <button
                     onClick={() => onNavigate(ViewEnum.WISHLIST)}
                     className="text-sm text-orange-500 font-semibold"
                   >
-                    View All
+                    {t('buyerDashboard.mobile.viewAll')}
                   </button>
                 </div>
                 <div className="space-y-3">
@@ -264,12 +280,12 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
             {recentConversations.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-bold text-gray-900">Recent Chats</h2>
+                  <h2 className="text-lg font-bold text-gray-900">{t('buyerDashboard.mobile.recentChats')}</h2>
                   <button
                     onClick={() => onNavigate(ViewEnum.INBOX)}
                     className="text-sm text-orange-500 font-semibold"
                   >
-                    View All
+                    {t('buyerDashboard.mobile.viewAll')}
                   </button>
                 </div>
                 <div className="space-y-2">
@@ -282,7 +298,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                       <p className="font-semibold text-gray-900 mb-1">{conv.vehicleName}</p>
                       {conv.messages.length > 0 && (
                         <p className="text-sm text-gray-600 truncate">
-                          {conv.messages[conv.messages.length - 1]?.text || 'No messages yet'}
+                          {conv.messages[conv.messages.length - 1]?.text || t('buyerDashboard.mobile.noMessagesYet')}
                         </p>
                       )}
                     </button>
@@ -297,22 +313,29 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
           <div className="space-y-4">
             {savedSearches.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-gray-600 mb-2">No saved searches</p>
+                <p className="text-gray-600 mb-2">{t('buyerDashboard.mobile.noSavedSearches')}</p>
                 <button
                   onClick={() => onNavigate(ViewEnum.USED_CARS)}
                   className="text-orange-500 font-semibold"
                 >
-                  Start Searching
+                  {t('buyerDashboard.mobile.startSearching')}
                 </button>
               </div>
             ) : (
               savedSearches.map((search, idx) => {
                 const filters = search.filters || {};
-                const filterText = [
-                  filters.make && `Make: ${filters.make}`,
-                  filters.model && `Model: ${filters.model}`,
-                  (filters.minPrice || filters.maxPrice) && `Price: ₹${(filters.minPrice || 0).toLocaleString()} - ₹${(filters.maxPrice || 0).toLocaleString()}`,
-                ].filter(Boolean).join(' • ') || 'No filters';
+                const filterText =
+                  [
+                    filters.make && t('buyerDashboard.filter.make', { value: filters.make }),
+                    filters.model && t('buyerDashboard.filter.model', { value: filters.model }),
+                    (filters.minPrice || filters.maxPrice) &&
+                      t('buyerDashboard.filter.price', {
+                        min: (filters.minPrice || 0).toLocaleString('en-IN'),
+                        max: (filters.maxPrice || 0).toLocaleString('en-IN'),
+                      }),
+                  ]
+                    .filter(Boolean)
+                    .join(' • ') || t('buyerDashboard.mobile.noFilters');
                 
                 return (
                   <div key={idx} className="bg-white rounded-xl p-4 shadow-sm">
@@ -322,7 +345,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                       onClick={() => onNavigate(ViewEnum.USED_CARS)}
                       className="text-sm text-orange-500 font-semibold"
                     >
-                      View Results
+                      {t('buyerDashboard.mobile.viewResults')}
                     </button>
                   </div>
                 );
@@ -335,17 +358,17 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
           <div className="space-y-4">
             {recentlyViewed.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-gray-600 mb-2">No recently viewed vehicles</p>
+                <p className="text-gray-600 mb-2">{t('buyerDashboard.mobile.noRecentlyViewed')}</p>
                 <button
                   onClick={() => onNavigate(ViewEnum.USED_CARS)}
                   className="text-orange-500 font-semibold"
                 >
-                  Start Browsing
+                  {t('buyerDashboard.mobile.startBrowsing')}
                 </button>
               </div>
             ) : (
               <div>
-                <h2 className="text-lg font-bold text-gray-900 mb-3">Recently Viewed</h2>
+                <h2 className="text-lg font-bold text-gray-900 mb-3">{t('buyerDashboard.recentlyViewed')}</h2>
                 <div className="space-y-3">
                   {recentlyViewed.map((vehicle) => (
                     <div
@@ -386,7 +409,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
-                    Logout
+                    {t('nav.logout')}
                   </div>
                 </button>
               </div>

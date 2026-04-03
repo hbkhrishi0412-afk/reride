@@ -1,4 +1,5 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import VehicleCard from './VehicleCard';
 import VirtualizedVehicleList from './VirtualizedVehicleList';
@@ -42,6 +43,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
   sellerEmail,
   onViewVehicle
 }) => {
+  const { t } = useTranslation();
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   // Safety check
   const safeSellerVehicles = sellerVehicles || [];
@@ -49,7 +51,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
   const soldVehicles = safeSellerVehicles.filter(v => v && v.status === 'sold');
 
   // Export to CSV functionality
-  const handleExportData = () => {
+  const handleExportData = useCallback(() => {
     try {
       // Prepare CSV headers
       const headers = [
@@ -100,9 +102,81 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
       console.log(`✅ Exported ${safeSellerVehicles.length} vehicles successfully`);
     } catch (error) {
       console.error('Failed to export data:', error);
-      alert('Failed to export data. Please try again.');
+      alert(t('dashboard.exportFailed'));
     }
-  };
+  }, [safeSellerVehicles, t]);
+
+  const quickActions = useMemo(
+    () => [
+      {
+        id: 'add',
+        label: t('dashboard.quick.addVehicle'),
+        icon: (
+          <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+        ),
+        onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (onEditVehicle) {
+            onEditVehicle({} as Vehicle);
+          }
+        },
+      },
+      {
+        id: 'bulk',
+        label: t('dashboard.quick.bulkUpload'),
+        icon: (
+          <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+        ),
+        onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (onBulkUpload && sellerEmail) {
+            setIsBulkUploadOpen(true);
+          } else {
+            alert(t('dashboard.bulkUploadUnavailable'));
+          }
+        },
+      },
+      {
+        id: 'analytics',
+        label: t('dashboard.quick.analytics'),
+        icon: (
+          <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        ),
+        onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (onNavigateToAnalytics) {
+            onNavigateToAnalytics();
+          } else {
+            console.log('Analytics navigation not available');
+          }
+        },
+      },
+      {
+        id: 'export',
+        label: t('dashboard.quick.export'),
+        icon: (
+          <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        ),
+        onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleExportData();
+        },
+      },
+    ],
+    [t, onEditVehicle, onBulkUpload, sellerEmail, onNavigateToAnalytics, handleExportData, setIsBulkUploadOpen]
+  );
 
   const handleBulkUpload = (vehicles: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => {
     if (onBulkUpload) {
@@ -118,7 +192,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
         <div>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">
-              Active Listings ({activeVehicles.length})
+              {t('dashboard.activeListings', { count: activeVehicles.length })}
             </h2>
           </div>
           
@@ -136,7 +210,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
             />
           ) : (
             <div className="text-center py-8 text-gray-500">
-              <p>No active listings found.</p>
+              <p>{t('dashboard.noActiveListings')}</p>
             </div>
           )}
         </div>
@@ -145,7 +219,7 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
         {soldVehicles.length > 0 && (
           <div>
             <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
-              Sold Vehicles ({soldVehicles.length})
+              {t('dashboard.soldListings', { count: soldVehicles.length })}
             </h2>
             <VirtualizedVehicleList
               vehicles={soldVehicles}
@@ -164,74 +238,11 @@ const DashboardListings: React.FC<DashboardListingsProps> = memo(({
         {/* Quick Actions */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
-            Quick Actions
+            {t('dashboard.quickActions')}
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              {
-                label: 'Add Vehicle',
-                icon: (
-                  <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                ),
-                onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (onEditVehicle) {
-                    onEditVehicle({} as Vehicle);
-                  }
-                },
-              },
-              {
-                label: 'Bulk Upload',
-                icon: (
-                  <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                ),
-                onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (onBulkUpload && sellerEmail) {
-                    setIsBulkUploadOpen(true);
-                  } else {
-                    alert('Bulk upload is not available. Please ensure you are logged in.');
-                  }
-                },
-              },
-              {
-                label: 'Analytics',
-                icon: (
-                  <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                ),
-                onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (onNavigateToAnalytics) {
-                    onNavigateToAnalytics();
-                  } else {
-                    console.log('Analytics navigation not available');
-                  }
-                },
-              },
-              {
-                label: 'Export',
-                icon: (
-                  <svg className="w-8 h-8 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                ),
-                onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleExportData();
-                },
-              },
-            ].map((action) => (
-              <DashboardQuickAction key={action.label} label={action.label} icon={action.icon} onClick={action.onClick} />
+            {quickActions.map((action) => (
+              <DashboardQuickAction key={action.id} label={action.label} icon={action.icon} onClick={action.onClick} />
             ))}
           </div>
         </div>

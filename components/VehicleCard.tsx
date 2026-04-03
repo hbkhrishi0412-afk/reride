@@ -1,4 +1,5 @@
 import React, { memo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types.js';
 import StarRating from './StarRating.js';
 import { getFirstValidImage } from '../utils/imageUtils.js';
@@ -28,6 +29,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   onViewSellerProfile, 
   onQuickView 
 }) => {
+  const { t } = useTranslation();
   // Validate onSelect prop on mount
   useEffect(() => {
     if (!onSelect) {
@@ -105,7 +107,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
           handleCardClick(e as any);
         }
       }}
-      aria-label={`View details for ${vehicle.make} ${vehicle.model}`}
+      aria-label={t('vehicle.card.viewDetailsAria', { make: vehicle.make, model: vehicle.model })}
       data-vehicle-id={vehicle.id}
       style={{
         fontFamily: "'Poppins', sans-serif",
@@ -159,9 +161,9 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             <span 
               className="text-white font-bold"
               style={{ fontSize: '12px', letterSpacing: '0.5px' }}
-              aria-label="Featured vehicle badge"
+              aria-label={t('vehicle.card.featuredBadgeAria')}
             >
-              Featured
+              {t('vehicle.card.featured')}
             </span>
           </div>
         )}
@@ -178,7 +180,9 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
               width: '32px',
               height: '32px'
             }}
-            aria-label={isSelectedForCompare ? "Remove from comparison" : "Add to comparison"}
+            aria-label={
+              isSelectedForCompare ? t('vehicle.card.compareRemove') : t('vehicle.card.compareAdd')
+            }
           >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
@@ -201,7 +205,9 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
               width: '32px',
               height: '32px'
             }}
-            aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
+            aria-label={
+              isInWishlist ? t('vehicle.card.wishlistRemove') : t('vehicle.card.wishlistAdd')
+            }
           >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
@@ -260,7 +266,8 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             fontFamily: "'Poppins', sans-serif"
           }}
         >
-          By:           <button 
+          {t('vehicle.card.byPrefix')}{' '}
+          <button 
             type="button"
             onClick={handleSellerClick}
             className="font-semibold hover:underline focus:outline-none transition-colors cursor-pointer"
@@ -268,9 +275,11 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
               color: '#FF7F47',
               fontFamily: "'Poppins', sans-serif"
             }}
-            aria-label={`View seller profile for ${vehicle.sellerName || 'seller'}`}
+            aria-label={t('vehicle.card.viewSellerAria', {
+              name: vehicle.sellerName || t('vehicle.card.sellerFallback'),
+            })}
           >
-            {vehicle.sellerName || 'Seller'}
+            {vehicle.sellerName || t('vehicle.card.sellerFallback')}
           </button>
         </p>
         
@@ -297,7 +306,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
                   fontFamily: "'Poppins', sans-serif"
                 }}
               >
-                {Math.round(vehicle.mileage / 1000)}K kms
+                {t('vehicle.card.mileageCompact', { km: Math.round(vehicle.mileage / 1000) })}
               </span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -339,7 +348,7 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
                   fontFamily: "'Poppins', sans-serif"
                 }}
               >
-                {vehicle.transmission || 'Manual'}
+                {vehicle.transmission || t('common.manual')}
               </span>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { VehicleCategory } from '../types';
 
@@ -35,6 +36,7 @@ two-wheeler,Royal Enfield,Classic 350,Halcyon,2023,210000,5000,Petrol,Manual,Bla
 const REQUIRED_FIELDS: (keyof Vehicle)[] = ['category', 'make', 'model', 'year', 'price', 'mileage', 'fuelType', 'transmission', 'city', 'state'];
 
 const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipleVehicles, sellerEmail }) => {
+    const { t } = useTranslation();
     const [step, setStep] = useState(1);
     const [file, setFile] = useState<File | null>(null);
     const [parsedData, setParsedData] = useState<Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]>([]);
@@ -59,7 +61,9 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
                 let hasError = false;
                 for (const field of REQUIRED_FIELDS) {
                     if (!row[field]) {
-                        validationErrors.push(`Row ${index + 2}: Missing required field '${field}'.`);
+                        validationErrors.push(
+                            t('dashboard.bulkModal.error.missingField', { row: index + 2, field })
+                        );
                         hasError = true;
                     }
                 }
@@ -106,7 +110,9 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
 
                 // More validation
                 if (isNaN(newVehicle.year) || isNaN(newVehicle.price) || isNaN(newVehicle.mileage)) {
-                    validationErrors.push(`Row ${index + 2}: Year, Price, and Mileage must be numbers.`);
+                    validationErrors.push(
+                        t('dashboard.bulkModal.error.numericFields', { row: index + 2 })
+                    );
                     return;
                 }
                 validVehicles.push(newVehicle);
@@ -117,7 +123,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
             setStep(2);
         };
         reader.readAsText(file);
-    }, [file, sellerEmail]);
+    }, [file, sellerEmail, t]);
     
     const handleConfirm = () => {
         if (parsedData.length > 0) {
@@ -142,16 +148,16 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
             <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="p-6 border-b dark:border-gray-200-200">
-                    <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">Bulk Upload Vehicles</h2>
-                    <p className="text-sm text-reride-text-dark dark:text-reride-text-dark">Upload multiple listings at once using a CSV file.</p>
+                    <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">{t('dashboard.bulkModal.title')}</h2>
+                    <p className="text-sm text-reride-text-dark dark:text-reride-text-dark">{t('dashboard.bulkModal.subtitle')}</p>
                 </div>
 
                 <div className="p-6 overflow-y-auto">
                     {step === 1 && (
                         <div className="space-y-4 text-center">
-                            <h3 className="font-semibold">Step 1: Prepare Your CSV File</h3>
-                            <p>Download our template, fill it with your vehicle data, and upload it here.</p>
-                            <button onClick={downloadTemplate} className="font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>Download CSV Template</button>
+                            <h3 className="font-semibold">{t('dashboard.bulkModal.step1Title')}</h3>
+                            <p>{t('dashboard.bulkModal.step1Body')}</p>
+                            <button onClick={downloadTemplate} className="font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>{t('dashboard.bulkModal.downloadTemplate')}</button>
                             <div className="mt-4 p-6 border-2 border-dashed border-gray-200 dark:border-gray-200-300 rounded-lg">
                                 <input type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-reride-text-dark file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:text-white" style={{ ['--file-bg' as any]: 'var(--reride-orange)', ['--file-hover-bg' as any]: 'var(--reride-blue)' }} />
                             </div>
@@ -159,28 +165,28 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
                     )}
                     {step === 2 && (
                         <div className="space-y-4">
-                            <h3 className="font-semibold">Step 2: Review and Confirm</h3>
+                            <h3 className="font-semibold">{t('dashboard.bulkModal.step2Title')}</h3>
                             <div className="p-4 bg-white rounded-lg">
-                                <p className="font-bold text-reride-orange dark:text-reride-orange">{parsedData.length} vehicles ready for upload.</p>
-                                {errors.length > 0 && <p className="font-bold text-reride-orange dark:text-reride-orange mt-2">{errors.length} rows have errors and will be skipped.</p>}
+                                <p className="font-bold text-reride-orange dark:text-reride-orange">{t('dashboard.bulkModal.readyCount', { count: parsedData.length })}</p>
+                                {errors.length > 0 && <p className="font-bold text-reride-orange dark:text-reride-orange mt-2">{t('dashboard.bulkModal.errorsSkipped', { count: errors.length })}</p>}
                             </div>
                             {errors.length > 0 && (
                                 <details className="max-h-48 overflow-y-auto p-2 border rounded-lg">
-                                    <summary className="cursor-pointer font-semibold text-sm">View Errors</summary>
+                                    <summary className="cursor-pointer font-semibold text-sm">{t('dashboard.bulkModal.viewErrors')}</summary>
                                     <ul className="text-xs text-reride-orange list-disc list-inside mt-2">
                                         {errors.map((err, i) => <li key={i}>{err}</li>)}
                                     </ul>
                                 </details>
                             )}
-                            <p className="text-sm">Ready to proceed? Click confirm to add {parsedData.length} new listings to your dashboard.</p>
+                            <p className="text-sm">{t('dashboard.bulkModal.confirmHint', { count: parsedData.length })}</p>
                         </div>
                     )}
                 </div>
 
                 <div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg">
-                    <button onClick={onClose} className="px-4 py-2 bg-white-dark text-reride-text-dark rounded-md hover:bg-white">Cancel</button>
-                    {step === 1 && <button onClick={handleParseAndValidate} disabled={!file} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50">Next: Review</button>}
-                    {step === 2 && <button onClick={handleConfirm} className="px-4 py-2 bg-reride-orange text-white rounded-md hover:bg-reride-orange">Confirm & Upload</button>}
+                    <button onClick={onClose} className="px-4 py-2 bg-white-dark text-reride-text-dark rounded-md hover:bg-white">{t('dashboard.bulkModal.cancel')}</button>
+                    {step === 1 && <button onClick={handleParseAndValidate} disabled={!file} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50">{t('dashboard.bulkModal.nextReview')}</button>}
+                    {step === 2 && <button onClick={handleConfirm} className="px-4 py-2 bg-reride-orange text-white rounded-md hover:bg-reride-orange">{t('dashboard.bulkModal.confirmUpload')}</button>}
                 </div>
             </div>
         </div>

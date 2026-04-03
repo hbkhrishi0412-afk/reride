@@ -82,6 +82,15 @@ const vehicleSchema = new mongoose.Schema({
   sellerAverageRating: { type: Number, default: 0 },
   sellerRatingCount: { type: Number, default: 0 },
   sellerBadges: [mongoose.Schema.Types.Mixed],
+
+  offerEnabled: { type: Boolean, default: false },
+  offerTitle: String,
+  offerStartDate: String,
+  offerEndDate: String,
+  offerDateLabel: String,
+  offerDescription: String,
+  offerHighlight: String,
+  offerDisclaimer: String,
 }, {
   timestamps: true // Add createdAt and updatedAt fields
 });

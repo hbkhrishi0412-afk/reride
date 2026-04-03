@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PageTransition from './components/PageTransition';
 import SEO from './components/SEO';
 import CookieConsentBanner from './components/CookieConsentBanner';
+import I18nDocumentSync from './components/I18nDocumentSync';
 import { 
   VehicleListErrorBoundary, 
   ChatErrorBoundary, 
@@ -3508,6 +3509,8 @@ const AppContent: React.FC = () => {
     // For ALL other views (Home, Browse, Detail, etc.), show mobile UI using MobileLayout
     // Hide header for HOME view since it has its own hero section
     const shouldHideHeader = currentView === ViewEnum.HOME;
+    // Vehicle detail: full-bleed listing UX (no tab bar) — matches native listing apps / reference
+    const hideBottomNavOnDetail = currentView === ViewEnum.DETAIL;
     return (
       <>
         {/* Mobile Feature Managers */}
@@ -3522,7 +3525,7 @@ const AppContent: React.FC = () => {
         
         <MobileLayout
           showHeader={!shouldHideHeader}
-          showBottomNav={true}
+          showBottomNav={!hideBottomNavOnDetail}
           headerTitle={getPageTitle()}
           showBack={currentView === ViewEnum.DETAIL}
           onBack={() => navigate(ViewEnum.USED_CARS)}
@@ -3718,6 +3721,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <AppProvider>
+        <I18nDocumentSync />
         <SEO />
         <AppContent />
         <CookieConsentBanner />
