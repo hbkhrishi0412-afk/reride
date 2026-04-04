@@ -2,8 +2,9 @@
 
 import React from 'react';
 import type { VehicleCategoryData } from './vehicleDataTypes';
+import { VehicleCategory } from './vehicle-category.js';
 
-export { VehicleCategory } from './vehicle-category.js';
+export { VehicleCategory };
 
 /** Lightweight counts for home discovery (from GET /api/vehicles?aggregate=storefront). */
 export interface StorefrontDiscoveryAggregates {
