@@ -6959,11 +6959,17 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
       }
 
-      // Check if conversation exists
-      const existing = await conversationService.findById(conversationData.id);
+      // Check if conversation exists (by client id / metadata alias, uuid, or vehicle + customer)
+      let existing = await conversationService.findById(conversationData.id);
+      if (!existing && conversationData.vehicleId != null && conversationData.customerId) {
+        existing = await conversationService.findByVehicleAndCustomer(
+          Number(conversationData.vehicleId),
+          String(conversationData.customerId).toLowerCase().trim(),
+        );
+      }
       if (existing) {
-        await conversationService.update(conversationData.id, conversationData);
-        const updated = await conversationService.findById(conversationData.id);
+        await conversationService.update(existing.id, conversationData);
+        const updated = await conversationService.findById(existing.id);
         return res.status(200).json({ success: true, data: updated });
       } else {
         const conversation = await conversationService.create(conversationData);
@@ -7070,7 +7076,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation deletion' });
       }
 
-      await conversationService.delete(String(conversationId));
+      await conversationService.delete(conversation.id);
       return res.status(200).json({ success: true, message: 'Conversation deleted successfully' });
     }
 

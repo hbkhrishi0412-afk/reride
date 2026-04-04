@@ -1,5 +1,18 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
 
+function newConversationDbId(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') {
+    return c.randomUUID();
+  }
+  throw new Error('crypto.randomUUID is not available in this environment');
+}
+
+/** True if value is a UUID-shaped string (avoids invalid uuid casts on Postgres uuid columns). */
+export function isConversationUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
 export interface ChatMessage {
   id: number;
   sender: 'user' | 'seller' | 'system';
@@ -114,12 +127,22 @@ function conversationToSupabaseRow(conversation: Partial<Conversation>, isUpdate
 // Conversation service for Supabase
 export const supabaseConversationService = {
   // Create a new conversation
-  async create(conversationData: Omit<Conversation, 'id'>): Promise<Conversation> {
-    const id = `${conversationData.customerId}_${conversationData.vehicleId}`;
-    
+  async create(conversationData: Conversation): Promise<Conversation> {
+    const clientProvidedId = conversationData.id?.trim() || '';
+    const dbId = newConversationDbId();
+
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    const row = conversationToSupabaseRow({ ...conversationData, id }, false); // false = create operation
-    
+    const row = conversationToSupabaseRow({ ...conversationData, id: dbId }, false); // false = create operation
+
+    // Client uses stable string ids (e.g. conv_*); DB often uses uuid — keep alias for lookups.
+    row.metadata = {
+      ...(row.metadata && typeof row.metadata === 'object' ? row.metadata : {}),
+      messages: Array.isArray(row.metadata?.messages) ? row.metadata.messages : [],
+    };
+    if (clientProvidedId && clientProvidedId !== dbId) {
+      (row.metadata as Record<string, unknown>).client_conversation_id = clientProvidedId;
+    }
+
     const { data, error } = await supabase
       .from('conversations')
       .insert(row)
@@ -133,7 +156,7 @@ export const supabaseConversationService = {
       }
       // Check for duplicate key errors
       if (error.code === '23505' || error.message.includes('duplicate') || error.message.includes('unique')) {
-        throw new Error(`Conversation already exists: ${id}`);
+        throw new Error(`Conversation already exists: ${dbId}`);
       }
       throw new Error(`Failed to create conversation: ${error.message}`);
     }
@@ -148,32 +171,54 @@ export const supabaseConversationService = {
   // Find conversation by ID
   async findById(id: string): Promise<Conversation | null> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
-    // PGRST116 = not found (expected when conversation doesn't exist)
-    if (error) {
-      if (error.code === 'PGRST116') {
+    const trimmed = id.trim();
+
+    if (isConversationUuid(trimmed)) {
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', trimmed)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+          throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+        }
+        console.error('Error fetching conversation:', error.message);
         return null;
       }
-      // For connection errors, throw to allow caller to handle
-      if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
-        throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
+
+      if (!data) {
+        return null;
       }
-      // For other errors, log and return null (permission issues, etc.)
-      console.error('Error fetching conversation:', error.message);
+
+      return supabaseRowToConversation(data);
+    }
+
+    // Non-uuid ids (conv_*, legacy composite keys) — resolve via metadata alias
+    const { data: aliasRows, error: aliasError } = await supabase
+      .from('conversations')
+      .select('*')
+      .contains('metadata', { client_conversation_id: trimmed })
+      .limit(1);
+
+    if (aliasError) {
+      if (aliasError.message.includes('fetch') || aliasError.message.includes('network') || aliasError.message.includes('ECONNREFUSED') || aliasError.message.includes('ENOTFOUND')) {
+        throw new Error(`Supabase connection failed: ${aliasError.message}. Please check your network connection and Supabase configuration.`);
+      }
+      console.error('Error fetching conversation:', aliasError.message);
       return null;
     }
-    
-    if (!data) {
+
+    const row = aliasRows?.[0];
+    if (!row) {
       return null;
     }
-    
-    return supabaseRowToConversation(data);
+
+    return supabaseRowToConversation(row);
   },
 
   // Get all conversations (used by admin; limit to avoid slow loads)
@@ -200,6 +245,15 @@ export const supabaseConversationService = {
   // Update conversation
   async update(id: string, updates: Partial<Conversation>): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+
+    let canonicalId = id.trim();
+    if (!isConversationUuid(canonicalId)) {
+      const resolved = await this.findById(canonicalId);
+      if (!resolved) {
+        throw new Error(`Conversation not found: ${id}`);
+      }
+      canonicalId = resolved.id;
+    }
     
     // Load full row — partial updates (e.g. addMessage) must merge with existing data.
     // conversationToSupabaseRow() defaults missing fields to null/false; writing that row would
@@ -207,27 +261,28 @@ export const supabaseConversationService = {
     const { data: existingRow, error: fetchError } = await supabase
       .from('conversations')
       .select('*')
-      .eq('id', id)
+      .eq('id', canonicalId)
       .single();
     
     // Check if conversation exists
     if (fetchError) {
       if (fetchError.code === 'PGRST116') {
         // Conversation not found
-        throw new Error(`Conversation not found: ${id}`);
+        throw new Error(`Conversation not found: ${canonicalId}`);
       }
       // Other errors (connection issues, etc.)
       throw new Error(`Failed to fetch existing conversation: ${fetchError.message}`);
     }
     
     if (!existingRow) {
-      throw new Error(`Conversation not found: ${id}`);
+      throw new Error(`Conversation not found: ${canonicalId}`);
     }
 
     const existingConv = supabaseRowToConversation(existingRow);
     const merged: Conversation = {
       ...existingConv,
       ...updates,
+      id: canonicalId,
       messages:
         updates.messages !== undefined
           ? (Array.isArray(updates.messages) ? updates.messages : [])
@@ -250,6 +305,10 @@ export const supabaseConversationService = {
       ...(row.metadata || {}),
       messages: merged.messages,
     };
+    const clientAlias = updates.id && !isConversationUuid(String(updates.id)) ? String(updates.id).trim() : '';
+    if (clientAlias && clientAlias !== canonicalId) {
+      (row.metadata as Record<string, unknown>).client_conversation_id = clientAlias;
+    }
     
     // Always ensure messages array exists (even if empty)
     if (row.metadata && !row.metadata.messages) {
@@ -266,7 +325,7 @@ export const supabaseConversationService = {
     const { error, data: updateData } = await supabase
       .from('conversations')
       .update(row)
-      .eq('id', id)
+      .eq('id', canonicalId)
       .select();
     
     if (error) {
@@ -286,11 +345,20 @@ export const supabaseConversationService = {
   // Delete conversation
   async delete(id: string): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+
+    let canonicalId = id.trim();
+    if (!isConversationUuid(canonicalId)) {
+      const resolved = await this.findById(canonicalId);
+      if (!resolved) {
+        throw new Error(`Conversation delete failed: Conversation not found.`);
+      }
+      canonicalId = resolved.id;
+    }
     
     const { error, data: deleteData } = await supabase
       .from('conversations')
       .delete()
-      .eq('id', id)
+      .eq('id', canonicalId)
       .select();
     
     if (error) {
@@ -429,12 +497,13 @@ export const supabaseConversationService = {
   // Find conversation by vehicle ID and customer ID
   async findByVehicleAndCustomer(vehicleId: number, customerId: string): Promise<Conversation | null> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
+    const normalizedCustomerId = customerId ? customerId.toLowerCase().trim() : '';
+
     const { data, error } = await supabase
       .from('conversations')
       .select('*')
       .eq('vehicle_id', vehicleId.toString())
-      .eq('customer_id', customerId)
+      .eq('customer_id', normalizedCustomerId)
       .single();
     
     // PGRST116 = not found (expected when conversation doesn't exist)
@@ -483,7 +552,7 @@ export const supabaseConversationService = {
     }
     
     try {
-      await this.update(conversationId, {
+      await this.update(conversation.id, {
         messages: updatedMessages,
         lastMessageAt: message.timestamp,
         lastMessage: message.text,
