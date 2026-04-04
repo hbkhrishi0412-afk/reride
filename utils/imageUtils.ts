@@ -185,6 +185,36 @@ export const getSafeImageSrc = (src: string | undefined | null, fallback?: strin
 };
 
 /**
+ * Packaged Android WebView (`appassets.androidplatform.net`) and Capacitor `https://localhost`
+ * resolve root-relative URLs against the wrong origin. Rewrite `/api/...` (and similar) to the
+ * production site so vehicle images load; keep `/assets/*` on the local bundle.
+ */
+export function rewriteRootRelativeMediaUrlForPackagedApp(url: string): string {
+  if (!url || typeof url !== 'string' || !url.startsWith('/') || url.startsWith('//')) {
+    return url;
+  }
+  if (url.startsWith('/assets/')) {
+    return url;
+  }
+  if (typeof window === 'undefined') {
+    return url;
+  }
+  const h = window.location.hostname.toLowerCase();
+  const port = window.location.port || '';
+  const devPorts = ['5173', '4173', '3000', '8080'];
+  const loopback = h === 'localhost' || h === '127.0.0.1';
+  const packagedHttpsLoopback =
+    loopback && window.location.protocol === 'https:' && !devPorts.includes(port);
+  const androidAssetLoader =
+    h === 'appassets.androidplatform.net' || h.includes('appassets.androidplatform.net');
+  if (!androidAssetLoader && !packagedHttpsLoopback) {
+    return url;
+  }
+  const origin = 'https://www.reride.co.in';
+  return `${origin}${url}`;
+}
+
+/**
  * Checks if an image URL is from a known placeholder service that returns random images
  * @param url - The image URL to check
  * @returns true if the URL is from a placeholder service
@@ -222,7 +252,7 @@ export const getValidImages = (images: string[], vehicleId?: number): string[] =
       if (isPlaceholderService(img)) return false;
       return true;
     })
-    .map(img => getSafeImageSrc(toUrl(img)));
+    .map((img) => rewriteRootRelativeMediaUrlForPackagedApp(getSafeImageSrc(toUrl(img))));
   
   return validImages.length > 0 ? validImages : [DEFAULT_PLACEHOLDER];
 };
@@ -302,10 +332,10 @@ export const getFirstValidImage = (images: string[], vehicleId?: number): string
     if (isSupabaseStoragePath(img)) {
       const converted = convertStoragePathToUrl(img, vehicleId);
       if (converted && converted !== img && !isPlaceholderService(converted)) {
-        return converted;
+        return rewriteRootRelativeMediaUrlForPackagedApp(converted);
       }
     } else {
-      return getSafeImageSrc(img);
+      return rewriteRootRelativeMediaUrlForPackagedApp(getSafeImageSrc(img));
     }
   }
 
