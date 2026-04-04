@@ -1,4 +1,4 @@
-import { VehicleCategory } from '../types';
+import { VehicleCategory } from '../vehicle-category.js';
 
 /** Cities shown on home / mobile discovery rails (order preserved). */
 export const HOME_DISCOVERY_CITY_ORDER = [
