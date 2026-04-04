@@ -303,17 +303,16 @@ class RealtimeChatService {
     message: ChatMessage,
     userEmail: string,
     userRole: 'customer' | 'seller'
-  ): Promise<{ success: boolean; error?: string }> {
+  ): Promise<{ success: boolean; error?: string; persisted: boolean }> {
     try {
       // CRITICAL FIX: Normalize email before sending to ensure proper matching
       const normalizedUserEmail = (userEmail || '').toLowerCase().trim();
-      
-      // CRITICAL FIX: Ensure we're joined to the conversation room BEFORE sending
-      // This ensures the message is broadcast to other participants
-      console.log('🔧 Ensuring joined to conversation room before sending:', conversationId);
-      await this.joinConversation(conversationId);
-      // Small delay to ensure room join completes on server
-      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Dev-only: Socket.io rooms. Production uses Supabase Realtime on conversations — no socket, no waits.
+      if (this.socket) {
+        console.log('🔧 Joining conversation room before send (Socket.io):', conversationId);
+        await this.joinConversation(conversationId);
+      }
 
       // Set initial status to 'sending'
       const messageWithStatus: ChatMessage = {
@@ -324,7 +323,8 @@ class RealtimeChatService {
       // First, save to Supabase for persistence
       console.log('💾 Saving message to database:', { conversationId, messageId: message.id });
       const saveResult = await addMessageToConversation(conversationId, messageWithStatus);
-      
+      const persisted = !!saveResult.success;
+
       if (!saveResult.success) {
         console.error('❌ Failed to save message to Supabase:', {
           conversationId,
@@ -387,24 +387,21 @@ class RealtimeChatService {
           }
         });
 
-        return { success: true };
-      } else {
-        console.warn('⚠️ WebSocket not connected, queueing message:', { conversationId, messageId: message.id });
-        
-        // Queue message when offline, will sync when reconnected
-        const queue = this.pendingMessages.get(conversationId) || [];
-        queue.push(messageWithStatus);
-        this.pendingMessages.set(conversationId, queue);
-        
-        // Message is still saved to Supabase
-        // The recipient will get it when they refresh or when WebSocket reconnects
-        return { success: true };
+        return { success: true, persisted };
       }
+
+      console.warn('⚠️ WebSocket not connected (using API + Supabase Realtime only):', {
+        conversationId,
+        messageId: message.id,
+      });
+
+      return { success: true, persisted };
     } catch (error) {
       console.error('Error sending message:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        persisted: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -469,27 +466,8 @@ class RealtimeChatService {
   joinConversation(conversationId: string): Promise<void> {
     return new Promise((resolve) => {
       if (!this.socket) {
-        console.warn('⚠️ Cannot join conversation - socket not initialized:', conversationId);
-        // If socket doesn't exist yet, wait for connection
-        const checkConnection = setInterval(() => {
-          if (this.socket?.connected) {
-            clearInterval(checkConnection);
-            console.log('🔧 Socket connected, joining conversation:', conversationId);
-            this.socket.emit('conversation:join', { conversationId });
-            resolve();
-          } else if (this.socket && !this.isConnecting) {
-            // Socket exists but not connecting, give up after a short wait
-            clearInterval(checkConnection);
-            console.warn('⚠️ Socket not connecting, cannot join conversation:', conversationId);
-            resolve();
-          }
-        }, 100);
-        
-        // Timeout after 2 seconds
-        setTimeout(() => {
-          clearInterval(checkConnection);
-          resolve();
-        }, 2000);
+        // Production (and any env without Socket.io): no room to join — do not block sends.
+        resolve();
         return;
       }
 
