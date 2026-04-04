@@ -2938,31 +2938,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return;
               }
               
-              // First, try to find the conversation directly by ID (more reliable)
+              // Prefer API list first: server hydrates users.id → email for seller/customer matching
               let foundConv: Conversation | null = null;
-              try {
-                foundConv = await supabaseConversationService.findById(conversationId);
-                console.log('🔍 Direct conversation lookup result:', { 
-                  found: !!foundConv, 
-                  conversationId,
-                  sellerId: foundConv?.sellerId,
-                  currentUserEmail,
-                  role: currentUserRole
-                });
-              } catch (error) {
-                console.warn('⚠️ Direct lookup failed, trying bulk load:', error);
+              const bulkResult = currentUserRole === 'seller'
+                ? await getConversationsFromSupabase(undefined, currentUserEmail)
+                : currentUserRole === 'customer'
+                ? await getConversationsFromSupabase(currentUserEmail)
+                : await getConversationsFromSupabase();
+
+              if (bulkResult.success && bulkResult.data) {
+                foundConv = bulkResult.data.find((c) => c.id === conversationId) || null;
               }
-              
-              // If direct lookup failed, try bulk load
+
               if (!foundConv) {
-                const result = currentUserRole === 'seller'
-                  ? await getConversationsFromSupabase(undefined, currentUserEmail)
-                  : currentUserRole === 'customer'
-                  ? await getConversationsFromSupabase(currentUserEmail)
-                  : await getConversationsFromSupabase();
-                
-                if (result.success && result.data) {
-                  foundConv = result.data.find(c => c.id === conversationId) || null;
+                try {
+                  foundConv = await supabaseConversationService.findById(conversationId);
+                  console.log('🔍 Direct Supabase conversation lookup result:', {
+                    found: !!foundConv,
+                    conversationId,
+                    sellerId: foundConv?.sellerId,
+                    currentUserEmail,
+                    role: currentUserRole,
+                  });
+                } catch (error) {
+                  console.warn('⚠️ Direct lookup failed:', error);
                 }
               }
               
