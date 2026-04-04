@@ -447,6 +447,33 @@ const AppContent: React.FC = () => {
     navigate(ViewEnum.LOGIN_PORTAL);
   }, [addToast, navigate]);
 
+  /**
+   * Open seller/dealer profile. Always navigates when email is present: prefer full `users` row,
+   * else a minimal stub (same idea as dealer directory) so View Profile works if the seller is not
+   * yet in the in-memory list.
+   */
+  const openSellerProfileByEmail = React.useCallback(
+    (sellerEmail: string | undefined) => {
+      const normalized = sellerEmail?.toLowerCase().trim() ?? '';
+      if (!normalized) return;
+      const match = users.find((u) => u?.email && u.email.toLowerCase().trim() === normalized);
+      setPublicProfile(
+        match ??
+          ({
+            email: normalized,
+            name: 'Seller',
+            mobile: '',
+            role: 'seller',
+            location: '',
+            status: 'active',
+            createdAt: new Date().toISOString(),
+          } as User)
+      );
+      navigate(ViewEnum.SELLER_PROFILE);
+    },
+    [users, setPublicProfile, navigate]
+  );
+
   // Simple handler for service cart submissions (wire to real API as needed)
   const handleServiceRequestSubmit = React.useCallback(async (payload: ServiceRequestPayload) => {
     try {
@@ -904,18 +931,12 @@ const AppContent: React.FC = () => {
       const params = new URLSearchParams(window.location.search);
       const sellerParam = params.get('seller');
       if (sellerParam) {
-        const seller = users.find(u => {
-          return u && u.email && u.email.toLowerCase() === sellerParam.toLowerCase();
-        });
-        if (seller) {
-          setPublicProfile(seller);
-          navigate(ViewEnum.SELLER_PROFILE);
-        }
+        openSellerProfileByEmail(sellerParam);
       }
     } catch (e) {
       console.warn('Failed to process deep link params', e);
     }
-  }, [users, navigate, setPublicProfile]);
+  }, [openSellerProfileByEmail]);
 
 
   // Memoize renderView to prevent unnecessary re-renders
@@ -934,7 +955,10 @@ const AppContent: React.FC = () => {
                 setSelectedCategory(category);
                 navigate(ViewEnum.USED_CARS);
               }}
-              featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4)}
+              featuredVehicles={enrichVehiclesWithSellerInfo(
+                vehicles.filter(v => v.isFeatured && v.status === 'published').slice(0, 4),
+                users
+              )}
               onSelectVehicle={selectVehicle}
               onToggleCompare={(id) => {
                 setComparisonList(prev => 
@@ -952,14 +976,7 @@ const AppContent: React.FC = () => {
                 );
               }}
               wishlist={wishlist}
-              onViewSellerProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewSellerProfile={openSellerProfileByEmail}
               recommendations={recommendations}
               allVehicles={vehicles.filter(v => v.status === 'published')}
               onNavigate={navigate}
@@ -980,7 +997,10 @@ const AppContent: React.FC = () => {
               setSelectedCategory(category);
               navigate(ViewEnum.USED_CARS);
             }}
-            featuredVehicles={vehicles.filter(v => v.isFeatured && v.status === 'published')}
+            featuredVehicles={enrichVehiclesWithSellerInfo(
+              vehicles.filter(v => v.isFeatured && v.status === 'published'),
+              users
+            )}
             onSelectVehicle={selectVehicle}
             onToggleCompare={(id) => {
               setComparisonList(prev => 
@@ -998,15 +1018,7 @@ const AppContent: React.FC = () => {
               );
             }}
             wishlist={wishlist}
-            onViewSellerProfile={(sellerEmail) => {
-              // Normalize emails for comparison (critical for production)
-              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-              if (seller) {
-                setPublicProfile(seller);
-                navigate(ViewEnum.SELLER_PROFILE);
-              }
-            }}
+            onViewSellerProfile={openSellerProfileByEmail}
             recommendations={recommendations}
             allVehicles={vehicles.filter(v => v.status === 'published')}
             onNavigate={navigate}
@@ -1071,15 +1083,7 @@ const AppContent: React.FC = () => {
               categoryTitle={selectedCity ? `Used Cars in ${selectedCity}` : "Used Cars"}
               initialCategory={currentCategory}
               initialSearchQuery={initialSearchQuery}
-              onViewSellerProfile={(sellerEmail) => {
-                // Normalize emails for comparison (critical for production)
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewSellerProfile={openSellerProfileByEmail}
               userLocation={userLocation}
               currentUser={currentUser}
               onSaveSearch={(search) => {
@@ -1161,14 +1165,7 @@ const AppContent: React.FC = () => {
               onToggleWishlist={toggleWishlist}
               currentUser={currentUser}
               users={users}
-              onViewSellerProfile={(sellerEmail: string) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewSellerProfile={openSellerProfileByEmail}
               onStartChat={async (vehicle) => {
                 if (process.env.NODE_ENV === 'development') {
                   console.log('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
@@ -1327,14 +1324,7 @@ const AppContent: React.FC = () => {
             onFlagContent={(type, id, _reason) => flagContent(type, id)}
             users={users}
             updateVehicle={updateVehicle}
-            onViewSellerProfile={(sellerEmail: string) => {
-              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-              if (seller) {
-                setPublicProfile(seller);
-                navigate(ViewEnum.SELLER_PROFILE);
-              }
-            }}
+            onViewSellerProfile={openSellerProfileByEmail}
             onStartChat={async (vehicle) => {
               if (process.env.NODE_ENV === 'development') {
                 console.log('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
@@ -1544,14 +1534,7 @@ const AppContent: React.FC = () => {
               onToggleCompare={toggleCompare}
               comparisonList={comparisonList}
               currentUser={currentUser}
-              onViewSellerProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewSellerProfile={openSellerProfileByEmail}
               onNavigate={navigate}
             />
           );
@@ -1580,15 +1563,7 @@ const AppContent: React.FC = () => {
             }}
             categoryTitle="My Wishlist"
             isWishlistMode={true}
-            onViewSellerProfile={(sellerEmail) => {
-              // Normalize emails for comparison (critical for production)
-              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-              if (seller) {
-                setPublicProfile(seller);
-                navigate(ViewEnum.SELLER_PROFILE);
-              }
-            }}
+            onViewSellerProfile={openSellerProfileByEmail}
             userLocation={userLocation}
             currentUser={currentUser}
             onSaveSearch={(search) => {
@@ -2214,14 +2189,7 @@ const AppContent: React.FC = () => {
                 );
               }}
               comparisonList={comparisonList}
-              onViewSellerProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewSellerProfile={openSellerProfileByEmail}
               onLogout={handleLogout}
             />
           );
@@ -2252,15 +2220,7 @@ const AppContent: React.FC = () => {
               );
             }}
             comparisonList={comparisonList}
-            onViewSellerProfile={(sellerEmail) => {
-              // Normalize emails for comparison (critical for production)
-              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-              if (seller) {
-                setPublicProfile(seller);
-                navigate(ViewEnum.SELLER_PROFILE);
-              }
-            }}
+            onViewSellerProfile={openSellerProfileByEmail}
           />
         ) : (
           <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
@@ -2530,14 +2490,7 @@ const AppContent: React.FC = () => {
               currentUser={currentUser}
               onRequireLogin={requireLoginForDealerInteraction}
               onBack={() => goBack(ViewEnum.HOME)}
-              onViewSellerProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewSellerProfile={openSellerProfileByEmail}
             />
           );
         }
@@ -2564,15 +2517,7 @@ const AppContent: React.FC = () => {
             currentUser={currentUser}
             onRequireLogin={requireLoginForDealerInteraction}
             onBack={() => goBack(ViewEnum.HOME)}
-            onViewSellerProfile={(sellerEmail) => {
-              // Normalize emails for comparison (critical for production)
-              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-              if (seller) {
-                setPublicProfile(seller);
-                navigate(ViewEnum.SELLER_PROFILE);
-              }
-            }}
+            onViewSellerProfile={openSellerProfileByEmail}
           />
           );
         })() : (
@@ -2600,18 +2545,7 @@ const AppContent: React.FC = () => {
               userLocation={userLocation}
               currentUser={currentUser}
               onRequireLogin={requireLoginForDealerInteraction}
-              onViewProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                } else {
-                  // Create minimal user object with just email for profile lookup
-                  setPublicProfile({ email: sellerEmail, name: '', mobile: '', role: 'seller', location: '', status: 'active', createdAt: new Date().toISOString() } as User);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewProfile={openSellerProfileByEmail}
             />
           );
         }
@@ -2622,11 +2556,7 @@ const AppContent: React.FC = () => {
             userLocation={userLocation}
             currentUser={currentUser}
             onRequireLogin={requireLoginForDealerInteraction}
-            onViewProfile={(sellerEmail) => {
-              // Create minimal user object with just email for profile lookup
-              setPublicProfile({ email: sellerEmail, name: '', mobile: '', role: 'seller', location: '', status: 'active', createdAt: new Date().toISOString() } as User);
-              navigate(ViewEnum.SELLER_PROFILE);
-            }} 
+            onViewProfile={openSellerProfileByEmail}
           />
         );
 
@@ -2797,14 +2727,7 @@ const AppContent: React.FC = () => {
               onToggleCompare={toggleCompare}
               wishlist={wishlist}
               comparisonList={comparisonList}
-              onViewSellerProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewSellerProfile={openSellerProfileByEmail}
             />
           );
         }
@@ -2817,15 +2740,7 @@ const AppContent: React.FC = () => {
             onToggleCompare={toggleCompare}
             wishlist={wishlist}
             comparisonList={comparisonList}
-            onViewSellerProfile={(sellerEmail) => {
-              // Normalize emails for comparison (critical for production)
-              const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-              const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-              if (seller) {
-                setPublicProfile(seller);
-                navigate(ViewEnum.SELLER_PROFILE);
-              }
-            }}
+            onViewSellerProfile={openSellerProfileByEmail}
           />
         );
 
@@ -2962,8 +2877,9 @@ const AppContent: React.FC = () => {
     onExportUsers, onExportVehicles, onExportSales, onUpdateVehicleData,
     onToggleVerifiedStatus, onUpdateSupportTicket, onAddFaq, onUpdateFaq,
     onDeleteFaq, onCertificationApproval, onOfferResponse, addSellerRating,
-    sendMessage, setActiveChat, setConversations, setForgotPasswordRole,
-    requireLoginForDealerInteraction
+    sendMessage, setActiveChat, setConversations,     setForgotPasswordRole,
+    requireLoginForDealerInteraction,
+    openSellerProfileByEmail
   ]);
 
   const handleNotificationClick = React.useCallback((notification: Notification) => {
@@ -3418,14 +3334,7 @@ const AppContent: React.FC = () => {
                 );
               }}
               comparisonList={comparisonList}
-              onViewSellerProfile={(sellerEmail) => {
-                const normalizedSellerEmail = sellerEmail ? sellerEmail.toLowerCase().trim() : '';
-                const seller = normalizedSellerEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedSellerEmail) : undefined;
-                if (seller) {
-                  setPublicProfile(seller);
-                  navigate(ViewEnum.SELLER_PROFILE);
-                }
-              }}
+              onViewSellerProfile={openSellerProfileByEmail}
               onLogout={handleLogout}
             />
           </MobileLayout>

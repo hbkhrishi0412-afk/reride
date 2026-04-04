@@ -35,12 +35,20 @@ export const enrichVehiclesWithSellerInfo = (vehicles: Vehicle[], users: User[])
     });
     
     if (seller) {
+      const fromSeller = (seller.mobile || '').trim();
       return {
         ...vehicle,
         sellerName: seller.name || seller.dealershipName || 'Seller',
         sellerBadges: seller.badges || [],
         sellerAverageRating: seller.averageRating || 0,
-        sellerRatingCount: seller.ratingCount || 0
+        sellerRatingCount: seller.ratingCount || 0,
+        // Listing detail Call button reads sellerPhone; merge from profile when metadata omits it
+        ...(fromSeller && !vehicle.sellerPhone?.trim()
+          ? { sellerPhone: fromSeller }
+          : {}),
+        ...(seller.alternatePhone?.trim() && !vehicle.sellerWhatsApp?.trim()
+          ? { sellerWhatsApp: seller.alternatePhone.trim() }
+          : {}),
       };
     }
     
@@ -92,12 +100,19 @@ export const enrichVehicleWithSellerInfo = (vehicle: Vehicle, users: User[]): Ve
   });
   
   if (seller) {
+    const fromSeller = (seller.mobile || '').trim();
     return {
       ...vehicle,
       sellerName: seller.name || seller.dealershipName || 'Seller',
       sellerBadges: seller.badges || [],
       sellerAverageRating: seller.averageRating || 0,
-      sellerRatingCount: seller.ratingCount || 0
+      sellerRatingCount: seller.ratingCount || 0,
+      ...(fromSeller && !vehicle.sellerPhone?.trim()
+        ? { sellerPhone: fromSeller }
+        : {}),
+      ...(seller.alternatePhone?.trim() && !vehicle.sellerWhatsApp?.trim()
+        ? { sellerWhatsApp: seller.alternatePhone.trim() }
+        : {}),
     };
   }
   

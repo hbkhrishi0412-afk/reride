@@ -85,6 +85,12 @@ function supabaseRowToVehicle(row: any): Vehicle {
   
   // CRITICAL FIX: Process images to convert storage paths to public URLs
   const processedImages = processImageUrls(row.images, vehicleId);
+
+  const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const metaSellerPhone = (meta as { sellerPhone?: string; seller_phone?: string }).sellerPhone
+    ?? (meta as { seller_phone?: string }).seller_phone;
+  const metaSellerWa = (meta as { sellerWhatsApp?: string; seller_whatsapp?: string }).sellerWhatsApp
+    ?? (meta as { seller_whatsapp?: string }).seller_whatsapp;
   
   return {
     id: vehicleId,
@@ -121,8 +127,10 @@ function supabaseRowToVehicle(row: any): Vehicle {
     bootSpace: row.boot_space || undefined,
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString(),
-    // Extract additional fields from metadata if present
-    ...(row.metadata || {}),
+    // Extract additional fields from metadata; normalize snake_case contact fields for the client Vehicle type
+    ...meta,
+    ...(metaSellerPhone ? { sellerPhone: String(metaSellerPhone).trim() } : {}),
+    ...(metaSellerWa ? { sellerWhatsApp: String(metaSellerWa).trim() } : {}),
   };
 }
 

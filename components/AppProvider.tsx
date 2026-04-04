@@ -29,6 +29,7 @@ import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
 import { deduplicateRequest } from '../utils/requestDeduplication';
+import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';
 import * as buyerService from '../services/buyerService';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { supabaseRowToConversation } from '../services/supabase-conversation-service';
@@ -542,6 +543,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return '';
   });
   const [users, setUsers] = useState<User[]>([]);
+
+  // Merge seller phone/name from `users` when the directory loads after opening a listing (production race).
+  useEffect(() => {
+    if (!Array.isArray(users) || users.length === 0) return;
+    setSelectedVehicle((prev) => {
+      if (!prev?.sellerEmail) return prev;
+      const enriched = enrichVehicleWithSellerInfo(prev, users);
+      const prevPhone = (prev.sellerPhone || '').trim();
+      const nextPhone = (enriched.sellerPhone || '').trim();
+      const phoneAdded = !!nextPhone && nextPhone !== prevPhone;
+      const nameBetter =
+        !!enriched.sellerName &&
+        enriched.sellerName !== 'Seller' &&
+        (!prev.sellerName || prev.sellerName === 'Seller');
+      if (!phoneAdded && !nameBetter) return prev;
+      try {
+        sessionStorage.setItem('selectedVehicle', JSON.stringify(enriched));
+      } catch {
+        // ignore storage errors (private mode / WebView)
+      }
+      return enriched;
+    });
+  }, [users]);
+
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(() => getSettings());
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>(() => getAuditLog());
   const [vehicleData, setVehicleData] = useState<VehicleData>(() => {
@@ -5217,6 +5242,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const vehicleNorm: Vehicle =
         typeof vehicle.id === 'number' && vehicle.id === idNum ? vehicle : { ...vehicle, id: idNum };
+
+      const vehicleForDetail = enrichVehicleWithSellerInfo(
+        vehicleNorm,
+        Array.isArray(users) ? users : []
+      );
       
       // Track recently viewed for customers (async, non-blocking)
       if (currentUser?.role === 'customer' && currentUser?.email) {
@@ -5228,7 +5258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // CRITICAL: Store vehicle in sessionStorage FIRST (synchronous, immediate)
       // This ensures the vehicle is available even if state update is delayed
       try {
-        const vehicleJson = JSON.stringify(vehicleNorm);
+        const vehicleJson = JSON.stringify(vehicleForDetail);
         sessionStorage.setItem('selectedVehicle', vehicleJson);
         
         // Verify it was stored correctly
@@ -5236,7 +5266,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!verifyStored || verifyStored !== vehicleJson) {
           console.warn('⚠️ Vehicle sessionStorage verification mismatch; continuing with in-memory state');
         } else if (process.env.NODE_ENV === 'development') {
-          console.log('🚗 Vehicle stored and verified in sessionStorage:', vehicleNorm.id, vehicleNorm.make, vehicleNorm.model);
+          console.log('🚗 Vehicle stored and verified in sessionStorage:', vehicleForDetail.id, vehicleForDetail.make, vehicleForDetail.model);
         }
       } catch (error) {
         console.error('❌ Failed to store vehicle in sessionStorage:', error);
@@ -5245,7 +5275,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       // Set the selected vehicle state (async, but sessionStorage is already set and verified)
       // The navigate function will check sessionStorage first, so state update timing doesn't matter
-      setSelectedVehicle(vehicleNorm);
+      setSelectedVehicle(vehicleForDetail);
       
       if (process.env.NODE_ENV === 'development') {
         console.log('🚗 Navigating to DETAIL view with vehicle:', vehicleNorm.id, vehicleNorm.make, vehicleNorm.model);
