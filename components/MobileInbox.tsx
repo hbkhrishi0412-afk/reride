@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { Conversation, User, ChatMessage } from '../types';
+import type { Conversation, User, ChatMessage, Vehicle } from '../types';
+import { findUserByParticipantId, resolveSellerPhoneFromProfileOrListing } from '../utils/chatContact';
+import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { View as ViewEnum } from '../types';
 import { useConversationList } from '../hooks/useConversationList';
 import { formatRelativeTime } from '../utils/date';
@@ -9,6 +11,7 @@ interface MobileInboxProps {
   onSendMessage: (vehicleId: number, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   onMarkAsRead: (conversationId: string) => void;
   users: User[];
+  vehicles?: Vehicle[];
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
@@ -31,6 +34,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   onSendMessage,
   onMarkAsRead,
   users,
+  vehicles,
   typingStatus,
   onUserTyping,
   onMarkMessagesAsRead,
@@ -49,9 +53,12 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const touchEndX = useRef<number>(0);
 
   const getSellerName = (sellerId: string) => {
-    const seller = users.find(u => u.email === sellerId);
+    const seller = findUserByParticipantId(users, sellerId);
     return seller?.name || seller?.dealershipName || 'Seller';
   };
+
+  const getSellerPhone = (sellerId: string, vehicleId: number) =>
+    resolveSellerPhoneFromProfileOrListing(users, vehicles, sellerId, vehicleId);
 
   const { sortedConversations, filteredConversations, unreadCount } = useConversationList(
     conversations,
@@ -145,6 +152,26 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             </svg>
           </button>
         </div>
+
+        {(() => {
+          const raw = getSellerPhone(selectedConv.sellerId, selectedConv.vehicleId);
+          const href = telHrefFromRawPhone(raw);
+          const label = phoneDisplayCompact(raw) || raw;
+          if (!href || !raw) return null;
+          return (
+            <a
+              href={href}
+              className="flex items-center justify-center gap-2 border-b border-gray-200 bg-gray-100 py-3 text-gray-800 active:bg-gray-200"
+            >
+              <svg className="w-5 h-5 shrink-0 text-gray-600" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+              </svg>
+              <span className="text-sm font-semibold tabular-nums">
+                Call <span className="text-gray-600 font-medium">{label}</span>
+              </span>
+            </a>
+          );
+        })()}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">

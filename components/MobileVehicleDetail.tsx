@@ -9,6 +9,8 @@ import { MobileShareSheet } from './MobileShareSheet';
 import { MobileEMICalculator } from './MobileEMICalculator';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
+import { getFollowersCount } from '../services/buyerEngagementService';
+import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -156,15 +158,12 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     return Math.round((baseEMI * 60) - (baseEMI * 0.95 * 60)).toLocaleString();
   }, [baseEMI]);
 
-  const callHref = useMemo(() => {
-    const raw = (seller?.mobile || safeVehicle.sellerPhone || '').trim();
-    if (!raw) return null;
-    const compact = raw.replace(/[\s-]/g, '');
-    const digits = compact.replace(/\D/g, '');
-    if (digits.length < 10) return null;
-    const href = compact.startsWith('+') || compact.startsWith('00') ? `tel:${compact}` : `tel:${digits}`;
-    return href;
-  }, [seller?.mobile, safeVehicle.sellerPhone]);
+  const rawCallPhone = (seller?.mobile || safeVehicle.sellerPhone || '').trim();
+  const callHref = useMemo(() => telHrefFromRawPhone(rawCallPhone), [rawCallPhone]);
+  const callPhoneLabel = phoneDisplayCompact(rawCallPhone);
+  const followersForSeller = safeVehicle.sellerEmail
+    ? getFollowersCount(seller?.email || safeVehicle.sellerEmail)
+    : 0;
 
   /** Portaled to body: PageTransition/framer-motion uses transform, which breaks `fixed` inside scroll main. */
   const contactToolbar =
@@ -178,13 +177,18 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             {callHref ? (
               <a
                 href={callHref}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-base font-semibold text-white transition-colors hover:bg-blue-700 active:scale-[0.99]"
+                className="flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl bg-blue-600 px-2 py-3 text-base font-semibold text-white transition-colors hover:bg-blue-700 active:scale-[0.99]"
                 style={{ minHeight: '52px' }}
               >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                </svg>
-                {t('vehicle.detail.call')}
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  {t('vehicle.detail.call')}
+                </span>
+                {callPhoneLabel ? (
+                  <span className="text-xs font-medium text-white/90 tabular-nums">{callPhoneLabel}</span>
+                ) : null}
               </a>
             ) : (
               <button
@@ -326,7 +330,7 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
                    t('vehicle.card.sellerFallback')}
                 </h3>
                 <p className="text-sm text-gray-600">
-                  0 {t('vehicle.detail.followers')}
+                  {followersForSeller} {t('vehicle.detail.followers')}
                 </p>
               </div>
               {safeVehicle.sellerEmail && (

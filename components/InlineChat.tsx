@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import type { Conversation, ChatMessage } from '../types.js';
 import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon.js';
+import { phoneDisplayCompact } from '../utils/numberUtils.js';
 
 interface InlineChatProps {
   conversation: Conversation;
@@ -125,16 +126,23 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
         </div>
         <div className="flex items-center gap-2">
           {callTargetPhone && (
-            <button
-              onClick={() => onStartCall ? onStartCall(callTargetPhone) : window.open(`tel:${callTargetPhone}`)}
-              className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"
-              aria-label={`Call ${callTargetName || 'contact'}`}
-              title={`Call ${callTargetName || 'contact'}`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M2.003 5.884c-.005-1.054.917-1.93 1.97-1.823 1.022.105 1.936.563 2.654 1.282l1.12 1.12a1 1 0 01.106 1.31l-.723 1.085c-.195.293-.164.68.09.935l3.142 3.142a.75.75 0 00.935.09l1.085-.723a1 1 0 011.31.106l1.12 1.12a4.25 4.25 0 011.282 2.654c.107 1.053-.769 1.975-1.823 1.97-2.54-.012-5.02-.998-6.918-2.897-1.898-1.898-2.884-4.378-2.897-6.918z" clipRule="evenodd" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <button
+                onClick={() => onStartCall ? onStartCall(callTargetPhone) : window.open(`tel:${callTargetPhone}`)}
+                className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors shrink-0"
+                aria-label={`Call ${callTargetName || 'contact'}`}
+                title={`Call ${callTargetName || 'contact'}`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M2.003 5.884c-.005-1.054.917-1.93 1.97-1.823 1.022.105 1.936.563 2.654 1.282l1.12 1.12a1 1 0 01.106 1.31l-.723 1.085c-.195.293-.164.68.09.935l3.142 3.142a.75.75 0 00.935.09l1.085-.723a1 1 0 011.31.106l1.12 1.12a4.25 4.25 0 011.282 2.654c.107 1.053-.769 1.975-1.823 1.97-2.54-.012-5.02-.998-6.918-2.897-1.898-1.898-2.884-4.378-2.897-6.918z" clipRule="evenodd" />
+                </svg>
+              </button>
+              {phoneDisplayCompact(callTargetPhone) ? (
+                <span className="text-xs text-gray-600 tabular-nums truncate max-w-[7rem] sm:max-w-[10rem]" title={callTargetPhone}>
+                  {phoneDisplayCompact(callTargetPhone)}
+                </span>
+              ) : null}
+            </div>
           )}
           <button 
             onClick={handleFlagClick} 

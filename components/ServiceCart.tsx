@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 
 type ServicePackage = {
     id: string;
@@ -129,7 +130,10 @@ const ServiceCart: React.FC<Props> = ({
         const fetchProviderServices = async () => {
             try {
                 // Fetch provider services
-                const servicesResp = await fetch('/api/provider-services?scope=public');
+                const servicesResp = await authenticatedFetch('/api/provider-services?scope=public', {
+                    method: 'GET',
+                    skipAuth: true,
+                });
                 
                 if (!servicesResp.ok) return;
                 const servicesData = await servicesResp.json();
