@@ -279,7 +279,7 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
     console.log(`📡 Database name in connection options: ${opts.dbName}`);
 
     cached.promise = mongoose.connect(normalizedUri, opts)
-      .then(async (mongooseInstance) => {
+      .then(async (mongooseInstance: Mongoose) => {
         const actualDbName = mongooseInstance.connection.name;
         console.log('✅ MongoDB connected successfully to database:', actualDbName);
         
@@ -295,7 +295,7 @@ async function connectToDatabase(retryCount = 0): Promise<Mongoose> {
         mongooseInstance.connection.removeAllListeners('disconnected');
         mongooseInstance.connection.removeAllListeners('reconnected');
         
-        mongooseInstance.connection.on('error', (err) => {
+        mongooseInstance.connection.on('error', (err: Error) => {
           console.error('❌ MongoDB connection error:', err);
           cached.conn = null;
           cached.promise = null;

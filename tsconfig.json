@@ -22,6 +22,6 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true
   },
-  "include": ["src", "components", "services", "utils", "constants", "types.ts", "vehicle-category.ts", "App.tsx", "index.tsx", "api", "vite-env.d.ts"],
+  "include": ["src", "components", "services", "utils", "constants", "lib", "types.ts", "vehicle-category.ts", "App.tsx", "index.tsx", "api", "vite-env.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
