@@ -6,7 +6,6 @@ import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings,
 import { View, VehicleCategory as CategoryEnum } from '../types';
 import { getConversations, saveConversations } from '../services/chatService';
 import {
-  saveConversationWithSync,
   addMessageWithSync,
   saveNotificationWithSync,
   getSyncQueueStatus,
@@ -33,11 +32,33 @@ import { deduplicateRequest } from '../utils/requestDeduplication';
 import * as buyerService from '../services/buyerService';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { supabaseRowToConversation } from '../services/supabase-conversation-service';
-import { isCapacitorNative, getDevSocketHost } from '../utils/apiConfig';
+import { emailToKey } from '../services/supabase-user-service';
+import { isCapacitorNative } from '../utils/apiConfig';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { getSupabaseClient } from '../lib/supabase';
 import { syncWithBackend } from '../services/supabase-auth-service';
 import type { Session } from '@supabase/supabase-js';
+
+/** Merge local + server messages without duplicates (realtime + optimistic UI). */
+function mergeConversationMessagesForRealtime(local: ChatMessage[], remote: ChatMessage[]): ChatMessage[] {
+  const byId = new Map<number, ChatMessage>();
+  for (const m of remote || []) {
+    if (m?.id != null) {
+      byId.set(Number(m.id), m);
+    }
+  }
+  for (const m of local || []) {
+    if (m?.id != null) {
+      const k = Number(m.id);
+      if (!byId.has(k)) {
+        byId.set(k, m);
+      }
+    }
+  }
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
+}
 
 // PERFORMANCE: Helper function for user-friendly error messages
 // Improves UX by converting technical errors to actionable messages
@@ -191,24 +212,6 @@ function pathToView(path: string): View {
   return View.HOME;
 }
 
-// Socket.io client type definition for real-time updates
-interface SocketInstance {
-  on: (event: string, callback: (...args: unknown[]) => void) => void;
-  emit: (event: string, ...args: unknown[]) => void;
-  disconnect: () => void;
-  connected?: boolean;
-  io?: {
-    reconnect: (enable: boolean) => void;
-  };
-}
-
-// WebSocket message data structure (kept for backward compatibility if needed)
-// interface NewMessageData {
-//   conversationId: string;
-//   message: ChatMessage;
-//   conversation: Conversation;
-// }
-
 // API response structure for vehicle feature operations
 interface FeatureApiResponse {
   success?: boolean;
@@ -218,12 +221,6 @@ interface FeatureApiResponse {
   alreadyFeatured?: boolean;
   vehicle?: Vehicle;
   remainingCredits?: number;
-}
-
-// Socket.io client module structure
-interface SocketIoClientModule {
-  default?: (url: string, options?: Record<string, unknown>) => SocketInstance;
-  io?: (url: string, options?: Record<string, unknown>) => SocketInstance;
 }
 
 interface AppContextType {
@@ -2187,30 +2184,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addToast, currentUser?.role, t]);
 
-  // Supabase Realtime: sync conversation updates so when the other party sends a message we see it without refetch
-  useSupabaseRealtime({
-    table: 'conversations',
-    enabled: !!currentUser?.email,
-    onUpdate: (row: any) => {
+  // Supabase Realtime: other party's messages (customer_id/seller_id are users.id, not raw emails — must match email + emailToKey + user.id)
+  const applyConversationRealtimeRow = useCallback(
+    async (row: any) => {
       const email = (currentUser?.email || '').toLowerCase().trim();
-      const cid = (row.customer_id || '').toLowerCase().trim();
-      const sid = (row.seller_id || '').toLowerCase().trim();
-      if (cid !== email && sid !== email) return;
+      if (!email || !row) {
+        return;
+      }
+      const uid = String(currentUser?.id || '').toLowerCase().trim();
+      const key = emailToKey(email);
+      const rc = String(row.customer_id ?? '').toLowerCase().trim();
+      const rs = String(row.seller_id ?? '').toLowerCase().trim();
+      const involved =
+        rc === email ||
+        rs === email ||
+        rc === key ||
+        rs === key ||
+        (!!uid && (rc === uid || rs === uid));
+      if (!involved) {
+        return;
+      }
+
+      let conv = supabaseRowToConversation(row);
       try {
-        const conv = supabaseRowToConversation(row);
-        setConversations(prev => {
-          const next = prev.findIndex(c => c.id === conv.id) < 0
-            ? [...prev, conv]
-            : prev.map(c => c.id === conv.id ? conv : c);
+        const supabase = getSupabaseClient();
+        const ids = [...new Set([row.customer_id, row.seller_id].filter(Boolean).map(String))];
+        if (ids.length > 0) {
+          const { data: users } = await supabase.from('users').select('id,email').in('id', ids);
+          const em = new Map<string, string>();
+          for (const u of users || []) {
+            if (u?.id && u?.email) {
+              em.set(String(u.id).toLowerCase(), String(u.email).toLowerCase().trim());
+            }
+          }
+          conv = {
+            ...conv,
+            customerId: em.get(String(row.customer_id).toLowerCase()) ?? conv.customerId,
+            sellerId: em.get(String(row.seller_id).toLowerCase()) ?? conv.sellerId,
+          };
+        }
+      } catch {
+        /* keep conv from row ids if user lookup fails (RLS) */
+      }
+
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.id === conv.id);
+        if (idx < 0) {
+          const next = [...prev, conv];
           try {
             saveConversations(next);
           } catch (_) {}
           return next;
-        });
-      } catch (e) {
-        console.warn('Realtime conversation update error:', e);
-      }
+        }
+        const existing = prev[idx];
+        const mergedMsgs = mergeConversationMessagesForRealtime(existing.messages || [], conv.messages || []);
+        const merged = {
+          ...conv,
+          messages: mergedMsgs.length ? mergedMsgs : conv.messages,
+        };
+        const next = prev.map((c, i) => (i === idx ? merged : c));
+        try {
+          saveConversations(next);
+        } catch (_) {}
+        return next;
+      });
     },
+    [currentUser?.email, currentUser?.id],
+  );
+
+  const onConversationRealtimeEvent = useCallback(
+    (row: any) => {
+      void applyConversationRealtimeRow(row);
+    },
+    [applyConversationRealtimeRow],
+  );
+
+  useSupabaseRealtime({
+    table: 'conversations',
+    enabled: !!currentUser?.email,
+    onInsert: onConversationRealtimeEvent,
+    onUpdate: onConversationRealtimeEvent,
   });
 
   // Supabase Realtime: when a new notification is created for this user, add it to state and show browser notification
@@ -4436,12 +4489,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
-        // CRITICAL: Ensure we're joined to the conversation room BEFORE sending
-        // This ensures the message is broadcast to other participants
-        console.log('🔧 Ensuring joined to conversation room before sending:', conversationId);
+        // Socket.io room join is instant when a dev socket exists; production uses Supabase Realtime (no wait).
         await realtimeChatService.joinConversation(conversationId);
-        // CRITICAL FIX: Increased delay to ensure room join completes on server
-        await new Promise(resolve => setTimeout(resolve, 300));
 
         // Find conversation BEFORE updating state to avoid stale state issues
         const conversation = conversations.find(conv => conv.id === conversationId);
@@ -4508,52 +4557,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         
         const sendResult = await realtimeChatService.sendMessage(conversationId, newMessage, userEmail, userRole);
-        
+
         if (!sendResult.success) {
           console.error('❌ Failed to send message via real-time service:', sendResult.error);
           addToast(t('toast.failedSendMessageConnection'), 'error');
-          // Message is still in local state, so user sees it
-          // It will be synced when connection is restored
-        } else {
-          console.log('✅ Message sent successfully via real-time service');
+        } else if (!sendResult.persisted) {
+          const retry = await addMessageWithSync(conversationId, newMessage);
+          if (!retry.synced && !retry.queued) {
+            console.warn('⚠️ Message may not be persisted; queue:', conversationId);
+          }
         }
-
-        // Save to Supabase with sync queue fallback (backup).
-        // Use a merged snapshot — `conversations` from this closure is stale after setState.
-        const conversationMergedForSync: Conversation = {
-          ...conversation,
-          messages: [...(conversation.messages || []), newMessage],
-          lastMessageAt: newMessage.timestamp,
-          isReadBySeller:
-            currentUser.role === 'seller'
-              ? true
-              : currentUser.role === 'customer'
-                ? false
-                : conversation.isReadBySeller,
-          isReadByCustomer:
-            currentUser.role === 'customer'
-              ? true
-              : currentUser.role === 'seller'
-                ? false
-                : conversation.isReadByCustomer,
-        };
-        (async () => {
-          const result = await saveConversationWithSync(conversationMergedForSync);
-          if (result.synced) {
-            console.log('✅ Conversation synced to Supabase:', conversationId);
-          } else if (result.queued) {
-            console.log('⏳ Conversation queued for sync (will retry):', conversationId);
-          }
-        })();
-
-        (async () => {
-          const result = await addMessageWithSync(conversationId, newMessage);
-          if (result.synced) {
-            console.log('✅ Message synced to Supabase:', messageId);
-          } else if (result.queued) {
-            console.log('⏳ Message queued for sync (will retry):', messageId);
-          }
-        })();
 
         // Create notification for the recipient
         // CRITICAL FIX: Normalize recipient email to ensure proper matching
@@ -4611,14 +4624,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
-        // CRITICAL: Ensure we're joined to the conversation room BEFORE sending
-        // This ensures the message is broadcast to other participants
-        console.log('🔧 Ensuring joined to conversation room before sending (withType):', conversationId);
         await realtimeChatService.joinConversation(conversationId);
-        // CRITICAL FIX: Increased delay to ensure room join completes on server
-        await new Promise(resolve => setTimeout(resolve, 300));
 
-        // Find conversation BEFORE updating state to avoid stale state issues
         const conversation = conversations.find(conv => conv.id === conversationId);
         if (!conversation) {
           console.warn('⚠️ Conversation not found:', conversationId);
@@ -4626,9 +4633,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
 
-        // Generate a more unique message ID to prevent collisions
         const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-        
+
         const newMessage: ChatMessage = {
           id: messageId,
           sender: (currentUser.role === 'seller' ? 'seller' : 'user') as 'seller' | 'user',
@@ -4636,85 +4642,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           timestamp: new Date().toISOString(),
           isRead: false,
           type: type || 'text',
-          ...(type === 'offer' && payload ? { payload } : {})
+          ...(type === 'offer' && payload ? { payload } : {}),
         };
 
-        // Update conversations and save to localStorage
-        setConversations(prev => {
-          const updated = Array.isArray(prev) ? prev.map(conv => 
-            conv && conv.id === conversationId ? {
-              ...conv,
-              messages: Array.isArray(conv.messages) ? [...conv.messages, newMessage] : [newMessage],
-              lastMessageAt: newMessage.timestamp,
-              isReadBySeller: currentUser.role === 'seller' ? true : (currentUser.role === 'customer' ? false : conv.isReadBySeller),
-              isReadByCustomer: currentUser.role === 'customer' ? true : (currentUser.role === 'seller' ? false : conv.isReadByCustomer)
-            } : conv
-          ) : [];
-          
-          // Save to localStorage immediately
+        const normalizedUserEmail = (currentUser.email || '').toLowerCase().trim();
+        const userRole = currentUser.role as 'customer' | 'seller';
+
+        setConversations((prev) => {
+          const updated = Array.isArray(prev)
+            ? prev.map((conv) =>
+                conv && conv.id === conversationId
+                  ? {
+                      ...conv,
+                      messages: Array.isArray(conv.messages) ? [...conv.messages, newMessage] : [newMessage],
+                      lastMessageAt: newMessage.timestamp,
+                      isReadBySeller:
+                        currentUser.role === 'seller'
+                          ? true
+                          : currentUser.role === 'customer'
+                            ? false
+                            : conv.isReadBySeller,
+                      isReadByCustomer:
+                        currentUser.role === 'customer'
+                          ? true
+                          : currentUser.role === 'seller'
+                            ? false
+                            : conv.isReadByCustomer,
+                    }
+                  : conv,
+              )
+            : [];
           try {
             saveConversations(updated);
           } catch (error) {
             console.error('Failed to save conversations to localStorage:', error);
           }
-          
-          // Save to Supabase with sync queue fallback
-          const updatedConversation = updated.find(conv => conv.id === conversationId);
-          if (updatedConversation) {
-            // Save entire conversation to Supabase (with queue fallback)
-            (async () => {
-              const result = await saveConversationWithSync(updatedConversation);
-              if (result.synced) {
-                console.log('✅ Conversation synced to Supabase:', conversationId);
-              } else if (result.queued) {
-                console.log('⏳ Conversation queued for sync (will retry):', conversationId);
-              }
-            })();
-            
-            // Also add message via API with sync queue
-            (async () => {
-              const result = await addMessageWithSync(conversationId, newMessage);
-              if (result.synced) {
-                console.log('✅ Message synced to Supabase:', messageId);
-                
-                // Broadcast message via WebSocket for real-time end-to-end sync (development only)
-                // In production, Firebase handles real-time sync, so Socket.io is not needed
-                if (process.env.NODE_ENV === 'development') {
-                  try {
-                    const socketIoClient = await import('socket.io-client') as unknown as SocketIoClientModule;
-                    const io = socketIoClient.default || socketIoClient.io;
-                    if (!io) {
-                      throw new Error('Socket.io client not available');
-                    }
-                    // CRITICAL FIX: Dynamically detect protocol (ws: or wss:) based on page protocol
-                    // This prevents mixed content errors when app is served over HTTPS
-                    const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    const wsUrl = `${wsProtocol}//${getDevSocketHost(3001)}`;
-                    const socket = io(wsUrl, { transports: ['websocket', 'polling'] });
-                    
-                    socket.emit('conversation:message', {
-                      conversationId,
-                      message: newMessage
-                    });
-                    
-                    // Disconnect after sending
-                    setTimeout(() => socket.disconnect(), 100);
-                  } catch (error) {
-                    console.warn('Failed to broadcast message via WebSocket:', error);
-                  }
-                }
-                // In production, Firebase handles real-time sync automatically
-              } else if (result.queued) {
-                console.log('⏳ Message queued for sync (will retry):', messageId);
-              }
-            })();
-          }
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 Updated conversations:', updated);
+          const updatedConversation = updated.find((conv) => conv.id === conversationId);
+          if (updatedConversation && activeChat?.id === conversationId) {
+            setActiveChat(updatedConversation);
           }
           return updated;
         });
+
+        const sendResult = await realtimeChatService.sendMessage(
+          conversationId,
+          newMessage,
+          normalizedUserEmail,
+          userRole,
+        );
+        if (!sendResult.success) {
+          addToast(t('toast.failedSendMessageConnection'), 'error');
+        } else if (!sendResult.persisted) {
+          await addMessageWithSync(conversationId, newMessage);
+        }
 
         // Create notification for the recipient using the conversation we found
         // CRITICAL FIX: Normalize recipient email to ensure proper matching
