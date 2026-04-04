@@ -384,6 +384,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isHandlingPopStateRef = useRef(false);
   /** True after navigate(DETAIL) until the router reports /vehicle/:id (HashRouter/WebView can lag one tick). */
   const expectingVehicleDetailRouteRef = useRef(false);
+  /** Featured carousel fires both touchend + synthetic click — avoid double navigate. */
+  const lastVehicleSelectRef = useRef<{ id: number; t: number }>({ id: -1, t: 0 });
   /** Prevents double handleLogin when both getSession + onAuthStateChange run after Google OAuth */
   const googleOAuthSyncDoneRef = useRef(false);
   /** One-shot: restore ReRide profile from persisted Supabase Auth session (mobile cold start / cleared app user cache) */
@@ -5032,6 +5034,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error('❌ selectVehicle: vehicle.id is not a valid number:', vehicle.id);
         return;
       }
+      const now = Date.now();
+      if (lastVehicleSelectRef.current.id === idNum && now - lastVehicleSelectRef.current.t < 450) {
+        return;
+      }
+      lastVehicleSelectRef.current = { id: idNum, t: now };
+
       const vehicleNorm: Vehicle =
         typeof vehicle.id === 'number' && vehicle.id === idNum ? vehicle : { ...vehicle, id: idNum };
       

@@ -42,7 +42,7 @@ export const getVehicleData = async (): Promise<VehicleData> => {
         // If both endpoints fail, throw error to trigger fallback
         throw new Error('Both API endpoints failed');
       },
-      { priority: 5, id: 'vehicle_data', maxRetries: 2 }
+      { priority: 5, id: 'vehicle_data', maxRetries: 0 }
     );
     
     return data;
