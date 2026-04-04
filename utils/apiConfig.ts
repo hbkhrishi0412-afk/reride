@@ -151,6 +151,66 @@ export async function isLocalDevApiReachable(timeoutMs = 2000): Promise<boolean>
 }
 
 /**
+ * When to open Socket.io to the machine-local dev API.
+ *
+ * `import.meta.env.DEV` is true for `vite build --mode development` (common Android debug APKs).
+ * Those bundles run on real devices / WebViewAssetLoader hosts — they must not use localhost:3001.
+ *
+ * Enable local Socket.io only for: Vite dev server (known ports) or explicit `VITE_MOBILE_LOCAL_DEV` + loopback/emulator host.
+ */
+export function isLocalSocketIoEnvironment(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      if (
+        String(import.meta.env.VITE_DISABLE_DEV_SOCKET || '').toLowerCase() === 'true'
+      ) {
+        return false;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const h = window.location.hostname.toLowerCase();
+  if (
+    h.includes('appassets.androidplatform.net') ||
+    h.includes('reride.co.in') ||
+    /\.vercel\.app$/i.test(h) ||
+    /\.netlify\.app$/i.test(h)
+  ) {
+    return false;
+  }
+
+  let viteDev = false;
+  let mode = '';
+  let mobileLocalDev = false;
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      viteDev = import.meta.env.DEV === true;
+      mode = String(import.meta.env.MODE || '');
+      mobileLocalDev =
+        import.meta.env.VITE_MOBILE_LOCAL_DEV === 'true' && mode === 'development';
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const loopbackish =
+    h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '10.0.2.2';
+  if (!loopbackish) {
+    return false;
+  }
+
+  const port = window.location.port || '';
+  const vitePorts = new Set(['5173', '4173', '3000', '8080', '5174', '24678']);
+  const onViteDevServer = viteDev && vitePorts.has(port);
+
+  return Boolean(onViteDevServer || mobileLocalDev);
+}
+
+/**
  * Use PC-local API + `.env.development` Supabase when building with
  * `vite build --mode development` and `VITE_MOBILE_LOCAL_DEV=true`.
  * Production store builds use `vite build` (mode production) → live API + `.env.production` Supabase.

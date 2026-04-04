@@ -3,7 +3,7 @@ import { queueRequest } from '../utils/requestQueue';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 
-/** Best-effort email from JWT (custom app token). Supabase tokens may omit email — caller still POSTs. */
+/** Best-effort email from JWT (custom app token). */
 function parseJwtEmailClaim(token: string): string | null {
   try {
     const parts = token.split('.');
@@ -18,14 +18,32 @@ function parseJwtEmailClaim(token: string): string | null {
   }
 }
 
+/** Match API auth to current session when JWT has no email (e.g. some Supabase tokens). */
+function getClientEmailForNotificationGuard(): string | null {
+  const token = getBrowserAccessTokenForApi();
+  if (token) {
+    const fromJwt = parseJwtEmailClaim(token);
+    if (fromJwt) return fromJwt;
+  }
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem('reRideCurrentUser');
+    if (!raw) return null;
+    const u = JSON.parse(raw) as { email?: string };
+    const e = (u?.email || '').toString().toLowerCase().trim();
+    return e.includes('@') ? e : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Save notification to Supabase
  */
 export async function saveNotificationToSupabase(notification: Notification): Promise<{ success: boolean; data?: Notification; error?: string }> {
   try {
     const recipient = (notification.recipientEmail || '').toLowerCase().trim();
-    const token = getBrowserAccessTokenForApi();
-    const authEmail = token ? parseJwtEmailClaim(token) : null;
+    const authEmail = getClientEmailForNotificationGuard();
     if (authEmail && recipient && authEmail !== recipient) {
       // API rejects POST for another user's inbox; server creates those on conversation message save.
       return { success: true };
