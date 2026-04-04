@@ -734,6 +734,9 @@ const AppContent: React.FC = () => {
       if (path.includes('/vehicle/')) {
         return;
       }
+      if (typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('/vehicle/')) {
+        return;
+      }
       const st = window.history.state as { usr?: { view?: unknown }; view?: unknown } | null;
       const embedded = st?.usr ?? st;
       if (embedded && typeof embedded === 'object' && embedded !== null && 'view' in embedded) {

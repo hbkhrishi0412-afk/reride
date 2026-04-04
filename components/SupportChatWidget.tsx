@@ -94,31 +94,51 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
     };
 
     newSocket.onmessage = (event) => {
+      let raw: string;
       try {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'message') {
-          setMessages(prev => [...prev, {
-            id: data.id || `msg_${Date.now()}`,
-            text: data.text,
-            sender: data.sender || 'bot',
-            timestamp: data.timestamp || new Date().toISOString(),
-            isRead: false
-          }]);
-          setIsTyping(false);
-        } else if (data.type === 'typing') {
-          setIsTyping(data.isTyping || false);
-        } else if (data.type === 'history') {
-          // Load chat history
-          if (Array.isArray(data.messages)) {
-            setMessages(data.messages);
-          }
-        } else if (data.type === 'session') {
-          setSessionId(data.sessionId);
-        }
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
+        raw = typeof event.data === 'string' ? event.data : String(event.data);
+      } catch {
+        return;
       }
+      // Defer React updates off the WebSocket message task (avoids long "message" handler violations).
+      queueMicrotask(() => {
+        try {
+          const data = JSON.parse(raw) as {
+            type?: string;
+            id?: string;
+            text?: string;
+            sender?: string;
+            timestamp?: string;
+            isTyping?: boolean;
+            messages?: ChatMessage[];
+            sessionId?: string;
+          };
+
+          if (data.type === 'message') {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: data.id || `msg_${Date.now()}`,
+                text: data.text ?? '',
+                sender: (data.sender as ChatMessage['sender']) || 'bot',
+                timestamp: data.timestamp || new Date().toISOString(),
+                isRead: false,
+              },
+            ]);
+            setIsTyping(false);
+          } else if (data.type === 'typing') {
+            setIsTyping(data.isTyping || false);
+          } else if (data.type === 'history') {
+            if (Array.isArray(data.messages)) {
+              setMessages(data.messages);
+            }
+          } else if (data.type === 'session') {
+            setSessionId(data.sessionId ?? null);
+          }
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error);
+        }
+      });
     };
 
     newSocket.onerror = (error) => {

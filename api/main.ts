@@ -67,6 +67,7 @@ import {
 } from '../utils/security.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { attachApiCors } from '../utils/attach-api-cors.js';
+import { isAndroidWebViewAssetLoaderOrigin } from '../utils/cors-origin.js';
 import { logInfo, logWarn, logError, logSecurity } from '../utils/logger.js';
 import { generateCsrfToken, validateCsrfToken, getCsrfCookieName, getCsrfHeaderName } from '../utils/csrf.js';
 import { checkUpstashRateLimit } from '../lib/rate-limit-upstash.js';
@@ -345,15 +346,7 @@ async function mainHandler(
       : Array.isArray(rawOrigin)
         ? rawOrigin[0]
         : undefined;
-  let isPackagedAndroidWebView = false;
-  if (originHeader) {
-    try {
-      isPackagedAndroidWebView =
-        new URL(originHeader).hostname.toLowerCase() === 'appassets.androidplatform.net';
-    } catch {
-      /* ignore */
-    }
-  }
+  const isPackagedAndroidWebView = isAndroidWebViewAssetLoaderOrigin(originHeader);
   const isCapacitorApp =
     originHeader === 'https://localhost' ||
     originHeader === 'https://127.0.0.1' ||
@@ -626,7 +619,7 @@ async function mainHandler(
       } catch (error) {
         logError('⚠️ Error in handleVehicles wrapper:', error);
         // For vehicles?type=data, ensure we never return 500
-        if (req.query?.type === 'data') {
+        if (firstQueryParam(req.query?.type) === 'data') {
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('X-Data-Fallback', 'true');
           return res.status(200).json({
@@ -752,8 +745,9 @@ async function mainHandler(
     
     // Special handling for vehicle-data endpoints - NEVER return 500
     const pathname = req.url?.split('?')[0] || '';
-    const isVehicleDataEndpoint = pathname.includes('/vehicle-data') || 
-                                  pathname.includes('/vehicles') && req.query?.type === 'data';
+    const isVehicleDataEndpoint =
+      pathname.includes('/vehicle-data') ||
+      (pathname.includes('/vehicles') && firstQueryParam(req.query?.type) === 'data');
     
     if (isVehicleDataEndpoint) {
       res.setHeader('X-Data-Fallback', 'true');
@@ -2969,8 +2963,9 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       });
     }
 
-    // Check action type from query parameter
-    const { type, action } = req.query;
+    // Vercel may pass query values as string | string[] — strict equality on type breaks catalog routing.
+    const type = firstQueryParam(req.query.type);
+    const action = firstQueryParam(req.query.action);
 
   // VEHICLE DATA ENDPOINTS (brands, models, variants)
   if (type === 'data') {
@@ -3126,7 +3121,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
   // VEHICLE CRUD OPERATIONS
   if (req.method === 'GET') {
     try {
-      if (String(req.query.aggregate || '') === 'storefront') {
+      if (firstQueryParam(req.query.aggregate) === 'storefront') {
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
         const now = Date.now();
@@ -3144,17 +3139,21 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         } catch (aggErr) {
           const msg = aggErr instanceof Error ? aggErr.message : String(aggErr);
           console.error('❌ storefront aggregate failed:', msg);
-          return res.status(500).json({
-            success: false,
-            reason: 'Failed to load discovery counts',
-            details: process.env.NODE_ENV === 'development' ? msg : undefined,
-          });
+          res.setHeader('X-Data-Fallback', 'true');
+          // Never 500 here — mobile WebView needs 200 + JSON so UI and CORS stay usable.
+          const fallbackBody = {
+            success: true as const,
+            categories: {} as Record<string, number>,
+            cities: {} as Record<string, number>,
+          };
+          storefrontAggregateCache = { body: fallbackBody, timestamp: now };
+          return res.status(200).json(fallbackBody);
         }
       }
 
-      if (action === 'city-stats' && req.query.city) {
+      if (action === 'city-stats' && firstQueryParam(req.query.city)) {
         // Sanitize city input
-        const sanitizedCity = await sanitizeString(String(req.query.city));
+        const sanitizedCity = await sanitizeString(String(firstQueryParam(req.query.city)));
         // PERFORMANCE FIX: Use database-level filtering instead of fetching all vehicles
         const cityVehicles = await vehicleService.findByCityAndStatus(sanitizedCity, 'published');
         const stats = {
@@ -3358,11 +3357,12 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // PAGINATION SUPPORT: Parse pagination parameters early
       // Default to pagination (50 per page) for better performance. limit=0 means return all (no pagination).
-      const page = parseInt(String(req.query.page || '1'), 10) || 1;
-      const rawLimit = req.query.limit;
-      const parsedLimit = rawLimit === undefined || rawLimit === '' ? 50 : parseInt(String(rawLimit), 10);
+      const page = parseInt(String(firstQueryParam(req.query.page) ?? '1'), 10) || 1;
+      const rawLimit = firstQueryParam(req.query.limit);
+      const parsedLimit =
+        rawLimit === undefined || rawLimit === '' ? 50 : parseInt(String(rawLimit), 10);
       const limit = (Number.isNaN(parsedLimit) || parsedLimit < 0) ? 50 : parsedLimit;
-      const skipExpiryCheck = req.query.skipExpiryCheck === 'true'; // Skip expensive expiry checks for fast initial load
+      const skipExpiryCheck = firstQueryParam(req.query.skipExpiryCheck) === 'true';
       
       let vehicles: VehicleType[];
       let totalVehiclesCount: number = 0;
@@ -4492,7 +4492,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     res.setHeader('Content-Type', 'application/json');
     
     // Special handling for vehicle-data endpoints - NEVER return 500
-    const isVehicleDataEndpoint = req.query?.type === 'data';
+    const isVehicleDataEndpoint = firstQueryParam(req.query?.type) === 'data';
     if (isVehicleDataEndpoint) {
       res.setHeader('X-Data-Fallback', 'true');
       const defaultData = {
@@ -7597,28 +7597,40 @@ export default async function handler(
       const pathname = req.url?.split('?')[0] || '';
       
       // Special handling for critical endpoints - never return 500
-      const isCriticalEndpoint = 
-        pathname.includes('/vehicle-data') || 
-        pathname.includes('/vehicles') && req.query?.type === 'data' ||
+      const isCriticalEndpoint =
+        pathname.includes('/vehicle-data') ||
+        (pathname.includes('/vehicles') && firstQueryParam(req.query?.type) === 'data') ||
+        (pathname.includes('/vehicles') && firstQueryParam(req.query?.aggregate) === 'storefront') ||
         pathname.includes('/users') ||
         pathname.includes('/vehicles') ||
         pathname.includes('/faqs');
-      
+
       if (isCriticalEndpoint) {
         // Return 200 with fallback data instead of 500
         res.setHeader('X-Error-Fallback', 'true');
-        
-        if (pathname.includes('/vehicle-data') || (pathname.includes('/vehicles') && req.query?.type === 'data')) {
+
+        if (
+          pathname.includes('/vehicle-data') ||
+          (pathname.includes('/vehicles') && firstQueryParam(req.query?.type) === 'data')
+        ) {
           return res.status(200).json({
             FOUR_WHEELER: [{ name: "Maruti Suzuki", models: [{ name: "Swift", variants: ["LXi", "VXi", "ZXi"] }] }],
             TWO_WHEELER: [{ name: "Honda", models: [{ name: "Activa 6G", variants: ["Standard", "DLX"] }] }]
           });
         }
-        
+
+        if (pathname.includes('/vehicles') && firstQueryParam(req.query?.aggregate) === 'storefront') {
+          return res.status(200).json({
+            success: true,
+            categories: {},
+            cities: {},
+          });
+        }
+
         if (pathname.includes('/users')) {
           return res.status(200).json([]);
         }
-        
+
         if (pathname.includes('/vehicles')) {
           return res.status(200).json([]);
         }

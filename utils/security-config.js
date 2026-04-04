@@ -66,8 +66,11 @@ const SECURITY_CONFIG = {
             // Android WebViewAssetLoader origin (used by MainActivity)
             'https://appassets.androidplatform.net',
             'https://localhost',
+            'http://localhost',
+            'http://127.0.0.1',
+            'https://127.0.0.1',
             'capacitor://localhost',
-            'http://localhost'
+            'ionic://localhost',
           ];
           // Keep historical Vercel domains as a fallback.
           const vercelDefaults = [
@@ -81,6 +84,10 @@ const SECURITY_CONFIG = {
           'http://localhost:5173',
           'https://localhost',
           'capacitor://localhost',
+          'ionic://localhost',
+          'http://localhost',
+          'http://127.0.0.1',
+          'https://127.0.0.1',
           'https://appassets.androidplatform.net',
           'https://reride-app.vercel.app',
           'https://reride--2-.vercel.app'

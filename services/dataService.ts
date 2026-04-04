@@ -1,6 +1,11 @@
 import type { Vehicle, User, VehicleData, StorefrontDiscoveryAggregates } from '../types';
 import { queueRequest } from '../utils/requestQueue';
-import { isCapacitorNative, resolveApiUrl } from '../utils/apiConfig';
+import {
+  getAlternateApiOriginForFallback,
+  isCapacitorNative,
+  normalizeRerideApiHostToWww,
+  resolveApiUrl,
+} from '../utils/apiConfig';
 import { ensureCsrfToken } from '../utils/authenticatedFetch';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 
@@ -126,7 +131,20 @@ class DataService {
         const performFetch = async (): Promise<Response> => {
           let timeoutId: NodeJS.Timeout | null = null;
           const primaryUrl = this.resolveDataApiUrl(endpoint);
-          const fallbackUrl: string | null = null;
+          let fallbackUrl: string | null = null;
+          try {
+            const altOrigin = getAlternateApiOriginForFallback();
+            if (altOrigin) {
+              const pu = new URL(primaryUrl);
+              const candidate = `${altOrigin}${pu.pathname}${pu.search}${pu.hash}`;
+              const normalized = normalizeRerideApiHostToWww(candidate);
+              if (normalized !== primaryUrl) {
+                fallbackUrl = normalized;
+              }
+            }
+          } catch {
+            fallbackUrl = null;
+          }
           const fetchTimeoutMs = isCapacitorNative() ? 20000 : 7000;
           try {
             const controller = new AbortController();

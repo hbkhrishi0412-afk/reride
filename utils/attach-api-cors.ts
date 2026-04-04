@@ -1,4 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import {
+  isAndroidWebViewAssetLoaderOrigin,
+  isCapacitorShellOrigin,
+  normalizeRequestOrigin,
+} from './cors-origin.js';
 import { getSecurityConfig } from './security-config.js';
 import { getSecurityHeaders } from './security.js';
 
@@ -25,8 +30,11 @@ function isOriginInAllowlist(
   allowedList: readonly string[],
 ): boolean {
   if (!origin) return false;
-  if (allowedList.includes(origin)) return true;
-  return allowedList.some((entry) => originsMatchForCors(origin, entry));
+  const normalized = normalizeRequestOrigin(origin) || origin;
+  if (allowedList.includes(origin) || allowedList.includes(normalized)) return true;
+  return allowedList.some(
+    (entry) => originsMatchForCors(origin, entry) || originsMatchForCors(normalized, entry),
+  );
 }
 
 /** tchar per RFC 9110 — reject CRLF / delimiter injection in reflected header names */
@@ -40,12 +48,55 @@ function sanitizeAdditionalHeaderName(name: string): string | null {
   return t;
 }
 
+/** Minimal CORS if the full path throws (must never leave preflight without ACAO for trusted shells). */
+function applyMinimalCorsForTrustedShells(req: VercelRequest, res: VercelResponse): void {
+  const rawOrigin = req.headers.origin;
+  const origin =
+    typeof rawOrigin === 'string'
+      ? rawOrigin
+      : Array.isArray(rawOrigin)
+        ? rawOrigin[0]
+        : undefined;
+  const normalized = normalizeRequestOrigin(origin);
+  if (!normalized) return;
+  if (!isAndroidWebViewAssetLoaderOrigin(origin) && !isCapacitorShellOrigin(origin)) return;
+  res.setHeader('Access-Control-Allow-Origin', normalized);
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET, POST, PUT, DELETE, OPTIONS, HEAD',
+  );
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-CSRF-Token',
+      'X-App-Client',
+      'Accept',
+      'Accept-Language',
+      'If-None-Match',
+    ].join(', '),
+  );
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Vary', 'Origin');
+}
+
 /**
  * Apply security + CORS headers for the unified Vercel API (`api/main.ts`).
  * Merges safe `Access-Control-Request-Headers` tokens so preflight succeeds for
  * Sentry/tracing without echoing arbitrary strings.
  */
 export function attachApiCors(req: VercelRequest, res: VercelResponse): void {
+  try {
+    attachApiCorsInner(req, res);
+  } catch {
+    applyMinimalCorsForTrustedShells(req, res);
+  }
+}
+
+function attachApiCorsInner(req: VercelRequest, res: VercelResponse): void {
   const config = getSecurityConfig();
   const primaryOrigin =
     process.env.PRIMARY_ORIGIN ||
@@ -64,6 +115,8 @@ export function attachApiCors(req: VercelRequest, res: VercelResponse): void {
       : Array.isArray(rawOrigin)
         ? rawOrigin[0]
         : undefined;
+  const normalizedOrigin = normalizeRequestOrigin(origin);
+
   const isProduction = process.env.NODE_ENV === 'production';
   const isLocalhost =
     !!origin &&
@@ -71,16 +124,7 @@ export function attachApiCors(req: VercelRequest, res: VercelResponse): void {
       origin.includes('127.0.0.1') ||
       origin.includes('::1'));
 
-  let isPackagedAndroidWebView = false;
-  if (origin) {
-    try {
-      isPackagedAndroidWebView =
-        new URL(origin).hostname.toLowerCase() === 'appassets.androidplatform.net';
-    } catch {
-      /* ignore */
-    }
-  }
-
+  const isPackagedAndroidWebView = isAndroidWebViewAssetLoaderOrigin(origin);
   const isCapacitorApp =
     origin === 'https://localhost' ||
     origin === 'https://127.0.0.1' ||
@@ -93,18 +137,23 @@ export function attachApiCors(req: VercelRequest, res: VercelResponse): void {
   const allowlisted =
     isOriginInAllowlist(origin, config.CORS.ALLOWED_ORIGINS) ||
     (!isProduction && isLocalhost) ||
-    isCapacitorApp;
+    isCapacitorApp ||
+    isCapacitorShellOrigin(origin);
 
-  if (allowlisted && origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (isProduction && origin) {
-    // Unknown origin: do not echo attacker Origin; browser will block credentialed cross-origin reads.
-    res.setHeader('Access-Control-Allow-Origin', primaryOrigin);
+  /**
+   * Browsers require Access-Control-Allow-Origin to **match** the request Origin exactly
+   * (when credentials are used). Never send PRIMARY_ORIGIN (www) for unrelated cross-origin
+   * clients (e.g. appassets) — that fails CORS and looks like a missing/wrong header.
+   */
+  const echoOrigin = normalizedOrigin || origin;
+  if (allowlisted && echoOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', echoOrigin);
   } else if (!isProduction) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-  } else {
+    res.setHeader('Access-Control-Allow-Origin', echoOrigin || '*');
+  } else if (origin && originsMatchForCors(origin, primaryOrigin)) {
     res.setHeader('Access-Control-Allow-Origin', primaryOrigin);
   }
+  // Untrusted cross-origin in production: omit Access-Control-Allow-Origin (do not spoof www).
 
   res.setHeader('Access-Control-Allow-Methods', config.CORS.ALLOWED_METHODS.join(', '));
 
@@ -144,5 +193,7 @@ export function attachApiCors(req: VercelRequest, res: VercelResponse): void {
   }
   res.setHeader('Vary', varyParts.join(', '));
 
-  res.setHeader('Content-Type', 'application/json');
+  if (req.method !== 'OPTIONS' && req.method !== 'HEAD') {
+    res.setHeader('Content-Type', 'application/json');
+  }
 }
