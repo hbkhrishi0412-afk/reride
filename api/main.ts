@@ -418,9 +418,24 @@ async function mainHandler(
       logInfo(`📍 Using pathname from req.url (Vercel rewrite): ${pathname}`);
     }
 
+    pathname = resolveEffectiveApiPathname(req, pathname);
+    if (process.env.NODE_ENV !== 'production') {
+      logInfo(`📍 Effective pathname after rewrite resolution: ${pathname}`);
+    }
+
     // CSRF token endpoint: GET /api/csrf-token (no rate limit, no CSRF check)
     if (req.method === 'GET' && (pathname.includes('/csrf-token') || pathname.endsWith('/csrf-token'))) {
-      const token = generateCsrfToken();
+      let token: string;
+      try {
+        token = generateCsrfToken();
+      } catch (e) {
+        logError('❌ CSRF token generation failed:', e);
+        res.setHeader('Content-Type', 'application/json');
+        return res.status(503).json({
+          success: false,
+          reason: 'Unable to issue CSRF token. Please retry.',
+        });
+      }
       const cookieName = getCsrfCookieName();
       // SameSite=Strict breaks cross-origin credentialed fetches (Android WebView → API origin).
       // SameSite=None + Secure allows the cookie on fetch(..., { credentials: 'include' }) from the app WebView.
@@ -802,6 +817,53 @@ async function mainHandler(
 function firstQueryParam(val: string | string[] | undefined): string | undefined {
   if (val === undefined) return undefined;
   return Array.isArray(val) ? val[0] : val;
+}
+
+/**
+ * After rewrite to /api/main.ts, pathname can be `/api/main` while headers omit the client path.
+ * Wrong routing sends e.g. GET /api/vehicles?type=data to handleUsers → 500 and broken CORS preflight.
+ */
+function resolveEffectiveApiPathname(req: VercelRequest, pathname: string): string {
+  const mainLike =
+    pathname === '/api/main' ||
+    pathname === '/main' ||
+    pathname.endsWith('/api/main.ts') ||
+    pathname.endsWith('/main.ts');
+
+  const scanPath = (raw: string): string | null => {
+    if (!raw || typeof raw !== 'string') return null;
+    const pathOnly = raw.split('?')[0] || '';
+    if (pathOnly.includes('/csrf-token')) return '/api/csrf-token';
+    if (pathOnly.includes('/vehicle-data')) return '/api/vehicle-data';
+    if (pathOnly.includes('/vehicles')) return '/api/vehicles';
+    return null;
+  };
+
+  const headerVals = [
+    req.headers['x-vercel-original-path'],
+    req.headers['x-invoke-path'],
+    req.headers['x-matched-path'],
+  ];
+  for (const h of headerVals) {
+    const v = Array.isArray(h) ? h[0] : h;
+    const hit = scanPath(String(v || ''));
+    if (hit) return hit;
+  }
+
+  const urlHit = scanPath(typeof req.url === 'string' ? req.url : '');
+  if (urlHit) return urlHit;
+
+  if (mainLike) {
+    const t = firstQueryParam(req.query?.type);
+    const a = firstQueryParam(req.query?.aggregate);
+    const skip = firstQueryParam(req.query?.skipExpiryCheck);
+    // Vehicle catalog + storefront aggregate + common listing queries use these params together with /vehicles
+    if (t === 'data' || a === 'storefront' || skip === 'true') {
+      return '/api/vehicles';
+    }
+  }
+
+  return pathname;
 }
 
 // Users handler - preserves exact functionality from users.ts
@@ -2951,7 +3013,42 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       return res.status(200).end();
     }
 
-    // Check Supabase availability (required for vehicles, users, etc.)
+    // Vercel may pass query values as string | string[] — strict equality on type breaks catalog routing.
+    const type = firstQueryParam(req.query.type);
+
+    // Public catalog JSON must never 503: mobile WebView treats it as hard failure + CORS noise.
+    if (!USE_SUPABASE && type === 'data' && req.method === 'GET') {
+      logWarn('⚠️ Supabase unavailable — returning default vehicle catalog for type=data');
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json({
+        FOUR_WHEELER: [
+          {
+            name: 'Maruti Suzuki',
+            models: [
+              { name: 'Swift', variants: ['LXi', 'VXi', 'VXi (O)', 'ZXi', 'ZXi+'] },
+              { name: 'Baleno', variants: ['Sigma', 'Delta', 'Zeta', 'Alpha'] },
+            ],
+          },
+        ],
+        TWO_WHEELER: [
+          {
+            name: 'Honda',
+            models: [{ name: 'Activa 6G', variants: ['Standard', 'DLX', 'Smart'] }],
+          },
+        ],
+      });
+    }
+
+    const aggregate = firstQueryParam(req.query.aggregate);
+    if (!USE_SUPABASE && req.method === 'GET' && aggregate === 'storefront') {
+      logWarn('⚠️ Supabase unavailable — empty storefront aggregate fallback');
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('X-Data-Fallback', 'true');
+      return res.status(200).json({ success: true, categories: {}, cities: {} });
+    }
+
+    // Check Supabase availability (required for vehicles listing CRUD, etc.)
     if (!USE_SUPABASE) {
       const errorMsg = getSupabaseErrorMessage();
       logWarn('⚠️ Supabase not available:', errorMsg);
@@ -2962,9 +3059,6 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         fallback: true
       });
     }
-
-    // Vercel may pass query values as string | string[] — strict equality on type breaks catalog routing.
-    const type = firstQueryParam(req.query.type);
     const action = firstQueryParam(req.query.action);
 
   // VEHICLE DATA ENDPOINTS (brands, models, variants)
@@ -4855,6 +4949,11 @@ async function handleVehicleData(req: VercelRequest, res: VercelResponse, _optio
       }
     ]
   };
+
+  if (!USE_SUPABASE && req.method === 'GET') {
+    res.setHeader('X-Data-Fallback', 'true');
+    return res.status(200).json(defaultData);
+  }
 
   try {
     if (req.method === 'GET') {

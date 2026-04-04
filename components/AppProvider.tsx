@@ -1424,7 +1424,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Restore selectedVehicle for DETAIL view (catalog + sessionStorage — fixes stale router state after selectVehicle)
     if (newView === View.DETAIL) {
-      expectingVehicleDetailRouteRef.current = false;
+      // Only clear the "expecting detail route" guard once the router path actually shows /vehicle/:id.
+      // Clearing too early allowed a follow-up tick with pathname "/" + newView HOME to wipe selectedVehicle
+      // and bounce the UI back from DETAIL → HOME (Android WebView / HashRouter).
+      if (path.includes('/vehicle/')) {
+        expectingVehicleDetailRouteRef.current = false;
+      }
       const trySessionStorageForPath = () => {
         try {
           const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
@@ -1472,7 +1477,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isHandlingPopStateRef.current = false;
     }, 100);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.key]);
+  }, [location.pathname, location.hash, location.key]);
 
   // When the catalog finishes loading, resolve /vehicle/:id if the list sync effect ran too early
   useEffect(() => {

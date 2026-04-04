@@ -45,6 +45,6 @@ export function isCapacitorShellOrigin(origin: string | undefined): boolean {
   } catch {
     return false;
   }
-  const raw = origin.trim();
+  const raw = (origin ?? '').trim();
   return raw.startsWith('capacitor://') || raw.startsWith('ionic://');
 }

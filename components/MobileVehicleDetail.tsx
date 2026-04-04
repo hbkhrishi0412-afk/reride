@@ -145,14 +145,14 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
   }, [baseEMI]);
 
   const callHref = useMemo(() => {
-    const raw = (seller?.phone || safeVehicle.sellerPhone || '').trim();
+    const raw = (seller?.mobile || safeVehicle.sellerPhone || '').trim();
     if (!raw) return null;
     const compact = raw.replace(/[\s-]/g, '');
     const digits = compact.replace(/\D/g, '');
     if (digits.length < 10) return null;
     const href = compact.startsWith('+') || compact.startsWith('00') ? `tel:${compact}` : `tel:${digits}`;
     return href;
-  }, [seller?.phone, safeVehicle.sellerPhone]);
+  }, [seller?.mobile, safeVehicle.sellerPhone]);
 
   /** Portaled to body: PageTransition/framer-motion uses transform, which breaks `fixed` inside scroll main. */
   const contactToolbar =
@@ -221,6 +221,9 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
           src={getFirstValidImage(safeVehicle.images, safeVehicle.id)}
           alt={`${safeVehicle.make} ${safeVehicle.model}`}
           className="w-full h-full object-cover"
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
           onClick={() => setShowGallery(true)}
         />
         {safeVehicle.images.length > 1 && (
