@@ -3332,6 +3332,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     return () => clearInterval(refreshInterval);
   }, [currentUser?.email, currentUser?.role]);
+
+  // Customers: poll API so seller replies appear even when Realtime RLS blocks postgres_changes
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'customer' || !currentUser.email) {
+      return;
+    }
+    const normalizedCustomerEmail = currentUser.email.toLowerCase().trim();
+
+    const loadCustomerConversations = async () => {
+      try {
+        const { getConversationsFromSupabase } = await import('../services/conversationService');
+        const result = await getConversationsFromSupabase(normalizedCustomerEmail);
+        if (!result.success || !result.data) {
+          return;
+        }
+        const normalizedConversations = result.data.map((conv) => ({
+          ...conv,
+          sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+          customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
+        }));
+        setConversations((prev) => {
+          const prevIds = new Set(prev.map((c) => c.id));
+          const hasNew = normalizedConversations.some((c) => !prevIds.has(c.id));
+          const hasUpdated = normalizedConversations.some((newConv) => {
+            const oldConv = prev.find((c) => c.id === newConv.id);
+            return oldConv && oldConv.messages.length !== newConv.messages.length;
+          });
+          if (hasNew || hasUpdated || prev.length === 0) {
+            try {
+              saveConversations(normalizedConversations);
+            } catch (_) {
+              /* ignore */
+            }
+            return normalizedConversations;
+          }
+          return prev;
+        });
+      } catch (e) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Failed to refresh customer conversations:', e);
+        }
+      }
+    };
+
+    loadCustomerConversations();
+    const interval = setInterval(loadCustomerConversations, 8000);
+    return () => clearInterval(interval);
+  }, [currentUser?.email, currentUser?.role]);
   
   // CRITICAL: Periodically refresh notifications for all users
   useEffect(() => {
