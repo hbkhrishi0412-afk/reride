@@ -64,7 +64,7 @@ export function useSupabaseRealtime({
         ? `${table}:${filter.replace(/[^a-zA-Z0-9]/g, '_')}`
         : `${table}:all`;
 
-      // Create and subscribe to channel
+      // Create and subscribe to channel (omit `filter` when unset — some clients mis-handle filter: undefined)
       const channel = supabase
         .channel(channelName)
         .on(
@@ -73,7 +73,7 @@ export function useSupabaseRealtime({
             event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
             schema: 'public',
             table: table,
-            filter: filter,
+            ...(filter ? { filter } : {}),
           },
           (payload) => {
             if (process.env.NODE_ENV === 'development') {

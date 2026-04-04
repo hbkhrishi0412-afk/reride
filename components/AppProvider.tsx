@@ -39,6 +39,11 @@ import { getSupabaseClient } from '../lib/supabase';
 import { syncWithBackend } from '../services/supabase-auth-service';
 import type { Session } from '@supabase/supabase-js';
 
+/** PostgREST realtime filter value: quote emails so `@` and special chars parse correctly. */
+function postgrestEqQuoted(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
 /** Merge local + server messages without duplicates (realtime + optimistic UI). */
 function mergeConversationMessagesForRealtime(local: ChatMessage[], remote: ChatMessage[]): ChatMessage[] {
   const byId = new Map<number, ChatMessage>();
@@ -2268,11 +2273,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Supabase Realtime: when a new notification is created for this user, add it to state and show browser notification
   const userEmailForNotif = currentUser?.email?.toLowerCase().trim() ?? '';
-  useSupabaseRealtime({
-    table: 'notifications',
-    enabled: !!userEmailForNotif,
-    filter: userEmailForNotif ? `recipient_email=eq.${userEmailForNotif}` : undefined,
-    onInsert: (row: any) => {
+  const onNotificationRealtimeInsert = useCallback(
+    (row: any) => {
       const recipient = (row.recipient_email || row.user_id || '').toString().toLowerCase().trim();
       if (recipient !== userEmailForNotif) return;
       const notif: Notification = {
@@ -2285,11 +2287,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isRead: row.read ?? false,
         timestamp: row.created_at || new Date().toISOString(),
       };
-      setNotifications(prev => [notif, ...prev]);
+      setNotifications((prev) => [notif, ...prev]);
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         showNotification(notif.title || 'New message', { body: notif.message });
       }
     },
+    [userEmailForNotif],
+  );
+
+  useSupabaseRealtime({
+    table: 'notifications',
+    enabled: !!userEmailForNotif,
+    filter: userEmailForNotif ? `recipient_email=eq.${postgrestEqQuoted(userEmailForNotif)}` : undefined,
+    onInsert: onNotificationRealtimeInsert,
   });
 
   // Supabase Realtime: published vehicle inserts/updates/deletes → debounced full refresh (web + Capacitor)
