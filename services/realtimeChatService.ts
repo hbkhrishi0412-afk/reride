@@ -7,7 +7,7 @@
 
 import type { Conversation, ChatMessage, Notification } from '../types';
 import { addMessageToConversation, saveConversationToSupabase } from './conversationService';
-import { getDevSocketHost } from '../utils/apiConfig';
+import { getMobileLocalApiOrigin, isLocalDevApiReachable } from '../utils/apiConfig';
 
 interface SocketInstance {
   on(event: string, callback: (data: any) => void): void;
@@ -82,12 +82,32 @@ class RealtimeChatService {
     try {
       // Only use WebSocket in development (local server)
       // In production, we'll use Supabase real-time subscriptions
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      
+      const isDevelopment =
+        (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) ||
+        process.env.NODE_ENV === 'development';
+
       if (isDevelopment) {
-        const wsProtocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsHost = getDevSocketHost(3001);
-        const wsUrl = `${wsProtocol}//${wsHost}`;
+        const disableSocket =
+          typeof import.meta !== 'undefined' &&
+          String((import.meta as any).env?.VITE_DISABLE_DEV_SOCKET || '').toLowerCase() === 'true';
+        if (disableSocket) {
+          this.onConnectionStatusChanged?.(true);
+          return true;
+        }
+
+        const apiUp = await isLocalDevApiReachable();
+        if (!apiUp) {
+          if (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) {
+            console.info(
+              'ℹ️ Local dev API not reachable (start `npm run dev:api` or `npm run dev` for Socket.io). Chat uses Supabase only.',
+            );
+          }
+          this.onConnectionStatusChanged?.(true);
+          return true;
+        }
+
+        // dev-api-server uses HTTP only; `wss://` from an https WebView never matches the server.
+        const socketOrigin = getMobileLocalApiOrigin();
 
         try {
           const socketIoClient = await import('socket.io-client') as unknown as SocketIoClientModule;
@@ -101,8 +121,9 @@ class RealtimeChatService {
             return true;
           }
 
-          this.socket = io(wsUrl, {
+          this.socket = io(socketOrigin, {
             transports: ['websocket', 'polling'],
+            secure: false,
             reconnection: true,
             reconnectionDelay: 1000,
             reconnectionAttempts: this.maxReconnectAttempts,
@@ -193,9 +214,13 @@ class RealtimeChatService {
     });
 
     this.socket.on('connect_error', (error: unknown) => {
-      console.warn('⚠️ WebSocket connection error:', error);
       this.reconnectAttempts++;
+      if (this.reconnectAttempts === 1) {
+        console.warn('⚠️ Socket.io connect error (dev API may have stopped):', error);
+      }
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        this.socket?.disconnect();
+        this.socket = null;
         this.onConnectionStatusChanged?.(false);
       }
     });
@@ -314,15 +339,18 @@ class RealtimeChatService {
         await this.joinConversation(conversationId);
       }
 
-      // Set initial status to 'sending'
+      // Ephemeral UI status — do not persist. Production has no Socket.io acks; saving `sending` made
+      // Supabase realtime merges overwrite the bubble with a stuck clock forever.
+      const messageForPersistence: ChatMessage = { ...message };
+      delete messageForPersistence.status;
       const messageWithStatus: ChatMessage = {
         ...message,
         status: 'sending'
       };
 
-      // First, save to Supabase for persistence
+      // First, save to Supabase for persistence (no delivery status in JSON column)
       console.log('💾 Saving message to database:', { conversationId, messageId: message.id });
-      const saveResult = await addMessageToConversation(conversationId, messageWithStatus);
+      const saveResult = await addMessageToConversation(conversationId, messageForPersistence);
       const persisted = !!saveResult.success;
 
       if (!saveResult.success) {

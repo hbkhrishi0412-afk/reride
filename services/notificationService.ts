@@ -1,12 +1,36 @@
 import type { Notification } from '../types';
 import { queueRequest } from '../utils/requestQueue';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
+import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+
+/** Best-effort email from JWT (custom app token). Supabase tokens may omit email — caller still POSTs. */
+function parseJwtEmailClaim(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+    const json = JSON.parse(atob(b64 + pad)) as Record<string, unknown>;
+    const email = (json.email || json.user_email || '').toString().toLowerCase().trim();
+    return email.includes('@') ? email : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Save notification to Supabase
  */
 export async function saveNotificationToSupabase(notification: Notification): Promise<{ success: boolean; data?: Notification; error?: string }> {
   try {
+    const recipient = (notification.recipientEmail || '').toLowerCase().trim();
+    const token = getBrowserAccessTokenForApi();
+    const authEmail = token ? parseJwtEmailClaim(token) : null;
+    if (authEmail && recipient && authEmail !== recipient) {
+      // API rejects POST for another user's inbox; server creates those on conversation message save.
+      return { success: true };
+    }
+
     const response = await authenticatedFetch('/api/notifications', {
       method: 'POST',
       body: JSON.stringify(notification),

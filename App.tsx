@@ -469,7 +469,8 @@ const AppContent: React.FC = () => {
             createdAt: new Date().toISOString(),
           } as User)
       );
-      navigate(ViewEnum.SELLER_PROFILE);
+      // Pass email in params so the URL is correct in the same tick (navigate() used to read stale publicSellerProfile).
+      navigate(ViewEnum.SELLER_PROFILE, { sellerEmail: normalized });
     },
     [users, setPublicProfile, navigate]
   );

@@ -7,9 +7,13 @@ import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFet
  */
 export async function saveBuyerActivityToSupabase(activity: BuyerActivity): Promise<{ success: boolean; data?: BuyerActivity; error?: string }> {
   try {
+    const normalized: BuyerActivity = {
+      ...activity,
+      userId: String(activity.userId || '').toLowerCase().trim(),
+    };
     const response = await authenticatedFetch('/api/buyer-activity', {
       method: 'POST',
-      body: JSON.stringify(activity),
+      body: JSON.stringify(normalized),
     });
 
     const result = await handleApiResponse<{ data?: BuyerActivity; reason?: string; error?: string }>(response);
@@ -30,7 +34,8 @@ export async function getBuyerActivityFromSupabase(userId: string): Promise<{ su
   try {
     const result = await queueRequest(
       async () => {
-        const response = await authenticatedFetch(`/api/buyer-activity?userId=${encodeURIComponent(userId)}`, { method: 'GET' });
+        const q = encodeURIComponent(String(userId).toLowerCase().trim());
+        const response = await authenticatedFetch(`/api/buyer-activity?userId=${q}`, { method: 'GET' });
         const parsed = await handleApiResponse<{ data?: BuyerActivity; reason?: string; error?: string }>(response);
         if (!parsed.success) {
           throw new Error(parsed.reason || parsed.error || 'Failed to get buyer activity');
@@ -52,9 +57,10 @@ export async function getBuyerActivityFromSupabase(userId: string): Promise<{ su
  */
 export async function updateBuyerActivityInSupabase(userId: string, updates: Partial<BuyerActivity>): Promise<{ success: boolean; data?: BuyerActivity; error?: string }> {
   try {
+    const uid = String(userId).toLowerCase().trim();
     const response = await authenticatedFetch('/api/buyer-activity', {
       method: 'PUT',
-      body: JSON.stringify({ userId, ...updates }),
+      body: JSON.stringify({ ...updates, userId: uid }),
     });
 
     const result = await handleApiResponse<{ data?: BuyerActivity; reason?: string; error?: string }>(response);

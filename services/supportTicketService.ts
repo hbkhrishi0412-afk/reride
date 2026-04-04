@@ -50,7 +50,7 @@ export const fetchSupportTicketsFromSupabase = async (
 ): Promise<SupportTicket[]> => {
   try {
     const params = new URLSearchParams();
-    if (userEmail) params.append('userEmail', userEmail);
+    if (userEmail) params.append('userEmail', String(userEmail).toLowerCase().trim());
     if (status) params.append('status', status);
 
     const query = params.toString();
@@ -75,9 +75,13 @@ export const createSupportTicketInSupabase = async (
   ticket: Omit<SupportTicket, 'id' | 'createdAt' | 'updatedAt' | 'replies' | 'status'>
 ): Promise<SupportTicket | null> => {
   try {
+    const payload = {
+      ...ticket,
+      userEmail: String(ticket.userEmail || '').toLowerCase().trim(),
+    };
     const response = await authenticatedFetch('/api/support-tickets', {
       method: 'POST',
-      body: JSON.stringify(ticket)
+      body: JSON.stringify(payload)
     });
     const parsed = await handleApiResponse<{ ticket?: any }>(response);
     if (!parsed.success || !parsed.data?.ticket) {
