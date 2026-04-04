@@ -5,6 +5,7 @@ import { View, VehicleCategory } from '../types';
 import { generateVehicleDescription, getAiVehicleSuggestions } from '../services/geminiService';
 import { getSafeImageSrc } from '../utils/imageUtils';
 import { formatSalesValue } from '../utils/numberUtils';
+import { findUserByParticipantId } from '../utils/chatContact';
 import VehicleCard from './VehicleCard';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController, BarController } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
@@ -3410,7 +3411,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   currentUserRole="seller"
                   otherUserName={selectedConv.customerName}
                   callTargetPhone={(() => {
-                    const contact = allUsers?.find?.((u: User) => u && u.email && u.email.toLowerCase().trim() === selectedConv.customerId?.toLowerCase().trim());
+                    const contact = findUserByParticipantId(allUsers || [], selectedConv.customerId);
                     return contact?.mobile || (contact as any)?.phone || '';
                   })()}
                   callTargetName={selectedConv.customerName}
@@ -3660,7 +3661,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             currentUserRole="seller"
             otherUserName={selectedConv.customerName}
             callTargetPhone={(() => {
-              const contact = allUsers?.find?.((u: User) => u && u.email && u.email.toLowerCase().trim() === selectedConv.customerId?.toLowerCase().trim());
+              const contact = findUserByParticipantId(allUsers || [], selectedConv.customerId);
               return contact?.mobile || (contact as any)?.phone || '';
             })()}
             callTargetName={selectedConv.customerName}

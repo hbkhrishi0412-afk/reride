@@ -31,8 +31,10 @@ import { saveConversationWithSync } from './services/syncService';
 import { enrichVehiclesWithSellerInfo } from './utils/vehicleEnrichment';
 import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
+import { resolveChatCallPhone, resolveChatOtherPartyName } from './utils/chatContact';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
 import { logWarn, logDebug } from './utils/logger';
+import { authenticatedFetch } from './utils/authenticatedFetch';
 // Firebase removed - using Supabase
 
 // PERFORMANCE: Proper typing improves tree-shaking and prevents runtime errors
@@ -504,14 +506,8 @@ const AppContent: React.FC = () => {
         candidateProviderIds,
         services,
       };
-      const accessToken = typeof window !== 'undefined' ? localStorage.getItem('reRideAccessToken') : null;
-
-      const resp = await fetch('/api/service-requests', {
+      const resp = await authenticatedFetch('/api/service-requests', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
         body: JSON.stringify(body),
       });
 
@@ -586,9 +582,8 @@ const AppContent: React.FC = () => {
     const run = async () => {
       // Fetch actual service providers from API
       try {
-        const accessToken = typeof window !== 'undefined' ? localStorage.getItem('reRideAccessToken') : null;
-        const providersResp = await fetch('/api/service-providers?scope=all', {
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        const providersResp = await authenticatedFetch('/api/service-providers?scope=all', {
+          method: 'GET',
         });
         if (providersResp.ok) {
           const providers = await providersResp.json() as ProviderResponse[];
@@ -2437,6 +2432,7 @@ const AppContent: React.FC = () => {
                 if (!c || !c.customerId || !currentUser?.email) return false;
                 return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
               })}
+              vehicles={vehicles}
               onSendMessage={(vehicleId, messageText, type, payload) => {
                 const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
                 const conversation = normalizedCustomerEmail ? conversations.find(c => {
@@ -2469,6 +2465,7 @@ const AppContent: React.FC = () => {
               if (!c || !c.customerId || !currentUser?.email) return false;
               return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
             })}
+            vehicles={vehicles}
             onSendMessage={(vehicleId, messageText, type, payload) => {
               // Only find conversations that belong to the current user
               // Normalize emails for comparison (critical for production)
@@ -3336,28 +3333,10 @@ const AppContent: React.FC = () => {
               <Suspense fallback={<MinimalLoader />}>
                 <ChatWidget
                   conversation={activeChat}
-                  currentUserRole={currentUser.role as 'customer' | 'seller'}
-                  otherUserName={(() => {
-                    const isCustomer = (currentUser.role as string) === 'customer';
-                    if (isCustomer) {
-                      const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
-                      return seller?.name || seller?.dealershipName || 'Seller';
-                    }
-                    return activeChat.customerName;
-                  })()}
-                  callTargetPhone={(() => {
-                    const isCustomer = (currentUser.role as string) === 'customer';
-                    const lookupEmail = isCustomer ? activeChat.sellerId : activeChat.customerId;
-                    const contact = lookupEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === lookupEmail.toLowerCase().trim()) : undefined;
-                    // User interface has 'mobile' field, not 'phone'
-                    return contact?.mobile || '';
-                  })()}
-                  callTargetName={(() => {
-                    const isCustomer = (currentUser.role as string) === 'customer';
-                    const lookupEmail = isCustomer ? activeChat.sellerId : activeChat.customerId;
-                    const contact = lookupEmail ? users.find(u => u && u.email && u.email.toLowerCase().trim() === lookupEmail.toLowerCase().trim()) : undefined;
-                    return contact?.name || contact?.dealershipName || (isCustomer ? 'Seller' : activeChat.customerName);
-                  })()}
+                  currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
+                  otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                  callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                  callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                   isInlineLaunch={true}
                   onStartCall={(phone) => {
                     if (!phone) return;
@@ -3468,11 +3447,15 @@ const AppContent: React.FC = () => {
                 <Suspense fallback={<MinimalLoader />}>
                   <ChatWidget
                     conversation={activeChat}
-                    currentUserRole={currentUser.role as 'customer' | 'seller'}
-                    otherUserName={(() => {
-                      const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
-                      return seller?.name || seller?.dealershipName || 'Seller';
-                    })()}
+                    currentUserRole="customer"
+                    otherUserName={resolveChatOtherPartyName(users, activeChat, 'customer')}
+                    callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, 'customer')}
+                    callTargetName={resolveChatOtherPartyName(users, activeChat, 'customer')}
+                    isInlineLaunch={true}
+                    onStartCall={(phone) => {
+                      if (!phone) return;
+                      window.open(`tel:${phone}`);
+                    }}
                     onClose={() => {
                       // Clear localStorage to prevent auto-restore
                       try {
@@ -3578,15 +3561,15 @@ const AppContent: React.FC = () => {
             <Suspense fallback={<MinimalLoader />}>
               <ChatWidget
                 conversation={activeChat}
-                currentUserRole={currentUser.role as 'customer' | 'seller'}
-                otherUserName={(() => {
-                  if (currentUser?.role === 'customer') {
-                    const seller = users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim());
-                    return seller?.name || seller?.dealershipName || 'Seller';
-                  } else {
-                    return activeChat.customerName;
-                  }
-                })()}
+                currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
+                otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                isInlineLaunch={true}
+                onStartCall={(phone) => {
+                  if (!phone) return;
+                  window.open(`tel:${phone}`);
+                }}
                 onClose={handleCloseChat}
                 onSendMessage={(messageText, _type, _payload) => {
                   sendMessage(activeChat.id, messageText);
@@ -3691,12 +3674,15 @@ const AppContent: React.FC = () => {
             <Suspense fallback={<MinimalLoader />}>
               <ChatWidget
                 conversation={activeChat}
-                currentUserRole={currentUser.role as 'customer' | 'seller'}
-                otherUserName={currentUser?.role === 'customer' ? 
-                  (users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.name || 
-                   users.find(u => u && u.email && u.email.toLowerCase().trim() === activeChat.sellerId?.toLowerCase().trim())?.dealershipName || 
-                   'Seller') : 
-                  activeChat.customerName}
+                currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
+                otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                isInlineLaunch={true}
+                onStartCall={(phone) => {
+                  if (!phone) return;
+                  window.open(`tel:${phone}`);
+                }}
                 onClose={handleCloseChat}
                 onSendMessage={(messageText, _type, _payload) => {
                   sendMessage(activeChat.id, messageText);

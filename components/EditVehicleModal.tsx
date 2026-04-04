@@ -13,7 +13,7 @@ const EditVehicleModal: React.FC<EditVehicleModalProps> = ({ vehicle, onClose, o
     const [formData, setFormData] = useState<Vehicle>(vehicle);
     const [featureInput, setFeatureInput] = useState('');
     const [fixInput, setFixInput] = useState('');
-    const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'media' | 'quality'>('basic');
+    const [activeTab, setActiveTab] = useState<'basic' | 'specs' | 'media' | 'quality' | 'offer'>('basic');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 

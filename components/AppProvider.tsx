@@ -146,14 +146,20 @@ function normalizeRouterPath(path: string): string {
  * HashRouter should set pathname from the hash, but some Android WebViews briefly report "/"
  * while `location.hash` already contains #/vehicle/:id. Prefer the hash path when it encodes detail.
  */
-function getAppPathFromRouter(loc: { pathname?: string }): string {
+function getAppPathFromRouter(loc: { pathname?: string; hash?: string }): string {
   const raw = (loc?.pathname ?? '/') || '/';
   const p = normalizeRouterPath(raw);
   if (p.startsWith('/vehicle/')) return p;
   if (p !== '/' && p !== '') return p;
-  if (typeof window !== 'undefined' && window.location.hash && window.location.hash.length > 1) {
+  const hashStr =
+    loc?.hash != null && loc.hash.length > 0
+      ? loc.hash
+      : typeof window !== 'undefined' && window.location.hash
+        ? window.location.hash
+        : '';
+  if (hashStr.length > 1) {
     try {
-      const fromHash = window.location.hash.replace(/^#/, '').split('?')[0] || '/';
+      const fromHash = hashStr.replace(/^#/, '').split('?')[0] || '/';
       if (fromHash.startsWith('/vehicle/')) {
         return fromHash;
       }
@@ -1328,7 +1334,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const stored = sessionStorage.getItem('selectedVehicle');
           if (stored) {
             const parsed = JSON.parse(stored) as Vehicle;
-            if (parsed && parsed.id != null && parsed.id !== '') vehicleForPath = parsed;
+            if (parsed && parsed.id != null && String(parsed.id).trim() !== '') vehicleForPath = parsed;
           }
         } catch {
           /* ignore */

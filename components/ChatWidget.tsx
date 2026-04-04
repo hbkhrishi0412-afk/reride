@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
 import type { Conversation, ChatMessage } from '../types';
 import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon';
+import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 
 interface ChatWidgetProps {
   conversation: Conversation;
@@ -201,6 +202,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   const senderType = currentUserRole === 'customer' ? 'user' : 'seller';
   const otherUserRole = currentUserRole === 'customer' ? 'seller' : 'customer';
 
+  const mobileCallHref = callTargetPhone ? telHrefFromRawPhone(callTargetPhone) : null;
+  const mobileCallLabel = callTargetPhone ? phoneDisplayCompact(callTargetPhone) : '';
+
   // Handle minimize/maximize with animation
   const handleToggleMinimize = () => {
     if (!isMinimized) {
@@ -377,12 +381,12 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                 </div>
             </div>
             <div className="flex items-center gap-1">
-                {callTargetPhone && (
+                {callTargetPhone && (!isMobile || !mobileCallHref) && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onStartCall ? onStartCall(callTargetPhone) : window.open(`tel:${callTargetPhone}`); }}
                     className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
                     aria-label={`Call ${callTargetName || 'contact'}`}
-                    title={`Call ${callTargetName || 'contact'}`}
+                    title={`Call ${callTargetName || 'contact'}${mobileCallLabel ? ` · ${mobileCallLabel}` : ''}`}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M2.003 5.884c-.005-1.054.917-1.93 1.97-1.823 1.022.105 1.936.563 2.654 1.282l1.12 1.12a1 1 0 01.106 1.31l-.723 1.085c-.195.293-.164.68.09.935l3.142 3.142a.75.75 0 00.935.09l1.085-.723a1 1 0 011.31.106l1.12 1.12a4.25 4.25 0 011.282 2.654c.107 1.053-.769 1.975-1.823 1.97-2.54-.012-5.02-.998-6.918-2.897-1.898-1.898-2.884-4.378-2.897-6.918z" clipRule="evenodd" />
@@ -430,6 +434,28 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                 </button>
             </div>
         </div>
+
+        {isMobile && mobileCallHref && callTargetPhone && (
+          <a
+            href={mobileCallHref}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onStartCall) {
+                e.preventDefault();
+                onStartCall(callTargetPhone);
+              }
+            }}
+            className="flex w-full items-center justify-center gap-2 border-b border-gray-200 bg-gray-100 py-3 text-gray-800 active:bg-gray-200"
+            aria-label={`Call ${callTargetName || 'contact'} ${mobileCallLabel}`.trim()}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-gray-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+              <path fillRule="evenodd" d="M2.003 5.884c-.005-1.054.917-1.93 1.97-1.823 1.022.105 1.936.563 2.654 1.282l1.12 1.12a1 1 0 01.106 1.31l-.723 1.085c-.195.293-.164.68.09.935l3.142 3.142a.75.75 0 00.935.09l1.085-.723a1 1 0 011.31.106l1.12 1.12a4.25 4.25 0 011.282 2.654c.107 1.053-.769 1.975-1.823 1.97-2.54-.012-5.02-.998-6.918-2.897-1.898-1.898-2.884-4.378-2.897-6.918z" clipRule="evenodd" />
+            </svg>
+            <span className="text-sm font-semibold tabular-nums">
+              Call <span className="text-gray-600 font-medium">{mobileCallLabel || callTargetPhone.trim()}</span>
+            </span>
+          </a>
+        )}
 
         {/* Messages - compact list */}
         <div className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3 relative" style={{ backgroundColor: '#F7F7F9' }}>

@@ -91,8 +91,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         return t('auth.roleRegister.service');
       case 'admin':
         return t('auth.roleRegister.admin');
-      default:
-        return roleConfig[role]?.title ?? role;
+      default: {
+        const _exhaustiveCheck: never = role;
+        return String(_exhaustiveCheck);
+      }
     }
   };
 

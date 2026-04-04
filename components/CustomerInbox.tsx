@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { Conversation, User, ChatMessage } from '../types.js';
+import type { Conversation, User, ChatMessage, Vehicle } from '../types.js';
+import { findUserByParticipantId, resolveSellerPhoneFromProfileOrListing } from '../utils/chatContact.js';
 import { OfferModal } from './ReadReceiptIcon.js';
 import InlineChat from './InlineChat.js';
 import { useConversationList } from '../hooks/useConversationList';
@@ -10,6 +11,7 @@ interface CustomerInboxProps {
   onSendMessage: (vehicleId: number, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   onMarkAsRead: (conversationId: string) => void;
   users: User[];
+  vehicles?: Vehicle[];
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
@@ -25,7 +27,7 @@ const countUnreadMessages = (conversation: Conversation, userRole: 'customer' | 
   return conversation.messages.filter(msg => msg.sender === 'user' && !msg.isRead).length;
 };
 
-const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMessage, onMarkAsRead, users, typingStatus, onUserTyping, onMarkMessagesAsRead, onFlagContent, onOfferResponse }) => {
+const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMessage, onMarkAsRead, users, vehicles, typingStatus, onUserTyping, onMarkMessagesAsRead, onFlagContent, onOfferResponse }) => {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterUnread, setFilterUnread] = useState(false);
@@ -33,14 +35,13 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
 
   const getSellerName = useCallback((sellerId: string) => {
-    const seller = users.find(u => u.email === sellerId);
+    const seller = findUserByParticipantId(users, sellerId);
     return seller?.name || seller?.dealershipName || 'Seller';
   }, [users]);
 
-  const getSellerPhone = useCallback((sellerId: string) => {
-    const seller = users.find(u => u.email === sellerId);
-    return seller?.mobile || '';
-  }, [users]);
+  const getSellerPhone = useCallback((sellerId: string, vehicleId: number) => {
+    return resolveSellerPhoneFromProfileOrListing(users, vehicles, sellerId, vehicleId);
+  }, [users, vehicles]);
 
   const handleStartCall = useCallback((phone: string) => {
     if (!phone) return;
@@ -274,7 +275,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
                       conversation={selectedConv}
                       currentUserRole="customer"
                       otherUserName={getSellerName(selectedConv.sellerId)}
-                      callTargetPhone={getSellerPhone(selectedConv.sellerId)}
+                      callTargetPhone={getSellerPhone(selectedConv.sellerId, selectedConv.vehicleId)}
                       callTargetName={getSellerName(selectedConv.sellerId)}
                       onStartCall={handleStartCall}
                       onSendMessage={(messageText, type, payload) => {
