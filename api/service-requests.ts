@@ -1,16 +1,38 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
+import { authenticateRequest } from './auth.js';
 import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
 import type { ServiceRequestPayload } from '../services/supabase-service-request-service.js';
 import { applyCors } from './_cors.js';
+
+/**
+ * Customers and providers authenticate with either a Supabase session JWT or the legacy
+ * app JWT stored as reRideAccessToken (same pattern as api/services.ts). Service requests
+ * previously only accepted Supabase tokens, so email/password logins failed verification.
+ */
+async function resolveServiceRequestActorId(req: VercelRequest): Promise<string> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ') || authHeader.substring(7).trim() === '') {
+    throw new Error('Missing bearer token');
+  }
+  try {
+    const decoded = await verifyIdTokenFromHeader(req);
+    return decoded.uid;
+  } catch {
+    const legacy = authenticateRequest(req);
+    if (!legacy.isValid || !legacy.user?.userId) {
+      throw new Error(legacy.error || 'Authentication required');
+    }
+    return legacy.user.userId;
+  }
+}
 
 // ServiceRequestPayload is now imported from the service file
 
 export async function handleServiceRequests(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   try {
-    const decoded = await verifyIdTokenFromHeader(req);
-    const providerId = decoded.uid;
+    const providerId = await resolveServiceRequestActorId(req);
     const scope = (req.query.scope as string) || 'mine';
 
     if (req.method === 'GET') {
@@ -113,7 +135,16 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
   } catch (error) {
     console.error('Service requests API error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
-    const status = message.includes('Missing bearer token') ? 401 : 500;
+    const lower = message.toLowerCase();
+    const isAuthFailure =
+      lower.includes('missing bearer') ||
+      lower.includes('authentication') ||
+      lower.includes('authorization') ||
+      lower.includes('invalid or expired') ||
+      lower.includes('token has expired') ||
+      lower.includes('invalid token') ||
+      lower.includes('no valid authorization');
+    const status = isAuthFailure ? 401 : 500;
     return res.status(status).json({ error: message });
   }
 }
