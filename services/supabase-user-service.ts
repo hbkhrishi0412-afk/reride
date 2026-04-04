@@ -1,8 +1,8 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
 import type { User } from '../types.js';
 
-// Convert email to a safe key (replace special chars)
-function emailToKey(email: string): string {
+/** Stable `users.id` for email/password users (matches FK targets on conversations, etc.). */
+export function emailToKey(email: string): string {
   return email.toLowerCase().trim().replace(/[.#$[\]]/g, '_');
 }
 

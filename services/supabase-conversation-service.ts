@@ -1,4 +1,92 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
+import { emailToKey } from './supabase-user-service.js';
+
+type SupabaseDb = ReturnType<typeof getSupabaseAdminClient>;
+
+/** Resolve app-facing email or id string to `users.id` for FK columns. */
+async function resolveUserTableId(supabase: SupabaseDb, input: string | null | undefined): Promise<string | null> {
+  const t = typeof input === 'string' ? input.toLowerCase().trim() : '';
+  if (!t) {
+    return null;
+  }
+
+  const { data: byEmail } = await supabase.from('users').select('id').eq('email', t).maybeSingle();
+  if (byEmail?.id) {
+    return String(byEmail.id);
+  }
+
+  const { data: byId } = await supabase.from('users').select('id').eq('id', t).maybeSingle();
+  if (byId?.id) {
+    return String(byId.id);
+  }
+
+  const key = emailToKey(t);
+  if (key !== t) {
+    const { data: byKey } = await supabase.from('users').select('id').eq('id', key).maybeSingle();
+    if (byKey?.id) {
+      return String(byKey.id);
+    }
+  }
+
+  return null;
+}
+
+/** Distinct values to match `conversations.customer_id` / `seller_id` (legacy rows may use email or key). */
+async function participantIdQueryValues(supabase: SupabaseDb, input: string | null | undefined): Promise<string[]> {
+  const t = typeof input === 'string' ? input.toLowerCase().trim() : '';
+  if (!t) {
+    return [];
+  }
+  const resolved = await resolveUserTableId(supabase, input);
+  const key = emailToKey(t);
+  return [...new Set([resolved, t, key].filter(Boolean) as string[])];
+}
+
+/** Map stored user ids back to emails for API/UI (auth compares emails). */
+async function hydrateConversationRows(supabase: SupabaseDb, rows: any[]): Promise<Conversation[]> {
+  if (!rows?.length) {
+    return [];
+  }
+
+  const ids = new Set<string>();
+  for (const r of rows) {
+    if (r.customer_id != null && r.customer_id !== '') {
+      ids.add(String(r.customer_id));
+    }
+    if (r.seller_id != null && r.seller_id !== '') {
+      ids.add(String(r.seller_id));
+    }
+  }
+
+  const idList = [...ids];
+  const emailById = new Map<string, string>();
+  // Browser client uses anon key + RLS; batch user reads often fail. Server (admin) hydrates reliably.
+  if (idList.length > 0 && isServerSide) {
+    try {
+      const { data: users, error } = await supabase.from('users').select('id,email').in('id', idList);
+      if (!error && users) {
+        for (const u of users) {
+          if (u?.id && u?.email) {
+            emailById.set(String(u.id), String(u.email).toLowerCase().trim());
+          }
+        }
+      }
+    } catch {
+      // Network — fall back to raw ids in row
+    }
+  }
+
+  return rows.map((r) => {
+    const base = supabaseRowToConversation(r);
+    const cEmail = r.customer_id != null ? emailById.get(String(r.customer_id)) : undefined;
+    const sEmail = r.seller_id != null ? emailById.get(String(r.seller_id)) : undefined;
+    return {
+      ...base,
+      customerId: cEmail ?? base.customerId,
+      sellerId: sEmail ?? base.sellerId,
+    };
+  });
+}
 
 function newConversationDbId(): string {
   const c = globalThis.crypto;
@@ -132,7 +220,22 @@ export const supabaseConversationService = {
     const dbId = newConversationDbId();
 
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    const row = conversationToSupabaseRow({ ...conversationData, id: dbId }, false); // false = create operation
+
+    const customerFk = await resolveUserTableId(supabase, conversationData.customerId);
+    const sellerFk = await resolveUserTableId(supabase, conversationData.sellerId);
+    if (!customerFk) {
+      throw new Error(
+        'Cannot create conversation: customer is not registered. Ask them to sign up or complete login.',
+      );
+    }
+    if (!sellerFk) {
+      throw new Error('Cannot create conversation: seller account was not found in users.');
+    }
+
+    const row = conversationToSupabaseRow(
+      { ...conversationData, id: dbId, customerId: customerFk, sellerId: sellerFk },
+      false,
+    ); // false = create operation
 
     // Client uses stable string ids (e.g. conv_*); DB often uses uuid — keep alias for lookups.
     row.metadata = {
@@ -164,8 +267,9 @@ export const supabaseConversationService = {
     if (!data) {
       throw new Error(`Failed to create conversation: No data returned from insert operation.`);
     }
-    
-    return supabaseRowToConversation(data);
+
+    const [hydrated] = await hydrateConversationRows(supabase, [data]);
+    return hydrated;
   },
 
   // Find conversation by ID
@@ -195,7 +299,8 @@ export const supabaseConversationService = {
         return null;
       }
 
-      return supabaseRowToConversation(data);
+      const [hydrated] = await hydrateConversationRows(supabase, [data]);
+      return hydrated ?? null;
     }
 
     // Non-uuid ids (conv_*, legacy composite keys) — resolve via metadata alias
@@ -218,7 +323,8 @@ export const supabaseConversationService = {
       return null;
     }
 
-    return supabaseRowToConversation(row);
+    const [hydrated] = await hydrateConversationRows(supabase, [row]);
+    return hydrated ?? null;
   },
 
   // Get all conversations (used by admin; limit to avoid slow loads)
@@ -238,8 +344,8 @@ export const supabaseConversationService = {
       }
       throw new Error(`Failed to fetch conversations: ${error.message}`);
     }
-    
-    return (data || []).map(supabaseRowToConversation);
+
+    return hydrateConversationRows(supabase, data || []);
   },
 
   // Update conversation
@@ -278,7 +384,8 @@ export const supabaseConversationService = {
       throw new Error(`Conversation not found: ${canonicalId}`);
     }
 
-    const existingConv = supabaseRowToConversation(existingRow);
+    const [existingHydrated] = await hydrateConversationRows(supabase, [existingRow]);
+    const existingConv = existingHydrated ?? supabaseRowToConversation(existingRow);
     const merged: Conversation = {
       ...existingConv,
       ...updates,
@@ -288,9 +395,22 @@ export const supabaseConversationService = {
           ? (Array.isArray(updates.messages) ? updates.messages : [])
           : existingConv.messages,
     };
-    
+
+    const customerFk = await resolveUserTableId(supabase, merged.customerId);
+    const sellerFk = await resolveUserTableId(supabase, merged.sellerId);
+    const mergedForDb: Conversation = {
+      ...merged,
+      customerId: customerFk ?? merged.customerId,
+      sellerId: sellerFk ?? merged.sellerId,
+    };
+    if (!customerFk || !sellerFk) {
+      throw new Error(
+        `Cannot update conversation: ${!customerFk ? 'customer' : 'seller'} could not be resolved to a users row (FK).`,
+      );
+    }
+
     // Convert merged conversation to row format (isUpdate=true to preserve created_at and set updated_at)
-    const row = conversationToSupabaseRow(merged, true); // true = update operation
+    const row = conversationToSupabaseRow(mergedForDb, true); // true = update operation
     
     // Remove id from updates (don't update the id field)
     delete row.id;
@@ -378,49 +498,27 @@ export const supabaseConversationService = {
   // Find conversations by customer ID
   async findByCustomerId(customerId: string): Promise<Conversation[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    
-    // CRITICAL: Normalize customerId for case-insensitive matching
-    const normalizedCustomerId = customerId ? customerId.toLowerCase().trim() : '';
-    
-    // Try exact match first (in case data is already normalized)
-    let { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('customer_id', normalizedCustomerId);
-    
-    // If no results with normalized, try with original (case-sensitive) as fallback
-    if (!error && (!data || data.length === 0)) {
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from('conversations')
-        .select('*')
-        .eq('customer_id', customerId);
-      
-      if (!fallbackError && fallbackData && fallbackData.length > 0) {
-        data = fallbackData;
-        error = null;
-      }
+
+    const variants = await participantIdQueryValues(supabase, customerId);
+    if (variants.length === 0) {
+      return [];
     }
-    
-    // PERFORMANCE: Removed "fetch all and filter in memory" fallback - it caused very slow
-    // page loads when the first two queries returned no rows. Return empty if no match.
-    
+
+    const { data, error } = await supabase.from('conversations').select('*').in('customer_id', variants);
+
     if (error) {
-      // Check for connection/network errors
       if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
         throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
       }
       throw new Error(`Failed to fetch conversations by customer: ${error.message}`);
     }
-    
-    // Normalize customerId and sellerId in returned conversations to ensure consistency
-    return (data || []).map(row => {
-      const conv = supabaseRowToConversation(row);
-      return {
-        ...conv,
-        sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
-        customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
-      };
-    });
+
+    const hydrated = await hydrateConversationRows(supabase, data || []);
+    return hydrated.map((conv) => ({
+      ...conv,
+      sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+      customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
+    }));
   },
 
   // Find conversations by seller ID
@@ -438,43 +536,25 @@ export const supabaseConversationService = {
       });
     }
     
-    // Try exact match first (in case data is already normalized)
-    let { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('seller_id', normalizedSellerId);
-    
+    const variants = await participantIdQueryValues(supabase, sellerId);
+    let data: any[] | null = null;
+    let error: any = null;
+
+    if (variants.length > 0) {
+      const res = await supabase.from('conversations').select('*').in('seller_id', variants);
+      data = res.data;
+      error = res.error;
+    }
+
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔍 Supabase query result (normalized):', {
+      console.log('🔍 Supabase query result (seller variants):', {
         found: data?.length || 0,
         error: error?.message,
-        sampleSellerIds: data?.slice(0, 3).map((row: any) => row.seller_id)
+        variants,
+        sampleSellerIds: data?.slice(0, 3).map((row: any) => row.seller_id),
       });
     }
-    
-    // If no results with normalized, try with original (case-sensitive) as fallback
-    if (!error && (!data || data.length === 0)) {
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from('conversations')
-        .select('*')
-        .eq('seller_id', sellerId);
-      
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔍 Supabase query result (original case):', {
-          found: fallbackData?.length || 0,
-          error: fallbackError?.message
-        });
-      }
-      
-      if (!fallbackError && fallbackData && fallbackData.length > 0) {
-        data = fallbackData;
-        error = null;
-      }
-    }
-    
-    // PERFORMANCE: Removed "fetch all and filter in memory" fallback - it caused very slow
-    // page loads when the first two queries returned no rows. Return empty if no match.
-    
+
     if (error) {
       // Check for connection/network errors
       if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
@@ -482,49 +562,45 @@ export const supabaseConversationService = {
       }
       throw new Error(`Failed to fetch conversations by seller: ${error.message}`);
     }
-    
-    // Normalize sellerId in returned conversations to ensure consistency
-    return (data || []).map(row => {
-      const conv = supabaseRowToConversation(row);
-      return {
-        ...conv,
-        sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
-        customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId
-      };
-    });
+
+    const hydrated = await hydrateConversationRows(supabase, data || []);
+    return hydrated.map((conv) => ({
+      ...conv,
+      sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+      customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
+    }));
   },
 
   // Find conversation by vehicle ID and customer ID
   async findByVehicleAndCustomer(vehicleId: number, customerId: string): Promise<Conversation | null> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
-    const normalizedCustomerId = customerId ? customerId.toLowerCase().trim() : '';
+    const variants = await participantIdQueryValues(supabase, customerId);
+    if (variants.length === 0) {
+      return null;
+    }
 
-    const { data, error } = await supabase
+    const { data: rows, error } = await supabase
       .from('conversations')
       .select('*')
       .eq('vehicle_id', vehicleId.toString())
-      .eq('customer_id', normalizedCustomerId)
-      .single();
-    
-    // PGRST116 = not found (expected when conversation doesn't exist)
+      .in('customer_id', variants)
+      .limit(1);
+
     if (error) {
-      if (error.code === 'PGRST116') {
-        return null;
-      }
-      // For connection errors, throw to allow caller to handle
       if (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
         throw new Error(`Supabase connection failed: ${error.message}. Please check your network connection and Supabase configuration.`);
       }
-      // For other errors, log and return null (permission issues, etc.)
       console.error('Error fetching conversation by vehicle and customer:', error.message);
       return null;
     }
-    
-    if (!data) {
+
+    const row = rows?.[0];
+    if (!row) {
       return null;
     }
-    
-    return supabaseRowToConversation(data);
+
+    const [hydrated] = await hydrateConversationRows(supabase, [row]);
+    return hydrated ?? null;
   },
 
   // Add message to conversation
