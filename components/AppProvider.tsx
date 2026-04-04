@@ -1039,11 +1039,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const navigate = useCallback((view: View, params?: { city?: string }) => {
-    // Don't navigate if we're currently handling a popstate event
-    // This prevents navigation loops when browser back/forward is used
+    // Don't navigate during popstate sync unless opening a different vehicle (Similar Vehicles on DETAIL).
     if (isHandlingPopStateRef.current) {
-      logDebug('⏸️ Navigation skipped - handling popstate event');
-      return;
+      if (view !== View.DETAIL) {
+        logDebug('⏸️ Navigation skipped - handling popstate event');
+        return;
+      }
+      try {
+        const raw = sessionStorage.getItem('selectedVehicle');
+        if (!raw) {
+          logDebug('⏸️ Navigation skipped - handling popstate event');
+          return;
+        }
+        const v = JSON.parse(raw) as { id?: number | string };
+        const targetId = v?.id != null ? Number(v.id) : NaN;
+        if (!Number.isFinite(targetId)) {
+          logDebug('⏸️ Navigation skipped - handling popstate event');
+          return;
+        }
+        const pathNow = getAppPathFromRouter(
+          typeof window !== 'undefined'
+            ? { pathname: window.location.pathname, hash: window.location.hash }
+            : { pathname: '/' },
+        );
+        const m = pathNow.match(/\/vehicle\/([^/?#]+)/);
+        const pathId = m ? Number(m[1]) : NaN;
+        if (Number.isFinite(pathId) && pathId === targetId) {
+          logDebug('⏸️ Navigation skipped - handling popstate event');
+          return;
+        }
+      } catch {
+        logDebug('⏸️ Navigation skipped - handling popstate event');
+        return;
+      }
     }
     
     // Prevent infinite redirect loops by checking if we're already on the target view
@@ -1268,14 +1296,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Handle dynamic paths
       if (view === View.DETAIL) {
-        let vehicleForPath = selectedVehicle;
-        if (!vehicleForPath) {
-          try {
-            const stored = sessionStorage.getItem('selectedVehicle');
-            if (stored) vehicleForPath = JSON.parse(stored);
-          } catch { /* ignore */ }
+        // Prefer sessionStorage for URL: selectVehicle() writes there synchronously then calls navigate(),
+        // while selectedVehicle React state is still the previous listing (stale closure) — otherwise
+        // /vehicle/:id and router state stay on the old id and Similar Vehicles clicks appear to do nothing.
+        let vehicleForPath: Vehicle | null = null;
+        try {
+          const stored = sessionStorage.getItem('selectedVehicle');
+          if (stored) {
+            const parsed = JSON.parse(stored) as Vehicle;
+            if (parsed && parsed.id != null && parsed.id !== '') vehicleForPath = parsed;
+          }
+        } catch {
+          /* ignore */
         }
-        newPath = vehicleForPath?.id ? `/vehicle/${vehicleForPath.id}` : '/vehicle';
+        if (!vehicleForPath?.id && selectedVehicle?.id != null) {
+          vehicleForPath = selectedVehicle;
+        }
+        newPath = vehicleForPath?.id != null ? `/vehicle/${vehicleForPath.id}` : '/vehicle';
       } else if (view === View.SELLER_PROFILE) {
         newPath = publicSellerProfile?.email
           ? `/seller/${encodeURIComponent(publicSellerProfile.email)}`
@@ -1287,11 +1324,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Use React Router navigate instead of manual history.pushState
-      let detailSelectedId: number | undefined =
-        view === View.DETAIL && selectedVehicle?.id != null
-          ? Number(selectedVehicle.id)
-          : undefined;
-      if (view === View.DETAIL && (detailSelectedId == null || !Number.isFinite(detailSelectedId))) {
+      let detailSelectedId: number | undefined = undefined;
+      if (view === View.DETAIL) {
         try {
           const raw = sessionStorage.getItem('selectedVehicle');
           if (raw) {
@@ -1301,6 +1335,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         } catch {
           /* ignore */
+        }
+        if ((detailSelectedId == null || !Number.isFinite(detailSelectedId)) && selectedVehicle?.id != null) {
+          const n = Number(selectedVehicle.id);
+          if (Number.isFinite(n)) detailSelectedId = n;
         }
       }
       routerNavigate(newPath, {
@@ -1412,6 +1450,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    // Already on vehicle detail but URL id changed (e.g. Similar Vehicles / deep link) — must sync state.
+    // Previously we returned here, so selectedVehicle could stay on the old listing while the URL updated.
+    if (newView === currentView && newView === View.DETAIL && path.includes('/vehicle/')) {
+      const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
+      if (idMatch) {
+        const parsedId = Number(idMatch[1]);
+        if (Number.isFinite(parsedId) && !vehicleIdsEqual(selectedVehicle?.id, parsedId)) {
+          const found = vehicles.find((v) => vehicleIdsEqual(v.id, parsedId));
+          if (found) {
+            setSelectedVehicle(found);
+            try {
+              sessionStorage.setItem('selectedVehicle', JSON.stringify(found));
+            } catch {
+              /* ignore */
+            }
+          } else {
+            try {
+              const stored = sessionStorage.getItem('selectedVehicle');
+              if (stored) {
+                const v = JSON.parse(stored) as Vehicle;
+                if (vehicleIdsEqual(v?.id, parsedId)) setSelectedVehicle(v);
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      }
+      return;
+    }
+
     // Prevent loops: only update if the view actually changed
     if (newView === currentView) return;
 
@@ -1476,8 +1545,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTimeout(() => {
       isHandlingPopStateRef.current = false;
     }, 100);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, location.hash, location.key]);
+  }, [location.pathname, location.hash, location.key, currentView, vehicles, selectedVehicle?.id]);
 
   // When the catalog finishes loading, resolve /vehicle/:id if the list sync effect ran too early
   useEffect(() => {
@@ -1501,7 +1569,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       /* ignore */
     }
-  }, [currentView, location?.pathname, vehicles, selectedVehicle?.id]);
+  }, [currentView, location?.pathname, location?.hash, vehicles, selectedVehicle?.id]);
 
   // CRITICAL: Listen for force loading completion event (safety mechanism)
   useEffect(() => {
