@@ -759,7 +759,7 @@ async function mainHandler(
     }
     
     // Special handling for vehicle-data endpoints - NEVER return 500
-    const pathname = req.url?.split('?')[0] || '';
+    // Do not use req.url here: after Vercel rewrite it is often /api/main, which would skip fallbacks.
     const isVehicleDataEndpoint =
       pathname.includes('/vehicle-data') ||
       (pathname.includes('/vehicles') && firstQueryParam(req.query?.type) === 'data');
@@ -807,6 +807,45 @@ async function mainHandler(
         details: 'Unable to connect to Supabase database. Please check your Supabase configuration, credentials, and network connectivity.'
       });
     }
+
+    // Public read paths: return empty JSON instead of 500 so the SPA and WebView stay usable.
+    const isGet = req.method === 'GET';
+    if (isGet && pathname.includes('/csrf-token')) {
+      try {
+        const token = generateCsrfToken();
+        const cookieName = getCsrfCookieName();
+        const forwardedProto = (req.headers['x-forwarded-proto'] as string) || '';
+        const useCrossSiteCookie = forwardedProto === 'https' || process.env.VERCEL === '1';
+        const sameSite = useCrossSiteCookie ? 'None' : 'Lax';
+        const secureSuffix = useCrossSiteCookie ? '; Secure' : '';
+        res.setHeader(
+          'Set-Cookie',
+          `${cookieName}=${token}; Path=/; SameSite=${sameSite}; Max-Age=86400${secureSuffix}`,
+        );
+        res.setHeader('X-Error-Fallback', 'true');
+        return res.status(200).json({ token });
+      } catch {
+        return res.status(503).json({
+          success: false,
+          reason: 'Unable to issue CSRF token. Please retry.',
+        });
+      }
+    }
+    if (isGet && pathname.includes('/users') && !firstQueryParam(req.query?.action)) {
+      res.setHeader('X-Error-Fallback', 'true');
+      return res.status(200).json([]);
+    }
+    if (isGet && pathname.includes('/vehicles')) {
+      res.setHeader('X-Error-Fallback', 'true');
+      if (firstQueryParam(req.query?.aggregate) === 'storefront') {
+        return res.status(200).json({
+          success: true,
+          categories: {},
+          cities: {},
+        });
+      }
+      return res.status(200).json([]);
+    }
     
     const message = error instanceof Error ? error.message : 'An unexpected server error occurred.';
     return res.status(500).json({ success: false, reason: message, error: message });
@@ -835,6 +874,7 @@ function resolveEffectiveApiPathname(req: VercelRequest, pathname: string): stri
     const pathOnly = raw.split('?')[0] || '';
     if (pathOnly.includes('/csrf-token')) return '/api/csrf-token';
     if (pathOnly.includes('/vehicle-data')) return '/api/vehicle-data';
+    if (pathOnly.includes('/users')) return '/api/users';
     if (pathOnly.includes('/vehicles')) return '/api/vehicles';
     return null;
   };
@@ -857,13 +897,52 @@ function resolveEffectiveApiPathname(req: VercelRequest, pathname: string): stri
     const t = firstQueryParam(req.query?.type);
     const a = firstQueryParam(req.query?.aggregate);
     const skip = firstQueryParam(req.query?.skipExpiryCheck);
+    const act = firstQueryParam(req.query?.action);
     // Vehicle catalog + storefront aggregate + common listing queries use these params together with /vehicles
-    if (t === 'data' || a === 'storefront' || skip === 'true') {
+    if (t === 'data' || a === 'storefront' || skip === 'true' || act === 'track-view') {
       return '/api/vehicles';
     }
   }
 
   return pathname;
+}
+
+/**
+ * Pathname for error fallbacks when the handler throws before/during routing.
+ * Mirrors mainHandler's rewrite resolution so we don't treat /api/main as the real route.
+ */
+function getEffectivePathnameForErrorFallback(req: VercelRequest): string {
+  let pathname = '/';
+  try {
+    const originalPath = req.headers['x-vercel-original-path'] as string;
+    const invokePath = req.headers['x-invoke-path'] as string;
+    let requestUrl = originalPath || invokePath || req.url || '';
+    if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
+      pathname = new URL(requestUrl).pathname;
+    } else if (requestUrl.startsWith('/')) {
+      pathname = requestUrl.split('?')[0];
+    } else if (requestUrl) {
+      pathname = new URL(requestUrl, `http://${req.headers.host || 'localhost'}`).pathname;
+    }
+  } catch {
+    if (req.url) {
+      const m = req.url.match(/^([^?]+)/);
+      if (m) pathname = m[1];
+    }
+  }
+  if (
+    (pathname === '/api/main' || pathname === '/main') &&
+    req.url &&
+    req.url.startsWith('/api/') &&
+    req.url !== '/api/main'
+  ) {
+    pathname = req.url.split('?')[0];
+  }
+  try {
+    return resolveEffectiveApiPathname(req, pathname);
+  } catch {
+    return pathname;
+  }
 }
 
 // Users handler - preserves exact functionality from users.ts
@@ -3849,7 +3928,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
 
         return res.status(200).json({ success: true, views: vehicle.views });
       } catch (error) {
-        return res.status(500).json({ success: false, reason: 'Failed to track view', error: error instanceof Error ? error.message : 'Unknown error' });
+        logWarn('⚠️ track-view failed (non-fatal):', error);
+        return res.status(200).json({ success: false });
       }
     }
 
@@ -7715,7 +7795,7 @@ export default async function handler(
       res.setHeader('Content-Type', 'application/json');
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown fatal error';
-      const pathname = req.url?.split('?')[0] || '';
+      const pathname = getEffectivePathnameForErrorFallback(req);
       
       // Special handling for critical endpoints - never return 500
       const isCriticalEndpoint =
@@ -7724,11 +7804,33 @@ export default async function handler(
         (pathname.includes('/vehicles') && firstQueryParam(req.query?.aggregate) === 'storefront') ||
         pathname.includes('/users') ||
         pathname.includes('/vehicles') ||
-        pathname.includes('/faqs');
+        pathname.includes('/faqs') ||
+        pathname.includes('/csrf-token');
 
       if (isCriticalEndpoint) {
         // Return 200 with fallback data instead of 500
         res.setHeader('X-Error-Fallback', 'true');
+
+        if (pathname.includes('/csrf-token') && req.method === 'GET') {
+          try {
+            const token = generateCsrfToken();
+            const cookieName = getCsrfCookieName();
+            const forwardedProto = (req.headers['x-forwarded-proto'] as string) || '';
+            const useCrossSiteCookie = forwardedProto === 'https' || process.env.VERCEL === '1';
+            const sameSite = useCrossSiteCookie ? 'None' : 'Lax';
+            const secureSuffix = useCrossSiteCookie ? '; Secure' : '';
+            res.setHeader(
+              'Set-Cookie',
+              `${cookieName}=${token}; Path=/; SameSite=${sameSite}; Max-Age=86400${secureSuffix}`,
+            );
+            return res.status(200).json({ token });
+          } catch {
+            return res.status(503).json({
+              success: false,
+              reason: 'Unable to issue CSRF token. Please retry.',
+            });
+          }
+        }
 
         if (
           pathname.includes('/vehicle-data') ||

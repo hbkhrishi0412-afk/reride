@@ -20,30 +20,6 @@
         {
           "key": "Cache-Control",
           "value": "private, no-cache, must-revalidate"
-        },
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "https://appassets.androidplatform.net"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS, HEAD"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-App-Client, Accept, Accept-Language, If-None-Match, sentry-trace, baggage, traceparent, tracestate"
-        },
-        {
-          "key": "Access-Control-Allow-Credentials",
-          "value": "true"
-        },
-        {
-          "key": "Access-Control-Max-Age",
-          "value": "86400"
-        },
-        {
-          "key": "Vary",
-          "value": "Origin"
         }
       ]
     },
@@ -59,26 +35,6 @@
           "value": "nosniff"
         },
         {
-          "key": "Access-Control-Allow-Origin",
-          "value": "https://appassets.androidplatform.net"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS, HEAD"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-App-Client, Accept, Accept-Language, If-None-Match, sentry-trace, baggage, traceparent, tracestate"
-        },
-        {
-          "key": "Access-Control-Allow-Credentials",
-          "value": "true"
-        },
-        {
-          "key": "Access-Control-Max-Age",
-          "value": "86400"
-        },
-        {
           "key": "Vary",
           "value": "Origin, Accept-Encoding"
         }
@@ -90,26 +46,6 @@
         {
           "key": "Cache-Control",
           "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=7200"
-        },
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "https://appassets.androidplatform.net"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS, HEAD"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-App-Client, Accept, Accept-Language, If-None-Match, sentry-trace, baggage, traceparent, tracestate"
-        },
-        {
-          "key": "Access-Control-Allow-Credentials",
-          "value": "true"
-        },
-        {
-          "key": "Access-Control-Max-Age",
-          "value": "86400"
         },
         {
           "key": "Vary",
