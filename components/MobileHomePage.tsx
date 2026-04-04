@@ -59,9 +59,17 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const [searchQuery, setSearchQuery] = useState('');
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
-  /** Tap vs horizontal-scroll: carousel scroll steals small finger movement; track scrollLeft + slop. */
-  const touchStartData = useRef<Map<number, { x: number; y: number; time: number; scrollLeft: number }>>(new Map());
-  /** After a carousel tap we navigate on touchend; suppress the follow-up synthetic click (avoids double selectVehicle). */
+  /**
+   * Featured carousel: horizontal scroll + strict touch heuristics used to swallow taps on real devices
+   * (small scrollDelta / missing synthetic click on iOS). Pointer down→up with a movement slop fixes opens.
+   */
+  const carouselPointerRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    vehicleId: number;
+  } | null>(null);
+  /** After pointer-up navigation, skip the follow-up synthetic click (selectVehicle dedupes, but avoids double work). */
   const carouselTapSuppressClickRef = useRef(false);
 
   const publishedVehicles = useMemo(
@@ -316,78 +324,78 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
             >
             {displayedFeaturedVehicles.map((vehicle, idx) => {
-              const TAP_MOVE_PX = 28;
-              const TAP_MAX_MS = 600;
-              const SCROLL_EPS = 12;
+              const TAP_MOVE_SLACK_PX = 56;
 
-              const handleTouchStart = (e: React.TouchEvent) => {
-                touchStartData.current.set(vehicle.id, {
-                  x: e.touches[0].clientX,
-                  y: e.touches[0].clientY,
-                  time: Date.now(),
-                  scrollLeft: carouselRef.current?.scrollLeft ?? 0
-                });
+              const openVehicleFromCarousel = () => {
+                carouselTapSuppressClickRef.current = true;
+                window.setTimeout(() => {
+                  carouselTapSuppressClickRef.current = false;
+                }, 450);
+                onSelectVehicle?.(vehicle);
               };
-              
-              const handleTouchEnd = (e: React.TouchEvent) => {
-                const touchStart = touchStartData.current.get(vehicle.id);
-                if (!touchStart) return;
-                
-                const touchEnd = {
-                  x: e.changedTouches[0].clientX,
-                  y: e.changedTouches[0].clientY,
-                  time: Date.now()
+
+              const handlePointerDown = (e: React.PointerEvent) => {
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                const el = e.target as HTMLElement | null;
+                if (el?.closest?.('button, a, [role="button"]')) return;
+                carouselPointerRef.current = {
+                  pointerId: e.pointerId,
+                  x: e.clientX,
+                  y: e.clientY,
+                  vehicleId: vehicle.id,
                 };
-                
-                const deltaX = Math.abs(touchEnd.x - touchStart.x);
-                const deltaY = Math.abs(touchEnd.y - touchStart.y);
-                const deltaTime = touchEnd.time - touchStart.time;
-                const scrollDelta = Math.abs(
-                  (carouselRef.current?.scrollLeft ?? 0) - touchStart.scrollLeft
-                );
-                
-                // Tap: little finger movement, short press, and carousel did not meaningfully scroll
-                if (
-                  deltaX < TAP_MOVE_PX &&
-                  deltaY < TAP_MOVE_PX &&
-                  deltaTime < TAP_MAX_MS &&
-                  scrollDelta < SCROLL_EPS
-                ) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  carouselTapSuppressClickRef.current = true;
-                  window.setTimeout(() => {
-                    carouselTapSuppressClickRef.current = false;
-                  }, 400);
-                  onSelectVehicle?.(vehicle);
-                }
-                
-                touchStartData.current.delete(vehicle.id);
               };
-              
+
+              const handlePointerUp = (e: React.PointerEvent) => {
+                const el = e.target as HTMLElement | null;
+                if (el?.closest?.('button, a, [role="button"]')) return;
+                const start = carouselPointerRef.current;
+                if (
+                  !start ||
+                  start.vehicleId !== vehicle.id ||
+                  start.pointerId !== e.pointerId
+                ) {
+                  return;
+                }
+                carouselPointerRef.current = null;
+                const dx = Math.abs(e.clientX - start.x);
+                const dy = Math.abs(e.clientY - start.y);
+                if (dx < TAP_MOVE_SLACK_PX && dy < TAP_MOVE_SLACK_PX) {
+                  e.preventDefault();
+                  openVehicleFromCarousel();
+                }
+              };
+
+              const handlePointerCancel = (e: React.PointerEvent) => {
+                const start = carouselPointerRef.current;
+                if (start && start.pointerId === e.pointerId) {
+                  carouselPointerRef.current = null;
+                }
+              };
+
               const handleClick = () => {
                 if (carouselTapSuppressClickRef.current) return;
                 onSelectVehicle?.(vehicle);
               };
-              
+
               return (
                 <div
                   key={vehicle.id}
-                  className="flex-shrink-0 w-[calc(100%-2rem)] snap-center cursor-pointer"
+                  className="flex-shrink-0 w-[calc(100%-2rem)] snap-center cursor-pointer touch-pan-x"
                   role="button"
                   tabIndex={0}
                   aria-label={`View ${vehicle.year} ${vehicle.make} ${vehicle.model}`}
                   onClick={handleClick}
+                  onPointerDown={handlePointerDown}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerCancel}
                   onKeyDown={(e) => {
-                    // Keyboard activation for accessibility parity with onClick/onTouch
                     if ((e.key === 'Enter' || e.key === ' ') && onSelectVehicle) {
                       e.preventDefault();
                       e.stopPropagation();
                       onSelectVehicle(vehicle);
                     }
                   }}
-                  onTouchStart={handleTouchStart}
-                  onTouchEnd={handleTouchEnd}
                 >
                   <div className="bg-white rounded-2xl shadow-xl overflow-hidden active:scale-[0.98] transition-all duration-300 hover:shadow-2xl border border-gray-100 cursor-pointer">
                   <div className="relative h-52 overflow-hidden">
@@ -414,6 +422,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                     {/* Wishlist Button - Premium Style */}
                     <button
                       type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onPointerUp={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         onToggleWishlist(vehicle.id);
