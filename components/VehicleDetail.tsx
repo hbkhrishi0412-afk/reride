@@ -13,6 +13,7 @@ import VehicleHistory from './VehicleHistory';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
 import { logWarn, logDebug } from '../utils/logger';
+import { scrollAppToTop } from '../utils/scrollAppToTop';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -331,7 +332,8 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     setIsGeneratingProsCons(false);
     setShowEMICalculator(false);
     setActiveMediaTab(vehicle.videoUrl ? 'video' : 'images');
-    window.scrollTo(0, 0);
+    scrollAppToTop();
+    requestAnimationFrame(() => scrollAppToTop());
     // Reset tracked views when vehicle changes
     trackedViewRef.current.clear();
   }, [vehicle.id, vehicle.videoUrl]);

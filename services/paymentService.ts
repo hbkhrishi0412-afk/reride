@@ -37,15 +37,55 @@ export const createPaymentRequest = async (
   }
 };
 
+function normalizePaymentRequestFromApi(
+  raw: Record<string, unknown>,
+  sellerEmail: string
+): PaymentRequest | null {
+  const planId = (raw.planId ?? raw.plan) as PaymentRequest['planId'] | undefined;
+  const status = raw.status as PaymentRequest['status'] | undefined;
+  const amount = Number(raw.amount ?? 0);
+  if (
+    !planId ||
+    !['pending', 'approved', 'rejected'].includes(String(status))
+  ) {
+    return null;
+  }
+  return {
+    id: String(raw.id || ''),
+    sellerEmail: String(raw.sellerEmail || sellerEmail),
+    planId,
+    amount,
+    status: status as PaymentRequest['status'],
+    paymentProof: raw.paymentProof as string | undefined,
+    paymentMethod: raw.paymentMethod as PaymentRequest['paymentMethod'],
+    transactionId: raw.transactionId as string | undefined,
+    requestedAt: String(
+      raw.requestedAt || raw.createdAt || new Date().toISOString()
+    ),
+  };
+}
+
 // Get payment request status for a seller
 export const getPaymentRequestStatus = async (sellerEmail: string): Promise<PaymentRequest | null> => {
   try {
     const response = await authenticatedFetch(`/api/payments?action=status&sellerEmail=${encodeURIComponent(sellerEmail)}`);
-    const result = await handleApiResponse<{ paymentRequest?: PaymentRequest; paymentStatus?: PaymentRequest | null }>(response);
+    const result = await handleApiResponse<Record<string, unknown>>(response);
     if (!result.success) {
       throw new Error(result.reason || result.error || 'Failed to get payment request status');
     }
-    return result.data?.paymentRequest || result.data?.paymentStatus || null;
+    const data = result.data;
+    if (!data || typeof data !== 'object') return null;
+
+    const direct = data.paymentRequest as PaymentRequest | undefined;
+    if (direct?.planId && direct.status) return direct;
+
+    const wrapper = data.paymentStatus as Record<string, unknown> | undefined;
+    if (!wrapper || String(wrapper.status).toLowerCase() === 'none') {
+      return null;
+    }
+    const last = wrapper.lastPayment as Record<string, unknown> | undefined;
+    if (!last) return null;
+    return normalizePaymentRequestFromApi(last, sellerEmail);
   } catch (error) {
     console.error('Error getting payment request status:', error);
     return null;

@@ -820,18 +820,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Navigate based on user role
     // Directly set view since we've already validated the user
     // The navigate function will validate again, but we know the user is valid
+    let postLoginView = View.HOME;
     if (user.role === 'admin') {
+      postLoginView = View.ADMIN_PANEL;
       setCurrentView(View.ADMIN_PANEL);
     } else if (user.role === 'seller') {
       logDebug('🔄 Setting seller dashboard view after login');
+      postLoginView = View.SELLER_DASHBOARD;
       setCurrentView(View.SELLER_DASHBOARD);
     } else if (user.role === 'customer') {
-      // Customers go to HOME (they can access BUYER_DASHBOARD from profile/navigation)
+      postLoginView = View.HOME;
       setCurrentView(View.HOME);
     } else {
       setCurrentView(View.HOME);
     }
-  }, [addToast, t]);
+
+    // Keep React Router URL in sync; otherwise location sync maps /login → LOGIN_PORTAL and overwrites HOME.
+    try {
+      const pathByRole =
+        user.role === 'admin'
+          ? '/admin'
+          : user.role === 'seller'
+            ? '/seller/dashboard'
+            : '/';
+      routerNavigate(pathByRole, {
+        state: {
+          view: postLoginView,
+          previousView: currentView,
+          timestamp: Date.now(),
+        },
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [addToast, currentView, routerNavigate, t]);
 
   // After Supabase Google OAuth redirect: session exists; sync profile with ReRide API and log in
   useEffect(() => {
@@ -1433,6 +1455,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       newView = View.HOME;
     }
 
+    // Logged-in user on /login: do not force LOGIN_PORTAL over post-login view (handleLogin may lag URL update).
+    const loginOnlyViews = new Set<View>([
+      View.LOGIN_PORTAL,
+      View.CUSTOMER_LOGIN,
+      View.SELLER_LOGIN,
+    ]);
+    if (
+      currentUser &&
+      loginOnlyViews.has(newView) &&
+      !loginOnlyViews.has(currentView)
+    ) {
+      return;
+    }
+
     // HashRouter / Android WebView: location can briefly stay "/" while currentView is already DETAIL
     // after selectVehicle → navigate(DETAIL). Do not clobber detail with HOME in that window.
     if (
@@ -1545,7 +1581,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTimeout(() => {
       isHandlingPopStateRef.current = false;
     }, 100);
-  }, [location.pathname, location.hash, location.key, currentView, vehicles, selectedVehicle?.id]);
+  }, [
+    location.pathname,
+    location.hash,
+    location.key,
+    currentView,
+    currentUser,
+    vehicles,
+    selectedVehicle?.id,
+  ]);
 
   // When the catalog finishes loading, resolve /vehicle/:id if the list sync effect ran too early
   useEffect(() => {
@@ -4475,27 +4519,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.log('✅ Message sent successfully via real-time service');
         }
 
-        // Save to Supabase with sync queue fallback (backup)
-        const updatedConversation = conversations.find(conv => conv.id === conversationId);
-        if (updatedConversation) {
-          (async () => {
-            const result = await saveConversationWithSync(updatedConversation);
-            if (result.synced) {
-              console.log('✅ Conversation synced to Supabase:', conversationId);
-            } else if (result.queued) {
-              console.log('⏳ Conversation queued for sync (will retry):', conversationId);
-            }
-          })();
-          
-          (async () => {
-            const result = await addMessageWithSync(conversationId, newMessage);
-            if (result.synced) {
-              console.log('✅ Message synced to Supabase:', messageId);
-            } else if (result.queued) {
-              console.log('⏳ Message queued for sync (will retry):', messageId);
-            }
-          })();
-        }
+        // Save to Supabase with sync queue fallback (backup).
+        // Use a merged snapshot — `conversations` from this closure is stale after setState.
+        const conversationMergedForSync: Conversation = {
+          ...conversation,
+          messages: [...(conversation.messages || []), newMessage],
+          lastMessageAt: newMessage.timestamp,
+          isReadBySeller:
+            currentUser.role === 'seller'
+              ? true
+              : currentUser.role === 'customer'
+                ? false
+                : conversation.isReadBySeller,
+          isReadByCustomer:
+            currentUser.role === 'customer'
+              ? true
+              : currentUser.role === 'seller'
+                ? false
+                : conversation.isReadByCustomer,
+        };
+        (async () => {
+          const result = await saveConversationWithSync(conversationMergedForSync);
+          if (result.synced) {
+            console.log('✅ Conversation synced to Supabase:', conversationId);
+          } else if (result.queued) {
+            console.log('⏳ Conversation queued for sync (will retry):', conversationId);
+          }
+        })();
+
+        (async () => {
+          const result = await addMessageWithSync(conversationId, newMessage);
+          if (result.synced) {
+            console.log('✅ Message synced to Supabase:', messageId);
+          } else if (result.queued) {
+            console.log('⏳ Message queued for sync (will retry):', messageId);
+          }
+        })();
 
         // Create notification for the recipient
         // CRITICAL FIX: Normalize recipient email to ensure proper matching
