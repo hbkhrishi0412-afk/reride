@@ -460,6 +460,10 @@ const authApi = async (body: any): Promise<any> => {
                 method: 'POST',
                 skipAuth: true,
                 body: JSON.stringify(body),
+                signal:
+                    typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+                        ? AbortSignal.timeout(45_000)
+                        : undefined,
             });
             
             // Handle rate limiting (429) - don't retry immediately, wait and use fallback

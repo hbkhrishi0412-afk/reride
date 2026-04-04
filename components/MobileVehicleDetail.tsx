@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle, ProsAndCons, User } from '../types';
@@ -8,6 +8,7 @@ import { MobileImageGallery } from './MobileImageGallery';
 import { MobileShareSheet } from './MobileShareSheet';
 import { MobileEMICalculator } from './MobileEMICalculator';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
+import { scrollAppToTop } from '../utils/scrollAppToTop';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -129,6 +130,17 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
     const list = Array.isArray(recommendations) ? recommendations : [];
     return list.filter(rec => rec.id !== safeVehicle.id).slice(0, 3);
   }, [recommendations, safeVehicle.id]);
+
+  useEffect(() => {
+    setActiveTab('overview');
+    setShowGallery(false);
+    setShowShareSheet(false);
+    setShowEMICalculator(false);
+    setProsAndCons(null);
+    setIsGeneratingProsCons(false);
+    scrollAppToTop();
+    requestAnimationFrame(() => scrollAppToTop());
+  }, [vehicle.id]);
 
   // Calculate EMI for display
   const baseEMI = useMemo(() => {

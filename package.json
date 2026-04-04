@@ -31,6 +31,7 @@
     "test-categories:local": "node scripts/test-category-sync.js http://localhost:5173",
     "db:verify": "node verify-production-setup.js",
     "db:setup": "node scripts/setup-database-collections.js",
+    "repair:conversation-sellers": "node scripts/repair-conversations-seller-id.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

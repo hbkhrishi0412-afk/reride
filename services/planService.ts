@@ -41,16 +41,39 @@ const getPlanModel = async () => {
   return planModelPromise;
 };
 
-const normalizePlan = (raw: any): PlanDetails => ({
-    id: (String(raw?.id || raw?.planId || 'free') as SubscriptionPlan),
-    name: String(raw?.name || 'Custom Plan'),
-    price: Number(raw?.price || 0),
-    features: Array.isArray(raw?.features) ? raw.features.map(String) : [],
-    listingLimit: Number(raw?.listingLimit || 0),
-    featuredCredits: Number(raw?.featuredCredits || 0),
-    freeCertifications: Number(raw?.freeCertifications || 0),
-    isMostPopular: Boolean(raw?.isMostPopular),
-});
+function parseListingLimit(
+    raw: unknown,
+    fallback: number | 'unlimited'
+): number | 'unlimited' {
+    if (raw === 'unlimited' || String(raw).toLowerCase() === 'unlimited') {
+        return 'unlimited';
+    }
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+    return fallback;
+}
+
+const normalizePlan = (raw: any): PlanDetails => {
+    const id = String(raw?.id || raw?.planId || 'free') as SubscriptionPlan;
+    const base = PLAN_DETAILS[id];
+    const fallbackLimit = base?.listingLimit ?? 1;
+    return {
+        id,
+        name: String(raw?.name || base?.name || 'Custom Plan'),
+        price: Number(raw?.price ?? base?.price ?? 0),
+        features: Array.isArray(raw?.features)
+            ? raw.features.map(String)
+            : base?.features ?? [],
+        listingLimit: parseListingLimit(raw?.listingLimit, fallbackLimit),
+        featuredCredits: Number(
+            raw?.featuredCredits ?? base?.featuredCredits ?? 0
+        ),
+        freeCertifications: Number(
+            raw?.freeCertifications ?? base?.freeCertifications ?? 0
+        ),
+        isMostPopular: Boolean(raw?.isMostPopular ?? base?.isMostPopular),
+    };
+};
 
 export const planService = {
     // Get plan details with any updates applied
@@ -60,7 +83,27 @@ export const planService = {
             try {
                 const allPlans = await planService.getAllPlans();
                 const match = allPlans.find((p) => p.id === planId);
-                return match || basePlan;
+                if (!match) return basePlan;
+                // API/DB can store listingLimit 0; never replace catalog defaults with invalid limits.
+                const lim = match.listingLimit;
+                const limitOk =
+                    lim === 'unlimited' ||
+                    (typeof lim === 'number' && lim > 0);
+                if (limitOk) return match;
+                if (!basePlan) return match;
+                return {
+                    ...basePlan,
+                    ...match,
+                    listingLimit: basePlan.listingLimit,
+                    featuredCredits:
+                        match.featuredCredits > 0
+                            ? match.featuredCredits
+                            : basePlan.featuredCredits,
+                    freeCertifications:
+                        match.freeCertifications > 0
+                            ? match.freeCertifications
+                            : basePlan.freeCertifications,
+                };
             } catch {
                 return basePlan;
             }

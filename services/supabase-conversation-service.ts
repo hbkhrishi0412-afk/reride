@@ -201,10 +201,12 @@ export const supabaseConversationService = {
   async update(id: string, updates: Partial<Conversation>): Promise<void> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     
-    // First, get existing conversation to merge metadata (messages) properly
-    const { data: existingConversation, error: fetchError } = await supabase
+    // Load full row — partial updates (e.g. addMessage) must merge with existing data.
+    // conversationToSupabaseRow() defaults missing fields to null/false; writing that row would
+    // wipe seller_id/customer_id and break seller inbox + notifications.
+    const { data: existingRow, error: fetchError } = await supabase
       .from('conversations')
-      .select('metadata')
+      .select('*')
       .eq('id', id)
       .single();
     
@@ -218,48 +220,36 @@ export const supabaseConversationService = {
       throw new Error(`Failed to fetch existing conversation: ${fetchError.message}`);
     }
     
-    if (!existingConversation) {
+    if (!existingRow) {
       throw new Error(`Conversation not found: ${id}`);
     }
+
+    const existingConv = supabaseRowToConversation(existingRow);
+    const merged: Conversation = {
+      ...existingConv,
+      ...updates,
+      messages:
+        updates.messages !== undefined
+          ? (Array.isArray(updates.messages) ? updates.messages : [])
+          : existingConv.messages,
+    };
     
-    // Convert updates to row format (isUpdate=true to preserve created_at and set updated_at)
-    const row = conversationToSupabaseRow(updates, true); // true = update operation
+    // Convert merged conversation to row format (isUpdate=true to preserve created_at and set updated_at)
+    const row = conversationToSupabaseRow(merged, true); // true = update operation
     
     // Remove id from updates (don't update the id field)
     delete row.id;
     
     // Remove created_at from updates (preserve original creation timestamp)
     delete row.created_at;
-    
-    // CRITICAL: Merge metadata (messages) instead of replacing it
-    // This preserves existing messages when updating other conversation fields
-    const existingMessages = existingConversation?.metadata?.messages || [];
-    
-    if (updates.messages !== undefined) {
-      // Messages are being updated - use the provided messages array
-      // This handles both adding new messages and replacing the entire array
-      if (!row.metadata) {
-        row.metadata = {};
-      }
-      row.metadata.messages = Array.isArray(updates.messages) ? updates.messages : [];
-    } else {
-      // No messages in updates - preserve existing messages
-      // Ensure metadata object exists to store messages
-      if (!row.metadata) {
-        row.metadata = {};
-      }
-      // Preserve existing messages
-      row.metadata.messages = existingMessages;
-      
-      // Preserve any other metadata fields that might exist
-      if (existingConversation?.metadata) {
-        Object.keys(existingConversation.metadata).forEach(key => {
-          if (key !== 'messages' && !row.metadata![key]) {
-            row.metadata![key] = existingConversation.metadata![key];
-          }
-        });
-      }
-    }
+
+    // Preserve extra metadata keys not modeled on Conversation (e.g. future fields)
+    const existingMeta = (existingRow as { metadata?: Record<string, unknown> }).metadata || {};
+    row.metadata = {
+      ...existingMeta,
+      ...(row.metadata || {}),
+      messages: merged.messages,
+    };
     
     // Always ensure messages array exists (even if empty)
     if (row.metadata && !row.metadata.messages) {
@@ -482,12 +472,22 @@ export const supabaseConversationService = {
     
     const updatedMessages = [...(conversation.messages || []), message];
     console.log('💾 Supabase: Updating conversation with', updatedMessages.length, 'messages');
+
+    const readPatch: Partial<Conversation> = {};
+    if (message.sender === 'seller') {
+      readPatch.isReadBySeller = true;
+      readPatch.isReadByCustomer = false;
+    } else if (message.sender === 'user') {
+      readPatch.isReadBySeller = false;
+      readPatch.isReadByCustomer = true;
+    }
     
     try {
       await this.update(conversationId, {
         messages: updatedMessages,
         lastMessageAt: message.timestamp,
         lastMessage: message.text,
+        ...readPatch,
       });
       console.log('✅ Supabase: Message added successfully');
     } catch (error) {

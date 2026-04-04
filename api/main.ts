@@ -7606,11 +7606,13 @@ async function handlePlans(req: VercelRequest, res: VercelResponse, _options: Ha
     };
 
     const toListingLimit = (value: unknown, fallback: number | 'unlimited'): number | 'unlimited' => {
-      if (value === 'unlimited' || value === 'unlimited') {
+      if (value === 'unlimited' || String(value).toLowerCase() === 'unlimited') {
         return 'unlimited';
       }
       const n = Number(value);
-      return Number.isFinite(n) ? n : (typeof fallback === 'number' ? fallback : 0);
+      // Stored 0 or invalid should not override catalog defaults (fixes "1 / 0" on dashboard).
+      if (Number.isFinite(n) && n > 0) return n;
+      return fallback;
     };
 
     const toPlanDetails = (id: string, row: Record<string, unknown>) => {
