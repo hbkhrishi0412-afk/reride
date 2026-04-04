@@ -24,14 +24,18 @@ export function getUpstashRatelimit(): Ratelimit | null {
   if (ratelimit) return ratelimit;
   const redis = getRedis();
   if (!redis) return null;
-  ratelimit = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(
-      process.env.RATE_LIMIT_MAX_REQUESTS ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) : 1000,
-      '15 m'
-    ),
-    analytics: true,
-  });
+  try {
+    ratelimit = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(
+        process.env.RATE_LIMIT_MAX_REQUESTS ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) : 1000,
+        '15 m'
+      ),
+      analytics: true,
+    });
+  } catch {
+    return null;
+  }
   return ratelimit;
 }
 

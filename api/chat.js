@@ -183,7 +183,7 @@ export async function handleChat(req, res) {
   // We need to adapt the router to work with Vercel's request/response
   return new Promise((resolve, reject) => {
     try {
-      router(req as any, res as any, (err?: any) => {
+      router(req, res, (err) => {
         if (err) {
           reject(err);
         } else {

@@ -9,7 +9,7 @@ import {
 } from './shared';
 import { verifyToken, hashPassword, type TokenPayload } from '../../utils/security.js';
 import { logSecurity, logError, logInfo } from '../../utils/logger.js';
-import { VehicleCategory } from '../../types.js';
+import { VehicleCategory } from '../../vehicle-category.js';
 import type { User as UserType, Vehicle as VehicleType } from '../../types.js';
 import { randomBytes } from 'crypto';
 

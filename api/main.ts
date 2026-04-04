@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomBytes } from 'crypto';
 import { PLAN_DETAILS } from '../constants/plans.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
-import { VehicleCategory } from '../types.js';
+import { VehicleCategory } from '../vehicle-category.js';
 // Supabase services
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import { supabaseVehicleService } from '../services/supabase-vehicle-service.js';
@@ -5094,7 +5094,7 @@ async function getFallbackVehicles(): Promise<VehicleType[]> {
       displacement: '1197 cc',
       groundClearance: '163 mm',
       bootSpace: '268 litres'
-    } satisfies VehicleType
+    } as VehicleType
   ];
 }
 

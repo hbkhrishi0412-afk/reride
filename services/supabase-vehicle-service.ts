@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
 import type { Vehicle } from '../types.js';
-import { VehicleCategory } from '../types.js';
+import { VehicleCategory } from '../vehicle-category.js';
 import { CITY_MAPPING } from '../utils/cityMapping.js';
 import { HOME_DISCOVERY_CITY_ORDER } from '../constants/homeDiscovery.js';
 

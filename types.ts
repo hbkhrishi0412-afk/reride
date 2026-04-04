@@ -3,14 +3,7 @@
 import React from 'react';
 import type { VehicleCategoryData } from './vehicleDataTypes';
 
-export enum VehicleCategory {
-  FOUR_WHEELER = 'four-wheeler',
-  TWO_WHEELER = 'two-wheeler',
-  THREE_WHEELER = 'three-wheeler',
-  COMMERCIAL = 'commercial',
-  FARM = 'farm',
-  CONSTRUCTION = 'construction'
-}
+export { VehicleCategory } from './vehicle-category.js';
 
 /** Lightweight counts for home discovery (from GET /api/vehicles?aggregate=storefront). */
 export interface StorefrontDiscoveryAggregates {
