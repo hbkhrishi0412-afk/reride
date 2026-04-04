@@ -7,7 +7,11 @@
 
 import type { Conversation, ChatMessage, Notification } from '../types';
 import { addMessageToConversation, saveConversationToSupabase } from './conversationService';
-import { getMobileLocalApiOrigin, isLocalDevApiReachable } from '../utils/apiConfig';
+import {
+  getMobileLocalApiOrigin,
+  isLocalDevApiReachable,
+  isLocalSocketIoEnvironment,
+} from '../utils/apiConfig';
 
 interface SocketInstance {
   on(event: string, callback: (data: any) => void): void;
@@ -80,13 +84,11 @@ class RealtimeChatService {
     this.isConnecting = true;
 
     try {
-      // Only use WebSocket in development (local server)
-      // In production, we'll use Supabase real-time subscriptions
-      const isDevelopment =
-        (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) ||
-        process.env.NODE_ENV === 'development';
+      // Local Node Socket.io only when the page can reach the dev API (not Android APK / WebViewAssetLoader).
+      // Vite sets DEV=true for `build --mode development`; that must not imply localhost:3001 on a device.
+      const useLocalSocketIo = isLocalSocketIoEnvironment();
 
-      if (isDevelopment) {
+      if (useLocalSocketIo) {
         const disableSocket =
           typeof import.meta !== 'undefined' &&
           String((import.meta as any).env?.VITE_DISABLE_DEV_SOCKET || '').toLowerCase() === 'true';
