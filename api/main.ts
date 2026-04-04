@@ -7578,19 +7578,41 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
 ) {
+  // Apply CORS headers FIRST, before anything else, so they're present on all responses
+  // including error responses from unhandled exceptions or module init failures.
+  try {
+    attachApiCors(req, res);
+  } catch {
+    // Inline minimal CORS if the helper fails (e.g. security-config module crashed)
+    const rawOrigin = req.headers.origin;
+    const origin = typeof rawOrigin === 'string' ? rawOrigin : Array.isArray(rawOrigin) ? rawOrigin[0] : undefined;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, HEAD');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token, X-App-Client, Accept, Accept-Language, If-None-Match');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      res.setHeader('Vary', 'Origin');
+    }
+  }
+
+  // Handle CORS preflight at the top level so OPTIONS never falls through to
+  // mainHandler (which may throw during module init / Supabase connect).
+  if (req.method === 'OPTIONS' || req.method === 'HEAD') {
+    if (req.method === 'HEAD') {
+      res.setHeader('Content-Length', '0');
+    }
+    return res.status(200).end();
+  }
+
   try {
     return await mainHandler(req, res);
   } catch (error) {
     // Catch any errors that occur during handler initialization or module loading
     logError('❌ Fatal error in API handler:', error);
     
-    // Ensure response headers are set
+    // CORS headers already set above; just ensure Content-Type is present
     if (!res.headersSent) {
-      try {
-        attachApiCors(req, res);
-      } catch {
-        /* avoid masking original error if CORS helper fails */
-      }
       res.setHeader('Content-Type', 'application/json');
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown fatal error';
