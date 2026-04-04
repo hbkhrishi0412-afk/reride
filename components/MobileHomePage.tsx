@@ -61,6 +61,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   const [carouselIndex, setCarouselIndex] = useState(0);
   /** Tap vs horizontal-scroll: carousel scroll steals small finger movement; track scrollLeft + slop. */
   const touchStartData = useRef<Map<number, { x: number; y: number; time: number; scrollLeft: number }>>(new Map());
+  /** After a carousel tap we navigate on touchend; suppress the follow-up synthetic click (avoids double selectVehicle). */
+  const carouselTapSuppressClickRef = useRef(false);
 
   const publishedVehicles = useMemo(
     () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published' && vehicle.listingType !== 'rental'),
@@ -278,7 +280,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         <div className="px-4 py-6 bg-white">
           <div className="text-center mb-5">
             <div className="flex flex-col items-center gap-3">
-              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 via-orange-500 to-pink-500 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider shadow-lg">
+              <button type="button" className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 via-orange-500 to-pink-500 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider shadow-lg">
                 <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
@@ -288,6 +290,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               <p className="text-gray-600 text-sm leading-relaxed">{t('home.featured.subtitle')}</p>
             </div>
             <button
+              type="button"
               onClick={() => onNavigate(ViewEnum.USED_CARS)}
               className="mt-3 inline-flex items-center gap-2 px-5 py-2 rounded-full border border-purple-600 text-purple-700 font-bold text-sm hover:bg-purple-50 transition-all duration-200 active:scale-95"
             >
@@ -352,6 +355,10 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 ) {
                   e.preventDefault();
                   e.stopPropagation();
+                  carouselTapSuppressClickRef.current = true;
+                  window.setTimeout(() => {
+                    carouselTapSuppressClickRef.current = false;
+                  }, 400);
                   onSelectVehicle?.(vehicle);
                 }
                 
@@ -359,6 +366,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               };
               
               const handleClick = () => {
+                if (carouselTapSuppressClickRef.current) return;
                 onSelectVehicle?.(vehicle);
               };
               
@@ -405,6 +413,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                     
                     {/* Wishlist Button - Premium Style */}
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         onToggleWishlist(vehicle.id);
@@ -468,6 +477,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
             <div className="flex items-center justify-center gap-2 mt-4">
               {displayedFeaturedVehicles.map((_, idx) => (
                 <button
+                  type="button"
                   key={idx}
                   onClick={() => {
                     if (carouselRef.current) {
