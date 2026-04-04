@@ -394,6 +394,61 @@ class DataService {
     }
   }
 
+  /**
+   * Parse GET /users-style JSON. Used for both admin full list and public seller directory.
+   */
+  private extractUsersFromApiResponse(
+    rawResponse:
+      | User[]
+      | { users?: User[]; data?: User[]; success?: boolean; reason?: string }
+      | null
+      | undefined
+  ): User[] {
+    if (!rawResponse || typeof rawResponse !== 'object') return [];
+    if (Array.isArray(rawResponse)) return rawResponse;
+    if ('success' in rawResponse && rawResponse.success === false) return [];
+    if (Array.isArray(rawResponse.users)) return rawResponse.users;
+    if (Array.isArray(rawResponse.data)) return rawResponse.data;
+    return [];
+  }
+
+  /**
+   * Public seller rows (includes `mobile` for listing Call button). Anonymous GET /users returns [];
+   * the API exposes this data at GET /users?role=seller (see api/main.ts handleUsers).
+   */
+  private async fetchPublicSellersForCatalog(): Promise<User[]> {
+    try {
+      const raw = await this.makeApiRequest<
+        User[] | { users?: User[]; data?: User[]; success?: boolean; reason?: string }
+      >('/users?role=seller', {}, 7);
+      const sellers = this.extractUsersFromApiResponse(raw);
+      if (sellers.length > 0) {
+        console.log(
+          `✅ Loaded ${sellers.length} public sellers for listing contact (GET /users?role=seller)`
+        );
+      }
+      return sellers;
+    } catch (e) {
+      console.warn('⚠️ Public sellers fetch failed:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Full user list for admins; otherwise public sellers so vehicle detail can resolve seller phone.
+   */
+  private async resolveProductionUsersFromApi(
+    rawResponse:
+      | User[]
+      | { users?: User[]; data?: User[]; success?: boolean; reason?: string }
+      | null
+      | undefined
+  ): Promise<User[]> {
+    const direct = this.extractUsersFromApiResponse(rawResponse);
+    if (direct.length > 0) return direct;
+    return this.fetchPublicSellersForCatalog();
+  }
+
   /** Normalize GET /vehicles response (array or paginated envelope). */
   private extractVehiclesFromApiResponse(
     response: Vehicle[] | { vehicles?: Vehicle[]; pagination?: { page?: number; limit?: number; total?: number; pages?: number; hasMore?: boolean } }
@@ -923,21 +978,15 @@ class DataService {
     if (cachedUsers.length > 0 && !forceRefresh) {
       // Fetch fresh data in background (don't await)
       this.makeApiRequest<User[] | { users?: User[]; data?: User[]; success?: boolean; reason?: string; diagnostic?: string }>('/users')
-        .then(rawResponse => {
+        .then(async rawResponse => {
           // Handle response
           if (rawResponse && typeof rawResponse === 'object' && 'success' in rawResponse && rawResponse.success === false) {
             console.warn('⚠️ Background user refresh returned error:', rawResponse.reason);
             return;
           }
-          
-          const users = Array.isArray(rawResponse)
-            ? rawResponse
-            : Array.isArray(rawResponse?.users)
-              ? rawResponse.users
-              : Array.isArray(rawResponse?.data)
-                ? rawResponse.data
-                : [];
-          
+
+          const users = await this.resolveProductionUsersFromApi(rawResponse);
+
           if (Array.isArray(users) && users.length >= 0) {
             this.setLocalStorageData(cacheKey, users);
             console.log(`✅ Background refresh: Updated cache with ${users.length} users`);
@@ -1021,14 +1070,8 @@ class DataService {
         throw new Error(errorReason);
       }
       
-      const users = Array.isArray(rawResponse)
-        ? rawResponse
-        : Array.isArray(rawResponse?.users)
-          ? rawResponse.users
-          : Array.isArray(rawResponse?.data)
-            ? rawResponse.data
-            : [];
-      
+      const users = await this.resolveProductionUsersFromApi(rawResponse);
+
       // Validate response is an array
       if (!Array.isArray(users)) {
         console.error('❌ getUsers: Invalid response format - expected array, got:', typeof rawResponse, rawResponse);
@@ -1095,6 +1138,11 @@ class DataService {
         if (cachedUsers.length > 0) {
           console.warn('⚠️ Using cached users data due to access denied');
           return cachedUsers;
+        }
+        const sellers = await this.fetchPublicSellersForCatalog();
+        if (sellers.length > 0) {
+          this.setLocalStorageData('reRideUsers_prod', sellers);
+          return sellers;
         }
         return [];
       }
