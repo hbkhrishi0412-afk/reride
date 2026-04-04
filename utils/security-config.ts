@@ -54,29 +54,37 @@ export const SECURITY_CONFIG = {
 
   // CORS Configuration
   CORS: {
-    ALLOWED_ORIGINS: process.env.NODE_ENV === 'production'
-      ? [
-          process.env.ALLOWED_ORIGIN || 'https://www.reride.co.in',
-          'https://www.reride.co.in',
-          'https://reride.co.in',
-          'https://reride-app.vercel.app', // Keep for backward compatibility
-          // Android WebViewAssetLoader origin (used by MainActivity)
-          'https://appassets.androidplatform.net',
-          'https://localhost',             // REQUIRED FOR CAPACITOR ANDROID APP
-          'capacitor://localhost'          // REQUIRED FOR CAPACITOR IOS APP
-        ]
-      : [
-          'http://localhost:3000',
-          'http://localhost:5173',
-          'http://localhost:5174',
-          'https://reride-app.vercel.app',
-          'https://reride--2-.vercel.app',
-          'https://www.reride.co.in',
-          'https://reride.co.in',
-          'https://appassets.androidplatform.net',
-          'https://localhost',
-          'capacitor://localhost'
-        ],
+    // Mobile / WebView shells MUST stay allowlisted even if NODE_ENV is mis-inferred at bundle time.
+    ALLOWED_ORIGINS: (() => {
+      const mobileShellOrigins = [
+        'https://appassets.androidplatform.net',
+        'https://localhost',
+        'http://localhost',
+        'http://127.0.0.1',
+        'https://127.0.0.1',
+        'capacitor://localhost',
+        'ionic://localhost',
+      ] as const;
+      const productionOrigins = [
+        process.env.ALLOWED_ORIGIN || 'https://www.reride.co.in',
+        'https://www.reride.co.in',
+        'https://reride.co.in',
+        'https://reride-app.vercel.app',
+        ...mobileShellOrigins,
+      ];
+      const developmentExtra = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'https://reride--2-.vercel.app',
+        ...mobileShellOrigins,
+      ];
+      const merged =
+        process.env.NODE_ENV === 'production'
+          ? [...productionOrigins]
+          : [...productionOrigins, ...developmentExtra];
+      return [...new Set(merged)];
+    })(),
     ALLOWED_METHODS: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
     ALLOWED_HEADERS: [
       'Content-Type',

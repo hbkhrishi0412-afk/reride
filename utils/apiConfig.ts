@@ -14,6 +14,9 @@
 /** Primary production API host (matches Vercel `PRIMARY_ORIGIN` / live site). */
 const DEFAULT_PRODUCTION_ORIGIN = 'https://www.reride.co.in';
 
+/** Same-project Vercel host (see `security-config` CORS list). Used as last-resort API origin on mobile WebView. */
+const VERCEL_APP_FALLBACK_ORIGIN = 'https://reride-app.vercel.app';
+
 /**
  * `https://reride.co.in` redirects to www; CORS preflight (OPTIONS) cannot follow redirects.
  * Normalize apex → `www` for any env override or absolute URL so Android WebView / Capacitor
@@ -191,6 +194,52 @@ export function isCapacitorNative(): boolean {
   } catch {
   }
   return false;
+}
+
+/**
+ * Optional alternate origin for `DataService` network retries when the primary
+ * `www.reride.co.in` request fails with `TypeError: Failed to fetch` (DNS, TLS, or transient CDN issues).
+ *
+ * - Set `VITE_API_FALLBACK_URL` for a custom mirror.
+ * - Otherwise, on Capacitor / Android WebViewAssetLoader only, defaults to the Vercel deployment
+ *   if the app is still configured to use the canonical production API base (no `VITE_API_URL` override).
+ */
+export function getAlternateApiOriginForFallback(): string | null {
+  const explicit =
+    typeof import.meta !== 'undefined' &&
+    import.meta.env?.VITE_API_FALLBACK_URL &&
+    String(import.meta.env.VITE_API_FALLBACK_URL).trim() !== ''
+      ? normalizeRerideApiHostToWww(
+          String(import.meta.env.VITE_API_FALLBACK_URL).trim().replace(/\/+$/, ''),
+        )
+      : null;
+  if (explicit) return explicit;
+
+  if (typeof window === 'undefined') return null;
+
+  const hl = window.location.hostname.toLowerCase();
+  const mobileShell =
+    isCapacitorNative() ||
+    hl === 'appassets.androidplatform.net' ||
+    hl.includes('appassets.androidplatform.net');
+  if (!mobileShell) return null;
+
+  if (
+    typeof import.meta !== 'undefined' &&
+    import.meta.env?.VITE_API_URL &&
+    String(import.meta.env.VITE_API_URL).trim() !== ''
+  ) {
+    return null;
+  }
+
+  const base = getApiBaseUrl();
+  const canonicalProd = normalizeRerideApiHostToWww(DEFAULT_PRODUCTION_ORIGIN);
+  if (!base || normalizeRerideApiHostToWww(base) !== canonicalProd) {
+    return null;
+  }
+
+  const vercel = normalizeRerideApiHostToWww(VERCEL_APP_FALLBACK_ORIGIN);
+  return vercel === canonicalProd ? null : vercel;
 }
 
 /**

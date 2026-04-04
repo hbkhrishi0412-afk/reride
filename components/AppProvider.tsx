@@ -116,6 +116,28 @@ function normalizeRouterPath(path: string): string {
   return p;
 }
 
+/**
+ * HashRouter should set pathname from the hash, but some Android WebViews briefly report "/"
+ * while `location.hash` already contains #/vehicle/:id. Prefer the hash path when it encodes detail.
+ */
+function getAppPathFromRouter(loc: { pathname?: string }): string {
+  const raw = (loc?.pathname ?? '/') || '/';
+  const p = normalizeRouterPath(raw);
+  if (p.startsWith('/vehicle/')) return p;
+  if (p !== '/' && p !== '') return p;
+  if (typeof window !== 'undefined' && window.location.hash && window.location.hash.length > 1) {
+    try {
+      const fromHash = window.location.hash.replace(/^#/, '').split('?')[0] || '/';
+      if (fromHash.startsWith('/vehicle/')) {
+        return fromHash;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return p;
+}
+
 // Helper function to map URL paths to views (safe for Capacitor/WebView)
 function pathToView(path: string): View {
   if (path == null || typeof path !== 'string') return View.HOME;
@@ -360,6 +382,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   // Flag to prevent navigation loops when handling popstate
   const isHandlingPopStateRef = useRef(false);
+  /** True after navigate(DETAIL) until the router reports /vehicle/:id (HashRouter/WebView can lag one tick). */
+  const expectingVehicleDetailRouteRef = useRef(false);
   /** Prevents double handleLogin when both getSession + onAuthStateChange run after Google OAuth */
   const googleOAuthSyncDoneRef = useRef(false);
   /** One-shot: restore ReRide profile from persisted Supabase Auth session (mobile cold start / cleared app user cache) */
@@ -1112,8 +1136,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // Only clear selectedVehicle if we're NOT preserving it
     // preserveSelectedVehicle is already true when navigating to DETAIL view
-    if (!preserveSelectedVehicle) {
+    if (view === View.DETAIL) {
+      expectingVehicleDetailRouteRef.current = true;
+    } else if (!preserveSelectedVehicle) {
+      expectingVehicleDetailRouteRef.current = false;
       setSelectedVehicle(null);
+      try {
+        sessionStorage.removeItem('selectedVehicle');
+      } catch {
+        /* ignore */
+      }
     }
     
     if (view === View.USED_CARS && currentView !== View.HOME) setSelectedCategory('ALL');
@@ -1341,7 +1373,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // navigation sends users back to HOME instead of vehicle detail.
   useEffect(() => {
     try {
-      const path = normalizeRouterPath((location?.pathname ?? '/') || '/');
+      const path = getAppPathFromRouter(location ?? { pathname: '/' });
       setCurrentView(pathToView(path));
     } catch (error) {
       logDebug('Failed initial URL → view sync:', error);
@@ -1352,13 +1384,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sync React Router location changes with app view state
   // This replaces the manual popstate handler — React Router manages browser history
   useEffect(() => {
-    const path = normalizeRouterPath((location?.pathname ?? '/') || '/');
+    const path = getAppPathFromRouter(location ?? { pathname: '/' });
     const routerState = location?.state as HistoryState | null;
     let newView: View;
     try {
       newView = routerState?.view ?? pathToView(path);
     } catch (_) {
       newView = View.HOME;
+    }
+
+    // HashRouter / Android WebView: location can briefly stay "/" while currentView is already DETAIL
+    // after selectVehicle → navigate(DETAIL). Do not clobber detail with HOME in that window.
+    if (
+      expectingVehicleDetailRouteRef.current &&
+      newView === View.HOME &&
+      (path === '/' || path === '') &&
+      currentView === View.DETAIL
+    ) {
+      try {
+        if (sessionStorage.getItem('selectedVehicle')) {
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
     }
 
     // Prevent loops: only update if the view actually changed
@@ -1373,6 +1422,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Restore selectedVehicle for DETAIL view (catalog + sessionStorage — fixes stale router state after selectVehicle)
     if (newView === View.DETAIL) {
+      expectingVehicleDetailRouteRef.current = false;
       const trySessionStorageForPath = () => {
         try {
           const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
@@ -1425,7 +1475,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // When the catalog finishes loading, resolve /vehicle/:id if the list sync effect ran too early
   useEffect(() => {
     if (currentView !== View.DETAIL) return;
-    const path = normalizeRouterPath((location?.pathname ?? '/') || '/');
+    const path = getAppPathFromRouter(location ?? { pathname: '/' });
     const m = path.match(/\/vehicle\/([^/?#]+)/);
     if (!m) return;
     const id = Number(m[1]);

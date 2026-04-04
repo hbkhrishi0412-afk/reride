@@ -60,13 +60,16 @@ export const MobilePushNotificationManager: React.FC<MobilePushNotificationManag
   // Handle notification clicks from service worker
   useEffect(() => {
     const handleNotificationClick = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'NOTIFICATION_CLICK') {
-        const notificationId = event.data.notificationId;
-        const notification = notifications.find(n => n.id === notificationId);
+      const d = event.data;
+      if (!d || d.type !== 'NOTIFICATION_CLICK') return;
+      const notificationId = d.notificationId;
+      // Defer navigation / state updates off the SW message task (avoids long "message" handler violations).
+      queueMicrotask(() => {
+        const notification = notifications.find((n) => n.id === notificationId);
         if (notification && onNotificationClick) {
           onNotificationClick(notification);
         }
-      }
+      });
     };
 
     navigator.serviceWorker?.addEventListener('message', handleNotificationClick);
