@@ -132,6 +132,25 @@ export function getMobileLocalApiOrigin(): string {
 }
 
 /**
+ * True when the Node dev API (`dev-api-server.js`) responds on `/api/health`.
+ * Used to avoid Socket.io / raw WebSocket retries when only Vite is running.
+ */
+export async function isLocalDevApiReachable(timeoutMs = 2000): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const origin = getMobileLocalApiOrigin();
+    const res = await fetch(`${origin}/api/health`, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Use PC-local API + `.env.development` Supabase when building with
  * `vite build --mode development` and `VITE_MOBILE_LOCAL_DEV=true`.
  * Production store builds use `vite build` (mode production) → live API + `.env.production` Supabase.

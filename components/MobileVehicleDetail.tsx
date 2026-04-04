@@ -335,8 +335,14 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
               </div>
               {safeVehicle.sellerEmail && (
                 <button
-                  onClick={() => onViewSellerProfile(safeVehicle.sellerEmail)}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onViewSellerProfile(safeVehicle.sellerEmail);
+                  }}
                   className="text-sm text-orange-500 font-semibold flex-shrink-0"
+                  style={{ minHeight: '44px', padding: '0 8px' }}
                 >
                   {t('vehicle.detail.viewProfile')}
                 </button>

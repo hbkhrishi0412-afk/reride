@@ -25,6 +25,8 @@ interface ImportMetaEnv {
   readonly VITE_MOBILE_LOCAL_DEV?: string
   /** Port for local dev API (default 3001, same as dev-api-server.js). */
   readonly VITE_LOCAL_API_PORT?: string
+  /** When `true`, skip Socket.io to the local dev API (no console noise if you only run Vite). */
+  readonly VITE_DISABLE_DEV_SOCKET?: string
   readonly VITE_GA_MEASUREMENT_ID?: string
   /** When `messagebot`, phone OTP uses MessageBot SMS + server JWT (see .env.example). Omit or other value = Supabase SMS. */
   readonly VITE_OTP_SMS_PROVIDER?: string

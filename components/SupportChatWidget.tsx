@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { getDevSocketHost } from '../utils/apiConfig';
+import { getMobileLocalApiOrigin, isLocalDevApiReachable } from '../utils/apiConfig';
 
 interface ChatMessage {
   id: string;
@@ -60,40 +60,58 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
   useEffect(() => {
     if (!isOpen) return;
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = process.env.NODE_ENV === 'production'
-      ? 'www.reride.co.in'
-      : getDevSocketHost(3001);
-    const wsUrl = `${wsProtocol}//${wsHost}/chat`;
+    let cancelled = false;
+    let newSocket: WebSocket | null = null;
 
-    const newSocket = new WebSocket(wsUrl);
-
-    newSocket.onopen = () => {
-      setIsConnected(true);
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔧 SupportChat: WebSocket connected');
+    const run = async () => {
+      const isProd = process.env.NODE_ENV === 'production';
+      if (!isProd) {
+        const disable =
+          typeof import.meta !== 'undefined' &&
+          String(import.meta.env?.VITE_DISABLE_DEV_SOCKET || '').toLowerCase() === 'true';
+        if (disable) return;
+        const apiOk = await isLocalDevApiReachable();
+        if (cancelled || !apiOk) return;
       }
-      
-      // Send session initialization
-      if (currentUser) {
-        newSocket.send(JSON.stringify({
-          type: 'init',
-          userId: currentUser.email,
-          userName: currentUser.name,
-          role: currentUser.role
-        }));
-      } else {
-        // Generate anonymous session ID
-        const anonSessionId = `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        setSessionId(anonSessionId);
-        newSocket.send(JSON.stringify({
-          type: 'init',
-          sessionId: anonSessionId
-        }));
-      }
-    };
 
-    newSocket.onmessage = (event) => {
+      // Local dev API is HTTP-only; avoid wss:// to localhost:3001 from an https WebView.
+      const wsUrl = isProd
+        ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//www.reride.co.in/chat`
+        : `${getMobileLocalApiOrigin().replace(/^http/, 'ws')}/chat`;
+
+      if (cancelled) return;
+
+      const sock = new WebSocket(wsUrl);
+      newSocket = sock;
+
+      sock.onopen = () => {
+        setIsConnected(true);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔧 SupportChat: WebSocket connected');
+        }
+
+        if (currentUser) {
+          sock.send(
+            JSON.stringify({
+              type: 'init',
+              userId: currentUser.email,
+              userName: currentUser.name,
+              role: currentUser.role,
+            }),
+          );
+        } else {
+          const anonSessionId = `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          setSessionId(anonSessionId);
+          sock.send(
+            JSON.stringify({
+              type: 'init',
+              sessionId: anonSessionId,
+            }),
+          );
+        }
+      };
+
+      sock.onmessage = (event) => {
       let raw: string;
       try {
         raw = typeof event.data === 'string' ? event.data : String(event.data);
@@ -141,31 +159,34 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
       });
     };
 
-    newSocket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setIsConnected(false);
-    };
+      sock.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setIsConnected(false);
+      };
 
-    newSocket.onclose = (event) => {
-      setIsConnected(false);
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🔧 SupportChat: WebSocket disconnected');
-      }
-      // Attempt to reconnect after 3 seconds
-      setTimeout(() => {
-        if (isOpen) {
-          // Reconnect logic handled by useEffect
+      sock.onclose = () => {
+        setIsConnected(false);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔧 SupportChat: WebSocket disconnected');
         }
-      }, 3000);
+      };
+
+      if (!cancelled) {
+        setSocket(sock);
+      } else {
+        sock.close();
+      }
     };
 
-    setSocket(newSocket);
+    void run();
 
     // Load chat history from API
     loadChatHistory();
 
     return () => {
-      newSocket.close();
+      cancelled = true;
+      newSocket?.close();
+      setSocket(null);
     };
   }, [isOpen, currentUser]);
 

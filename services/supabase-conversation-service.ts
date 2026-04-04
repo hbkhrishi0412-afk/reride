@@ -42,6 +42,25 @@ async function participantIdQueryValues(supabase: SupabaseDb, input: string | nu
   return [...new Set([resolved, t, key].filter(Boolean) as string[])];
 }
 
+/**
+ * Delivery states like `sending` are client-only (Socket.io acks). In production there is no socket,
+ * but we were persisting `sending` — realtime merge prefers the server row, so messages stayed on the clock forever.
+ */
+export function sanitizePersistedChatMessage<T extends { status?: string }>(m: T): T {
+  if (m?.status !== 'sending') {
+    return m;
+  }
+  const { status: _s, ...rest } = m;
+  return rest as T;
+}
+
+export function sanitizePersistedChatMessages<T extends { status?: string }>(messages: T[] | undefined): T[] {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+  return messages.map(sanitizePersistedChatMessage);
+}
+
 /** Map stored user ids back to emails for API/UI (auth compares emails). */
 async function hydrateConversationRows(supabase: SupabaseDb, rows: any[]): Promise<Conversation[]> {
   if (!rows?.length) {
@@ -107,6 +126,8 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   isRead: boolean;
+  /** Client-only; never rely on this field from persisted rows (see sanitizePersistedChatMessage). */
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   type?: 'text' | 'test_drive_request' | 'offer';
   payload?: {
     date?: string;
@@ -152,7 +173,7 @@ export function supabaseRowToConversation(row: any): Conversation {
     vehicleId: row.vehicle_id != null ? Number(row.vehicle_id) : 0,
     vehicleName: row.vehicle_name || '',
     vehiclePrice: row.vehicle_price ? Number(row.vehicle_price) : undefined,
-    messages: (row.metadata?.messages || []) as ChatMessage[],
+    messages: sanitizePersistedChatMessages((row.metadata?.messages || []) as ChatMessage[]),
     lastMessage: row.last_message || undefined,
     lastMessageAt: row.last_message_at || row.lastMessageAt || new Date().toISOString(),
     isReadBySeller: row.is_read_by_seller || false,
@@ -615,7 +636,7 @@ export const supabaseConversationService = {
     
     console.log('📋 Supabase: Current conversation has', conversation.messages?.length || 0, 'messages');
     
-    const updatedMessages = [...(conversation.messages || []), message];
+    const updatedMessages = [...(conversation.messages || []), sanitizePersistedChatMessage(message)];
     console.log('💾 Supabase: Updating conversation with', updatedMessages.length, 'messages');
 
     const readPatch: Partial<Conversation> = {};

@@ -7,7 +7,6 @@ import { View, VehicleCategory as CategoryEnum } from '../types';
 import { getConversations, saveConversations } from '../services/chatService';
 import {
   addMessageWithSync,
-  saveNotificationWithSync,
   getSyncQueueStatus,
   processSyncQueue,
 } from '../services/syncService';
@@ -32,7 +31,7 @@ import { deduplicateRequest } from '../utils/requestDeduplication';
 import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';
 import * as buyerService from '../services/buyerService';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
-import { supabaseRowToConversation } from '../services/supabase-conversation-service';
+import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../services/supabase-conversation-service';
 import { emailToKey } from '../services/supabase-user-service';
 import { isCapacitorNative } from '../utils/apiConfig';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
@@ -50,14 +49,14 @@ function mergeConversationMessagesForRealtime(local: ChatMessage[], remote: Chat
   const byId = new Map<number, ChatMessage>();
   for (const m of remote || []) {
     if (m?.id != null) {
-      byId.set(Number(m.id), m);
+      byId.set(Number(m.id), sanitizePersistedChatMessage(m));
     }
   }
   for (const m of local || []) {
     if (m?.id != null) {
       const k = Number(m.id);
       if (!byId.has(k)) {
-        byId.set(k, m);
+        byId.set(k, sanitizePersistedChatMessage(m));
       }
     }
   }
@@ -145,7 +144,9 @@ function normalizeRouterPath(path: string): string {
 
 /**
  * HashRouter should set pathname from the hash, but some Android WebViews briefly report "/"
- * while `location.hash` already contains #/vehicle/:id. Prefer the hash path when it encodes detail.
+ * while `location.hash` already contains the real route (#/vehicle/:id, #/seller/..., etc.).
+ * Prefer the hash path for any `/...` segment — not only vehicle detail — or seller/deep links
+ * mis-resolve to `/` and the location sync effect clobbers SELLER_PROFILE back to HOME/DETAIL.
  */
 function getAppPathFromRouter(loc: { pathname?: string; hash?: string }): string {
   const raw = (loc?.pathname ?? '/') || '/';
@@ -161,7 +162,7 @@ function getAppPathFromRouter(loc: { pathname?: string; hash?: string }): string
   if (hashStr.length > 1) {
     try {
       const fromHash = hashStr.replace(/^#/, '').split('?')[0] || '/';
-      if (fromHash.startsWith('/vehicle/')) {
+      if (fromHash.startsWith('/') && fromHash.length > 1) {
         return fromHash;
       }
     } catch {
@@ -222,6 +223,30 @@ function pathToView(path: string): View {
   
   // Default fallback
   return View.HOME;
+}
+
+/** Email segment from /seller/:email (excludes /seller/dashboard). */
+function parseSellerEmailFromPath(path: string): string | null {
+  const sellerSeg = path.match(/^\/seller\/(.+)$/i);
+  if (!sellerSeg || sellerSeg[1].toLowerCase() === 'dashboard') return null;
+  try {
+    const email = decodeURIComponent(sellerSeg[1]).toLowerCase().trim();
+    return email || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prefer the URL for public seller routes: history.state.view can lag or be wrong on HashRouter/WebView
+ * while the hash already shows /seller/..., which previously kept the UI on DETAIL or HOME.
+ */
+function resolveViewFromPathAndState(path: string, routerState: HistoryState | null | undefined): View {
+  const pathView = pathToView(path);
+  if (pathView === View.SELLER_PROFILE) {
+    return View.SELLER_PROFILE;
+  }
+  return routerState?.view ?? pathView;
 }
 
 // API response structure for vehicle feature operations
@@ -307,7 +332,7 @@ interface AppContextType {
   handleLogout: () => void;
   handleLogin: (user: User) => void;
   handleRegister: (user: User) => void;
-  navigate: (view: View, params?: { city?: string }) => void;
+  navigate: (view: View, params?: { city?: string; sellerEmail?: string }) => void;
   goBack: (fallbackView?: View) => void;
   refreshVehicles: () => Promise<void>;
   
@@ -1093,46 +1118,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  const navigate = useCallback((view: View, params?: { city?: string }) => {
-    // Don't navigate during popstate sync unless opening a different vehicle (Similar Vehicles on DETAIL).
+  const navigate = useCallback((view: View, params?: { city?: string; sellerEmail?: string }) => {
+    // Don't navigate during popstate sync unless opening a different vehicle (Similar Vehicles on DETAIL),
+    // or opening a public seller profile (must not be blocked — common right after opening a listing on mobile).
     if (isHandlingPopStateRef.current) {
-      if (view !== View.DETAIL) {
+      if (view === View.SELLER_PROFILE) {
+        // allow
+      } else if (view !== View.DETAIL) {
         logDebug('⏸️ Navigation skipped - handling popstate event');
         return;
-      }
-      try {
-        const raw = sessionStorage.getItem('selectedVehicle');
-        if (!raw) {
+      } else {
+        try {
+          const raw = sessionStorage.getItem('selectedVehicle');
+          if (!raw) {
+            logDebug('⏸️ Navigation skipped - handling popstate event');
+            return;
+          }
+          const v = JSON.parse(raw) as { id?: number | string };
+          const targetId = v?.id != null ? Number(v.id) : NaN;
+          if (!Number.isFinite(targetId)) {
+            logDebug('⏸️ Navigation skipped - handling popstate event');
+            return;
+          }
+          const pathNow = getAppPathFromRouter(
+            typeof window !== 'undefined'
+              ? { pathname: window.location.pathname, hash: window.location.hash }
+              : { pathname: '/' },
+          );
+          const m = pathNow.match(/\/vehicle\/([^/?#]+)/);
+          const pathId = m ? Number(m[1]) : NaN;
+          if (Number.isFinite(pathId) && pathId === targetId) {
+            logDebug('⏸️ Navigation skipped - handling popstate event');
+            return;
+          }
+        } catch {
           logDebug('⏸️ Navigation skipped - handling popstate event');
           return;
         }
-        const v = JSON.parse(raw) as { id?: number | string };
-        const targetId = v?.id != null ? Number(v.id) : NaN;
-        if (!Number.isFinite(targetId)) {
-          logDebug('⏸️ Navigation skipped - handling popstate event');
-          return;
-        }
-        const pathNow = getAppPathFromRouter(
-          typeof window !== 'undefined'
-            ? { pathname: window.location.pathname, hash: window.location.hash }
-            : { pathname: '/' },
-        );
-        const m = pathNow.match(/\/vehicle\/([^/?#]+)/);
-        const pathId = m ? Number(m[1]) : NaN;
-        if (Number.isFinite(pathId) && pathId === targetId) {
-          logDebug('⏸️ Navigation skipped - handling popstate event');
-          return;
-        }
-      } catch {
-        logDebug('⏸️ Navigation skipped - handling popstate event');
-        return;
       }
     }
     
     // Prevent infinite redirect loops by checking if we're already on the target view
     // EXCEPTION: Allow navigation to DETAIL view even if already on DETAIL (different vehicle)
+    // EXCEPTION: Allow SELLER_PROFILE when switching to a different dealer (params.sellerEmail)
     if (view === currentView && !params?.city && view !== View.DETAIL) {
-      return; // Already on this view, no need to navigate (except for DETAIL view)
+      if (view === View.SELLER_PROFILE && params?.sellerEmail) {
+        const norm = params.sellerEmail.toLowerCase().trim();
+        const cur = publicSellerProfile?.email?.toLowerCase().trim();
+        if (norm === cur) {
+          return;
+        }
+      } else {
+        return;
+      }
     }
 
     // Update previous view before changing current view
@@ -1369,8 +1407,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         newPath = vehicleForPath?.id != null ? `/vehicle/${vehicleForPath.id}` : '/vehicle';
       } else if (view === View.SELLER_PROFILE) {
-        newPath = publicSellerProfile?.email
-          ? `/seller/${encodeURIComponent(publicSellerProfile.email)}`
+        const emailForPath = (params?.sellerEmail ?? publicSellerProfile?.email ?? '').trim();
+        newPath = emailForPath
+          ? `/seller/${encodeURIComponent(emailForPath)}`
           : '/seller';
       } else if (view === View.CITY_LANDING && params?.city) {
         newPath = `/city/${encodeURIComponent(params.city.toLowerCase().replace(/\s+/g, '-'))}`;
@@ -1407,7 +1446,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // Fallback: at minimum the currentView state is already updated
     }
-  }, [currentView, currentUser, previousView, selectedVehicle, updateSelectedCity, setPreviousView, setSelectedVehicle, setPublicSellerProfile, setInitialSearchQuery, setSelectedCategory, setCurrentView, routerNavigate]);
+  }, [currentView, currentUser, previousView, selectedVehicle, publicSellerProfile, updateSelectedCity, setPreviousView, setSelectedVehicle, setPublicSellerProfile, setInitialSearchQuery, setSelectedCategory, setCurrentView, routerNavigate]);
 
   // Go back using React Router, with fallback to a default view
   const goBack = useCallback((fallbackView?: View) => {
@@ -1469,7 +1508,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     try {
       const path = getAppPathFromRouter(location ?? { pathname: '/' });
-      setCurrentView(pathToView(path));
+      const routerState = location?.state as HistoryState | null;
+      setCurrentView(resolveViewFromPathAndState(path, routerState));
     } catch (error) {
       logDebug('Failed initial URL → view sync:', error);
     }
@@ -1483,7 +1523,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const routerState = location?.state as HistoryState | null;
     let newView: View;
     try {
-      newView = routerState?.view ?? pathToView(path);
+      newView = resolveViewFromPathAndState(path, routerState);
     } catch (_) {
       newView = View.HOME;
     }
@@ -1550,6 +1590,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    // Still on seller profile but URL switched to another dealer — view enum unchanged, so hydrate profile
+    if (newView === currentView && newView === View.SELLER_PROFILE) {
+      const email = parseSellerEmailFromPath(path);
+      if (email) {
+        setPublicSellerProfile((prev) => {
+          if (prev?.email?.toLowerCase().trim() === email) return prev;
+          const match = users.find((u) => u?.email && u.email.toLowerCase().trim() === email);
+          return (
+            match ??
+            ({
+              email,
+              name: 'Seller',
+              mobile: '',
+              role: 'seller',
+              location: '',
+              status: 'active',
+              createdAt: new Date().toISOString(),
+            } as User)
+          );
+        });
+      }
+      return;
+    }
+
     // Prevent loops: only update if the view actually changed
     if (newView === currentView) return;
 
@@ -1607,6 +1671,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Clear seller profile when navigating away
     if (newView !== View.SELLER_PROFILE) {
       setPublicSellerProfile(null);
+    } else {
+      const email = parseSellerEmailFromPath(path);
+      if (email) {
+        setPublicSellerProfile((prev) => {
+          if (prev?.email?.toLowerCase().trim() === email) return prev;
+          const match = users.find((u) => u?.email && u.email.toLowerCase().trim() === email);
+          return (
+            match ??
+            ({
+              email,
+              name: 'Seller',
+              mobile: '',
+              role: 'seller',
+              location: '',
+              status: 'active',
+              createdAt: new Date().toISOString(),
+            } as User)
+          );
+        });
+      }
     }
 
     setCurrentView(newView);
@@ -1621,6 +1705,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentView,
     currentUser,
     vehicles,
+    users,
     selectedVehicle?.id,
   ]);
 
@@ -4657,47 +4742,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
-        // Create notification for the recipient
-        // CRITICAL FIX: Normalize recipient email to ensure proper matching
-        const rawRecipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
-        const recipientEmail = (rawRecipientEmail || '').toLowerCase().trim();
-        const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
-        
-        // Generate a more unique notification ID
-        const notificationId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-        
-        const newNotification: Notification = {
-          id: notificationId,
-          recipientEmail,
-          message: `New message from ${senderName}: ${message.length > 50 ? message.substring(0, 50) + '...' : message}`,
-          targetId: conversationId,
-          targetType: 'conversation',
-          isRead: false,
-          timestamp: new Date().toISOString()
-        };
-
-        // Update notifications separately
-        setNotifications(prevNotifications => {
-          const updatedNotifications = [newNotification, ...prevNotifications];
-          // Save to localStorage
-          try {
-            localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
-          } catch (error) {
-            console.error('Failed to save notifications to localStorage:', error);
-          }
-          
-          // Save to Supabase with sync queue fallback
-          (async () => {
-            const result = await saveNotificationWithSync(newNotification);
-            if (result.synced) {
-              console.log('✅ Notification synced to Supabase:', notificationId);
-            } else if (result.queued) {
-              console.log('⏳ Notification queued for sync (will retry):', notificationId);
-            }
-          })();
-          
-          return updatedNotifications;
-        });
+        // Recipient notifications are created server-side in PUT /api/conversations (see api/main.ts).
+        // POST /api/notifications only allows creating rows for the authenticated user — do not duplicate here.
       } catch (error) {
         console.error('Error in sendMessage:', error);
         addToast(t('toast.failedSendMessageGeneric'), 'error');
@@ -4785,55 +4831,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           await addMessageWithSync(conversationId, newMessage);
         }
 
-        // Create notification for the recipient using the conversation we found
-        // CRITICAL FIX: Normalize recipient email to ensure proper matching
-        const rawRecipientEmail = currentUser.role === 'seller' ? conversation.customerId : conversation.sellerId;
-        const recipientEmail = (rawRecipientEmail || '').toLowerCase().trim();
-        const senderName = currentUser.role === 'seller' ? 'Seller' : conversation.customerName;
-        
-        // Create appropriate notification message
-        let notificationMessage = '';
-        if (type === 'offer' && payload?.offerPrice) {
-          notificationMessage = `New offer from ${senderName}: ₹${payload.offerPrice.toLocaleString()}`;
-        } else {
-          notificationMessage = `New message from ${senderName}: ${messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText}`;
-        }
-        
-        // Generate a more unique notification ID
-        const notificationId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-        
-        const newNotification: Notification = {
-          id: notificationId,
-          recipientEmail,
-          message: notificationMessage,
-          targetId: conversationId,
-          targetType: 'conversation',
-          isRead: false,
-          timestamp: new Date().toISOString()
-        };
-
-        // Update notifications separately
-        setNotifications(prevNotifications => {
-          const updatedNotifications = [newNotification, ...prevNotifications];
-          // Save to localStorage
-          try {
-            localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
-          } catch (error) {
-            console.error('Failed to save notifications to localStorage:', error);
-          }
-          
-          // Save to Supabase with sync queue fallback - wait for completion
-          (async () => {
-            const result = await saveNotificationWithSync(newNotification);
-            if (result.synced) {
-              console.log('✅ Notification synced to Supabase:', notificationId);
-            } else if (result.queued) {
-              console.log('⏳ Notification queued for sync (will retry):', notificationId);
-            }
-          })();
-          
-          return updatedNotifications;
-        });
+        // Recipient notifications are created server-side when the message is persisted (PUT /api/conversations).
       } catch (error) {
         console.error('Error in sendMessageWithType:', error);
         addToast(t('toast.failedSendMessageGeneric'), 'error');
