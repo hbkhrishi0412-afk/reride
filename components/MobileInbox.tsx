@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Conversation, User, ChatMessage, Vehicle } from '../types';
 import { findUserByParticipantId, resolveSellerPhoneFromProfileOrListing } from '../utils/chatContact';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
@@ -43,6 +44,11 @@ interface MobileInboxProps {
   onClearChat?: (conversationId: string) => void | Promise<void>;
   /** Counterpart online per conversation id (Supabase presence / Socket.io). */
   chatPeerOnlineByConversationId?: Record<string, boolean>;
+  /**
+   * When set (e.g. seller on mobile), tapping a thread opens the global floating ChatWidget
+   * instead of the built-in full-screen thread (same pattern as the website dashboard).
+   */
+  openThreadInFloatingChat?: (conversation: Conversation) => void;
 }
 
 /**
@@ -72,7 +78,9 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   onConsumedInitialConversation,
   onClearChat,
   chatPeerOnlineByConversationId,
+  openThreadInFloatingChat,
 }) => {
+  const { t } = useTranslation();
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterUnread, setFilterUnread] = useState(false);
@@ -146,6 +154,10 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
 
   const handleSelectConversation = useCallback(
     (conv: Conversation) => {
+      if (openThreadInFloatingChat) {
+        openThreadInFloatingChat(conv);
+        return;
+      }
       setSelectedConv(conv);
       if (inboxRole === 'customer') {
         if (!conv.isReadByCustomer) {
@@ -157,7 +169,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
         onMarkMessagesAsRead(conv.id, 'seller');
       }
     },
-    [inboxRole, onMarkAsRead, onMarkMessagesAsRead]
+    [inboxRole, onMarkAsRead, onMarkMessagesAsRead, openThreadInFloatingChat]
   );
 
   const handleSwipeStart = (e: React.TouchEvent, convId: string) => {
@@ -321,7 +333,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
       // Wait for this thread to appear — do not auto-open another conversation
       return;
     }
-    if (!selectedConv && sortedConversations.length > 0) {
+    if (!openThreadInFloatingChat && !selectedConv && sortedConversations.length > 0) {
       handleSelectConversation(sortedConversations[0]);
     }
   }, [
@@ -330,6 +342,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     initialOpenConversationId,
     onConsumedInitialConversation,
     handleSelectConversation,
+    openThreadInFloatingChat,
   ]);
 
   // Show chat view if conversation is selected (Facebook Messenger–style layout)
@@ -669,6 +682,26 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   // Show conversation list
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
+      <div className="px-4 pt-4 pb-2 bg-gray-50">
+        <h1 className="text-xl font-bold text-gray-900">{t('mobileInbox.title')}</h1>
+        <p className="text-sm text-gray-600 mt-1">
+          {conversations.length > 0 ? (
+            <>
+              {inboxRole === 'seller'
+                ? t('mobileInbox.sellerThreadSummary', { count: conversations.length })
+                : t('mobileInbox.buyerThreadSummary', { count: conversations.length })}
+              {unreadCount > 0
+                ? ` · ${t('mobileInbox.unreadLine', { count: unreadCount })}`
+                : ''}
+            </>
+          ) : (
+            t('mobileInbox.emptySubtitle')
+          )}
+        </p>
+        {openThreadInFloatingChat && inboxRole === 'seller' && conversations.length > 0 && (
+          <p className="text-xs text-gray-500 mt-1.5">{t('mobileInbox.sellerTapForFloatingChat')}</p>
+        )}
+      </div>
       {/* Search Bar */}
       <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
         <div className="relative">

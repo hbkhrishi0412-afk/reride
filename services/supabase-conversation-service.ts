@@ -679,6 +679,75 @@ export const supabaseConversationService = {
     await this.update(conversation.id, patch);
   },
 
+  /**
+   * Update an offer message's payload status and append the responder's chat line in one write.
+   * Required so Supabase Realtime does not overwrite client-only offer state with stale rows.
+   */
+  async respondToOffer(
+    conversationId: string,
+    offerMessageId: number | string,
+    response: 'accepted' | 'rejected' | 'countered',
+    options: {
+      counterPrice?: number;
+      responseMessage: ChatMessage;
+    },
+  ): Promise<Conversation> {
+    const conversation = await this.findById(String(conversationId));
+    if (!conversation) {
+      throw new Error(`Conversation not found: ${conversationId}`);
+    }
+
+    const idMatch = (a: unknown, b: unknown): boolean => {
+      if (a == null || b == null) return false;
+      return String(a) === String(b) || Number(a) === Number(b);
+    };
+
+    let foundOffer = false;
+    const patchedMessages = (conversation.messages || []).map((m) => {
+      if (m?.type === 'offer' && idMatch(m.id, offerMessageId)) {
+        foundOffer = true;
+        const payload = {
+          ...(m.payload || {}),
+          status: response,
+          ...(options.counterPrice != null && Number(options.counterPrice) > 0
+            ? { counterPrice: options.counterPrice }
+            : {}),
+        };
+        return { ...m, payload };
+      }
+      return m;
+    });
+
+    if (!foundOffer) {
+      throw new Error(`Offer message not found: ${offerMessageId}`);
+    }
+
+    const newMsg = sanitizePersistedChatMessage(options.responseMessage);
+    const updatedMessages = [...patchedMessages, newMsg];
+
+    const readPatch: Partial<Conversation> = {};
+    if (newMsg.sender === 'seller') {
+      readPatch.isReadBySeller = true;
+      readPatch.isReadByCustomer = false;
+    } else if (newMsg.sender === 'user') {
+      readPatch.isReadBySeller = false;
+      readPatch.isReadByCustomer = true;
+    }
+
+    await this.update(conversation.id, {
+      messages: updatedMessages,
+      lastMessageAt: newMsg.timestamp,
+      lastMessage: newMsg.text,
+      ...readPatch,
+    });
+
+    const updated = await this.findById(conversation.id);
+    if (!updated) {
+      throw new Error('Conversation not found after offer response');
+    }
+    return updated;
+  },
+
   // Add message to conversation
   async addMessage(conversationId: string, message: ChatMessage): Promise<void> {
     console.log('💾 Supabase: Adding message to conversation:', { conversationId, messageId: message.id });

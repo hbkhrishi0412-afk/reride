@@ -1,4 +1,4 @@
-import type { Conversation } from '../types';
+import type { ChatMessage, Conversation } from '../types';
 import { queueRequest } from '../utils/requestQueue';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
@@ -108,6 +108,41 @@ export async function addMessageToConversation(conversationId: string, message: 
       conversationId,
       messageId: message?.id
     });
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+/** Persist offer accept/reject/counter plus the visible chat line (single DB write). */
+export async function putConversationOfferResponse(
+  conversationId: string,
+  offerMessageId: number | string,
+  response: 'accepted' | 'rejected' | 'countered',
+  responseMessage: ChatMessage,
+  counterPrice?: number,
+): Promise<{ success: boolean; data?: Conversation; error?: string }> {
+  try {
+    const fetchResponse = await authenticatedFetch('/api/conversations', {
+      method: 'PUT',
+      body: JSON.stringify({
+        conversationId,
+        offerResponse: {
+          offerMessageId,
+          response,
+          ...(counterPrice != null && Number(counterPrice) > 0 ? { counterPrice } : {}),
+          responseMessage,
+        },
+      }),
+    });
+    const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(fetchResponse);
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.reason || result.error || `HTTP ${fetchResponse.status}`,
+      };
+    }
+    return { success: true, data: result.data?.data };
+  } catch (error) {
+    console.error('putConversationOfferResponse error:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }

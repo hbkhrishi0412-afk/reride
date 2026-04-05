@@ -3426,39 +3426,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               onMarkMessagesAsRead={onMarkMessagesAsRead}
               onSelectConv={setSelectedConv}
             />
-            {selectedConv && (
-              <div className="bg-white p-6 rounded-lg shadow-md">
-                <ChatWidget
-                  conversation={selectedConv}
-                  currentUserRole="seller"
-                  otherUserName={selectedConv.customerName}
-                  otherUserOnline={chatPeerOnlineByConversationId?.[String(selectedConv.id)]}
-                  callTargetPhone={(() => {
-                    const contact = findUserByParticipantId(allUsers || [], selectedConv.customerId);
-                    return contact?.mobile || (contact as any)?.phone || '';
-                  })()}
-                  callTargetName={selectedConv.customerName}
-                  isInlineLaunch={true}
-                  onStartCall={(phone) => { if (phone) window.open(`tel:${phone}`); }}
-                  onClose={() => setSelectedConv(null)}
-                  onSendMessage={(messageText, type, payload) => {
-                    if (type || payload) {
-                      onSellerSendMessage(selectedConv.id, messageText, type, payload);
-                    } else {
-                      onSellerSendMessage(selectedConv.id, messageText);
-                    }
-                  }}
-                  typingStatus={typingStatus}
-                  onUserTyping={onUserTyping}
-                  onUserStoppedTyping={onUserStoppedTyping}
-                  uploaderEmail={seller.email}
-                  onMarkMessagesAsRead={onMarkMessagesAsRead}
-                  onFlagContent={() => {}}
-                  onOfferResponse={onOfferResponse}
-                  onClearChat={onClearChat}
-                />
-              </div>
-            )}
           </div>
         );
       case 'settings':

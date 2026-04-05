@@ -182,19 +182,8 @@ export const OfferMessage: React.FC<{
     const { offerPrice, counterPrice, status } = msg.payload || {};
 
     const isRecipient = (currentUserRole === 'customer' && msg.sender === 'seller') || (currentUserRole === 'seller' && msg.sender === 'user');
-    const showActions = isRecipient && status === 'pending';
-    
-    // Debug logging
-    console.log('🔧 OfferMessage debug:', {
-        msgId: msg.id,
-        msgSender: msg.sender,
-        currentUserRole,
-        payload: msg.payload,
-        status,
-        isRecipient,
-        showActions,
-        onRespond: typeof onRespond
-    });
+    const statusNorm = (status ?? 'pending').toString().trim().toLowerCase();
+    const showActions = isRecipient && (statusNorm === 'pending' || statusNorm === '');
     
     const statusInfo = {
         pending: { text: "Pending", color: "bg-reride-blue-light text-reride-text-dark dark:bg-reride-blue/50 dark:text-reride-text-dark border-gray-200" },
@@ -223,17 +212,16 @@ export const OfferMessage: React.FC<{
                         )}
                     </div>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap bg-reride-blue-light text-reride-text-dark`}>
-                        {statusInfo[status || 'pending'].text}
+                        {(statusInfo as Record<string, typeof statusInfo.pending>)[statusNorm]?.text ?? statusInfo.pending.text}
                     </span>
                 </div>
                 {showActions && (
                     <div className="mt-3 pt-3 border-t border-gray-200-200 dark:border-gray-200-300 flex gap-2">
                         <button 
+                            type="button"
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log('🔧 Accept button clicked for message:', msg.id);
-                                alert('Accept button clicked!'); // Temporary test
                                 onRespond(msg.id, 'accepted');
                             }} 
                             className="flex-1 text-sm bg-green-500 text-white font-bold py-1.5 px-3 rounded-md hover:bg-green-600 transition-colors cursor-pointer"
@@ -242,11 +230,10 @@ export const OfferMessage: React.FC<{
                             Accept
                         </button>
                         <button 
+                            type="button"
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log('🔧 Reject button clicked for message:', msg.id);
-                                alert('Reject button clicked!'); // Temporary test
                                 onRespond(msg.id, 'rejected');
                             }} 
                             className="flex-1 text-sm bg-red-500 text-white font-bold py-1.5 px-3 rounded-md hover:bg-red-600 transition-colors cursor-pointer"
@@ -256,10 +243,10 @@ export const OfferMessage: React.FC<{
                         </button>
                         {currentUserRole === 'seller' && (
                             <button 
+                                type="button"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    console.log('🔧 Counter button clicked for message:', msg.id);
                                     setIsCounterModalOpen(true);
                                 }} 
                                 className="flex-1 text-sm bg-blue-500 text-white font-bold py-1.5 px-3 rounded-md hover:bg-blue-600 transition-colors"

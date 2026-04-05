@@ -13,6 +13,7 @@
     "dev:fast": "npm run clean && vite --force",
     "build": "vite build && node scripts/verify-build-output.cjs",
     "build:android": "cross-env CAPACITOR_BUILD=1 NODE_ENV=production npm run build",
+    "android:sync": "npm run build:android && npx cap sync android",
     "build:android:dev": "cross-env CAPACITOR_BUILD=1 vite build --mode development && node scripts/verify-build-output.cjs",
     "build:analyze": "ANALYZE=true vite build",
     "build:stats": "ANALYZE=true vite build",

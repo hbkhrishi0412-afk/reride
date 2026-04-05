@@ -7183,12 +7183,22 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       }
     }
 
-    // PUT - Update conversation (add message)
+    // PUT - Update conversation (add message or offer response)
     if (req.method === 'PUT') {
-      const { conversationId, message } = req.body;
-      
-      if (!conversationId || !message) {
-        return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
+      const body = req.body as {
+        conversationId?: string;
+        message?: any;
+        offerResponse?: {
+          offerMessageId?: number | string;
+          response?: 'accepted' | 'rejected' | 'countered';
+          counterPrice?: number;
+          responseMessage?: any;
+        };
+      };
+      const { conversationId, message, offerResponse } = body;
+
+      if (!conversationId) {
+        return res.status(400).json({ success: false, reason: 'Conversation ID is required' });
       }
 
       const conversation = await conversationService.findById(String(conversationId));
@@ -7201,6 +7211,88 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
       const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
       if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
         return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
+      }
+
+      const isOfferPut =
+        offerResponse &&
+        typeof offerResponse === 'object' &&
+        offerResponse.offerMessageId != null &&
+        offerResponse.response != null &&
+        offerResponse.responseMessage != null;
+
+      if (isOfferPut) {
+        const { offerMessageId, response, counterPrice, responseMessage } = offerResponse;
+        try {
+          console.log('💾 API: Offer response on conversation:', { conversationId, offerMessageId, response });
+          const updatedConversation = await conversationService.respondToOffer(
+            String(conversationId),
+            offerMessageId as number | string,
+            response as 'accepted' | 'rejected' | 'countered',
+            {
+              counterPrice: typeof counterPrice === 'number' ? counterPrice : undefined,
+              responseMessage,
+            },
+          );
+
+          const recipientEmail =
+            normalizedAuthEmail === normalizedCustomerId ? normalizedSellerId : normalizedCustomerId;
+          const senderName =
+            normalizedAuthEmail === normalizedCustomerId
+              ? conversation.customerName || 'Customer'
+              : conversation.sellerName || 'Seller';
+          const messageText = typeof responseMessage?.text === 'string' ? responseMessage.text : '';
+          const notificationMessage =
+            messageText.length > 50
+              ? `New message from ${senderName}: ${messageText.substring(0, 50)}...`
+              : `New message from ${senderName}: ${messageText}`;
+          const notificationId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+          try {
+            const supabase = getSupabaseAdminClient();
+            const record: Record<string, unknown> = {
+              user_id: recipientEmail,
+              recipient_email: recipientEmail,
+              type: 'conversation',
+              title: 'New message',
+              message: notificationMessage,
+              read: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              metadata: {
+                conversationId: String(conversationId),
+                targetType: 'conversation',
+                targetId: String(conversationId),
+              },
+            };
+            let inserted = await supabase
+              .from('notifications')
+              .insert({ ...record, id: notificationId })
+              .select('id')
+              .single();
+            if (inserted.error) {
+              const retry = await supabase.from('notifications').insert(record).select('id').single();
+              if (retry.error)
+                console.warn('⚠️ API: Failed to create message notification (non-fatal):', retry.error.message);
+            }
+          } catch (notifErr) {
+            console.warn('⚠️ API: Failed to create message notification (non-fatal):', notifErr);
+          }
+
+          return res.status(200).json({ success: true, data: updatedConversation });
+        } catch (error) {
+          console.error('❌ API: Error applying offer response:', {
+            conversationId,
+            offerMessageId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+          return res.status(500).json({
+            success: false,
+            reason: error instanceof Error ? error.message : 'Failed to apply offer response',
+          });
+        }
+      }
+
+      if (!message) {
+        return res.status(400).json({ success: false, reason: 'Conversation ID and message are required' });
       }
 
       try {
