@@ -1,14 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { Conversation, User, ChatMessage, Vehicle } from '../types';
 import { findUserByParticipantId, resolveSellerPhoneFromProfileOrListing } from '../utils/chatContact';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
 import { View as ViewEnum } from '../types';
 import { useConversationList } from '../hooks/useConversationList';
 import { formatRelativeTime } from '../utils/date';
+import { getThreadLastMessagePreview } from '../utils/messagePreview';
 
 interface MobileInboxProps {
   conversations: Conversation[];
-  onSendMessage: (vehicleId: number, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
+  /** Pass conversation id (string) so seller and customer threads resolve reliably. */
+  onSendMessage: (
+    conversationId: string,
+    messageText: string,
+    type?: ChatMessage['type'],
+    payload?: any
+  ) => void;
   onMarkAsRead: (conversationId: string) => void;
   users: User[];
   vehicles?: Vehicle[];
@@ -18,7 +25,11 @@ interface MobileInboxProps {
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   currentUser: User | null;
+  /** Customer inbox vs seller inbox (buyer threads). */
+  inboxRole?: 'customer' | 'seller';
   onNavigate?: (view: ViewEnum) => void;
+  initialOpenConversationId?: string | null;
+  onConsumedInitialConversation?: () => void;
 }
 
 /**
@@ -41,7 +52,10 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   onFlagContent,
   onOfferResponse,
   currentUser,
-  onNavigate
+  inboxRole = 'customer',
+  onNavigate,
+  initialOpenConversationId = null,
+  onConsumedInitialConversation,
 }) => {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,28 +66,53 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
 
-  const getSellerName = (sellerId: string) => {
+  const getSellerName = useCallback((sellerId: string) => {
     const seller = findUserByParticipantId(users, sellerId);
     return seller?.name || seller?.dealershipName || 'Seller';
-  };
+  }, [users]);
 
   const getSellerPhone = (sellerId: string, vehicleId: number) =>
     resolveSellerPhoneFromProfileOrListing(users, vehicles, sellerId, vehicleId);
+
+  const getCounterpartLabel = useCallback(
+    (c: Conversation) => {
+      if (inboxRole === 'seller') {
+        return (
+          c.customerName?.trim() ||
+          findUserByParticipantId(users, c.customerId)?.name ||
+          'Customer'
+        );
+      }
+      return getSellerName(c.sellerId);
+    },
+    [inboxRole, users, getSellerName]
+  );
 
   const { sortedConversations, filteredConversations, unreadCount } = useConversationList(
     conversations,
     searchQuery,
     filterUnread,
-    getSellerName
+    {
+      viewerRole: inboxRole,
+      getCounterpartLabel,
+    }
   );
 
-  const handleSelectConversation = (conv: Conversation) => {
-    setSelectedConv(conv);
-    if (!conv.isReadByCustomer) {
-      onMarkAsRead(conv.id);
-      onMarkMessagesAsRead(conv.id, 'customer');
-    }
-  };
+  const handleSelectConversation = useCallback(
+    (conv: Conversation) => {
+      setSelectedConv(conv);
+      if (inboxRole === 'customer') {
+        if (!conv.isReadByCustomer) {
+          onMarkAsRead(conv.id);
+          onMarkMessagesAsRead(conv.id, 'customer');
+        }
+      } else if (!conv.isReadBySeller) {
+        onMarkAsRead(conv.id);
+        onMarkMessagesAsRead(conv.id, 'seller');
+      }
+    },
+    [inboxRole, onMarkAsRead, onMarkMessagesAsRead]
+  );
 
   const handleSwipeStart = (e: React.TouchEvent, convId: string) => {
     touchStartX.current = e.touches[0].clientX;
@@ -101,7 +140,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const handleSendMessage = () => {
     if (!messageText.trim() || !selectedConv) return;
     
-    onSendMessage(selectedConv.vehicleId, messageText);
+    onSendMessage(selectedConv.id, messageText.trim());
     setMessageText('');
     
     // Focus back on input
@@ -116,10 +155,24 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   }, [selectedConv?.messages, typingStatus]);
 
   useEffect(() => {
+    if (initialOpenConversationId) {
+      const match = sortedConversations.find((c) => c.id === initialOpenConversationId);
+      if (match) {
+        handleSelectConversation(match);
+        onConsumedInitialConversation?.();
+        return;
+      }
+    }
     if (!selectedConv && sortedConversations.length > 0) {
       handleSelectConversation(sortedConversations[0]);
     }
-  }, [sortedConversations]);
+  }, [
+    sortedConversations,
+    selectedConv,
+    initialOpenConversationId,
+    onConsumedInitialConversation,
+    handleSelectConversation,
+  ]);
 
   // Show chat view if conversation is selected
   if (selectedConv) {
@@ -137,7 +190,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             </svg>
           </button>
           <div className="flex-1">
-            <h2 className="font-semibold text-gray-900">{getSellerName(selectedConv.sellerId)}</h2>
+            <h2 className="font-semibold text-gray-900">{getCounterpartLabel(selectedConv)}</h2>
             <p className="text-sm text-gray-600">{selectedConv.vehicleName}</p>
           </div>
           <button
@@ -154,7 +207,10 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
         </div>
 
         {(() => {
-          const raw = getSellerPhone(selectedConv.sellerId, selectedConv.vehicleId);
+          const raw =
+            inboxRole === 'customer'
+              ? getSellerPhone(selectedConv.sellerId, selectedConv.vehicleId)
+              : findUserByParticipantId(users, selectedConv.customerId)?.mobile || '';
           const href = telHrefFromRawPhone(raw);
           const label = phoneDisplayCompact(raw) || raw;
           if (!href || !raw) return null;
@@ -176,7 +232,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {selectedConv.messages.map((msg, idx) => {
-            const isUser = msg.sender === 'user';
+            const isUser =
+              inboxRole === 'customer' ? msg.sender === 'user' : msg.sender === 'seller';
             const isOffer = msg.type === 'offer';
             
             return (
@@ -307,8 +364,15 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
           </div>
         ) : (
           filteredConversations.map((conv) => {
-            const lastMessage = conv.messages[conv.messages.length - 1];
-            const isUnread = !conv.isReadByCustomer;
+            const lastMessage =
+              conv.messages?.length > 0 ? conv.messages[conv.messages.length - 1] : undefined;
+            const counterpart = getCounterpartLabel(conv);
+            const preview = getThreadLastMessagePreview(lastMessage, {
+              otherLabel: counterpart,
+              viewer: inboxRole,
+            });
+            const isUnread =
+              inboxRole === 'customer' ? !conv.isReadByCustomer : !conv.isReadBySeller;
             const isSwiped = swipedId === conv.id;
 
             return (
@@ -326,12 +390,12 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                   }`}
                 >
                   <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">
-                    {getSellerName(conv.sellerId).charAt(0).toUpperCase()}
+                    {counterpart.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="font-semibold text-gray-900 truncate">
-                        {getSellerName(conv.sellerId)}
+                        {counterpart}
                       </h3>
                       <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
                         {formatRelativeTime(conv.lastMessageAt)}
@@ -342,7 +406,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                     </p>
                     {lastMessage && (
                       <p className={`text-sm truncate ${isUnread ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
-                        {lastMessage.type === 'offer' ? '💰 Offer made' : lastMessage.text}
+                        {preview.prefix && <span className="text-gray-400 font-normal">{preview.prefix}</span>}
+                        {preview.text}
                       </p>
                     )}
                   </div>

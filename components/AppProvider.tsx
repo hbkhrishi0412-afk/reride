@@ -35,6 +35,7 @@ import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../serv
 import { emailToKey } from '../services/supabase-user-service';
 import { isCapacitorNative } from '../utils/apiConfig';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
 import { getSupabaseClient } from '../lib/supabase';
 import { syncWithBackend } from '../services/supabase-auth-service';
 import type { Session } from '@supabase/supabase-js';
@@ -2652,9 +2653,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // Get unread notifications that haven't been shown yet
+    const muted = getEffectiveMuteKeys(currentUser.notificationMuteKeys);
     const unreadNotifications = userNotifications
       .filter(n => !n.isRead && !shownNotificationIdsRef.current.has(n.id))
+      .filter(n => !isStoryMuted(n, muted))
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     // Show browser notification for each new unread notification (when page is hidden)
@@ -4987,7 +4989,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...result.user,
               role: result.user.role || currentUser?.role || 'customer', // Preserve existing role
               // Explicitly include partnerBanks from updates if present (fallback if API response doesn't include it)
-              ...(safeUpdates.partnerBanks !== undefined && { partnerBanks: safeUpdates.partnerBanks })
+              ...(safeUpdates.partnerBanks !== undefined && { partnerBanks: safeUpdates.partnerBanks }),
+              ...(safeUpdates.notificationMuteKeys !== undefined && {
+                notificationMuteKeys: safeUpdates.notificationMuteKeys
+              })
             };
             
             // Update React state - ensure partnerBanks is properly merged
@@ -4998,6 +5003,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (safeUpdates.partnerBanks !== undefined) {
                   merged.partnerBanks = safeUpdates.partnerBanks;
                   console.log('✅ Updated users array with partnerBanks:', { email, partnerBanks: merged.partnerBanks });
+                }
+                if (safeUpdates.notificationMuteKeys !== undefined) {
+                  merged.notificationMuteKeys = safeUpdates.notificationMuteKeys;
                 }
                 return merged;
               }
@@ -5011,7 +5019,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 ...updatedUserData,
                 role: updatedUserData.role || currentUser.role || 'customer', // Ensure role is never lost
                 // Explicitly ensure partnerBanks is included if it was in the update
-                ...(safeUpdates.partnerBanks !== undefined && { partnerBanks: safeUpdates.partnerBanks })
+                ...(safeUpdates.partnerBanks !== undefined && { partnerBanks: safeUpdates.partnerBanks }),
+                ...(safeUpdates.notificationMuteKeys !== undefined && {
+                  notificationMuteKeys: safeUpdates.notificationMuteKeys
+                })
               };
               
               setCurrentUser(mergedUser);

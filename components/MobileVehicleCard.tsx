@@ -35,7 +35,6 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const openDetails = useCallback(() => {
-    if (!onSelect) return;
     suppressClickRef.current = true;
     window.setTimeout(() => {
       suppressClickRef.current = false;
@@ -164,7 +163,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchCancel}
       onKeyDown={(e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && onSelect) {
+        if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           openDetails();
         }

@@ -19,6 +19,8 @@ interface MobileLayoutProps {
   onLogout: () => void;
   wishlistCount?: number;
   inboxCount?: number;
+  /** Unread in-app notifications (Activity); drives header bell dot. */
+  unreadNotificationCount?: number;
 }
 
 /**
@@ -40,7 +42,8 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   currentUser,
   onLogout,
   wishlistCount = 0,
-  inboxCount = 0
+  inboxCount = 0,
+  unreadNotificationCount = 0
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const shouldRenderHeader = showHeader || showMenu;
@@ -99,6 +102,7 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
           currentView={currentView}
           showMenu={showMenu}
           onToggleMenu={() => setShowMenu(!showMenu)}
+          unreadNotificationCount={unreadNotificationCount}
         />
       )}
       

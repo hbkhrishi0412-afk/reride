@@ -9,6 +9,7 @@ import { supabaseVehicleService } from '../services/supabase-vehicle-service.js'
 import { supabaseConversationService } from '../services/supabase-conversation-service.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { verifySupabaseToken } from '../server/supabase-auth.js';
 import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from './vehicleCatalogSupabase.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
@@ -513,8 +514,9 @@ async function mainHandler(
       res.setHeader('X-RateLimit-Limit', config.RATE_LIMIT.MAX_REQUESTS.toString());
     }
 
-    // CSRF validation for state-changing methods (POST, PUT, DELETE)
-    const isStateChanging = req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE';
+    // CSRF validation for state-changing methods (POST, PUT, PATCH, DELETE)
+    const isStateChanging =
+      req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH' || req.method === 'DELETE';
     const appClientHeader = String(
       req.headers['x-app-client'] || req.headers['X-App-Client'] || '',
     ).toLowerCase();
@@ -1057,11 +1059,11 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       }
 
       if (!user) {
-        // Auto-create test users if missing (development/testing only)
-        // SECURITY: Only allow in non-production environments
-        const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
-        
-        if (!isProduction) {
+        // Auto-create test users if missing (local development only — never on Vercel)
+        const allowTestUserBootstrap =
+          process.env.NODE_ENV === 'development' && String(process.env.VERCEL || '') !== '1';
+
+        if (allowTestUserBootstrap) {
           const testUsers = {
             'admin@test.com': {
               password: 'password123',
@@ -1183,36 +1185,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         logWarn('⚠️ Password validation error (treating as invalid):', pwErr);
       }
 
-      // CRITICAL FIX: Handle plain text passwords (migration from old system)
-      // If password validation fails and the stored password is not a bcrypt hash,
-      // check if it's a plain text password that matches, then rehash it
-      if (!isPasswordValid && user.password && user.password.trim() && !user.password.startsWith('$2')) {
-        // Password is stored as plain text - check if it matches
-        if (user.password.trim() === sanitizedData.password.trim()) {
-          logInfo('🔄 Plain text password detected - rehashing and updating user:', normalizedEmail);
-          
-          try {
-            // Rehash the password and update the user
-            const hashedPassword = await hashPassword(sanitizedData.password);
-            await supabaseUserService.update(normalizedEmail, {
-              password: hashedPassword,
-              updatedAt: new Date().toISOString()
-            });
-            
-            // Update the user object with the hashed password
-            user.password = hashedPassword;
-            
-            // Password is now valid (we just verified it matches)
-            isPasswordValid = true;
-            
-            logInfo('✅ Password rehashed successfully for user:', normalizedEmail);
-          } catch (rehashError) {
-            logError('❌ Failed to rehash password:', rehashError);
-            // Continue to return invalid credentials error below
-          }
-        }
-      }
-      
       if (!isPasswordValid) {
         // SECURITY: Log minimal details - don't expose password hash prefixes
         if (process.env.NODE_ENV !== 'production') {
@@ -1567,13 +1539,66 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
 
     // OAUTH LOGIN
     if (action === 'oauth-login') {
-      // REMOVED: firebaseUid requirement - not used in Supabase
-      if (!email || !name || !role) {
+      if (!name || !role) {
         return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
       }
 
-      // Sanitize OAuth data (removed firebaseUid - not used in Supabase)
-      const sanitizedData = await sanitizeObject({ email, name, role, authProvider, avatarUrl });
+      let supabaseUserRecord: { id: string; email?: string | null; phone?: string | null };
+      try {
+        const verified = await verifySupabaseToken(req.headers.authorization);
+        supabaseUserRecord = {
+          id: verified.uid,
+          email: verified.user?.email ?? null,
+          phone: verified.user?.phone ?? null,
+        };
+      } catch {
+        return res.status(401).json({
+          success: false,
+          reason: 'Valid Supabase session required. Sign in again, then retry.',
+        });
+      }
+
+      const bodyUid = String(req.body.firebaseUid ?? req.body.uid ?? '').trim();
+      if (!bodyUid || bodyUid !== supabaseUserRecord.id) {
+        return res.status(403).json({
+          success: false,
+          reason: 'Session does not match this account.',
+        });
+      }
+
+      const tokenEmail = (supabaseUserRecord.email || '').toLowerCase().trim();
+      const bodyEmail = String(email || '').toLowerCase().trim();
+      const derivedPhoneEmail =
+        !tokenEmail && supabaseUserRecord.phone
+          ? `${String(supabaseUserRecord.phone).replace(/\D/g, '')}@phone.reride.co.in`.toLowerCase()
+          : '';
+
+      if (tokenEmail && bodyEmail && tokenEmail !== bodyEmail) {
+        return res.status(403).json({
+          success: false,
+          reason: 'Email does not match signed-in account.',
+        });
+      }
+      if (derivedPhoneEmail && bodyEmail && derivedPhoneEmail !== bodyEmail) {
+        return res.status(403).json({
+          success: false,
+          reason: 'Account identity does not match signed-in session.',
+        });
+      }
+
+      const normalizedEmail = tokenEmail || derivedPhoneEmail || bodyEmail;
+      if (!normalizedEmail) {
+        return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
+      }
+
+      // Sanitize OAuth data (email comes from verified session + rules above)
+      const sanitizedData = await sanitizeObject({
+        email: normalizedEmail,
+        name,
+        role,
+        authProvider,
+        avatarUrl,
+      });
       const mobile = req.body.mobile || '';
       const location = req.body.location || '';
 
@@ -1593,9 +1618,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           reason: `Invalid role for OAuth registration. Allowed roles: ${allowedOauthRoles.join(', ')}` 
         });
       }
-
-      // Normalize email to lowercase for consistent database lookup
-      const normalizedEmail = sanitizedData.email.toLowerCase().trim();
       let user = await userService.findByEmail(normalizedEmail);
       
       if (!user) {
@@ -2510,6 +2532,30 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     try {
       // Supabase connection is handled automatically
       const { email, ...updateData } = req.body;
+
+      // Non-admins cannot self-elevate or mutate privileged fields
+      if (auth.user?.role !== 'admin') {
+        const privilegedKeys = [
+          'role',
+          'status',
+          'isVerified',
+          'subscriptionPlan',
+          'featuredCredits',
+          'usedCertifications',
+          'trustScore',
+          'authProvider',
+          'firebaseUid',
+          'phoneVerified',
+          'emailVerified',
+          'govtIdVerified',
+          'id',
+        ] as const;
+        for (const key of privilegedKeys) {
+          if (key in updateData) {
+            delete (updateData as Record<string, unknown>)[key];
+          }
+        }
+      }
       
       // SECURITY FIX: Authorization Check
       // Only allow updates if user is admin or updating their own profile
@@ -2600,6 +2646,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           updateFields[key] = updateData[key];
         }
       });
+
+      const MAX_NOTIFICATION_MUTE_KEYS = 200;
+      const MAX_NOTIFICATION_MUTE_KEY_LEN = 200;
+      if (updateFields.notificationMuteKeys !== undefined) {
+        const raw = updateFields.notificationMuteKeys;
+        if (!Array.isArray(raw)) {
+          delete updateFields.notificationMuteKeys;
+        } else {
+          updateFields.notificationMuteKeys = raw
+            .filter((x): x is string => typeof x === 'string')
+            .map((x) => x.slice(0, MAX_NOTIFICATION_MUTE_KEY_LEN))
+            .slice(0, MAX_NOTIFICATION_MUTE_KEYS);
+        }
+      }
       
       // CRITICAL: Sync verificationStatus with individual verification fields
       // If verificationStatus is being updated, also update individual fields
@@ -5241,6 +5301,13 @@ async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: 
     });
   }
 
+  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
+    const admin = requireAdmin(req, res, 'New cars catalog');
+    if (!admin) {
+      return;
+    }
+  }
+
   if (req.method === 'GET') {
     const items = await adminReadAll<Record<string, unknown>>(DB_PATHS.NEW_CARS);
     // CRITICAL: Spread data first, then set id to preserve string ID from key
@@ -5813,6 +5880,11 @@ async function handleGemini(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   }
 
+  const geminiAuth = requireAuth(req, res, 'Gemini API');
+  if (!geminiAuth) {
+    return;
+  }
+
   try {
     const { payload } = req.body;
     
@@ -6034,6 +6106,11 @@ async function handleGetFAQs(req: VercelRequest, res: VercelResponse, faqsPath: 
 
 async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
+    const admin = requireAdmin(req, res, 'Create FAQ');
+    if (!admin) {
+      return;
+    }
+
     const faqData = req.body;
     
     if (!faqData.question || !faqData.answer || !faqData.category) {
@@ -6069,6 +6146,11 @@ async function handleCreateFAQ(req: VercelRequest, res: VercelResponse, faqsPath
 
 async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
+    const admin = requireAdmin(req, res, 'Update FAQ');
+    if (!admin) {
+      return;
+    }
+
     const { id } = req.query;
     const updateData = req.body;
 
@@ -6107,6 +6189,11 @@ async function handleUpdateFAQ(req: VercelRequest, res: VercelResponse, faqsPath
 
 async function handleDeleteFAQ(req: VercelRequest, res: VercelResponse, faqsPath: string) {
   try {
+    const admin = requireAdmin(req, res, 'Delete FAQ');
+    if (!admin) {
+      return;
+    }
+
     const { id } = req.query;
 
     if (!id) {
@@ -6371,6 +6458,20 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
   try {
 
     switch (method) {
+      case 'GET':
+      case 'PUT':
+      case 'DELETE': {
+        const sellCarAdmin = requireAdmin(req, res, 'Sell car submissions');
+        if (!sellCarAdmin) {
+          return;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+
+    switch (method) {
       case 'POST':
         const submissionData = {
           ...req.body,
@@ -6601,12 +6702,26 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
       }
 
       try {
+        const createAuth = requireAuth(req, res, 'Create payment request');
+        if (!createAuth) {
+          return;
+        }
+
         const { sellerEmail, amount, plan, packageId } = req.body;
         
         if (!sellerEmail || !amount || !plan) {
           return res.status(400).json({ 
             success: false, 
             reason: 'Seller email, amount, and plan are required' 
+          });
+        }
+
+        const authedEmail = createAuth.user?.email ? createAuth.user.email.toLowerCase().trim() : '';
+        const normSeller = String(sellerEmail).toLowerCase().trim();
+        if (createAuth.user?.role !== 'admin' && authedEmail !== normSeller) {
+          return res.status(403).json({
+            success: false,
+            reason: 'You can only create payment requests for your own seller account.',
           });
         }
 
@@ -6645,12 +6760,26 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
       }
 
       try {
+        const statusAuth = requireAuth(req, res, 'Payment status');
+        if (!statusAuth) {
+          return;
+        }
+
         const { sellerEmail } = req.query;
         
         if (!sellerEmail) {
           return res.status(400).json({ 
             success: false, 
             reason: 'Seller email is required' 
+          });
+        }
+
+        const authedEmail = statusAuth.user?.email ? statusAuth.user.email.toLowerCase().trim() : '';
+        const normSeller = String(sellerEmail).toLowerCase().trim();
+        if (statusAuth.user?.role !== 'admin' && authedEmail !== normSeller) {
+          return res.status(403).json({
+            success: false,
+            reason: 'You can only view payment status for your own account.',
           });
         }
 
@@ -6698,6 +6827,11 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
       }
 
       try {
+        const approveAdmin = requireAdmin(req, res, 'Approve payment');
+        if (!approveAdmin) {
+          return;
+        }
+
         const { paymentRequestId } = req.body;
         
         if (!paymentRequestId) {
@@ -6736,6 +6870,11 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
       }
 
       try {
+        const rejectAdmin = requireAdmin(req, res, 'Reject payment');
+        if (!rejectAdmin) {
+          return;
+        }
+
         const { paymentRequestId, rejectionReason } = req.body;
         
         if (!paymentRequestId) {
@@ -6772,6 +6911,11 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
     // Get all payment requests
     if (req.method === 'GET') {
       try {
+        const listAdmin = requireAdmin(req, res, 'List payment requests');
+        if (!listAdmin) {
+          return;
+        }
+
         const { status } = req.query;
         const allRequests = await adminReadAll<Record<string, unknown>>(paymentRequestsPath);
         let paymentRequests = Object.values(allRequests);

@@ -68,11 +68,16 @@ class RealtimeChatService {
   private onNotificationReceived?: (notification: Notification) => void;
   private pendingMessages: Map<string, ChatMessage[]> = new Map(); // Queue messages when offline
   private userPresence: Map<string, UserPresence> = new Map(); // Track user presence
+  private lastUserEmail = '';
+  private lastUserRole: 'customer' | 'seller' = 'customer';
 
   /**
    * Initialize WebSocket connection for real-time chat
    */
   async connect(userEmail: string, userRole: 'customer' | 'seller'): Promise<boolean> {
+    this.lastUserEmail = userEmail;
+    this.lastUserRole = userRole;
+
     if (this.socket?.connected) {
       return true;
     }
@@ -312,12 +317,22 @@ class RealtimeChatService {
   private syncPendingMessages(): void {
     if (!this.socket?.connected) return;
 
-    // Get all pending messages and send them
+    const userEmail = this.lastUserEmail;
+    const userRole = this.lastUserRole;
+
     for (const [conversationId, messages] of this.pendingMessages.entries()) {
-      messages.forEach(message => {
-        // Messages will be sent via normal sendMessage flow
-        // This is just to clear the queue
-      });
+      for (const message of messages) {
+        const sentMessage: ChatMessage = {
+          ...message,
+          status: 'sent',
+        };
+        this.socket.emit('conversation:message', {
+          conversationId,
+          message: sentMessage,
+          userEmail: userEmail.toLowerCase().trim(),
+          userRole,
+        });
+      }
     }
     this.pendingMessages.clear();
   }

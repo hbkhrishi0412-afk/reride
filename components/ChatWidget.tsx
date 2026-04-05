@@ -30,9 +30,9 @@ const TypingIndicator: React.FC<{ name: string }> = ({ name }) => (
     <div className="flex items-start">
         <div className="rounded-xl px-4 py-3 max-w-lg bg-reride-light-gray dark:bg-brand-gray-700 text-reride-text-dark dark:text-brand-gray-200 flex items-center space-x-2">
             <span className="text-sm font-medium">{name} is typing</span>
-            <div className="w-1.5 h-1.5 bg-white0 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-            <div className="w-1.5 h-1.5 bg-white0 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-            <div className="w-1.5 h-1.5 bg-white0 rounded-full animate-bounce"></div>
+            <div className="w-1.5 h-1.5 bg-brand-gray-500 dark:bg-brand-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+            <div className="w-1.5 h-1.5 bg-brand-gray-500 dark:bg-brand-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+            <div className="w-1.5 h-1.5 bg-brand-gray-500 dark:bg-brand-gray-400 rounded-full animate-bounce"></div>
         </div>
     </div>
 );
@@ -87,18 +87,28 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   useEffect(() => {
     setHasOpenedOnce(false);
     setUserManuallyClosed(false); // Reset manual close flag for new conversation
+    lastMarkReadSignatureRef.current = '';
   }, [conversation.id]);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const lastMarkReadSignatureRef = useRef<string>('');
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversation.messages, typingStatus]);
-  
+
+  const lastMessageId =
+    conversation.messages?.length && conversation.messages.length > 0
+      ? conversation.messages[conversation.messages.length - 1]?.id
+      : undefined;
+
   useEffect(() => {
+    const sig = `${conversation.id}:${String(lastMessageId ?? '')}:${currentUserRole}`;
+    if (lastMarkReadSignatureRef.current === sig) return;
+    lastMarkReadSignatureRef.current = sig;
     onMarkMessagesAsRead(conversation.id, currentUserRole);
-  }, [conversation, onMarkMessagesAsRead, currentUserRole]);
+  }, [conversation.id, currentUserRole, lastMessageId, onMarkMessagesAsRead]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

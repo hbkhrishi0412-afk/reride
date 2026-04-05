@@ -27,6 +27,7 @@ const ICONS = {
   SELL: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
   PRICE: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>,
   SERVICE: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 112 0v1.586a1 1 0 00.293.707l1.414 1.414a1 1 0 00.707.293H17a2 2 0 110 2h-1.586a1 1 0 00-.707.293l-1.414 1.414a1 1 0 00-.293.707V15a2 2 0 11-2 0v-1.586a1 1 0 00-.293-.707l-1.414-1.414a1 1 0 00-.707-.293H7a2 2 0 110-2h1.586a1 1 0 00.707-.293l1.414-1.414A1 1 0 0011 5.586V4z" /></svg>,
+  BELL: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
 };
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavigate, currentUser, onLogout }) => {
@@ -48,6 +49,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
         { id: 'wishlist', title: 'My Wishlist', icon: ICONS.HEART, action: () => { onNavigate(View.WISHLIST); onClose(); }, section: 'Navigation' as const },
         { id: 'compare', title: 'Compare Vehicles', icon: ICONS.COMPARE, action: () => { onNavigate(View.COMPARISON); onClose(); }, section: 'Navigation' as const },
         { id: 'inbox', title: 'My Inbox', icon: ICONS.USER, action: () => { onNavigate(View.INBOX); onClose(); }, section: 'Navigation' as const },
+        { id: 'activity', title: 'Activity & notifications', icon: ICONS.BELL, action: () => { onNavigate(View.NOTIFICATIONS_CENTER); onClose(); }, section: 'Navigation' as const },
       ] : []),
       ...(currentUser?.role === 'seller' ? [
         { id: 'dashboard', title: 'Seller Dashboard', icon: ICONS.DASHBOARD, action: () => { onNavigate(View.SELLER_DASHBOARD); onClose(); }, section: 'Navigation' as const },

@@ -5,6 +5,7 @@ import { OfferModal } from './ReadReceiptIcon.js';
 import InlineChat from './InlineChat.js';
 import { useConversationList } from '../hooks/useConversationList';
 import { formatRelativeTime } from '../utils/date';
+import { getThreadLastMessagePreview } from '../utils/messagePreview';
 
 interface CustomerInboxProps {
   conversations: Conversation[];
@@ -17,6 +18,9 @@ interface CustomerInboxProps {
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
+  /** Open this thread when landing from a notification (Messenger-style deep link). */
+  initialOpenConversationId?: string | null;
+  onConsumedInitialConversation?: () => void;
 }
 
 // Helper function to count unread messages
@@ -27,7 +31,20 @@ const countUnreadMessages = (conversation: Conversation, userRole: 'customer' | 
   return conversation.messages.filter(msg => msg.sender === 'user' && !msg.isRead).length;
 };
 
-const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMessage, onMarkAsRead, users, vehicles, typingStatus, onUserTyping, onMarkMessagesAsRead, onFlagContent, onOfferResponse }) => {
+const CustomerInbox: React.FC<CustomerInboxProps> = ({
+  conversations,
+  onSendMessage,
+  onMarkAsRead,
+  users,
+  vehicles,
+  typingStatus,
+  onUserTyping,
+  onMarkMessagesAsRead,
+  onFlagContent,
+  onOfferResponse,
+  initialOpenConversationId = null,
+  onConsumedInitialConversation,
+}) => {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterUnread, setFilterUnread] = useState(false);
@@ -52,7 +69,10 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
     conversations,
     searchQuery,
     filterUnread,
-    getSellerName
+    {
+      viewerRole: 'customer',
+      getCounterpartLabel: (c) => getSellerName(c.sellerId),
+    }
   );
 
   const handleSelectConversation = useCallback((conv: Conversation) => {
@@ -64,14 +84,28 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
   }, [onMarkAsRead, onMarkMessagesAsRead]);
 
   useEffect(() => {
+    if (initialOpenConversationId) {
+      const match = sortedConversations.find((c) => c.id === initialOpenConversationId);
+      if (match) {
+        handleSelectConversation(match);
+        onConsumedInitialConversation?.();
+        return;
+      }
+    }
     if (!selectedConv && sortedConversations.length > 0) {
-      const firstConv = sortedConversations[0];
-      handleSelectConversation(firstConv);
+      handleSelectConversation(sortedConversations[0]);
     }
-    if (selectedConv && !conversations.find(c => c.id === selectedConv.id)) {
-        setSelectedConv(null);
+    if (selectedConv && !conversations.find((c) => c.id === selectedConv.id)) {
+      setSelectedConv(null);
     }
-  }, [conversations, sortedConversations, selectedConv, handleSelectConversation]);
+  }, [
+    conversations,
+    sortedConversations,
+    selectedConv,
+    handleSelectConversation,
+    initialOpenConversationId,
+    onConsumedInitialConversation,
+  ]);
 
 
   useEffect(() => {
@@ -111,12 +145,11 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
       <div className="mb-6 pb-4 border-b border-gray-200">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold text-gray-900">My Inbox</h1>
+            <h1 className="text-3xl font-extrabold text-gray-900">Messages</h1>
             <p className="text-sm text-gray-600 mt-1">
-              {conversations.length > 0 
-                ? `${conversations.length} ${conversations.length === 1 ? 'conversation' : 'conversations'}${unreadCount > 0 ? ` • ${unreadCount} unread` : ''}`
-                : 'Start a conversation with sellers'
-              }
+              {conversations.length > 0
+                ? `${conversations.length} ${conversations.length === 1 ? 'chat' : 'chats'}${unreadCount > 0 ? ` · ${unreadCount} unread` : ''}`
+                : 'Your chats with sellers appear here'}
             </p>
           </div>
         </div>
@@ -161,14 +194,13 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
               {filteredConversations.length > 0 ? (
                 <ul className="divide-y divide-gray-100">
                   {filteredConversations.map(conv => {
-                    const lastMessage = conv.messages[conv.messages.length - 1];
-                    const unreadCount = countUnreadMessages(conv, 'customer');
-                    const messageText = lastMessage?.type === 'offer'
-                      ? `💰 Offer: ₹${lastMessage.payload?.offerPrice?.toLocaleString('en-IN') || 'N/A'}`
-                      : lastMessage?.type === 'test_drive_request'
-                      ? '🚗 Test Drive Request'
-                      : lastMessage?.text || 'No messages yet.';
-                    
+                    const lastMessage =
+                      conv.messages?.length > 0 ? conv.messages[conv.messages.length - 1] : undefined;
+                    const unreadMsgCount = countUnreadMessages(conv, 'customer');
+                    const preview = getThreadLastMessagePreview(lastMessage, {
+                      otherLabel: getSellerName(conv.sellerId),
+                    });
+
                     const isSelected = selectedConv?.id === conv.id;
                     const isUnread = !conv.isReadByCustomer;
 
@@ -200,31 +232,26 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({ conversations, onSendMess
                               <span className="text-xs text-gray-500 whitespace-nowrap">
                                 {formatRelativeTime(conv.lastMessageAt)}
                               </span>
-                              {unreadCount > 0 && (
+                              {unreadMsgCount > 0 && (
                                 <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold text-white bg-orange-500 rounded-full">
-                                  {unreadCount > 9 ? '9+' : unreadCount}
+                                  {unreadMsgCount > 9 ? '9+' : unreadMsgCount}
                                 </span>
                               )}
                             </div>
                           </div>
-                          <p className={`text-sm truncate ${
-                            isUnread ? 'text-gray-900 font-medium' : 'text-gray-600'
-                          }`}>
-                            {lastMessage && (
-                              lastMessage.sender === 'user' ? (
-                                <span>
-                                  <span className="text-gray-500">You: </span>
-                                  {messageText}
-                                </span>
-                              ) : lastMessage.sender === 'seller' ? (
-                                <span>
-                                  <span className="text-gray-500">{getSellerName(conv.sellerId)}: </span>
-                                  {messageText}
-                                </span>
-                              ) : (
-                                <em className="text-gray-500">{lastMessage.text}</em>
-                              )
-                            )}
+                          <p
+                            className={`text-sm truncate ${
+                              isUnread ? 'text-gray-900 font-medium' : 'text-gray-600'
+                            }`}
+                          >
+                            {lastMessage ? (
+                              <span>
+                                {preview.prefix && (
+                                  <span className="text-gray-500 font-normal">{preview.prefix}</span>
+                                )}
+                                {preview.text}
+                              </span>
+                            ) : null}
                           </p>
                           {conv.vehiclePrice && (
                             <p className="text-xs text-gray-500 mt-1">
