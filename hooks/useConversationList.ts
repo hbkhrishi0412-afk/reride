@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Conversation } from '../types';
+import { filterMessagesForViewer } from '../utils/conversationView';
 
 export type InboxViewerRole = 'customer' | 'seller';
 
@@ -36,8 +37,8 @@ export const useConversationList = (
         const matchesVehicle = conv.vehicleName.toLowerCase().includes(query);
         const counterpart = getCounterpartLabel(conv)?.toLowerCase() ?? '';
         const matchesCounterpart = counterpart.includes(query);
-        const matchesMessage = (conv.messages ?? []).some((msg) =>
-          msg.text?.toLowerCase().includes(query)
+        const matchesMessage = filterMessagesForViewer(conv, viewerRole).some((msg) =>
+          msg.text?.toLowerCase().includes(query),
         );
         return matchesVehicle || matchesCounterpart || matchesMessage;
       });

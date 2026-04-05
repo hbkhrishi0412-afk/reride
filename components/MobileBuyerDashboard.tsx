@@ -4,6 +4,8 @@ import type { User, Vehicle, Conversation } from '../types';
 import { View as ViewEnum } from '../types';
 import { getFirstValidImage } from '../utils/imageUtils';
 import * as buyerService from '../services/buyerService';
+import { getLastVisibleMessageForViewer } from '../utils/conversationView';
+import { getThreadLastMessagePreview } from '../utils/messagePreview';
 
 interface MobileBuyerDashboardProps {
   currentUser: User;
@@ -296,11 +298,14 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                       className="w-full bg-white rounded-xl p-4 shadow-sm text-left active:scale-[0.98] transition-transform"
                     >
                       <p className="font-semibold text-gray-900 mb-1">{conv.vehicleName}</p>
-                      {conv.messages.length > 0 && (
-                        <p className="text-sm text-gray-600 truncate">
-                          {conv.messages[conv.messages.length - 1]?.text || t('buyerDashboard.mobile.noMessagesYet')}
-                        </p>
-                      )}
+                      <p className="text-sm text-gray-600 truncate">
+                        {(() => {
+                          const last = getLastVisibleMessageForViewer(conv, 'customer');
+                          const { prefix, text } = getThreadLastMessagePreview(last, { viewer: 'customer' });
+                          const line = `${prefix}${text}`;
+                          return line === 'No messages yet' ? t('buyerDashboard.mobile.noMessagesYet') : line;
+                        })()}
+                      </p>
                     </button>
                   ))}
                 </div>

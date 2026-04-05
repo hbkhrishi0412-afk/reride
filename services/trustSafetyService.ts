@@ -6,6 +6,7 @@ import type {
   User,
   Conversation,
 } from '../types';
+import { filterMessagesForViewer } from '../utils/conversationView';
 
 // ============================================
 // VERIFICATION MANAGEMENT
@@ -158,7 +159,7 @@ export function calculateResponseStats(
   
   userConversations.forEach(conv => {
     const isSeller = conv.sellerId === userId;
-    const messages = conv.messages;
+    const messages = filterMessagesForViewer(conv, isSeller ? 'seller' : 'customer');
     
     for (let i = 0; i < messages.length - 1; i++) {
       const currentMsg = messages[i];

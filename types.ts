@@ -320,6 +320,10 @@ export interface Conversation {
   isFlagged?: boolean;
   flagReason?: string;
   flaggedAt?: string;
+  /** ISO time: customer chose "clear history" — they no longer see messages at or before this (others unaffected). */
+  customerHistoryClearedAt?: string;
+  /** ISO time: seller chose "clear history" — they no longer see messages at or before this (others unaffected). */
+  sellerHistoryClearedAt?: string;
 }
 
 export interface Toast {

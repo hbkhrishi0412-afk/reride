@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { Conversation, User, ChatMessage, Vehicle } from '../types';
 import { findUserByParticipantId, resolveSellerPhoneFromProfileOrListing } from '../utils/chatContact';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
@@ -6,6 +6,7 @@ import { View as ViewEnum } from '../types';
 import { useConversationList } from '../hooks/useConversationList';
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
+import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
@@ -136,6 +137,11 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
       viewerRole: inboxRole,
       getCounterpartLabel,
     }
+  );
+
+  const visibleThreadMessages = useMemo(
+    () => (selectedConv ? filterMessagesForViewer(selectedConv, inboxRole) : []),
+    [selectedConv, inboxRole],
   );
 
   const handleSelectConversation = useCallback(
@@ -294,7 +300,14 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedConv?.messages, typingStatus]);
+  }, [
+    selectedConv?.id,
+    selectedConv?.messages,
+    selectedConv?.customerHistoryClearedAt,
+    selectedConv?.sellerHistoryClearedAt,
+    inboxRole,
+    typingStatus,
+  ]);
 
   useEffect(() => {
     if (initialOpenConversationId) {
@@ -405,7 +418,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                         setThreadMenuOpen(false);
                         if (
                           window.confirm(
-                            'Clear all messages in this chat? The conversation will stay open.',
+                            'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
                           )
                         ) {
                           void onClearChat(selectedConv.id);
@@ -446,7 +459,15 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
 
         {/* Message thread — Messenger bubble colors */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 space-y-1">
-          {(selectedConv.messages ?? []).map((msg, idx) => {
+          {visibleThreadMessages.length === 0 &&
+            !(typingStatus &&
+              typingStatus.conversationId === selectedConv.id &&
+              typingStatus.userRole === otherPartyRole) && (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center text-gray-500 text-[15px]">
+              No messages yet. Say hello!
+            </div>
+          )}
+          {visibleThreadMessages.map((msg, idx) => {
             const isUser =
               inboxRole === 'customer' ? msg.sender === 'user' : msg.sender === 'seller';
             const isOffer = msg.type === 'offer';
@@ -697,8 +718,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
           </div>
         ) : (
           filteredConversations.map((conv) => {
-            const lastMessage =
-              conv.messages?.length > 0 ? conv.messages[conv.messages.length - 1] : undefined;
+            const lastMessage = getLastVisibleMessageForViewer(conv, inboxRole);
             const counterpart = getCounterpartLabel(conv);
             const preview = getThreadLastMessagePreview(lastMessage, {
               otherLabel: counterpart,
@@ -737,12 +757,10 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                     <p className="text-sm text-gray-600 truncate mb-1">
                       {conv.vehicleName}
                     </p>
-                    {lastMessage && (
-                      <p className={`text-sm truncate ${isUnread ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
-                        {preview.prefix && <span className="text-gray-400 font-normal">{preview.prefix}</span>}
-                        {preview.text}
-                      </p>
-                    )}
+                    <p className={`text-sm truncate ${isUnread ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                      {preview.prefix && <span className="text-gray-400 font-normal">{preview.prefix}</span>}
+                      {preview.text}
+                    </p>
                   </div>
                   {isUnread && (
                     <div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></div>

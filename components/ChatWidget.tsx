@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, memo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import type { Conversation, ChatMessage } from '../types';
 import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon';
@@ -8,6 +8,7 @@ import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { filterMessagesForViewer } from '../utils/conversationView';
 
 interface ChatWidgetProps {
   conversation: Conversation;
@@ -80,6 +81,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const [attachError, setAttachError] = useState<string | null>(null);
   const voiceRecorder = useVoiceRecorder();
 
+  const visibleMessages = useMemo(
+    () => filterMessagesForViewer(conversation, currentUserRole),
+    [conversation, currentUserRole],
+  );
+
   // Detect mobile on mount and resize
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -101,19 +107,19 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
       if (process.env.NODE_ENV === 'development') {
         console.log('🔧 Auto-opening chat - conversation initialized', { 
           conversationId: conversation.id,
-          hasMessages: conversation.messages.length > 0
+          hasMessages: visibleMessages.length > 0
         });
       }
       setIsMinimized(false);
       setHasOpenedOnce(true);
-    } else if (conversation.messages.length > 0 && isMinimized && !userManuallyClosed && !isExiting) {
+    } else if (visibleMessages.length > 0 && isMinimized && !userManuallyClosed && !isExiting) {
       // Also auto-open if new messages arrive while minimized (only if not manually closed and not exiting)
       if (process.env.NODE_ENV === 'development') {
         console.log('🔧 Auto-opening chat - new messages received');
       }
       setIsMinimized(false);
     }
-  }, [conversation.id, conversation.messages.length, hasOpenedOnce, isMinimized, userManuallyClosed, isExiting]);
+  }, [conversation.id, visibleMessages.length, hasOpenedOnce, isMinimized, userManuallyClosed, isExiting]);
   
   // Reset states when conversation changes
   useEffect(() => {
@@ -121,7 +127,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     setUserManuallyClosed(false); // Reset manual close flag for new conversation
     lastMarkReadSignatureRef.current = '';
   }, [conversation.id]);
-  
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -130,11 +136,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [conversation.messages, typingStatus]);
+  }, [visibleMessages, typingStatus]);
 
   const lastMessageId =
-    conversation.messages?.length && conversation.messages.length > 0
-      ? conversation.messages[conversation.messages.length - 1]?.id
+    visibleMessages.length > 0
+      ? visibleMessages[visibleMessages.length - 1]?.id
       : undefined;
 
   useEffect(() => {
@@ -346,9 +352,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     }
   };
 
-  // Calculate unread messages count (messages from other user that are not read)
-  const unreadCount = conversation.messages.filter(msg => {
-    // Only count messages from the other user that haven't been read
+  const unreadCount = visibleMessages.filter((msg) => {
     return msg.sender !== senderType && msg.sender !== 'system' && !msg.isRead;
   }).length;
 
@@ -526,9 +530,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     onClick={(e) => {
                       e.stopPropagation();
                       if (
-                        window.confirm(
-                          'Clear all messages in this chat? The conversation will stay open.',
-                        )
+                    window.confirm(
+                      'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
+                    )
                       ) {
                         void onClearChat(conversation.id);
                       }
@@ -612,7 +616,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
 
         {/* Messages - compact list */}
         <div className="flex-grow p-3 overflow-y-auto bg-gray-50 space-y-3 relative" style={{ backgroundColor: '#F7F7F9' }}>
-            {conversation.messages.length === 0 ? (
+            {visibleMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-500">
                 <div className="text-center mb-6">
                   <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -649,7 +653,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
               </div>
             ) : (
               <>
-                {conversation.messages.map((msg) => (
+                {visibleMessages.map((msg) => (
                   <div key={msg.id} className={`flex flex-col ${msg.sender === senderType ? 'items-end' : 'items-start'}`}>
                       {msg.sender === 'system' && <div className="text-center text-xs text-gray-600 dark:text-gray-400 italic py-2 w-full">{msg.text}</div>}
                       {msg.sender !== 'system' && (
@@ -700,7 +704,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
         </div>
         
         {/* Make an Offer Button - Fixed at bottom when messages exist (outside scrollable area) */}
-        {conversation.messages.length > 0 && currentUserRole === 'customer' && (
+        {visibleMessages.length > 0 && currentUserRole === 'customer' && (
           <div 
             className="px-3 pt-2 pb-1 bg-white border-t border-gray-100"
             style={{
@@ -888,7 +892,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   if (process.env.NODE_ENV === 'development') {
     console.log('🔧 ChatWidget: Rendering chat button and window', { 
       isMinimized, 
-      hasMessages: conversation.messages.length > 0,
+      hasMessages: visibleMessages.length > 0,
       portalTarget: !!portalTarget,
       conversationId: conversation.id
     });

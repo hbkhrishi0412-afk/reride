@@ -2,6 +2,7 @@
 import type { Vehicle, ProsAndCons, Conversation, Suggestion } from '../types';
 import type { SearchFilters } from "../types";
 import { authenticatedFetch } from '../utils/authenticatedFetch';
+import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 
 // NOTE: Do not import `@google/generative-ai` on the client.
 // That library brings Node/crypto/util dependencies which can crash WebView environments
@@ -343,14 +344,19 @@ export const generateSellerSuggestions = async (vehicles: Vehicle[], conversatio
         status: v.status,
     })).filter(v => v.status === 'published');
 
-    const conversationSummary = conversations.map(c => ({
-        id: c.id,
-        vehicleName: c.vehicleName,
-        isReadBySeller: c.isReadBySeller,
-        lastMessageTimestamp: c.lastMessageAt,
-        lastMessageText: (c.messages && c.messages.length > 0) ? (c.messages[c.messages.length - 1].text ?? '') : '',
-        lastMessageSender: (c.messages && c.messages.length > 0) ? (c.messages[c.messages.length - 1].sender ?? 'buyer') : 'buyer',
-    })).filter(c => c.lastMessageSender !== 'seller' && !c.isReadBySeller);
+    const conversationSummary = conversations
+        .map((c) => {
+            const last = getLastVisibleMessageForViewer(c, 'seller');
+            return {
+                id: c.id,
+                vehicleName: c.vehicleName,
+                isReadBySeller: c.isReadBySeller,
+                lastMessageTimestamp: c.lastMessageAt,
+                lastMessageText: last?.text ?? '',
+                lastMessageSender: last?.sender === 'seller' ? 'seller' : 'user',
+            };
+        })
+        .filter((c) => c.lastMessageSender !== 'seller' && !c.isReadBySeller);
 
     const prompt = `You are an expert AI Sales Assistant for a used vehicle marketplace. Your goal is to provide actionable suggestions to a seller to help them sell their vehicles faster and improve customer communication.
 Analyze the following JSON data which contains the seller's current vehicle listings and un-replied customer inquiries.

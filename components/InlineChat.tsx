@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, memo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, memo } from 'react';
 import type { Conversation, ChatMessage } from '../types.js';
 import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon.js';
 import { phoneDisplayCompact } from '../utils/numberUtils.js';
@@ -6,6 +6,7 @@ import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { filterMessagesForViewer } from '../utils/conversationView';
 
 interface InlineChatProps {
   conversation: Conversation;
@@ -71,6 +72,11 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   const [attachError, setAttachError] = useState<string | null>(null);
   const voiceRecorder = useVoiceRecorder();
 
+  const visibleMessages = useMemo(
+    () => filterMessagesForViewer(conversation, currentUserRole),
+    [conversation, currentUserRole],
+  );
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +84,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [conversation.messages, typingStatus]);
+  }, [visibleMessages, typingStatus]);
   
   useEffect(() => {
     onMarkMessagesAsRead(conversation.id, currentUserRole);
@@ -260,7 +266,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
               onClick={() => {
                 if (
                   window.confirm(
-                    'Clear all messages in this chat? The conversation will stay open.',
+                    'Clear chat history for you only? You will not see earlier messages here. The other person still sees the full chat until they clear it.',
                   )
                 ) {
                   void onClearChat(conversation.id);
@@ -295,7 +301,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
 
       {/* Messages */}
       <div className={`flex-grow p-4 overflow-y-auto bg-gray-50 space-y-4 ${height}`}>
-        {conversation.messages.length === 0 ? (
+        {visibleMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center">
               <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -306,7 +312,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
           </div>
         ) : (
           <>
-            {conversation.messages.map((msg) => (
+            {visibleMessages.map((msg) => (
               <div key={msg.id} className={`flex flex-col ${msg.sender === senderType ? 'items-end' : 'items-start'}`}>
                 {msg.sender === 'system' && (
                   <div className="text-center text-xs text-gray-600 italic py-2 w-full">{msg.text}</div>
