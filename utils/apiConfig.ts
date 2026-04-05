@@ -276,6 +276,21 @@ export function isCapacitorNative(): boolean {
 }
 
 /**
+ * Origin for share links and QR codes (`/?seller=...`).
+ * Capacitor’s WebView uses `https://localhost` as the document origin; public URLs must point at
+ * the deployed site (`VITE_PRODUCTION_ORIGIN` / `VITE_APP_URL`, default `https://www.reride.co.in`).
+ */
+export function getPublicWebOriginForShareLinks(): string {
+  if (typeof window === 'undefined') {
+    return getProductionOrigin();
+  }
+  if (isCapacitorNative()) {
+    return getProductionOrigin();
+  }
+  return window.location.origin;
+}
+
+/**
  * Optional alternate origin for `DataService` network retries when the primary
  * `www.reride.co.in` request fails with `TypeError: Failed to fetch` (DNS, TLS, or transient CDN issues).
  *

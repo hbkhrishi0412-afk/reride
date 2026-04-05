@@ -11,6 +11,8 @@ import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
+import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
+import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -52,6 +54,8 @@ interface MobileDashboardProps {
   onBoostListing?: (vehicleId: number, packageId: string) => Promise<void>;
   // Request certification
   onRequestCertification?: (vehicleId: number) => void;
+  /** Opens this buyer thread so the seller can reply (inbox + composer). */
+  onSellerOpenChat?: (conversation: Conversation) => void;
 }
 
 type DashboardTab = 'overview' | 'listings' | 'messages' | 'inquiries' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'profile' | 'addVehicle' | 'editVehicle' | 'notifications';
@@ -88,7 +92,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   onMarkNotificationsAsRead,
   addToast,
   onBoostListing,
-  onRequestCertification
+  onRequestCertification,
+  onSellerOpenChat
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
@@ -757,16 +762,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       ) : (
         <div className="space-y-3">
           {safeConversations.slice(0, 5).map((conversation) => (
-            <div 
-              key={conversation.id} 
-              className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
+            <button
+              key={conversation.id}
+              type="button"
+              className="native-card p-4 cursor-pointer active:opacity-80 native-transition w-full text-left border-0 appearance-none bg-white"
+              style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
               onClick={() => {
-                try {
-                  sessionStorage.setItem('reride_seller_open_inquiries', '1');
-                } catch {
-                  /* ignore */
+                if (onSellerOpenChat) {
+                  onSellerOpenChat(conversation);
+                  return;
                 }
-                onNavigate(ViewEnum.SELLER_DASHBOARD);
+                setActiveTab('messages');
               }}
             >
               <div className="flex items-start gap-4">
@@ -814,19 +820,12 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
           {safeConversations.length > 5 && (
             <button 
               type="button"
-              onClick={() => {
-                try {
-                  sessionStorage.setItem('reride_seller_open_inquiries', '1');
-                } catch {
-                  /* ignore */
-                }
-                onNavigate(ViewEnum.SELLER_DASHBOARD);
-              }}
+              onClick={() => onNavigate(ViewEnum.INBOX)}
               className="w-full py-3.5 text-orange-600 font-semibold native-button native-button-secondary"
             >
               View all messages ({safeConversations.length})
@@ -1164,46 +1163,11 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   };
 
   const handleDownloadQRCode = async () => {
-    try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
-      
-      // Fetch the QR code image
-      const response = await fetch(qrUrl);
-      if (!response.ok) {
-        throw new Error('Failed to fetch QR code');
-      }
-      
-      const blob = await response.blob();
-      
-      // Create a download link
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const fileName = `seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\s+/g, '-')}.png`;
-      
-      link.href = url;
-      link.download = fileName;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      }, 100);
-      
-      addToast?.('QR code downloaded successfully!', 'success');
-    } catch (error) {
-      console.error('Failed to download QR code:', error);
-      addToast?.('Failed to download QR code. Please try again.', 'error');
-      // Fallback: open in new tab if download fails
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
-      window.open(qrUrl, '_blank');
-    }
+    const origin = getPublicWebOriginForShareLinks();
+    const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
+    const fileName = `seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\s+/g, '-')}.png`;
+    await saveQrCodePngFromUrl(qrUrl, fileName, addToast);
   };
 
   const userNotifications = notifications.filter(n => n.recipientEmail === currentUser.email);
@@ -1431,7 +1395,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
         {/* Seller QR Code Section - Only show for sellers when not editing */}
         {isSeller && !isEditingProfile && (() => {
-          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          const origin = getPublicWebOriginForShareLinks();
           const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
           const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}`;
           
@@ -2511,10 +2475,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           {safeConversations.map((conversation) => {
             const vehicle = safeUserVehicles.find(v => v.id === conversation.vehicleId);
             return (
-              <div 
-                key={conversation.id} 
-                className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
-                onClick={() => setActiveTab('messages')}
+              <button
+                key={conversation.id}
+                type="button"
+                className="native-card p-4 cursor-pointer active:opacity-80 native-transition w-full text-left border-0 appearance-none bg-white"
+                style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
+                onClick={() => {
+                  if (onSellerOpenChat) {
+                    onSellerOpenChat(conversation);
+                    return;
+                  }
+                  setActiveTab('messages');
+                }}
               >
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
@@ -2558,7 +2530,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     </div>
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

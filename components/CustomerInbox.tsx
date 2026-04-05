@@ -85,7 +85,8 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
 
   useEffect(() => {
     if (initialOpenConversationId) {
-      const match = sortedConversations.find((c) => c.id === initialOpenConversationId);
+      const want = String(initialOpenConversationId);
+      const match = sortedConversations.find((c) => String(c.id) === want);
       if (match) {
         handleSelectConversation(match);
         onConsumedInitialConversation?.();

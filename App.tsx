@@ -26,6 +26,11 @@ import MobileSearch from './components/MobileSearch';
 import MobilePushNotificationManager from './components/MobilePushNotificationManager';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates } from './types';
 import { countUnreadMessageThreads } from './utils/unreadCounts';
+import {
+  conversationBelongsToCustomer,
+  conversationBelongsToSeller,
+  normalizeInboxRole,
+} from './utils/conversationParticipants';
 import { parseDeepLink } from './utils/mobileFeatures';
 import { planService } from './services/planService';
 import { saveConversationWithSync } from './services/syncService';
@@ -446,8 +451,14 @@ const AppContent: React.FC = () => {
   const [inboxConversationIdToOpen, setInboxConversationIdToOpen] = React.useState<string | null>(null);
 
   const unreadMessagesCount = React.useMemo(
-    () => countUnreadMessageThreads(conversations, currentUser?.role, currentUser?.email),
-    [conversations, currentUser?.role, currentUser?.email]
+    () =>
+      countUnreadMessageThreads(
+        conversations,
+        currentUser?.role,
+        currentUser?.email,
+        currentUser?.id
+      ),
+    [conversations, currentUser?.role, currentUser?.email, currentUser?.id]
   );
 
   const unreadNotificationsCount = React.useMemo(() => {
@@ -468,6 +479,10 @@ const AppContent: React.FC = () => {
       return;
     }
     if (currentUser.role === 'seller') {
+      if (isMobileApp) {
+        navigate(ViewEnum.INBOX);
+        return;
+      }
       try {
         sessionStorage.setItem('reride_seller_open_inquiries', '1');
       } catch {
@@ -475,7 +490,7 @@ const AppContent: React.FC = () => {
       }
       navigate(ViewEnum.SELLER_DASHBOARD);
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, isMobileApp]);
 
   const handleInboxInitialConversationConsumed = React.useCallback(() => {
     setInboxConversationIdToOpen(null);
@@ -1681,7 +1696,12 @@ const AppContent: React.FC = () => {
                     sellerVehiclesFiltered,
                     users || []
                   )}
-                  conversations={(conversations || []).filter(c => c && c.sellerId && currentUser?.email && c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim())}
+                  conversations={(conversations || []).filter(
+                    (c) =>
+                      c &&
+                      currentUser?.email &&
+                      conversationBelongsToSeller(c, currentUser.email, currentUser.id)
+                  )}
                   onNavigate={navigate}
                   onEditVehicle={(vehicle) => {
                     // MobileDashboard handles editing internally
@@ -1958,7 +1978,12 @@ const AppContent: React.FC = () => {
               onMarkAsUnsold={async (vehicleId) => {
                 await updateVehicle(vehicleId, { status: 'published', soldAt: undefined, listingStatus: 'active' });
               }}
-              conversations={(conversations || []).filter(c => c && c.sellerId && currentUser?.email && c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim())}
+              conversations={(conversations || []).filter(
+                    (c) =>
+                      c &&
+                      currentUser?.email &&
+                      conversationBelongsToSeller(c, currentUser.email, currentUser.id)
+                  )}
               onSellerSendMessage={(conversationId, messageText, _type, _payload) => sendMessage(conversationId, messageText)}
               onMarkConversationAsReadBySeller={(conversationId) => markAsRead(conversationId)}
               typingStatus={typingStatus}
@@ -2197,6 +2222,11 @@ const AppContent: React.FC = () => {
               allVehicles={vehicles || []}
               onOfferResponse={onOfferResponse}
               onViewVehicle={selectVehicle}
+              onSellerOpenChat={(conv) => {
+                setInboxConversationIdToOpen(String(conv.id));
+                markAsRead(conv.id);
+                navigate(ViewEnum.INBOX);
+              }}
             />
             </Suspense>
           </DashboardErrorBoundary>
@@ -2428,19 +2458,21 @@ const AppContent: React.FC = () => {
       case ViewEnum.INBOX:
         if (isMobileApp && currentUser) {
           const inboxEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+          const inboxRoleNorm = normalizeInboxRole(currentUser.role);
           const mobileInboxThreads = conversations.filter((c) => {
             if (!c || !inboxEmail) return false;
-            if (currentUser.role === 'seller') {
-              return c.sellerId?.toLowerCase().trim() === inboxEmail;
+            if (inboxRoleNorm === 'seller') {
+              return conversationBelongsToSeller(c, inboxEmail, currentUser.id);
             }
-            return (
-              !!c.customerId && c.customerId.toLowerCase().trim() === inboxEmail
-            );
+            if (inboxRoleNorm === 'customer') {
+              return conversationBelongsToCustomer(c, inboxEmail, currentUser.id);
+            }
+            return false;
           });
           return (
             <MobileInbox
               conversations={mobileInboxThreads}
-              inboxRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
+              inboxRole={normalizeInboxRole(currentUser.role) === 'seller' ? 'seller' : 'customer'}
               initialOpenConversationId={inboxConversationIdToOpen}
               onConsumedInitialConversation={handleInboxInitialConversationConsumed}
               vehicles={vehicles}
@@ -2975,7 +3007,8 @@ const AppContent: React.FC = () => {
     onExportUsers, onExportVehicles, onExportSales, onUpdateVehicleData,
     onToggleVerifiedStatus, onUpdateSupportTicket, onAddFaq, onUpdateFaq,
     onDeleteFaq, onCertificationApproval, onOfferResponse, addSellerRating,
-    sendMessage, setActiveChat, setConversations,     setForgotPasswordRole,
+    sendMessage, setActiveChat, setConversations, setInboxConversationIdToOpen,
+    setForgotPasswordRole,
     requireLoginForDealerInteraction,
     openSellerProfileByEmail,
     isMobileApp,
@@ -3012,18 +3045,23 @@ const AppContent: React.FC = () => {
 
         if (currentUser.role === 'customer') {
           handleCloseChat();
-          setInboxConversationIdToOpen(conversation.id);
+          setInboxConversationIdToOpen(String(conversation.id));
           navigate(ViewEnum.INBOX);
           return;
         }
         if (currentUser.role === 'seller') {
-          setActiveChat(conversation);
-          try {
-            sessionStorage.setItem('reride_seller_open_inquiries', '1');
-          } catch {
-            /* ignore */
+          if (isMobileApp) {
+            setInboxConversationIdToOpen(String(conversation.id));
+            navigate(ViewEnum.INBOX);
+          } else {
+            setActiveChat(conversation);
+            try {
+              sessionStorage.setItem('reride_seller_open_inquiries', '1');
+            } catch {
+              /* ignore */
+            }
+            navigate(ViewEnum.SELLER_DASHBOARD);
           }
-          navigate(ViewEnum.SELLER_DASHBOARD);
         }
         return;
       }
@@ -3043,7 +3081,6 @@ const AppContent: React.FC = () => {
         vehicleMatch
       ) {
         selectVehicle(vehicleMatch);
-        navigate(ViewEnum.DETAIL);
         return;
       }
 
@@ -3079,10 +3116,12 @@ const AppContent: React.FC = () => {
       conversations,
       currentUser,
       handleCloseChat,
+      isMobileApp,
       navigate,
       selectVehicle,
       setActiveChat,
       setConversations,
+      setInboxConversationIdToOpen,
       vehicles,
     ]
   );
@@ -3289,7 +3328,12 @@ const AppContent: React.FC = () => {
                 }), 
                 users || []
               )}
-              conversations={(conversations || []).filter(c => c && c.sellerId && currentUser?.email && c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim())}
+              conversations={(conversations || []).filter(
+                    (c) =>
+                      c &&
+                      currentUser?.email &&
+                      conversationBelongsToSeller(c, currentUser.email, currentUser.id)
+                  )}
               onNavigate={navigate}
               onEditVehicle={(vehicle) => {
                 // Handle edit vehicle
@@ -3400,6 +3444,11 @@ const AppContent: React.FC = () => {
             notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
             onNotificationClick={handleNotificationClick}
             onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+            onSellerOpenChat={(conv) => {
+              setInboxConversationIdToOpen(String(conv.id));
+              markAsRead(conv.id);
+              navigate(ViewEnum.INBOX);
+            }}
           />
         </MobileLayout>
         
@@ -3648,8 +3697,12 @@ const AppContent: React.FC = () => {
                   window.open(`tel:${phone}`);
                 }}
                 onClose={handleCloseChat}
-                onSendMessage={(messageText, _type, _payload) => {
-                  sendMessage(activeChat.id, messageText);
+                onSendMessage={(messageText, type, payload) => {
+                  if (type || payload) {
+                    sendMessageWithType(activeChat.id, messageText, type, payload);
+                  } else {
+                    sendMessage(activeChat.id, messageText);
+                  }
                 }}
                 typingStatus={typingStatus}
                 onUserTyping={(conversationId, _userRole) => {

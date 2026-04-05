@@ -56,6 +56,7 @@
     "env:copy": "node -e \"const fs=require('fs'); const p='.env'; if(!fs.existsSync(p)){ fs.copyFileSync('.env.example', p); console.log('Created .env from .env.example – edit .env and add your keys.'); } else { console.log('.env already exists.'); }\""
   },
   "dependencies": {
+    "@capacitor-community/media": "^9.1.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/browser": "^8.0.2",
     "@emotion/is-prop-valid": "^1.4.0",

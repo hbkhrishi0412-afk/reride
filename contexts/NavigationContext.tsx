@@ -57,6 +57,7 @@ const VIEW_TO_PATH: Record<View, string> = {
   [View.SELL_CAR_ADMIN]: '/admin/sell-car',
   [View.NEW_CARS_ADMIN_LOGIN]: '/admin/new-cars',
   [View.NEW_CARS_ADMIN_PANEL]: '/admin/new-cars/manage',
+  [View.NOTIFICATIONS_CENTER]: '/notifications',
 };
 
 export function pathToView(path: string): View {
