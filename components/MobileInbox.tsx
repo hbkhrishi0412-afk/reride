@@ -8,6 +8,7 @@ import { useConversationList } from '../hooks/useConversationList';
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
 import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
+import { isOfferChatMessage } from '../utils/isOfferChatMessage';
 import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
 import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
@@ -483,7 +484,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
           {visibleThreadMessages.map((msg, idx) => {
             const isUser =
               inboxRole === 'customer' ? msg.sender === 'user' : msg.sender === 'seller';
-            const isOffer = msg.type === 'offer';
+            const isOffer = isOfferChatMessage(msg);
             const isImage = msg.type === 'image' && Boolean(msg.payload?.imageUrl);
             const isVoice = msg.type === 'voice' && Boolean(msg.payload?.audioUrl);
 
@@ -516,7 +517,10 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                         isUser ? 'bg-white/15' : 'bg-black/[0.06]'
                       }`}
                     >
-                      <p className="text-[13px] font-semibold">Offer: ₹{msg.payload?.price?.toLocaleString()}</p>
+                      <p className="text-[13px] font-semibold">
+                        Offer: ₹
+                        {(msg.payload?.offerPrice ?? msg.payload?.price ?? 0).toLocaleString('en-IN')}
+                      </p>
                       {msg.payload?.message && (
                         <p className="text-[13px] mt-1 opacity-90">{msg.payload.message}</p>
                       )}

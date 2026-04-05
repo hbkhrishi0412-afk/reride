@@ -7,6 +7,7 @@ import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { filterMessagesForViewer } from '../utils/conversationView';
+import { isOfferChatMessage } from '../utils/isOfferChatMessage';
 
 interface InlineChatProps {
   conversation: Conversation;
@@ -321,7 +322,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
                   <>
                     <div className={`px-4 py-3 max-w-md ${msg.sender === senderType ? 'text-white rounded-l-xl rounded-t-xl' : 'bg-white text-gray-900 rounded-r-xl rounded-t-xl shadow-sm'}`} 
                          style={msg.sender === senderType ? { background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' } : undefined}>
-                      {msg.type === 'offer' ? (
+                      {isOfferChatMessage(msg) ? (
                         <OfferMessage 
                           msg={msg} 
                           currentUserRole={currentUserRole} 

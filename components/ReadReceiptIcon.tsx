@@ -200,7 +200,10 @@ export const OfferMessage: React.FC<{
     
     return (
         <>
-            <div className={`p-3 border-l-4 rounded-r-lg bg-reride-off-white dark:bg-brand-gray-700/50 border-gray-200`}>
+            <div
+              className={`relative z-[1] p-3 border-l-4 rounded-r-lg bg-reride-off-white dark:bg-brand-gray-700/50 border-gray-200`}
+              style={{ pointerEvents: 'auto', touchAction: 'manipulation' }}
+            >
                 <div className="flex justify-between items-start">
                     <div>
                         <p className="font-semibold text-reride-text-dark dark:text-reride-text-dark">{msg.sender === 'user' ? 'Offer Made' : 'Counter-Offer'}</p>

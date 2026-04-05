@@ -702,9 +702,17 @@ export const supabaseConversationService = {
       return String(a) === String(b) || Number(a) === Number(b);
     };
 
+    const isOfferLike = (m: ChatMessage): boolean => {
+      if (m.type === 'offer') return true;
+      const op = m.payload?.offerPrice;
+      if (typeof op === 'number' && Number.isFinite(op)) return true;
+      if (typeof m.text === 'string' && /^\s*Offer:\s*\S/i.test(m.text)) return true;
+      return false;
+    };
+
     let foundOffer = false;
     const patchedMessages = (conversation.messages || []).map((m) => {
-      if (m?.type === 'offer' && idMatch(m.id, offerMessageId)) {
+      if (idMatch(m.id, offerMessageId) && isOfferLike(m)) {
         foundOffer = true;
         const payload = {
           ...(m.payload || {}),
