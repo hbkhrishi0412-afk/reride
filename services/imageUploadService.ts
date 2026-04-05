@@ -4,6 +4,8 @@
  * Images are stored as files in Supabase Storage buckets
  */
 
+import { getBrowserAccessTokenForApi } from '../utils/authStorage';
+
 interface UploadResult {
   success: boolean;
   url?: string;
@@ -161,6 +163,15 @@ async function uploadViaApi(file: File, folder: string): Promise<UploadResult> {
 async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: string): Promise<UploadResult> {
   try {
     console.log(`📤 Uploading image to Supabase Storage: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+
+    const isChatFolder = String(folder || '').startsWith('chat-messages');
+    const apiToken = typeof window !== 'undefined' ? getBrowserAccessTokenForApi() : null;
+
+    // Chat images/voice: prefer server upload when any app/Supabase JWT exists. Hybrid auth and
+    // WebViews often have no hydrated @supabase/supabase-js session while /api still accepts the same token.
+    if (isChatFolder && apiToken) {
+      return await uploadViaApi(file, folder);
+    }
     
     const { getSupabaseClient } = await import('../lib/supabase.js');
     const supabase = getSupabaseClient();
@@ -188,24 +199,34 @@ async function uploadToSupabaseStorage(file: File, folder: string, _userEmail?: 
     }
     
     if (!user) {
-      console.error('❌ Authentication check failed:', sessionError?.message || 'No Supabase session found');
-      
-      // Check if user is logged into the app (but Supabase session expired)
-      const appUser = typeof window !== 'undefined' 
-        ? JSON.parse(localStorage.getItem('reRideCurrentUser') || 'null')
-        : null;
-      
-      if (appUser) {
-        console.warn('⚠️ User is logged into app but Supabase session is missing/expired');
-        console.warn('   App user:', appUser.email);
-        console.warn('   Using server upload API (no Supabase session required)...');
-        return await uploadViaApi(file, folder);
-      } else {
-        return {
-          success: false,
-          error: 'You must be logged in to upload images. Please log in and try again.'
-        };
+      let hasStoredProfile = false;
+      if (typeof window !== 'undefined') {
+        try {
+          hasStoredProfile = !!JSON.parse(localStorage.getItem('reRideCurrentUser') || 'null');
+        } catch {
+          hasStoredProfile = false;
+        }
       }
+
+      const token = typeof window !== 'undefined' ? getBrowserAccessTokenForApi() : null;
+      // App JWT or Supabase access token (server accepts both on /api/upload-image)
+      if (token || hasStoredProfile) {
+        if (process.env.NODE_ENV === 'development') {
+          console.info(
+            '📤 Upload via /api/upload-image (Supabase JS session not hydrated; app token or profile present).',
+          );
+        }
+        return await uploadViaApi(file, folder);
+      }
+
+      console.error(
+        '❌ Authentication check failed:',
+        sessionError?.message || 'No Supabase session and no app token',
+      );
+      return {
+        success: false,
+        error: 'You must be logged in to upload images. Please log in and try again.',
+      };
     }
     console.log(`✅ User authenticated: ${user.email}`);
     

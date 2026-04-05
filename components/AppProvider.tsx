@@ -3423,10 +3423,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Also join rooms when conversations are loaded/updated
   useEffect(() => {
     if (realtimeChatService.isConnected() && conversations.length > 0 && currentUser) {
-      // Add a small delay to avoid race conditions
       const timeoutId = setTimeout(() => {
         joinAllConversationRooms();
-      }, 1000);
+      }, 50);
       
       return () => clearTimeout(timeoutId);
     }
@@ -3523,8 +3522,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Load immediately
     loadSellerConversations();
     
-    // Then refresh periodically
-    const refreshInterval = setInterval(loadSellerConversations, 10000); // Refresh every 10 seconds for sellers
+    // Fallback sync if Realtime/WebSocket misses an update (keep well under perceived “10s lag”)
+    const refreshInterval = setInterval(loadSellerConversations, 4000);
     
     return () => clearInterval(refreshInterval);
   }, [currentUser?.email, currentUser?.role]);
@@ -3573,9 +3572,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     loadCustomerConversations();
-    const interval = setInterval(loadCustomerConversations, 8000);
+    const interval = setInterval(loadCustomerConversations, 4000);
     return () => clearInterval(interval);
   }, [currentUser?.email, currentUser?.role]);
+
+  // While a thread is open, poll that conversation directly (fast path; bypasses bulk list + queue backlog).
+  useEffect(() => {
+    const convId = activeChat?.id;
+    if (!convId || !currentUser?.email) {
+      return;
+    }
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const syncOpenThread = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        const { getConversationByIdFromSupabase } = await import('../services/conversationService');
+        const result = await getConversationByIdFromSupabase(String(convId));
+        if (cancelled || !result.success || !result.data) {
+          return;
+        }
+        const fresh = result.data;
+
+        setConversations((prev) => {
+          const idx = prev.findIndex((c) => c && String(c.id) === String(convId));
+          const existing = idx >= 0 ? prev[idx] : null;
+          const mergedMsgs = existing
+            ? mergeConversationMessagesForRealtime(existing.messages || [], fresh.messages || [])
+            : mergeConversationMessagesForRealtime([], fresh.messages || []);
+          const merged: Conversation = {
+            ...fresh,
+            messages: mergedMsgs,
+          };
+          if (existing) {
+            const prevLen = existing.messages?.length ?? 0;
+            if (mergedMsgs.length === prevLen && merged.lastMessageAt === existing.lastMessageAt) {
+              return prev;
+            }
+          }
+          const next =
+            idx >= 0 ? prev.map((c, i) => (i === idx ? merged : c)) : [...prev, merged];
+          try {
+            saveConversations(next);
+          } catch {
+            /* ignore */
+          }
+          return next;
+        });
+
+        setActiveChat((ac) => {
+          if (!ac || String(ac.id) !== String(convId)) {
+            return ac;
+          }
+          const mergedMsgs = mergeConversationMessagesForRealtime(ac.messages || [], fresh.messages || []);
+          const prevLen = ac.messages?.length ?? 0;
+          if (mergedMsgs.length === prevLen && fresh.lastMessageAt === ac.lastMessageAt) {
+            return ac;
+          }
+          return { ...fresh, messages: mergedMsgs };
+        });
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void syncOpenThread();
+    const interval = setInterval(syncOpenThread, 600);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeChat?.id, currentUser?.email]);
   
   // CRITICAL: Periodically refresh notifications for all users
   useEffect(() => {
