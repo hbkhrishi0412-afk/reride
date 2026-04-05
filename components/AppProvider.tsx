@@ -5,6 +5,7 @@ import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom'
 import type { Vehicle, User, Conversation, Toast as ToastType, PlatformSettings, AuditLogEntry, VehicleData, Notification, VehicleCategory, SupportTicket, FAQItem, SubscriptionPlan, ChatMessage } from '../types';
 import { View, VehicleCategory as CategoryEnum } from '../types';
 import { getConversations, saveConversations } from '../services/chatService';
+import { putConversationOfferResponse } from '../services/conversationService';
 import {
   addMessageWithSync,
   getSyncQueueStatus,
@@ -5543,75 +5544,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     },
     onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => {
-      console.log('🔧 onOfferResponse called:', { conversationId, messageId, response, counterPrice });
-      
-      setConversations(prev => {
-        const updated = Array.isArray(prev) ? prev.map(conv => {
-          if (conv && conv.id === conversationId) {
-            const updatedMessages = Array.isArray(conv.messages) ? conv.messages.map(msg => {
-              if (msg && msg.id === messageId) {
-                const updatedPayload = {
-                  ...(msg.payload || {}),
-                  status: response,
-                  ...(counterPrice && { counterPrice })
-                };
-                
-                return {
-                  ...msg,
-                  payload: updatedPayload
-                };
-              }
-              return msg;
-            }) : [];
-            
-            // Add a response message
-            const responseMessages = {
-              accepted: `✅ Offer accepted! The deal is confirmed.`,
-              rejected: `❌ Offer declined. Thank you for your interest.`,
-              countered: `💰 Counter-offer made: ₹${counterPrice?.toLocaleString('en-IN')}`
-            };
-            
-            const responseMessage = {
-              id: Date.now(),
-              sender: 'seller' as const,
-              text: responseMessages[response],
-              timestamp: new Date().toISOString(),
-              isRead: false,
-              type: 'text' as const
-            };
-            
-            const updatedConv = {
-              ...conv,
-              messages: [...updatedMessages, responseMessage],
-              lastMessageAt: new Date().toISOString()
-            };
-            
-            // Update activeChat if it's the same conversation
-            // Use the computed updatedConv instead of accessing stale conversations from closure
-            setActiveChat(activeChatPrev => {
-              if (activeChatPrev && activeChatPrev.id === conversationId) {
-                return updatedConv;
-              }
-              return activeChatPrev;
-            });
-            
-            return updatedConv;
+      void (async () => {
+        if (!currentUser) {
+          addToast(t('toast.loginRequiredMessages'), 'error');
+          return;
+        }
+
+        const responseTexts: Record<typeof response, string> = {
+          accepted: `✅ Offer accepted! The deal is confirmed.`,
+          rejected: `❌ Offer declined. Thank you for your interest.`,
+          countered: `💰 Counter-offer made: ₹${(counterPrice ?? 0).toLocaleString('en-IN')}`,
+        };
+
+        const responseMessage: ChatMessage = {
+          id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
+          sender: currentUser.role === 'seller' ? 'seller' : 'user',
+          text: responseTexts[response],
+          timestamp: new Date().toISOString(),
+          isRead: false,
+          type: 'text',
+        };
+
+        const apiResult = await putConversationOfferResponse(
+          conversationId,
+          messageId,
+          response,
+          responseMessage,
+          counterPrice,
+        );
+
+        if (!apiResult.success || !apiResult.data) {
+          addToast(apiResult.error || t('toast.failedSendMessageGeneric'), 'error');
+          return;
+        }
+
+        const fresh = apiResult.data;
+        setConversations((prev) => {
+          const next = Array.isArray(prev)
+            ? prev.map((c) => (c && String(c.id) === String(fresh.id) ? fresh : c))
+            : [];
+          try {
+            saveConversations(next);
+          } catch {
+            /* ignore */
           }
-          return conv;
-        }) : [];
-        
-        console.log('🔧 Updated conversations after offer response:', updated);
-        return updated;
-      });
-      
-      addToast(
-        response === 'accepted'
-          ? t('toast.offerAccepted')
-          : response === 'rejected'
-            ? t('toast.offerRejected')
-            : t('toast.offerCountered'),
-        'success',
-      );
+          return next;
+        });
+        setActiveChat((ac) => (ac && String(ac.id) === String(fresh.id) ? fresh : ac));
+
+        addToast(
+          response === 'accepted'
+            ? t('toast.offerAccepted')
+            : response === 'rejected'
+              ? t('toast.offerRejected')
+              : t('toast.offerCountered'),
+          'success',
+        );
+      })();
     },
   }), [
     currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady, currentUser,

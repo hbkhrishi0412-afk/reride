@@ -18,6 +18,7 @@ import Footer from './components/Footer';
 import ToastContainer from './components/ToastContainer';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
+import { isCapacitorNativeApp } from './utils/isCapacitorNative';
 import ShareTargetHandler from './components/ShareTargetHandler';
 import OfflineIndicator from './components/OfflineIndicator';
 // Layout/utility components that are always needed - keep as eager imports
@@ -505,7 +506,8 @@ const AppContent: React.FC = () => {
       const id = String(conv.id);
       const latest = conversations.find((c) => c && String(c.id) === id) ?? conv;
 
-      if (isMobileApp && currentUser?.role === 'seller') {
+      const useFloatingSellerChat = isMobileApp || isCapacitorNativeApp();
+      if (useFloatingSellerChat && currentUser?.role === 'seller') {
         setActiveChat(latest);
         void markAsRead(id);
         return;
@@ -2486,7 +2488,7 @@ const AppContent: React.FC = () => {
         );
 
       case ViewEnum.INBOX:
-        if (isMobileApp && currentUser) {
+        if ((isMobileApp || isCapacitorNativeApp()) && currentUser) {
           const inboxEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
           const inboxRoleNorm = normalizeInboxRole(currentUser.role);
           const mobileInboxThreads = conversations.filter((c) => {
@@ -2506,6 +2508,12 @@ const AppContent: React.FC = () => {
               initialOpenConversationId={inboxConversationIdToOpen}
               onConsumedInitialConversation={handleInboxInitialConversationConsumed}
               chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
+              openThreadInFloatingChat={
+                normalizeInboxRole(currentUser.role) === 'seller' &&
+                (isMobileApp || isCapacitorNativeApp())
+                  ? handleSellerOpenChatFromDashboard
+                  : undefined
+              }
               vehicles={vehicles}
               onSendMessage={(conversationId, messageText, type, payload) => {
                 const conv = conversations.find((c) => c && c.id === conversationId);
@@ -3702,26 +3710,23 @@ const AppContent: React.FC = () => {
           inboxCount={unreadMessagesCount}
           unreadNotificationCount={unreadNotificationsCount}
         >
-        <ErrorBoundary>
-          <Suspense fallback={<LoadingSpinner />}>
-            <PageTransition currentView={currentView}>
-              {renderView()}
-            </PageTransition>
-          </Suspense>
-        </ErrorBoundary>
-        
-        {/* Mobile Global Components */}
-        <MobileSearch 
+          <ErrorBoundary>
+            <Suspense fallback={<LoadingSpinner />}>
+              <PageTransition currentView={currentView}>
+                {renderView()}
+              </PageTransition>
+            </Suspense>
+          </ErrorBoundary>
+        </MobileLayout>
+
+        <MobileSearch
           onNavigate={navigate}
           onSearch={(query) => {
             setInitialSearchQuery(query);
             navigate(ViewEnum.USED_CARS);
           }}
         />
-        <ToastContainer 
-          toasts={toasts} 
-          onRemove={removeToast} 
-        />
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
         {currentUser && activeChat && (
           <ChatErrorBoundary>
             <Suspense fallback={<MinimalLoader />}>
@@ -3766,7 +3771,6 @@ const AppContent: React.FC = () => {
             </Suspense>
           </ChatErrorBoundary>
         )}
-        </MobileLayout>
       </>
     );
   }

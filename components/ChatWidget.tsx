@@ -9,6 +9,7 @@ import { ChatMessageImage } from './ChatMessageImage';
 import { ChatMessageVoice } from './ChatMessageVoice';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { filterMessagesForViewer } from '../utils/conversationView';
+import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
 
 interface ChatWidgetProps {
   conversation: Conversation;
@@ -93,6 +94,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  /** Capacitor: sit above fixed bottom tab bar (~70px) so composer is tappable and visible. */
+  const bottomNavClearancePx = isMobile && isCapacitorNativeApp() ? 76 : 0;
   
   // Auto-open chat when conversation starts (even with no messages) or has new messages
   // BUT only if user hasn't manually closed it
@@ -151,13 +155,19 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   }, [conversation.id, currentUserRole, lastMessageId, onMarkMessagesAsRead]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-        if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
-            setShowEmojiPicker(false);
-        }
+    const closeIfOutside = (target: EventTarget | null) => {
+      if (emojiPickerRef.current && target instanceof Node && !emojiPickerRef.current.contains(target)) {
+        setShowEmojiPicker(false);
+      }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const onMouseDown = (event: MouseEvent) => closeIfOutside(event.target);
+    const onTouchStart = (event: TouchEvent) => closeIfOutside(event.targetTouches[0]?.target ?? null);
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('touchstart', onTouchStart);
+    };
   }, []);
 
   const scheduleTypingStop = () => {
@@ -388,15 +398,17 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     }
   }, [portalTarget]);
 
-  // Use a very high z-index so chat floats over any page content/banners/footers
-  const FLOATING_Z_INDEX = 2147482000; // near max, safely above other overlays
+  // High z-index over mobile nav (z-40); avoid extreme values — some WebViews mishandle them.
+  const FLOATING_Z_INDEX = 999999;
 
   // Floating chat button - ALWAYS visible
   const chatButton = (
     <div 
       style={{ 
         position: 'fixed',
-        bottom: isMobile ? '20px' : '24px',
+        bottom: isMobile
+          ? `calc(20px + ${bottomNavClearancePx}px + env(safe-area-inset-bottom, 0px))`
+          : '24px',
         right: isMobile ? '20px' : '24px',
         zIndex: FLOATING_Z_INDEX,
         pointerEvents: 'auto',
@@ -468,12 +480,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
       className="flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden"
       style={{ 
         position: 'fixed',
-        bottom: isMobile ? '16px' : '20px',
+        bottom: isMobile
+          ? `calc(16px + ${bottomNavClearancePx}px + env(safe-area-inset-bottom, 0px))`
+          : '20px',
         right: isMobile ? '16px' : '20px',
         width: isMobile ? 'calc(100vw - 32px)' : '360px',
         maxWidth: 'calc(100vw - 32px)',
-        height: isMobile ? 'calc(100vh - 80px)' : '460px',
-        maxHeight: 'calc(100vh - 80px)',
+        height: isMobile
+          ? `calc(100vh - ${80 + bottomNavClearancePx}px - env(safe-area-inset-bottom, 0px))`
+          : '460px',
+        maxHeight: isMobile
+          ? `calc(100vh - ${80 + bottomNavClearancePx}px - env(safe-area-inset-bottom, 0px))`
+          : 'calc(100vh - 80px)',
         zIndex: FLOATING_Z_INDEX,
         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
         opacity: isExiting || isAnimating ? 0 : 1,
@@ -846,6 +864,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                     type="text"
                     value={inputText}
                     onChange={handleInputChange}
+                    enterKeyHint="send"
+                    autoComplete="off"
+                    autoCorrect="on"
                     placeholder={
                       voiceRecorder.isRecording
                         ? 'Recording… tap mic to send'

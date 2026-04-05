@@ -11,8 +11,7 @@ import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
-import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
-import { getThreadLastMessagePreview } from '../utils/messagePreview';
+import { filterMessagesForViewer } from '../utils/conversationView';
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -58,7 +57,18 @@ interface MobileDashboardProps {
   onSellerOpenChat?: (conversation: Conversation) => void;
 }
 
-type DashboardTab = 'overview' | 'listings' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'profile' | 'addVehicle' | 'editVehicle' | 'notifications';
+type DashboardTab =
+  | 'overview'
+  | 'listings'
+  | 'messages'
+  | 'analytics'
+  | 'salesHistory'
+  | 'reports'
+  | 'settings'
+  | 'profile'
+  | 'addVehicle'
+  | 'editVehicle'
+  | 'notifications';
 
 const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   currentUser,
@@ -249,19 +259,33 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const totalInquiries = safeConversations.length;
   const reportedCount = safeReportedVehicles.length;
   const featuredListingsCount = safeUserVehicles.filter(v => v && v.isFeatured).length;
-
-  const tabs = useMemo(
-    () => [
-      { id: 'overview' as const, label: t('sellerDashboard.mobile.tab.overview'), icon: '📊', count: null },
-      { id: 'listings' as const, label: t('sellerDashboard.mobile.tab.listings'), icon: '🚗', count: totalListings },
-      { id: 'analytics' as const, label: t('sellerDashboard.mobile.tab.analytics'), icon: '📈', count: null },
-      { id: 'salesHistory' as const, label: t('sellerDashboard.mobile.tab.sales'), icon: '💰', count: soldListings },
-      { id: 'reports' as const, label: t('sellerDashboard.mobile.tab.reports'), icon: '🚩', count: reportedCount },
-      { id: 'settings' as const, label: t('sellerDashboard.mobile.tab.settings'), icon: '⚙️', count: null },
-      { id: 'profile' as const, label: t('sellerDashboard.mobile.tab.profile'), icon: '👤', count: null },
-    ],
-    [t, totalListings, soldListings, reportedCount]
+  const unreadSellerThreads = useMemo(
+    () => safeConversations.filter((c) => c && !c.isReadBySeller).length,
+    [safeConversations]
   );
+
+  const tabs = useMemo(() => {
+    const row: { id: DashboardTab; label: string; icon: string; count: number | null }[] = [
+      { id: 'overview', label: t('sellerDashboard.mobile.tab.overview'), icon: '📊', count: null },
+      { id: 'listings', label: t('sellerDashboard.mobile.tab.listings'), icon: '🚗', count: totalListings },
+    ];
+    if (isSeller) {
+      row.push({
+        id: 'messages',
+        label: t('sellerDashboard.mobile.tab.messages'),
+        icon: '💬',
+        count: unreadSellerThreads > 0 ? unreadSellerThreads : null,
+      });
+    }
+    row.push(
+      { id: 'analytics', label: t('sellerDashboard.mobile.tab.analytics'), icon: '📈', count: null },
+      { id: 'salesHistory', label: t('sellerDashboard.mobile.tab.sales'), icon: '💰', count: soldListings },
+      { id: 'reports', label: t('sellerDashboard.mobile.tab.reports'), icon: '🚩', count: reportedCount },
+      { id: 'settings', label: t('sellerDashboard.mobile.tab.settings'), icon: '⚙️', count: null },
+      { id: 'profile', label: t('sellerDashboard.mobile.tab.profile'), icon: '👤', count: null }
+    );
+    return row;
+  }, [t, totalListings, soldListings, reportedCount, isSeller, unreadSellerThreads]);
 
   const renderOverview = () => (
     <div className="space-y-5 pb-4">
@@ -712,6 +736,23 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     </div>
   );
 
+  /** No per-thread list here — seller opens floating ChatWidget from the global inbox (same as website). */
+  const renderMessagesHub = () => (
+    <div className="space-y-5 pb-4">
+      <div className="native-card p-5">
+        <h3 className="text-lg font-bold text-gray-900 mb-2">{t('sellerDashboard.mobile.tab.messages')}</h3>
+        <p className="text-sm text-gray-600 leading-relaxed mb-5">{t('sellerDashboard.mobile.messagesHubBody')}</p>
+        <button
+          type="button"
+          onClick={() => onNavigate(ViewEnum.INBOX)}
+          className="w-full native-button native-button-primary py-3.5 font-bold"
+        >
+          {t('sellerDashboard.mobile.messagesHubOpenInbox')}
+        </button>
+      </div>
+    </div>
+  );
+
   const renderAnalytics = () => {
     // Calculate additional metrics
     const averageViewsPerListing = activeListings > 0 ? Math.round(totalViews / activeListings) : 0;
@@ -731,17 +772,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     // Get top performing vehicles
     const topVehicles = [...safeUserVehicles]
       .sort((a, b) => (b?.views || 0) - (a?.views || 0))
-      .slice(0, 5);
-
-    // Calculate recent activity (last 7 days)
-    const recentConversations = safeConversations
-      .filter(c => {
-        if (!c?.lastMessageAt) return false;
-        const messageDate = new Date(c.lastMessageAt);
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        return messageDate > weekAgo;
-      })
       .slice(0, 5);
 
     return (
@@ -782,7 +812,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 </svg>
               </div>
             </div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Inquiries</p>
+            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">
+              {t('sellerDashboard.mobile.analyticsMessageThreads')}
+            </p>
             <p className="text-2xl font-bold text-gray-900">{totalInquiries}</p>
             {totalViews > 0 && (
               <p className="text-xs text-gray-500 mt-1">{conversionRate}% conversion</p>
@@ -839,7 +871,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Inquiries</span>
+                <span className="text-sm font-medium text-gray-700">
+                  {t('sellerDashboard.mobile.analyticsMessageThreads')}
+                </span>
                 <span className="text-xs text-gray-500">{totalInquiries}</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2">
@@ -906,7 +940,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                           </svg>
-                          {vehicle.inquiriesCount ?? 0} inquiries
+                          {t('sellerDashboard.mobile.listingMessageCount', {
+                            count: vehicle.inquiriesCount ?? 0,
+                          })}
                         </span>
                       )}
                     </div>
@@ -919,43 +955,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             </div>
           </div>
         )}
-
-        {/* Recent Activity */}
-        <div className="native-card p-4">
-          <h4 className="font-bold text-gray-900 mb-4">Recent Activity</h4>
-          {recentConversations.length > 0 ? (
-            <div className="space-y-3">
-              {recentConversations.map((conv) => (
-                <div key={conv.id} className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      New inquiry: {conv.vehicleName || 'Vehicle'}
-                    </p>
-                    {(() => {
-                      const last = getLastVisibleMessageForViewer(conv, 'seller');
-                      if (!last) return null;
-                      const { prefix, text } = getThreadLastMessagePreview(last, { viewer: 'seller' });
-                      const line = `${prefix}${text}`;
-                      const short = line.length > 50 ? `${line.slice(0, 50)}…` : line;
-                      return (
-                        <p className="text-xs text-gray-500 truncate mt-1">{short}</p>
-                      );
-                    })()}
-                    <p className="text-xs text-gray-400 mt-1">
-                      {conv.lastMessageAt ? new Date(conv.lastMessageAt).toLocaleDateString() : ''}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-500 text-sm">No recent activity</p>
-              <p className="text-gray-400 text-xs mt-1">Activity will appear here</p>
-            </div>
-          )}
-        </div>
 
         {/* Quick Stats Summary */}
         <div className="native-card p-4 bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200">
@@ -2638,6 +2637,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     switch (activeTab) {
       case 'overview': return renderOverview();
       case 'listings': return renderListings();
+      case 'messages': return isSeller ? renderMessagesHub() : renderOverview();
       case 'analytics': return renderAnalytics();
       case 'salesHistory': return renderSalesHistory();
       case 'reports': return renderReports();
