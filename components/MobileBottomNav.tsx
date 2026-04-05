@@ -123,10 +123,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
         >
           {navItems.map((item) => {
             const messagesTabActive =
-              item.id === 'messages' &&
-              (currentUser?.role === 'seller'
-                ? currentView === ViewEnum.SELLER_DASHBOARD
-                : currentView === ViewEnum.INBOX);
+              item.id === 'messages' && currentView === ViewEnum.INBOX;
 
             const isActive = item.id === 'sell'
               ? currentView === ViewEnum.SELLER_DASHBOARD ||
@@ -148,12 +145,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 return;
               }
               if (item.id === 'messages' && currentUser?.role === 'seller') {
-                try {
-                  sessionStorage.setItem('reride_seller_open_inquiries', '1');
-                } catch {
-                  /* ignore */
-                }
-                onNavigate(ViewEnum.SELLER_DASHBOARD);
+                onNavigate(ViewEnum.INBOX);
                 return;
               }
               if (item.view === ViewEnum.INBOX && !currentUser) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { User } from '../types.js';
 import PasswordInput from './PasswordInput.js';
 import { isTokenLikelyValid, refreshAuthToken, getAuthHeaders } from '../utils/authenticatedFetch.js';
+import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
 
 interface ProfileProps {
   currentUser: User;
@@ -770,7 +771,7 @@ const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, onUpdat
                             <h3 className="text-sm font-semibold text-gray-900">Seller Share Link & QR</h3>
                           </div>
                           {(() => {
-                            const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                            const origin = getPublicWebOriginForShareLinks();
                             const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
                             const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}`;
                             return (

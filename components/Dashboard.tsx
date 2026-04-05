@@ -25,6 +25,7 @@ import PaymentStatusCard from './PaymentStatusCard';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
+import { conversationBelongsToSeller } from '../utils/conversationParticipants';
 // Firebase status utilities removed - using Supabase
 
 // Safely register Chart.js components - wrap in try-catch to prevent crashes if Chart.js fails to load
@@ -2232,12 +2233,11 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
 
   const unreadCount = useMemo(() => {
     if (!seller?.email) return 0;
-    const normalizedSellerEmail = seller.email.toLowerCase().trim();
-    return safeConversations.filter(c => {
-      if (!c || c.isReadBySeller || !c.sellerId) return false;
-      return c.sellerId.toLowerCase().trim() === normalizedSellerEmail;
+    return safeConversations.filter((c) => {
+      if (!c || c.isReadBySeller === true || !c.sellerId) return false;
+      return conversationBelongsToSeller(c, seller.email, seller.id);
     }).length;
-  }, [safeConversations, seller?.email]);
+  }, [safeConversations, seller?.email, seller?.id]);
   const activeListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status !== 'sold'), [safeSellerVehicles]);
   const soldListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'sold'), [safeSellerVehicles]);
   const reportedCount = useMemo(() => safeReportedVehicles.length, [safeReportedVehicles]);
@@ -2761,10 +2761,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             <PaymentStatusCard currentUser={seller} />
             <AiAssistant
               vehicles={activeListings}
-              conversations={safeConversations.filter(c => {
-                if (!c || !c.sellerId || !seller?.email) return false;
-                return c.sellerId.toLowerCase().trim() === seller.email.toLowerCase().trim();
-              })}
+              conversations={safeConversations.filter((c) =>
+                c && seller?.email ? conversationBelongsToSeller(c, seller.email, seller.id) : false
+              )}
               onNavigateToVehicle={handleNavigateToVehicle}
               onNavigateToInquiry={handleNavigateToInquiry}
             />

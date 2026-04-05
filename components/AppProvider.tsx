@@ -204,6 +204,7 @@ function pathToView(path: string): View {
   if (normalizedPath === '/profile') return View.PROFILE;
   if (normalizedPath === '/forgot-password') return View.FORGOT_PASSWORD;
   if (normalizedPath === '/inbox') return View.INBOX;
+  if (normalizedPath === '/notifications') return View.NOTIFICATIONS_CENTER;
   if (normalizedPath.startsWith('/seller/')) {
     // Path like /seller/email@example.com
     return View.SELLER_PROFILE;
@@ -246,6 +247,9 @@ function resolveViewFromPathAndState(path: string, routerState: HistoryState | n
   const pathView = pathToView(path);
   if (pathView === View.SELLER_PROFILE) {
     return View.SELLER_PROFILE;
+  }
+  if (pathView === View.NOTIFICATIONS_CENTER) {
+    return View.NOTIFICATIONS_CENTER;
   }
   return routerState?.view ?? pathView;
 }
@@ -333,7 +337,10 @@ interface AppContextType {
   handleLogout: () => void;
   handleLogin: (user: User) => void;
   handleRegister: (user: User) => void;
-  navigate: (view: View, params?: { city?: string; sellerEmail?: string }) => void;
+  navigate: (
+    view: View,
+    params?: { city?: string; sellerEmail?: string; detailVehicle?: Vehicle }
+  ) => void;
   goBack: (fallbackView?: View) => void;
   refreshVehicles: () => Promise<void>;
   
@@ -413,6 +420,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   
   // All state from App.tsx moved here
   const [currentView, setCurrentView] = useState<View>(View.HOME);
+  /** Latest view for URL sync effect — avoids clobbering programmatic navigate() before the router path updates. */
+  const currentViewRef = useRef<View>(View.HOME);
+  currentViewRef.current = currentView;
   const [previousView, setPreviousView] = useState<View>(View.HOME);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   // Flag to prevent navigation loops when handling popstate
@@ -1119,7 +1129,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  const navigate = useCallback((view: View, params?: { city?: string; sellerEmail?: string }) => {
+  const navigate = useCallback(
+    (
+      view: View,
+      params?: { city?: string; sellerEmail?: string; detailVehicle?: Vehicle }
+    ) => {
+    const detailVehicleParam = params?.detailVehicle;
     // Don't navigate during popstate sync unless opening a different vehicle (Similar Vehicles on DETAIL),
     // or opening a public seller profile (must not be blocked — common right after opening a listing on mobile).
     if (isHandlingPopStateRef.current) {
@@ -1130,13 +1145,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       } else {
         try {
+          let targetId = NaN;
           const raw = sessionStorage.getItem('selectedVehicle');
-          if (!raw) {
-            logDebug('⏸️ Navigation skipped - handling popstate event');
-            return;
+          if (raw) {
+            const v = JSON.parse(raw) as { id?: number | string };
+            targetId = v?.id != null ? Number(v.id) : NaN;
           }
-          const v = JSON.parse(raw) as { id?: number | string };
-          const targetId = v?.id != null ? Number(v.id) : NaN;
+          if (!Number.isFinite(targetId) && detailVehicleParam) {
+            targetId = Number(detailVehicleParam.id);
+          }
           if (!Number.isFinite(targetId)) {
             logDebug('⏸️ Navigation skipped - handling popstate event');
             return;
@@ -1148,7 +1165,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           );
           const m = pathNow.match(/\/vehicle\/([^/?#]+)/);
           const pathId = m ? Number(m[1]) : NaN;
-          if (Number.isFinite(pathId) && pathId === targetId) {
+          if (Number.isFinite(pathId) && vehicleIdsEqual(pathId, targetId)) {
             logDebug('⏸️ Navigation skipped - handling popstate event');
             return;
           }
@@ -1198,34 +1215,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (view === View.DETAIL) {
       let vehicleFound = false;
       let vehicleToUse: Vehicle | null = null;
-      
+
       try {
-        // ALWAYS check sessionStorage first - it's the most reliable source
         const storedVehicle = sessionStorage.getItem('selectedVehicle');
         if (storedVehicle) {
           try {
-            vehicleToUse = JSON.parse(storedVehicle);
-            if (vehicleToUse && vehicleToUse.id) {
+            vehicleToUse = JSON.parse(storedVehicle) as Vehicle;
+            const storedIdNum = Number((vehicleToUse as Vehicle).id as unknown);
+            if (vehicleToUse != null && Number.isFinite(storedIdNum)) {
               vehicleFound = true;
-              // Always update state from sessionStorage when navigating to DETAIL
-              // This ensures state is in sync even if there was a race condition
               setSelectedVehicle(vehicleToUse);
               if (process.env.NODE_ENV === 'development') {
-                console.log('🔧 Restored vehicle from sessionStorage during navigation:', vehicleToUse.id, vehicleToUse.make, vehicleToUse.model);
+                console.log(
+                  '🔧 Restored vehicle from sessionStorage during navigation:',
+                  vehicleToUse.id,
+                  vehicleToUse.make,
+                  vehicleToUse.model
+                );
               }
             }
           } catch (parseError) {
             console.error('❌ Failed to parse vehicle from sessionStorage:', parseError);
-            // Clear corrupted data
             sessionStorage.removeItem('selectedVehicle');
           }
         }
-        
-        // If not found in sessionStorage, check state as fallback
+
+        // Same-tick open from selectVehicle: sessionStorage may fail (private mode) and
+        // selectedVehicle in this closure can still be stale — use explicit param.
+        if (!vehicleFound && detailVehicleParam) {
+          const paramId = Number(detailVehicleParam.id);
+          if (Number.isFinite(paramId)) {
+            vehicleToUse = detailVehicleParam;
+            vehicleFound = true;
+            setSelectedVehicle(detailVehicleParam);
+            try {
+              sessionStorage.setItem('selectedVehicle', JSON.stringify(detailVehicleParam));
+              if (process.env.NODE_ENV === 'development') {
+                console.log(
+                  '🔧 Applied detailVehicle param during navigation:',
+                  detailVehicleParam.id
+                );
+              }
+            } catch (error) {
+              console.warn('⚠️ Failed to sync detail vehicle to sessionStorage:', error);
+            }
+          }
+        }
+
         if (!vehicleFound && selectedVehicle && selectedVehicle.id) {
           vehicleToUse = selectedVehicle;
           vehicleFound = true;
-          // Sync state to sessionStorage for consistency
           try {
             sessionStorage.setItem('selectedVehicle', JSON.stringify(selectedVehicle));
             if (process.env.NODE_ENV === 'development') {
@@ -1235,27 +1274,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.warn('⚠️ Failed to sync vehicle to sessionStorage:', error);
           }
         }
-        
-        // If still no vehicle found, this is an error condition
-        if (!vehicleFound) {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ Attempted to navigate to DETAIL view without a vehicle in sessionStorage or state');
-            console.warn('⚠️ Current selectedVehicle:', selectedVehicle);
-            console.warn('⚠️ SessionStorage value:', sessionStorage.getItem('selectedVehicle'));
-          }
-          // DON'T redirect here - let the DETAIL view handle the error state
-          // This allows the user to see what went wrong instead of silently redirecting
-          // The DETAIL view will show "Vehicle Not Found" message
+
+        if (!vehicleFound && process.env.NODE_ENV === 'development') {
+          console.warn(
+            '⚠️ Attempted to navigate to DETAIL view without a vehicle in sessionStorage, params, or state'
+          );
+          console.warn('⚠️ Current selectedVehicle:', selectedVehicle);
+          console.warn('⚠️ SessionStorage value:', sessionStorage.getItem('selectedVehicle'));
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           console.error('❌ Error checking for vehicle during navigation:', error);
         }
-        // Don't redirect on error - let DETAIL view handle it
       }
-      
-      // Continue with navigation regardless - let DETAIL view decide what to show
-      // This ensures navigation always happens, and DETAIL view can handle missing vehicle gracefully
     }
     
     // Only clear selectedVehicle if we're NOT preserving it
@@ -1386,6 +1417,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         [View.BUYER_DASHBOARD]: '/customer/dashboard',
         [View.SELL_CAR]: '/sell-car',
         [View.SELL_CAR_ADMIN]: '/admin/sell-car',
+        [View.NOTIFICATIONS_CENTER]: '/notifications',
       };
 
       // Handle dynamic paths
@@ -1402,6 +1434,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         } catch {
           /* ignore */
+        }
+        if (!vehicleForPath?.id && detailVehicleParam) {
+          const n = Number(detailVehicleParam.id);
+          if (Number.isFinite(n)) vehicleForPath = detailVehicleParam;
         }
         if (!vehicleForPath?.id && selectedVehicle?.id != null) {
           vehicleForPath = selectedVehicle;
@@ -1430,6 +1466,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         } catch {
           /* ignore */
+        }
+        if ((detailSelectedId == null || !Number.isFinite(detailSelectedId)) && detailVehicleParam) {
+          const n = Number(detailVehicleParam.id);
+          if (Number.isFinite(n)) detailSelectedId = n;
         }
         if ((detailSelectedId == null || !Number.isFinite(detailSelectedId)) && selectedVehicle?.id != null) {
           const n = Number(selectedVehicle.id);
@@ -1535,34 +1575,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       View.CUSTOMER_LOGIN,
       View.SELLER_LOGIN,
     ]);
+    const viewNow = currentViewRef.current;
+
     if (
       currentUser &&
       loginOnlyViews.has(newView) &&
-      !loginOnlyViews.has(currentView)
+      !loginOnlyViews.has(viewNow)
     ) {
       return;
     }
 
     // HashRouter / Android WebView: location can briefly stay "/" while currentView is already DETAIL
     // after selectVehicle → navigate(DETAIL). Do not clobber detail with HOME in that window.
+    // Do not require sessionStorage: storage may be unavailable while selectedVehicle lives in React state only.
     if (
       expectingVehicleDetailRouteRef.current &&
       newView === View.HOME &&
       (path === '/' || path === '') &&
-      currentView === View.DETAIL
+      viewNow === View.DETAIL
     ) {
-      try {
-        if (sessionStorage.getItem('selectedVehicle')) {
-          return;
-        }
-      } catch {
-        /* ignore */
-      }
+      return;
     }
 
     // Already on vehicle detail but URL id changed (e.g. Similar Vehicles / deep link) — must sync state.
     // Previously we returned here, so selectedVehicle could stay on the old listing while the URL updated.
-    if (newView === currentView && newView === View.DETAIL && path.includes('/vehicle/')) {
+    if (newView === viewNow && newView === View.DETAIL && path.includes('/vehicle/')) {
       const idMatch = path.match(/\/vehicle\/([^/?#]+)/);
       if (idMatch) {
         const parsedId = Number(idMatch[1]);
@@ -1592,7 +1629,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Still on seller profile but URL switched to another dealer — view enum unchanged, so hydrate profile
-    if (newView === currentView && newView === View.SELLER_PROFILE) {
+    if (newView === viewNow && newView === View.SELLER_PROFILE) {
       const email = parseSellerEmailFromPath(path);
       if (email) {
         setPublicSellerProfile((prev) => {
@@ -1616,7 +1653,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Prevent loops: only update if the view actually changed
-    if (newView === currentView) return;
+    if (newView === viewNow) return;
 
     isHandlingPopStateRef.current = true;
 
@@ -1699,11 +1736,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTimeout(() => {
       isHandlingPopStateRef.current = false;
     }, 100);
+    // Do not list currentView in deps: when navigate() sets view before HashRouter updates the path,
+    // an effect run keyed on currentView would read the old URL and reset view (e.g. INBOX → dashboard).
   }, [
     location.pathname,
     location.hash,
     location.key,
-    currentView,
     currentUser,
     vehicles,
     users,
@@ -5297,7 +5335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Navigate to DETAIL view immediately
       // The navigate function will check sessionStorage first (which we just set and verified),
       // so the vehicle will be available even if state hasn't updated yet
-      navigate(View.DETAIL);
+      navigate(View.DETAIL, { detailVehicle: vehicleForDetail });
     },
     toggleWishlist: (vehicleId: number) => {
       setWishlist(prev => 

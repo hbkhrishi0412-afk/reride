@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import type { User } from '../types';
 import PasswordInput from './PasswordInput';
 import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetch.js';
+import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
+import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
 
 interface MobileProfileProps {
   currentUser: User;
@@ -103,46 +105,11 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
   };
 
   const handleDownloadQRCode = async () => {
-    try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
-      
-      // Fetch the QR code image
-      const response = await fetch(qrUrl);
-      if (!response.ok) {
-        throw new Error('Failed to fetch QR code');
-      }
-      
-      const blob = await response.blob();
-      
-      // Create a download link
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const fileName = `seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\s+/g, '-')}.png`;
-      
-      link.href = url;
-      link.download = fileName;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      }, 100);
-      
-      addToast?.('QR code downloaded successfully!', 'success');
-    } catch (error) {
-      console.error('Failed to download QR code:', error);
-      addToast?.('Failed to download QR code. Please try again.', 'error');
-      // Fallback: open in new tab if download fails
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
-      window.open(qrUrl, '_blank');
-    }
+    const origin = getPublicWebOriginForShareLinks();
+    const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(shareUrl)}`;
+    const fileName = `seller-qr-${(currentUser.dealershipName || currentUser.name || 'profile').toString().replace(/\s+/g, '-')}.png`;
+    await saveQrCodePngFromUrl(qrUrl, fileName, addToast);
   };
 
   const validateProfile = (): boolean => {
@@ -479,7 +446,7 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
 
             {/* Seller QR Code Section */}
             {currentUser.role === 'seller' && !isEditing && (() => {
-              const origin = typeof window !== 'undefined' ? window.location.origin : '';
+              const origin = getPublicWebOriginForShareLinks();
               const shareUrl = `${origin}/?seller=${encodeURIComponent(currentUser.email)}`;
               const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(shareUrl)}`;
               
