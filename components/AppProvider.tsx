@@ -10,7 +10,7 @@ import {
   getSyncQueueStatus,
   processSyncQueue,
 } from '../services/syncService';
-import { realtimeChatService } from '../services/realtimeChatService';
+import { realtimeChatService, type ChatEphemeralThreadMeta } from '../services/realtimeChatService';
 import { getSettings } from '../services/settingsService';
 import { getAuditLog, logAction, saveAuditLog } from '../services/auditLogService';
 import { getFaqs, saveFaqs } from '../services/faqService';
@@ -283,6 +283,8 @@ interface AppContextType {
   toasts: ToastType[];
   forgotPasswordRole: 'customer' | 'seller' | null;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
+  /** Supabase/Socket presence: counterpart online per conversation (for chat header). */
+  chatPeerOnlineByConversationId: Record<string, boolean>;
   selectedCategory: VehicleCategory | 'ALL';
   publicSellerProfile: User | null;
   activeChat: Conversation | null;
@@ -373,6 +375,7 @@ interface AppContextType {
   sendMessage: (conversationId: string, message: string) => void;
   sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => void;
   markAsRead: (conversationId: string) => void;
+  clearConversationMessages: (conversationId: string) => Promise<void>;
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
   flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => void;
   updateUser: (email: string, updates: Partial<User>) => Promise<void>;
@@ -535,6 +538,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<ToastType[]>([]);
   const [forgotPasswordRole, setForgotPasswordRole] = useState<'customer' | 'seller' | null>(null);
   const [typingStatus, setTypingStatus] = useState<{ conversationId: string; userRole: 'customer' | 'seller' } | null>(null);
+  const [chatPeerOnlineByConversationId, setChatPeerOnlineByConversationId] = useState<Record<string, boolean>>({});
   const [selectedCategory, setSelectedCategory] = useState<VehicleCategory | 'ALL'>(CategoryEnum.FOUR_WHEELER);
   const [publicSellerProfile, setPublicSellerProfile] = useState<User | null>(null);
   const [activeChat, setActiveChat] = useState<Conversation | null>(null);
@@ -2977,6 +2981,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser, conversations]);
 
+  // Supabase broadcast + presence for typing/online when Socket.io is off (production).
+  useEffect(() => {
+    if (!currentUser?.email || (currentUser.role !== 'seller' && currentUser.role !== 'customer')) {
+      setChatPeerOnlineByConversationId({});
+      realtimeChatService.syncChatEphemeralChannels([], '', 'customer');
+      return;
+    }
+    const email = currentUser.email.toLowerCase().trim();
+    const role = currentUser.role === 'seller' ? 'seller' : 'customer';
+    const metas: ChatEphemeralThreadMeta[] = conversations
+      .filter((c): c is Conversation => Boolean(c?.id))
+      .map((c) => {
+        const cid = String(c.customerId || '')
+          .toLowerCase()
+          .trim();
+        const sid = String(c.sellerId || '')
+          .toLowerCase()
+          .trim();
+        if (!cid || !sid) return null;
+        const counterpartEmail = role === 'customer' ? sid : cid;
+        return { conversationId: String(c.id), counterpartEmail };
+      })
+      .filter((m): m is ChatEphemeralThreadMeta => m != null);
+
+    realtimeChatService.syncChatEphemeralChannels(metas, email, role);
+  }, [currentUser?.email, currentUser?.role, conversations]);
+
   // Load buyer activity from database on customer login
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'customer') {
@@ -3278,16 +3309,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Setup typing status callback
     realtimeChatService.onTyping((typingStatus) => {
-      // Update typing status state for UI
       if (typingStatus.isTyping) {
         setTypingStatus({
           conversationId: typingStatus.conversationId,
-          userRole: typingStatus.userRole
+          userRole: typingStatus.userRole,
         });
       } else {
-        // Clear typing status if it matches the current conversation
-        setTypingStatus(prev => 
-          prev?.conversationId === typingStatus.conversationId ? null : prev
+        setTypingStatus((prev) =>
+          prev?.conversationId === typingStatus.conversationId &&
+          prev?.userRole === typingStatus.userRole
+            ? null
+            : prev,
         );
       }
     });
@@ -3303,38 +3335,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Add a small delay to ensure socket is fully ready
         setTimeout(() => {
           joinAllConversationRooms();
-        }, 500);
+        }, 120);
       }
     });
 
-    // Setup presence callback (track online/offline status)
+    // Setup presence callback (track online/offline status for chat header)
     realtimeChatService.onPresence((presence) => {
       if (process.env.NODE_ENV === 'development') {
         logDebug(`👤 Presence update: ${presence.userEmail} is ${presence.isOnline ? 'online' : 'offline'}`);
       }
-      // Update UI with presence status if needed
+      if (!presence.conversationId || !presence.userEmail) return;
+      setChatPeerOnlineByConversationId((prev) => ({
+        ...prev,
+        [presence.conversationId]: presence.isOnline,
+      }));
     });
 
-    // Setup read receipt callback
-    realtimeChatService.onRead((conversationId, messageId, readBy) => {
-      setConversations(prev => {
-        return prev.map(conv => {
-          if (conv.id === conversationId) {
-            const updatedMessages = conv.messages.map(msg => {
-              if (msg.id === messageId) {
-                return { ...msg, isRead: true };
-              }
-              return msg;
-            });
-            return {
-              ...conv,
-              messages: updatedMessages,
-              isReadBySeller: readBy === 'seller' ? true : conv.isReadBySeller,
-              isReadByCustomer: readBy === 'customer' ? true : conv.isReadByCustomer
-            };
-          }
-          return conv;
+    // Setup read receipt callback (remote: mark listed message ids as read by recipient)
+    realtimeChatService.onRead((conversationId, messageIds, _readBy) => {
+      const idSet = new Set(messageIds.map(String));
+      setConversations((prev) => {
+        const next = prev.map((conv) => {
+          if (String(conv.id) !== String(conversationId)) return conv;
+          const updatedMessages = (conv.messages || []).map((msg) =>
+            idSet.has(String(msg.id)) ? { ...msg, isRead: true } : msg,
+          );
+          return { ...conv, messages: updatedMessages };
         });
+        try {
+          saveConversations(next);
+        } catch (e) {
+          console.warn('saveConversations after read receipt failed', e);
+        }
+        return next;
+      });
+      setActiveChat((prev) => {
+        if (!prev || String(prev.id) !== String(conversationId)) return prev;
+        const updatedMessages = (prev.messages || []).map((msg) =>
+          idSet.has(String(msg.id)) ? { ...msg, isRead: true } : msg,
+        );
+        return { ...prev, messages: updatedMessages };
       });
     });
 
@@ -3746,6 +3786,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     toasts,
     forgotPasswordRole,
     typingStatus,
+    chatPeerOnlineByConversationId,
     selectedCategory,
     publicSellerProfile,
     activeChat,
@@ -4801,7 +4842,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         await realtimeChatService.joinConversation(conversationId);
 
-        const conversation = conversations.find(conv => conv.id === conversationId);
+        const conversation = conversations.find(
+          (conv) => conv && String(conv.id) === String(conversationId)
+        );
         if (!conversation) {
           console.warn('⚠️ Conversation not found:', conversationId);
           addToast(t('toast.conversationNotFoundRefresh'), 'error');
@@ -4809,15 +4852,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         const messageId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+        const resolvedType = type || 'text';
+        const displayText =
+          resolvedType === 'image'
+            ? (messageText?.trim() || '📷 Photo')
+            : resolvedType === 'voice'
+              ? (messageText?.trim() || '🎤 Voice message')
+              : messageText;
 
         const newMessage: ChatMessage = {
           id: messageId,
           sender: (currentUser.role === 'seller' ? 'seller' : 'user') as 'seller' | 'user',
-          text: messageText,
+          text: displayText,
           timestamp: new Date().toISOString(),
           isRead: false,
-          type: type || 'text',
-          ...(type === 'offer' && payload ? { payload } : {}),
+          type: resolvedType,
+          ...(payload && (resolvedType === 'offer' || resolvedType === 'image' || resolvedType === 'voice')
+            ? { payload }
+            : {}),
         };
 
         const normalizedUserEmail = (currentUser.email || '').toLowerCase().trim();
@@ -4826,7 +4878,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setConversations((prev) => {
           const updated = Array.isArray(prev)
             ? prev.map((conv) =>
-                conv && conv.id === conversationId
+                conv && String(conv.id) === String(conversationId)
                   ? {
                       ...conv,
                       messages: Array.isArray(conv.messages) ? [...conv.messages, newMessage] : [newMessage],
@@ -4852,8 +4904,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } catch (error) {
             console.error('Failed to save conversations to localStorage:', error);
           }
-          const updatedConversation = updated.find((conv) => conv.id === conversationId);
-          if (updatedConversation && activeChat?.id === conversationId) {
+          const updatedConversation = updated.find((conv) => String(conv.id) === String(conversationId));
+          if (updatedConversation && activeChat && String(activeChat.id) === String(conversationId)) {
             setActiveChat(updatedConversation);
           }
           return updated;
@@ -4879,41 +4931,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     markAsRead: async (conversationId: string) => {
       if (!currentUser) return;
-      
-      const conversation = conversations.find(conv => conv.id === conversationId);
+
+      const conversation = conversations.find(
+        (conv) => conv && String(conv.id) === String(conversationId),
+      );
       if (!conversation) return;
-      
-      // Get unread message IDs
-      const unreadMessageIds = conversation.messages
-        .filter(msg => !msg.isRead)
-        .map(msg => msg.id);
-      
-      if (unreadMessageIds.length === 0) return;
-      
+
       const readerRole = currentUser.role as 'customer' | 'seller';
-      
-      // Update local state immediately
-      setConversations(prev => Array.isArray(prev) ? prev.map(conv => 
-        conv && conv.id === conversationId ? {
-          ...conv,
-          messages: Array.isArray(conv.messages) ? conv.messages.map(msg => ({ ...msg, isRead: true })) : [],
-          isReadBySeller: readerRole === 'seller' ? true : conv.isReadBySeller,
-          isReadByCustomer: readerRole === 'customer' ? true : conv.isReadByCustomer
-        } : conv
-      ) : []);
-      
-      // Send read receipt via real-time service
+      const otherSender: 'user' | 'seller' = readerRole === 'customer' ? 'seller' : 'user';
+      const msgs = Array.isArray(conversation.messages) ? conversation.messages : [];
+      const unreadMessageIds = msgs
+        .filter((msg) => msg.sender === otherSender && !msg.isRead)
+        .map((msg) => msg.id);
+
+      if (unreadMessageIds.length === 0) return;
+
+      setConversations((prev) =>
+        Array.isArray(prev)
+          ? prev.map((conv) =>
+              conv && String(conv.id) === String(conversationId)
+                ? {
+                    ...conv,
+                    messages: Array.isArray(conv.messages)
+                      ? conv.messages.map((msg) =>
+                          msg.sender === otherSender && !msg.isRead ? { ...msg, isRead: true } : msg,
+                        )
+                      : [],
+                    isReadBySeller: readerRole === 'seller' ? true : conv.isReadBySeller,
+                    isReadByCustomer: readerRole === 'customer' ? true : conv.isReadByCustomer,
+                  }
+                : conv,
+            )
+          : [],
+      );
+
       await realtimeChatService.markAsRead(conversationId, unreadMessageIds, readerRole);
+
+      import('../services/conversationService')
+        .then(({ patchConversationMarkRead }) =>
+          patchConversationMarkRead(conversationId, unreadMessageIds),
+        )
+        .catch((err) => console.warn('Persist mark-read failed (non-fatal):', err));
+    },
+    clearConversationMessages: async (conversationId: string) => {
+      if (!currentUser) return;
+      try {
+        const { patchConversationClearMessages } = await import('../services/conversationService');
+        const res = await patchConversationClearMessages(conversationId);
+        if (!res.success) {
+          addToast(res.error || t('toast.failedSendMessageGeneric'), 'error');
+          return;
+        }
+        const server = res.data;
+        const now = server?.lastMessageAt || new Date().toISOString();
+        setConversations((prev) => {
+          const next = Array.isArray(prev)
+            ? prev.map((c) =>
+                String(c.id) === String(conversationId)
+                  ? {
+                      ...c,
+                      messages: Array.isArray(server?.messages) ? server.messages : [],
+                      lastMessage: server?.lastMessage ?? '',
+                      lastMessageAt: now,
+                      isReadBySeller: server?.isReadBySeller !== undefined ? server.isReadBySeller : true,
+                      isReadByCustomer:
+                        server?.isReadByCustomer !== undefined ? server.isReadByCustomer : true,
+                    }
+                  : c,
+              )
+            : [];
+          try {
+            saveConversations(next);
+          } catch (e) {
+            console.error('saveConversations after clear failed', e);
+          }
+          return next;
+        });
+        setActiveChat((prev) => {
+          if (!prev || String(prev.id) !== String(conversationId)) return prev;
+          return {
+            ...prev,
+            messages: Array.isArray(server?.messages) ? server.messages : [],
+            lastMessage: server?.lastMessage ?? '',
+            lastMessageAt: now,
+            isReadBySeller: true,
+            isReadByCustomer: true,
+          };
+        });
+        addToast('Chat cleared', 'success');
+      } catch (error) {
+        console.error('clearConversationMessages:', error);
+        addToast(t('toast.failedSendMessageGeneric'), 'error');
+      }
     },
     toggleTyping: (conversationId: string, isTyping: boolean) => {
       if (!currentUser) return;
-      
+      if (currentUser.role !== 'seller' && currentUser.role !== 'customer') return;
+
       const userRole = (currentUser.role === 'seller' ? 'seller' : 'customer') as 'customer' | 'seller';
-      
-      // Update local typing status
-      setTypingStatus(isTyping ? { conversationId, userRole } : null);
-      
-      // Send typing indicator via real-time service
+
+      // Remote typing state comes only from Socket.io / Supabase broadcast (see onTyping).
       realtimeChatService.sendTypingIndicator(conversationId, userRole, isTyping);
     },
     flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => {
@@ -5426,7 +5543,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }), [
     currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady, currentUser,
     comparisonList, ratings, sellerRatings, wishlist, conversations, toasts,
-    forgotPasswordRole, typingStatus, selectedCategory, publicSellerProfile,
+    forgotPasswordRole, typingStatus, chatPeerOnlineByConversationId, selectedCategory, publicSellerProfile,
     activeChat, isAnnouncementVisible, recommendations, initialSearchQuery,
     isCommandPaletteOpen, userLocation, selectedCity, users, platformSettings,
     auditLog, vehicleData, faqItems, supportTickets, notifications,

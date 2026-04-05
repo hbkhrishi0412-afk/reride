@@ -1945,6 +1945,32 @@ app.put('/api/conversations', async (req, res) => {
   }
 });
 
+// Dev stub: production uses Supabase via api/main PATCH
+app.patch('/api/conversations', (req, res) => {
+  try {
+    const { conversationId, clearMessages, markReadMessageIds } = req.body || {};
+    if (!conversationId) {
+      return res.status(400).json({ success: false, reason: 'conversationId is required' });
+    }
+    const now = new Date().toISOString();
+    return res.json({
+      success: true,
+      data: {
+        id: String(conversationId),
+        messages: clearMessages ? [] : undefined,
+        lastMessageAt: now,
+        lastMessage: clearMessages ? '' : undefined,
+        isReadBySeller: true,
+        isReadByCustomer: true,
+        markReadMessageIds: markReadMessageIds || [],
+      },
+    });
+  } catch (error) {
+    console.error('Error in PATCH /api/conversations:', error);
+    res.status(500).json({ success: false, reason: 'PATCH conversations failed' });
+  }
+});
+
 app.delete('/api/conversations', (req, res) => {
   try {
     const { conversationId } = req.body || req.query;

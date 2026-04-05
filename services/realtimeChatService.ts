@@ -5,7 +5,9 @@
  * using WebSocket for instant delivery and Supabase for persistent storage.
  */
 
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Conversation, ChatMessage, Notification } from '../types';
+import { getSupabaseClient } from '../lib/supabase';
 import { addMessageToConversation, saveConversationToSupabase } from './conversationService';
 import {
   getMobileLocalApiOrigin,
@@ -53,6 +55,12 @@ interface PresenceStatus {
   lastSeen?: string;
 }
 
+/** Per-thread metadata for Supabase Realtime broadcast (typing) + presence (online). */
+export interface ChatEphemeralThreadMeta {
+  conversationId: string;
+  counterpartEmail: string;
+}
+
 class RealtimeChatService {
   private socket: SocketInstance | null = null;
   private isConnecting = false;
@@ -63,13 +71,179 @@ class RealtimeChatService {
   private onMessageReceived?: (conversationId: string, message: ChatMessage, conversationData?: Partial<Conversation>) => void;
   private onTypingStatusChanged?: (status: TypingStatus) => void;
   private onConnectionStatusChanged?: (connected: boolean) => void;
-  private onReadReceipt?: (conversationId: string, messageId: number | string, readBy: 'customer' | 'seller') => void;
+  private onReadReceipt?: (
+    conversationId: string,
+    messageIds: (number | string)[],
+    readBy: 'customer' | 'seller',
+  ) => void;
   private onPresenceChanged?: (status: PresenceStatus) => void;
   private onNotificationReceived?: (notification: Notification) => void;
   private pendingMessages: Map<string, ChatMessage[]> = new Map(); // Queue messages when offline
   private userPresence: Map<string, UserPresence> = new Map(); // Track user presence
   private lastUserEmail = '';
   private lastUserRole: 'customer' | 'seller' = 'customer';
+  private supabaseEphemeralChannels = new Map<string, RealtimeChannel>();
+  private lastEphemeralSyncArgs: {
+    metas: ChatEphemeralThreadMeta[];
+    email: string;
+    role: 'customer' | 'seller';
+  } | null = null;
+
+  /**
+   * Subscribe to Supabase broadcast+presence per conversation when Socket.io is not in use
+   * (production / mobile). Keeps typing + online indicators in sync with low latency.
+   */
+  syncChatEphemeralChannels(
+    metas: ChatEphemeralThreadMeta[],
+    myEmail: string,
+    myRole: 'customer' | 'seller',
+  ): void {
+    this.lastEphemeralSyncArgs = { metas, email: myEmail, role: myRole };
+    if (this.socket?.connected) {
+      this.teardownSupabaseEphemeral();
+      return;
+    }
+    this.applySupabaseEphemeralSubscriptions(metas, myEmail, myRole);
+  }
+
+  private teardownSupabaseEphemeral(): void {
+    if (this.supabaseEphemeralChannels.size === 0) return;
+    try {
+      const supabase = getSupabaseClient();
+      for (const ch of this.supabaseEphemeralChannels.values()) {
+        try {
+          supabase.removeChannel(ch);
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    this.supabaseEphemeralChannels.clear();
+  }
+
+  private applySupabaseEphemeralSubscriptions(
+    metas: ChatEphemeralThreadMeta[],
+    myEmail: string,
+    myRole: 'customer' | 'seller',
+  ): void {
+    if (typeof window === 'undefined') return;
+
+    const norm = (e: string) => (e || '').toLowerCase().trim();
+    const me = norm(myEmail);
+    if (!me) {
+      this.teardownSupabaseEphemeral();
+      return;
+    }
+
+    let supabase: ReturnType<typeof getSupabaseClient>;
+    try {
+      supabase = getSupabaseClient();
+    } catch {
+      return;
+    }
+
+    const counterpartRole: 'customer' | 'seller' = myRole === 'customer' ? 'seller' : 'customer';
+    const want = new Set(metas.map((m) => String(m.conversationId)));
+
+    for (const id of [...this.supabaseEphemeralChannels.keys()]) {
+      if (!want.has(id)) {
+        const ch = this.supabaseEphemeralChannels.get(id);
+        if (ch) {
+          try {
+            supabase.removeChannel(ch);
+          } catch {
+            /* ignore */
+          }
+        }
+        this.supabaseEphemeralChannels.delete(id);
+      }
+    }
+
+    for (const m of metas) {
+      const convId = String(m.conversationId);
+      if (this.supabaseEphemeralChannels.has(convId)) continue;
+
+      const counterpart = norm(m.counterpartEmail);
+      if (!counterpart) continue;
+
+      const topic = `reride-chat-${convId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+      const ch = supabase
+        .channel(topic, {
+          config: {
+            broadcast: { self: false },
+            presence: { key: me },
+          },
+        })
+        .on(
+          'broadcast',
+          { event: 'typing' },
+          (evt: { payload?: { userRole?: string; isTyping?: boolean } } | { userRole?: string; isTyping?: boolean }) => {
+            const raw = evt as { payload?: { userRole?: string; isTyping?: boolean }; userRole?: string; isTyping?: boolean };
+            const p = raw.payload ?? raw;
+            if (!p || (p.userRole !== 'customer' && p.userRole !== 'seller')) return;
+            this.onTypingStatusChanged?.({
+              conversationId: convId,
+              userRole: p.userRole as 'customer' | 'seller',
+              isTyping: !!p.isTyping,
+            });
+          },
+        )
+        .on('presence', { event: 'sync' }, () => {
+          try {
+            const state = ch.presenceState();
+            const keys = Object.keys(state).map(norm);
+            const online = keys.includes(counterpart);
+            this.onPresenceChanged?.({
+              conversationId: convId,
+              userEmail: m.counterpartEmail,
+              userRole: counterpartRole,
+              isOnline: online,
+            });
+          } catch {
+            /* ignore */
+          }
+        })
+        .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            void ch.track({ role: myRole, online_at: new Date().toISOString() }).catch(() => {});
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            this.supabaseEphemeralChannels.delete(convId);
+          }
+        });
+
+      this.supabaseEphemeralChannels.set(convId, ch);
+    }
+  }
+
+  private refreshEphemeralAfterSocketDisconnect(): void {
+    if (!this.lastEphemeralSyncArgs) return;
+    const { metas, email, role } = this.lastEphemeralSyncArgs;
+    queueMicrotask(() => {
+      if (this.socket?.connected) return;
+      this.applySupabaseEphemeralSubscriptions(metas, email, role);
+    });
+  }
+
+  private sendTypingSupabaseBroadcast(
+    conversationId: string,
+    userRole: 'customer' | 'seller',
+    isTyping: boolean,
+  ): void {
+    const ch = this.supabaseEphemeralChannels.get(String(conversationId));
+    if (!ch) return;
+    try {
+      void ch.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { userRole, isTyping, ts: Date.now() },
+      });
+    } catch {
+      /* ignore */
+    }
+  }
 
   /**
    * Initialize WebSocket connection for real-time chat
@@ -144,16 +318,7 @@ class RealtimeChatService {
 
           this.setupSocketListeners();
           this.reconnectAttempts = 0;
-          
-          // Wait a bit to see if connection succeeds
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // If still not connected after setup, that's okay - it will reconnect automatically
-          if (!this.socket.connected) {
-            console.log('ℹ️ WebSocket connection pending, will connect when server is available');
-            // Don't return false - let it try to reconnect in background
-          }
-          
+
           return true;
         } catch (wsError) {
           console.warn('⚠️ WebSocket connection failed (server may not be running):', wsError);
@@ -209,8 +374,9 @@ class RealtimeChatService {
       console.log('✅ Real-time chat connected', { socketId: this.socket?.id, connected: this.socket?.connected });
       this.reconnectAttempts = 0;
       this.isConnecting = false;
+      this.teardownSupabaseEphemeral();
       this.onConnectionStatusChanged?.(true);
-      
+
       // Sync pending messages when reconnected
       this.syncPendingMessages();
     });
@@ -218,6 +384,7 @@ class RealtimeChatService {
     this.socket.on('disconnect', () => {
       console.log('🔧 Real-time chat disconnected');
       this.onConnectionStatusChanged?.(false);
+      this.refreshEphemeralAfterSocketDisconnect();
     });
 
     this.socket.on('connect_error', (error: unknown) => {
@@ -229,6 +396,7 @@ class RealtimeChatService {
         this.socket?.disconnect();
         this.socket = null;
         this.onConnectionStatusChanged?.(false);
+        this.refreshEphemeralAfterSocketDisconnect();
       }
     });
 
@@ -248,14 +416,26 @@ class RealtimeChatService {
       this.onTypingStatusChanged?.(data);
     });
 
-    // Listen for read receipts
-    this.socket.on('conversation:read', (data: {
-      conversationId: string;
-      messageId: number | string;
-      readBy: 'customer' | 'seller';
-    }) => {
-      this.onReadReceipt?.(data.conversationId, data.messageId, data.readBy);
-    });
+    // Listen for read receipts (server emits messageIds[])
+    this.socket.on(
+      'conversation:read',
+      (data: {
+        conversationId: string;
+        messageIds?: (number | string)[];
+        messageId?: number | string;
+        readBy: 'customer' | 'seller';
+      }) => {
+        const ids =
+          Array.isArray(data.messageIds) && data.messageIds.length > 0
+            ? data.messageIds
+            : data.messageId != null
+              ? [data.messageId]
+              : [];
+        if (ids.length > 0) {
+          this.onReadReceipt?.(data.conversationId, ids, data.readBy);
+        }
+      },
+    );
 
     // Listen for message delivery status
     this.socket.on('message:status', (data: MessageDeliveryStatus) => {
@@ -452,38 +632,44 @@ class RealtimeChatService {
   }
 
   /**
-   * Send typing indicator
+   * Send typing indicator (Socket.io in local dev, Supabase broadcast in production).
    */
   sendTypingIndicator(conversationId: string, userRole: 'customer' | 'seller', isTyping: boolean): void {
-    if (!this.socket?.connected) return;
-
-    // Clear existing timeout
     const timeoutKey = `${conversationId}-${userRole}`;
     const existingTimeout = this.typingTimeouts.get(timeoutKey);
     if (existingTimeout) {
       clearTimeout(existingTimeout);
+      this.typingTimeouts.delete(timeoutKey);
     }
 
-    // Send typing indicator
-    this.socket.emit('conversation:typing', {
-      conversationId,
-      userRole,
-      isTyping
-    });
-
-    // Auto-stop typing indicator after 3 seconds
-    if (isTyping) {
-      const timeout = setTimeout(() => {
-        this.socket?.emit('conversation:typing', {
+    const emitNow = () => {
+      if (this.socket?.connected) {
+        this.socket.emit('conversation:typing', {
           conversationId,
           userRole,
-          isTyping: false
+          isTyping,
         });
+      } else {
+        this.sendTypingSupabaseBroadcast(conversationId, userRole, isTyping);
+      }
+    };
+
+    emitNow();
+
+    if (isTyping) {
+      const timeout = setTimeout(() => {
+        if (this.socket?.connected) {
+          this.socket.emit('conversation:typing', {
+            conversationId,
+            userRole,
+            isTyping: false,
+          });
+        } else {
+          this.sendTypingSupabaseBroadcast(conversationId, userRole, false);
+        }
         this.typingTimeouts.delete(timeoutKey);
       }, 3000);
       this.typingTimeouts.set(timeoutKey, timeout);
-    } else {
-      this.typingTimeouts.delete(timeoutKey);
     }
   }
 
@@ -599,7 +785,13 @@ class RealtimeChatService {
   /**
    * Set callback for read receipts
    */
-  onRead(callback: (conversationId: string, messageId: number | string, readBy: 'customer' | 'seller') => void): void {
+  onRead(
+    callback: (
+      conversationId: string,
+      messageIds: (number | string)[],
+      readBy: 'customer' | 'seller',
+    ) => void,
+  ): void {
     this.onReadReceipt = callback;
   }
 
@@ -627,6 +819,9 @@ class RealtimeChatService {
 
     // Clear message callbacks
     this.messageCallbacks.clear();
+
+    this.teardownSupabaseEphemeral();
+    this.lastEphemeralSyncArgs = null;
 
     if (this.socket) {
       this.socket.disconnect();

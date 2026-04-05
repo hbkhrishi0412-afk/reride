@@ -15,12 +15,16 @@ interface CustomerInboxProps {
   vehicles?: Vehicle[];
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
+  onUserStoppedTyping?: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   /** Open this thread when landing from a notification (Messenger-style deep link). */
   initialOpenConversationId?: string | null;
   onConsumedInitialConversation?: () => void;
+  currentUserEmail?: string | null;
+  onClearChat?: (conversationId: string) => void | Promise<void>;
+  chatPeerOnlineByConversationId?: Record<string, boolean>;
 }
 
 // Helper function to count unread messages
@@ -39,11 +43,15 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   vehicles,
   typingStatus,
   onUserTyping,
+  onUserStoppedTyping,
   onMarkMessagesAsRead,
   onFlagContent,
   onOfferResponse,
   initialOpenConversationId = null,
   onConsumedInitialConversation,
+  currentUserEmail,
+  onClearChat,
+  chatPeerOnlineByConversationId,
 }) => {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -305,19 +313,27 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                       otherUserName={getSellerName(selectedConv.sellerId)}
                       callTargetPhone={getSellerPhone(selectedConv.sellerId, selectedConv.vehicleId)}
                       callTargetName={getSellerName(selectedConv.sellerId)}
+                      otherUserOnline={chatPeerOnlineByConversationId?.[String(selectedConv.id)]}
                       onStartCall={handleStartCall}
                       onSendMessage={(messageText, type, payload) => {
                           if (type === 'offer' && payload) {
                               onSendMessage(selectedConv.vehicleId, messageText, type, payload);
+                          } else if (type === 'image' && payload?.imageUrl) {
+                              onSendMessage(selectedConv.vehicleId, messageText || '📷 Photo', 'image', payload);
+                          } else if (type === 'voice' && payload?.audioUrl) {
+                              onSendMessage(selectedConv.vehicleId, messageText || '🎤 Voice message', 'voice', payload);
                           } else {
                               onSendMessage(selectedConv.vehicleId, messageText);
                           }
                       }}
                       typingStatus={typingStatus}
                       onUserTyping={onUserTyping}
+                      onUserStoppedTyping={onUserStoppedTyping}
+                      uploaderEmail={currentUserEmail ?? undefined}
                       onMarkMessagesAsRead={onMarkMessagesAsRead}
                       onFlagContent={onFlagContent}
                       onOfferResponse={onOfferResponse}
+                      onClearChat={onClearChat}
                       height="h-full"
                   />
               ) : (

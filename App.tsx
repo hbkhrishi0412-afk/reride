@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect } from 'react';
+import React, { Suspense, useCallback, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -333,6 +333,7 @@ const AppContent: React.FC = () => {
     setSelectedCity,
     publicSellerProfile,
     typingStatus,
+    chatPeerOnlineByConversationId,
     removeToast,
     setActiveChat,
     isCommandPaletteOpen,
@@ -345,6 +346,7 @@ const AppContent: React.FC = () => {
     sendMessage,
     sendMessageWithType,
     markAsRead,
+    clearConversationMessages,
     toggleTyping,
     flagContent,
     updateUser,
@@ -495,6 +497,28 @@ const AppContent: React.FC = () => {
   const handleInboxInitialConversationConsumed = React.useCallback(() => {
     setInboxConversationIdToOpen(null);
   }, []);
+
+  /** Seller dashboard message rows: open reply UI. On native/mobile app, use global ChatWidget; elsewhere deep-link inbox. */
+  const handleSellerOpenChatFromDashboard = useCallback(
+    (conv: Conversation) => {
+      if (!conv?.id) return;
+      const id = String(conv.id);
+      const latest = conversations.find((c) => c && String(c.id) === id) ?? conv;
+
+      if (isMobileApp && currentUser?.role === 'seller') {
+        setActiveChat(latest);
+        void markAsRead(id);
+        return;
+      }
+
+      setInboxConversationIdToOpen(id);
+      if (currentView !== ViewEnum.INBOX) {
+        navigate(ViewEnum.INBOX);
+      }
+      void markAsRead(id);
+    },
+    [conversations, currentView, currentUser?.role, isMobileApp, markAsRead, navigate, setActiveChat]
+  );
 
   /** Dealers & seller profiles are public to view; calling, follow, save, compare require an account. */
   const requireLoginForDealerInteraction = React.useCallback(() => {
@@ -1845,6 +1869,7 @@ const AppContent: React.FC = () => {
                   onNotificationClick={handleNotificationClick}
                   onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
                   addToast={addToast}
+                  onSellerOpenChat={handleSellerOpenChatFromDashboard}
                 />
             </DashboardErrorBoundary>
           );
@@ -1984,11 +2009,19 @@ const AppContent: React.FC = () => {
                       currentUser?.email &&
                       conversationBelongsToSeller(c, currentUser.email, currentUser.id)
                   )}
-              onSellerSendMessage={(conversationId, messageText, _type, _payload) => sendMessage(conversationId, messageText)}
+              onSellerSendMessage={(conversationId, messageText, type, payload) => {
+                if (type || payload) {
+                  sendMessageWithType(conversationId, messageText, type, payload);
+                } else {
+                  sendMessage(conversationId, messageText);
+                }
+              }}
               onMarkConversationAsReadBySeller={(conversationId) => markAsRead(conversationId)}
               typingStatus={typingStatus}
               onUserTyping={(conversationId, _userRole) => toggleTyping(conversationId, true)}
+              onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
               onMarkMessagesAsRead={(conversationId, _readerRole) => markAsRead(conversationId)}
+              onClearChat={clearConversationMessages}
               onUpdateSellerProfile={async (details) => {
                 if (currentUser) {
                   await updateUser(currentUser.email, details);
@@ -2222,11 +2255,8 @@ const AppContent: React.FC = () => {
               allVehicles={vehicles || []}
               onOfferResponse={onOfferResponse}
               onViewVehicle={selectVehicle}
-              onSellerOpenChat={(conv) => {
-                setInboxConversationIdToOpen(String(conv.id));
-                markAsRead(conv.id);
-                navigate(ViewEnum.INBOX);
-              }}
+              onSellerOpenChat={handleSellerOpenChatFromDashboard}
+              chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
             />
             </Suspense>
           </DashboardErrorBoundary>
@@ -2475,6 +2505,7 @@ const AppContent: React.FC = () => {
               inboxRole={normalizeInboxRole(currentUser.role) === 'seller' ? 'seller' : 'customer'}
               initialOpenConversationId={inboxConversationIdToOpen}
               onConsumedInitialConversation={handleInboxInitialConversationConsumed}
+              chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
               vehicles={vehicles}
               onSendMessage={(conversationId, messageText, type, payload) => {
                 const conv = conversations.find((c) => c && c.id === conversationId);
@@ -2485,9 +2516,7 @@ const AppContent: React.FC = () => {
               onMarkAsRead={markAsRead}
               users={users}
               typingStatus={typingStatus}
-              onUserTyping={(conversationId: string, _userRole: 'customer' | 'seller') => {
-                toggleTyping(conversationId, true);
-              }}
+              onTypingActivity={(conversationId, isTyping) => toggleTyping(conversationId, isTyping)}
               onMarkMessagesAsRead={markAsRead}
               onFlagContent={(type, id, _reason) => flagContent(type, id)}
               onOfferResponse={(conversationId, messageId, response, counterPrice) => {
@@ -2495,6 +2524,7 @@ const AppContent: React.FC = () => {
               }}
               currentUser={currentUser}
               onNavigate={navigate}
+              onClearChat={clearConversationMessages}
             />
           );
         }
@@ -2516,8 +2546,6 @@ const AppContent: React.FC = () => {
                 return c.vehicleId === vehicleId && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
               }) : undefined;
               if (conversation) {
-                // Use sendMessageWithType for both regular and offer messages
-                // This ensures proper saving, notifications, and activeChat updates
                 sendMessageWithType(conversation.id, messageText, type, payload);
               }
             }}
@@ -2527,12 +2555,16 @@ const AppContent: React.FC = () => {
             onUserTyping={(conversationId: string, _userRole: 'customer' | 'seller') => {
               toggleTyping(conversationId, true);
             }}
+            onUserStoppedTyping={(conversationId: string) => toggleTyping(conversationId, false)}
             onMarkMessagesAsRead={markAsRead}
             onFlagContent={(type, id, _reason) => flagContent(type, id)}
             onOfferResponse={(conversationId, messageId, response, counterPrice) => {
               // Handle offer responses using the AppProvider function
               onOfferResponse(conversationId, messageId, response, counterPrice);
             }}
+            currentUserEmail={currentUser.email}
+            onClearChat={clearConversationMessages}
+            chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
           />
         ) : (
           <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
@@ -3444,11 +3476,7 @@ const AppContent: React.FC = () => {
             notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
             onNotificationClick={handleNotificationClick}
             onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
-            onSellerOpenChat={(conv) => {
-              setInboxConversationIdToOpen(String(conv.id));
-              markAsRead(conv.id);
-              navigate(ViewEnum.INBOX);
-            }}
+            onSellerOpenChat={handleSellerOpenChatFromDashboard}
           />
         </MobileLayout>
         
@@ -3471,6 +3499,7 @@ const AppContent: React.FC = () => {
                   conversation={activeChat}
                   currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
                   otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                  otherUserOnline={chatPeerOnlineByConversationId[String(activeChat.id)]}
                   callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                   callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                   isInlineLaunch={true}
@@ -3490,6 +3519,8 @@ const AppContent: React.FC = () => {
                   onUserTyping={(conversationId, _userRole) => {
                     toggleTyping(conversationId, true);
                   }}
+                  onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
+                  uploaderEmail={currentUser?.email}
                   onMarkMessagesAsRead={(conversationId, _readerRole) => {
                     markAsRead(conversationId);
                   }}
@@ -3503,6 +3534,7 @@ const AppContent: React.FC = () => {
                     onOfferResponse(conversationId, messageId, response, counterPrice);
                     addToast(`Offer ${response}`, 'success');
                   }}
+                  onClearChat={clearConversationMessages}
                 />
               </Suspense>
             </ChatErrorBoundary>
@@ -3576,6 +3608,7 @@ const AppContent: React.FC = () => {
                     conversation={activeChat}
                     currentUserRole="customer"
                     otherUserName={resolveChatOtherPartyName(users, activeChat, 'customer')}
+                    otherUserOnline={chatPeerOnlineByConversationId[String(activeChat.id)]}
                     callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, 'customer')}
                     callTargetName={resolveChatOtherPartyName(users, activeChat, 'customer')}
                     isInlineLaunch={true}
@@ -3594,13 +3627,19 @@ const AppContent: React.FC = () => {
                       }
                       setActiveChat(null);
                     }}
-                    onSendMessage={(messageText, _type, _payload) => {
-                      sendMessage(activeChat.id, messageText);
+                    onSendMessage={(messageText, type, payload) => {
+                      if (type || payload) {
+                        sendMessageWithType(activeChat.id, messageText, type, payload);
+                      } else {
+                        sendMessage(activeChat.id, messageText);
+                      }
                     }}
                     typingStatus={typingStatus}
                     onUserTyping={(conversationId, _userRole) => {
                       toggleTyping(conversationId, true);
                     }}
+                    onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
+                    uploaderEmail={currentUser?.email}
                     onMarkMessagesAsRead={(conversationId, _readerRole) => {
                       markAsRead(conversationId);
                     }}
@@ -3614,6 +3653,7 @@ const AppContent: React.FC = () => {
                       onOfferResponse(conversationId, messageId, response, counterPrice);
                       addToast(`Offer ${response}`, 'success');
                     }}
+                    onClearChat={clearConversationMessages}
                   />
                 </Suspense>
               </ChatErrorBoundary>
@@ -3689,6 +3729,7 @@ const AppContent: React.FC = () => {
                 conversation={activeChat}
                 currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
                 otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                otherUserOnline={chatPeerOnlineByConversationId[String(activeChat.id)]}
                 callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                 callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                 isInlineLaunch={true}
@@ -3708,6 +3749,8 @@ const AppContent: React.FC = () => {
                 onUserTyping={(conversationId, _userRole) => {
                   toggleTyping(conversationId, true);
                 }}
+                onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
+                uploaderEmail={currentUser?.email}
                 onMarkMessagesAsRead={(conversationId, _readerRole) => {
                   markAsRead(conversationId);
                 }}
@@ -3718,6 +3761,7 @@ const AppContent: React.FC = () => {
                   onOfferResponse(conversationId, messageId, response, counterPrice);
                   addToast(`Offer ${response}`, 'success');
                 }}
+                onClearChat={clearConversationMessages}
               />
             </Suspense>
           </ChatErrorBoundary>
@@ -3808,6 +3852,7 @@ const AppContent: React.FC = () => {
                 conversation={activeChat}
                 currentUserRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
                 otherUserName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
+                otherUserOnline={chatPeerOnlineByConversationId[String(activeChat.id)]}
                 callTargetPhone={resolveChatCallPhone(users, vehicles, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                 callTargetName={resolveChatOtherPartyName(users, activeChat, currentUser.role === 'seller' ? 'seller' : 'customer')}
                 isInlineLaunch={true}
@@ -3816,13 +3861,19 @@ const AppContent: React.FC = () => {
                   window.open(`tel:${phone}`);
                 }}
                 onClose={handleCloseChat}
-                onSendMessage={(messageText, _type, _payload) => {
-                  sendMessage(activeChat.id, messageText);
+                onSendMessage={(messageText, type, payload) => {
+                  if (type || payload) {
+                    sendMessageWithType(activeChat.id, messageText, type, payload);
+                  } else {
+                    sendMessage(activeChat.id, messageText);
+                  }
                 }}
                 typingStatus={typingStatus}
                 onUserTyping={(conversationId, _userRole) => {
                   toggleTyping(conversationId, true);
                 }}
+                onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
+                uploaderEmail={currentUser?.email}
                 onMarkMessagesAsRead={(conversationId, _readerRole) => {
                   markAsRead(conversationId);
                 }}
@@ -3833,6 +3884,7 @@ const AppContent: React.FC = () => {
                   onOfferResponse(conversationId, messageId, response, counterPrice);
                   addToast(`Offer ${response}`, 'success');
                 }}
+                onClearChat={clearConversationMessages}
               />
             </Suspense>
           </ChatErrorBoundary>

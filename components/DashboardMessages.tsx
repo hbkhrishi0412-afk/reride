@@ -9,8 +9,11 @@ interface DashboardMessagesProps {
   onMarkConversationAsReadBySeller: (conversationId: string) => void;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
+  onUserStoppedTyping?: (conversationId: string) => void;
+  sellerEmail?: string | null;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
+  chatPeerOnlineByConversationId?: Record<string, boolean>;
 }
 
 const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
@@ -19,8 +22,11 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
   onMarkConversationAsReadBySeller,
   typingStatus,
   onUserTyping,
+  onUserStoppedTyping,
+  sellerEmail,
   onMarkMessagesAsRead,
-  onOfferResponse
+  onOfferResponse,
+  chatPeerOnlineByConversationId
 }) => {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -148,9 +154,12 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
               conversation={selectedConversation}
               currentUserRole="seller"
               otherUserName={selectedConversation.customerName}
+              otherUserOnline={chatPeerOnlineByConversationId?.[String(selectedConversation.id)]}
               onSendMessage={(messageText, type?, payload?) => selectedConversation && onSellerSendMessage(selectedConversation.id, messageText, type, payload)}
               typingStatus={typingStatus}
               onUserTyping={onUserTyping}
+              onUserStoppedTyping={onUserStoppedTyping}
+              uploaderEmail={sellerEmail ?? undefined}
               onMarkMessagesAsRead={onMarkMessagesAsRead}
               onFlagContent={() => {}}
               onOfferResponse={onOfferResponse}

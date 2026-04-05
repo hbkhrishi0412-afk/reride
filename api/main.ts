@@ -4968,14 +4968,42 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
     if (buffer.length > MAX_FILE_SIZE) {
       return res.status(400).json({ success: false, reason: 'Image must be under 10MB.' });
     }
-    const allowedMime = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    const allowedImageMime = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    const allowedAudioMime = [
+      'audio/webm',
+      'audio/mp4',
+      'audio/mpeg',
+      'audio/ogg',
+      'audio/wav',
+      'audio/aac',
+      'audio/x-m4a',
+      'audio/m4a',
+    ];
     const mime = (mimeType || 'image/jpeg').toLowerCase().split(';')[0].trim();
-    if (!allowedMime.includes(mime)) {
-      return res.status(400).json({ success: false, reason: 'Only JPEG, PNG and WebP images are allowed.' });
+    const isChatFolder = String(folder || '').startsWith('chat-messages');
+    const isAllowed =
+      allowedImageMime.includes(mime) || (isChatFolder && allowedAudioMime.includes(mime));
+    if (!isAllowed) {
+      return res.status(400).json({
+        success: false,
+        reason: isChatFolder
+          ? 'Only images (JPEG, PNG, WebP) or voice (WebM, MP4, OGG, etc.) are allowed in chat uploads.'
+          : 'Only JPEG, PNG and WebP images are allowed.',
+      });
     }
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 9);
-    const ext = (fileName.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '');
+    let ext = (fileName.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '');
+    if (allowedAudioMime.includes(mime)) {
+      if (!ext || ext === 'jpg' || ext === 'jpeg') {
+        if (mime.includes('webm')) ext = 'webm';
+        else if (mime.includes('mp4') || mime.includes('m4a')) ext = 'm4a';
+        else if (mime.includes('mpeg') || mime.includes('mp3')) ext = 'mp3';
+        else if (mime.includes('ogg')) ext = 'ogg';
+        else if (mime.includes('wav')) ext = 'wav';
+        else ext = 'webm';
+      }
+    }
     const storageFileName = `${timestamp}_${randomStr}.${ext}`;
     const filePath = `${folder}/${storageFileName}`;
     const supabase = getSupabaseAdminClient();
@@ -7197,6 +7225,70 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         return res.status(500).json({ 
           success: false, 
           reason: error instanceof Error ? error.message : 'Failed to add message to conversation' 
+        });
+      }
+    }
+
+    // PATCH — mark messages read and/or clear message history (participants only)
+    if (req.method === 'PATCH') {
+      let body = req.body as
+        | {
+            conversationId?: string;
+            markReadMessageIds?: (number | string)[];
+            clearMessages?: boolean;
+          }
+        | string
+        | undefined;
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body) as typeof body;
+        } catch {
+          return res.status(400).json({ success: false, reason: 'Invalid JSON body.' });
+        }
+      }
+      const conversationId = body && typeof body === 'object' ? body.conversationId : undefined;
+      if (!conversationId) {
+        return res.status(400).json({ success: false, reason: 'conversation ID is required' });
+      }
+
+      const conversation = await conversationService.findById(String(conversationId));
+      if (!conversation) {
+        return res.status(404).json({ success: false, reason: 'Conversation not found' });
+      }
+
+      const normalizedCustomerId = String(conversation.customerId || '').toLowerCase().trim();
+      const normalizedSellerId = String(conversation.sellerId || '').toLowerCase().trim();
+      if (!isAdmin && normalizedAuthEmail !== normalizedCustomerId && normalizedAuthEmail !== normalizedSellerId) {
+        return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
+      }
+
+      const markIds =
+        body && typeof body === 'object' && Array.isArray(body.markReadMessageIds)
+          ? body.markReadMessageIds
+          : [];
+      const doClear = Boolean(body && typeof body === 'object' && body.clearMessages);
+
+      try {
+        if (doClear) {
+          await conversationService.clearConversationMessages(String(conversation.id));
+        } else if (markIds.length > 0) {
+          await conversationService.markMessagesRead(String(conversation.id), markIds);
+        } else {
+          return res.status(400).json({
+            success: false,
+            reason: 'Provide clearMessages: true and/or markReadMessageIds array.',
+          });
+        }
+        const updatedConversation = await conversationService.findById(String(conversation.id));
+        if (!updatedConversation) {
+          return res.status(500).json({ success: false, reason: 'Failed to load conversation after update' });
+        }
+        return res.status(200).json({ success: true, data: updatedConversation });
+      } catch (error) {
+        console.error('❌ API: PATCH conversation error:', error);
+        return res.status(500).json({
+          success: false,
+          reason: error instanceof Error ? error.message : 'Failed to update conversation',
         });
       }
     }

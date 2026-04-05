@@ -281,7 +281,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   isRead: boolean;
-  type?: 'text' | 'test_drive_request' | 'offer';
+  type?: 'text' | 'test_drive_request' | 'offer' | 'image' | 'voice';
   // Real-time message status tracking
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   payload?: {
@@ -296,6 +296,12 @@ export interface ChatMessage {
     /** If this message is a counter-offer, this field holds the price of the offer it is countering. */
     counterPrice?: number;
     status?: 'pending' | 'accepted' | 'rejected' | 'countered' | 'confirmed';
+    /** Public URL for image messages (e.g. Supabase Storage). */
+    imageUrl?: string;
+    /** Public URL for voice note (e.g. WebM in Supabase Storage). */
+    audioUrl?: string;
+    /** Approximate duration in seconds (client-measured). */
+    durationSeconds?: number;
   };
 }
 
