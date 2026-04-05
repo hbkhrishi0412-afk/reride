@@ -115,6 +115,42 @@ export async function addMessageToConversation(conversationId: string, message: 
 /**
  * Get conversations from Supabase
  */
+/**
+ * Fetch one conversation by id (authenticated). Bypasses the global request queue so open-chat polling stays snappy.
+ */
+export async function getConversationByIdFromSupabase(
+  conversationId: string,
+): Promise<{ success: boolean; data?: Conversation; error?: string }> {
+  const id = String(conversationId || '').trim();
+  if (!id) {
+    return { success: false, error: 'conversationId required' };
+  }
+  try {
+    const response = await authenticatedFetch(
+      `/api/conversations?conversationId=${encodeURIComponent(id)}`,
+    );
+    if (response.status === 404) {
+      return { success: false, error: 'Not found' };
+    }
+    const parsed = await handleApiResponse<{ data?: Conversation; success?: boolean }>(response);
+    if (!parsed.success || !parsed.data) {
+      return { success: false, error: parsed.reason || parsed.error || 'Failed to load conversation' };
+    }
+    const body = parsed.data as { data?: Conversation };
+    const conv = body?.data;
+    if (!conv || typeof conv !== 'object') {
+      return { success: false, error: 'Invalid conversation payload' };
+    }
+    return { success: true, data: conv as Conversation };
+  } catch (error) {
+    console.error('getConversationByIdFromSupabase error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
 export async function getConversationsFromSupabase(customerId?: string, sellerId?: string): Promise<{ success: boolean; data?: Conversation[]; error?: string }> {
   try {
     const result = await queueRequest(

@@ -210,6 +210,33 @@ const requireAuth = (
   return auth;
 };
 
+/** App JWT (reRideAccessToken) or Supabase access_token in Authorization header. */
+const authenticateRequestDual = async (req: VercelRequest): Promise<AuthResult> => {
+  const legacy = authenticateRequest(req);
+  if (legacy.isValid) return legacy;
+  try {
+    const sb = await verifySupabaseToken(req.headers.authorization);
+    const email = (sb.email || '').toLowerCase().trim();
+    if (!email) {
+      return { isValid: false, error: 'Invalid Supabase token' };
+    }
+    const meta = (sb.user?.app_metadata ?? sb.user?.user_metadata) as Record<string, unknown> | undefined;
+    const rawRole = typeof meta?.role === 'string' ? meta.role.toLowerCase() : 'customer';
+    const role: 'customer' | 'seller' | 'admin' =
+      rawRole === 'seller' || rawRole === 'admin' ? rawRole : 'customer';
+    return {
+      isValid: true,
+      user: {
+        userId: sb.uid,
+        email,
+        role,
+      },
+    };
+  } catch {
+    return { isValid: false, error: legacy.error || 'Authentication required' };
+  }
+};
+
 const requireAdmin = (
   req: VercelRequest,
   res: VercelResponse,
@@ -4934,12 +4961,17 @@ async function handleUploadImage(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, reason: 'Method not allowed' });
   }
-  const auth = authenticateRequest(req);
-  if (!auth.isValid) {
-    return res.status(401).json({
-      success: false,
-      reason: auth.error || 'Authentication required to upload images.',
-    });
+  // Accept Supabase access_token (mobile/WebView) or legacy app JWT (reRideAccessToken)
+  try {
+    await verifySupabaseToken(req.headers.authorization);
+  } catch {
+    const legacy = authenticateRequest(req);
+    if (!legacy.isValid) {
+      return res.status(401).json({
+        success: false,
+        reason: legacy.error || 'Authentication required to upload images.',
+      });
+    }
   }
   if (!USE_SUPABASE) {
     return res.status(503).json({
@@ -7027,21 +7059,23 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
     let isAdmin = false;
     
     if (req.method === 'GET') {
-      // Try to authenticate, but don't fail if no token
-      auth = authenticateRequest(req);
+      auth = await authenticateRequestDual(req);
       if (auth.isValid && auth.user) {
         normalizedAuthEmail = auth.user.email ? auth.user.email.toLowerCase().trim() : '';
         isAdmin = auth.user.role === 'admin';
       }
-      // If auth fails, continue with empty auth (will return empty array)
     } else {
-      // POST/PUT/DELETE require authentication
-      auth = requireAuth(req, res, 'Conversations');
-      if (!auth) {
-        return;
+      auth = await authenticateRequestDual(req);
+      if (!auth.isValid || !auth.user) {
+        logWarn('⚠️ Conversations - Authentication failed:', auth.error);
+        return res.status(401).json({
+          success: false,
+          reason: auth.error || 'Authentication required.',
+          error: 'Invalid or expired authentication token',
+        });
       }
-      normalizedAuthEmail = auth.user?.email ? auth.user.email.toLowerCase().trim() : '';
-      isAdmin = auth.user?.role === 'admin';
+      normalizedAuthEmail = auth.user.email ? auth.user.email.toLowerCase().trim() : '';
+      isAdmin = auth.user.role === 'admin';
     }
 
     // GET - Retrieve conversations
