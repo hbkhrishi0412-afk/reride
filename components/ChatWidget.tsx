@@ -10,6 +10,7 @@ import { ChatMessageVoice } from './ChatMessageVoice';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { filterMessagesForViewer } from '../utils/conversationView';
 import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
+import { isOfferChatMessage } from '../utils/isOfferChatMessage';
 
 interface ChatWidgetProps {
   conversation: Conversation;
@@ -677,7 +678,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                       {msg.sender !== 'system' && (
                           <>
                               <div className={`px-3 py-2 max-w-xs text-sm leading-5 ${ msg.sender === senderType ? 'text-white rounded-2xl rounded-tr-sm' : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm'}`} style={msg.sender === senderType ? { background: 'linear-gradient(135deg, #5f48ff 0%, #7b5bff 100%)' } : { backgroundColor: '#FFFFFF', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)' }}>
-                                  {msg.type === 'offer' ? (
+                                  {isOfferChatMessage(msg) ? (
                                     <OfferMessage
                                       msg={msg}
                                       currentUserRole={currentUserRole}

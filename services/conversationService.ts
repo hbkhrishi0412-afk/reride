@@ -133,14 +133,30 @@ export async function putConversationOfferResponse(
         },
       }),
     });
-    const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(fetchResponse);
+    const result = await handleApiResponse<{
+      success?: boolean;
+      data?: Conversation;
+      reason?: string;
+      error?: string;
+    }>(fetchResponse);
     if (!result.success) {
       return {
         success: false,
         error: result.reason || result.error || `HTTP ${fetchResponse.status}`,
       };
     }
-    return { success: true, data: result.data?.data };
+    const body = result.data;
+    if (body && typeof body === 'object' && body.success === false) {
+      return {
+        success: false,
+        error: body.reason || body.error || 'Offer response was not saved',
+      };
+    }
+    const conv =
+      body && typeof body === 'object' && 'data' in body
+        ? (body as { data?: Conversation }).data
+        : (body as Conversation | undefined);
+    return { success: true, data: conv };
   } catch (error) {
     console.error('putConversationOfferResponse error:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
