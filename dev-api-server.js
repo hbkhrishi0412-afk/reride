@@ -17,6 +17,7 @@
 //
 import express from 'express';
 import cors from 'cors';
+import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { WebSocketServer } from 'ws';
@@ -38,6 +39,47 @@ const io = new Server(server, {
   }
 });
 const PORT = 3001;
+
+/**
+ * Dev parity with api/main.ts oauth-login: derive session from Supabase JWT.
+ * Verifies signature when SUPABASE_JWT_SECRET is set; otherwise decodes payload only (local dev).
+ */
+function getSupabaseJwtPayload(authHeader) {
+  if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+  const secret = process.env.SUPABASE_JWT_SECRET;
+  if (secret && String(secret).trim() && !String(secret).includes('your_')) {
+    try {
+      return jwt.verify(token, secret, { algorithms: ['HS256'] });
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const decoded = jwt.decode(token, { complete: false });
+    if (!decoded || typeof decoded !== 'object' || !decoded.sub) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function sessionFromJwtPayload(payload) {
+  if (!payload || !payload.sub) return null;
+  const phone =
+    payload.phone ||
+    payload.user_metadata?.phone ||
+    payload.app_metadata?.phone ||
+    '';
+  return {
+    id: String(payload.sub),
+    email: payload.email ? String(payload.email).toLowerCase().trim() : '',
+    phone: phone ? String(phone) : '',
+  };
+}
 
 // Enable CORS for all routes
 app.use(cors());
@@ -1148,26 +1190,77 @@ app.post('/api/users', (req, res) => {
   
   if (action === 'oauth-login') {
     const { firebaseUid, email, name, mobile, role, authProvider, avatarUrl } = req.body;
-    
-    if (!firebaseUid || !email || !name || !role) {
+
+    const payload = getSupabaseJwtPayload(req.headers.authorization);
+    const session = sessionFromJwtPayload(payload);
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        reason: 'Valid Supabase session required. Sign in again, then retry.',
+      });
+    }
+
+    const bodyUid = String(firebaseUid ?? req.body.uid ?? '').trim();
+    if (!bodyUid || bodyUid !== session.id) {
+      return res.status(403).json({
+        success: false,
+        reason: 'Session does not match this account.',
+      });
+    }
+
+    if (!name || !role) {
       return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
     }
-    
-    // Normalize email to lowercase
-    const normalizedEmail = email.toLowerCase().trim();
-    
-    // Find existing user or create new one
+
+    if (role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        reason: 'Admin accounts cannot be created via OAuth. Admin accounts must be provisioned internally.',
+      });
+    }
+    const allowedOauthRoles = ['customer', 'seller'];
+    if (!allowedOauthRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        reason: `Invalid role for OAuth registration. Allowed roles: ${allowedOauthRoles.join(', ')}`,
+      });
+    }
+
+    const tokenEmail = session.email || '';
+    const bodyEmail = String(email || '').toLowerCase().trim();
+    const derivedPhoneEmail =
+      !tokenEmail && session.phone
+        ? `${String(session.phone).replace(/\D/g, '')}@phone.reride.co.in`.toLowerCase()
+        : '';
+
+    if (tokenEmail && bodyEmail && tokenEmail !== bodyEmail) {
+      return res.status(403).json({
+        success: false,
+        reason: 'Email does not match signed-in account.',
+      });
+    }
+    if (derivedPhoneEmail && bodyEmail && derivedPhoneEmail !== bodyEmail) {
+      return res.status(403).json({
+        success: false,
+        reason: 'Account identity does not match signed-in session.',
+      });
+    }
+
+    const normalizedEmail = tokenEmail || derivedPhoneEmail || bodyEmail;
+    if (!normalizedEmail) {
+      return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
+    }
+
     let user = mockUsers.find(u => u.email === normalizedEmail);
-    
+
     if (!user) {
-      // Create new OAuth user
       user = {
         id: Date.now(),
         email: normalizedEmail,
         name,
         mobile: mobile || '',
         role,
-        firebaseUid,
+        firebaseUid: bodyUid,
         authProvider: authProvider || 'google',
         avatarUrl: avatarUrl || '',
         status: 'active',
@@ -1177,9 +1270,14 @@ app.post('/api/users', (req, res) => {
       };
       mockUsers.push(user);
     } else {
-      // Update existing user with OAuth info if needed
+      if (user.firebaseUid && user.firebaseUid !== bodyUid) {
+        return res.status(403).json({
+          success: false,
+          reason: 'Session does not match this account.',
+        });
+      }
       if (!user.firebaseUid) {
-        user.firebaseUid = firebaseUid;
+        user.firebaseUid = bodyUid;
       }
       if (!user.authProvider) {
         user.authProvider = authProvider || 'google';
@@ -1187,7 +1285,7 @@ app.post('/api/users', (req, res) => {
       if (avatarUrl && !user.avatarUrl) {
         user.avatarUrl = avatarUrl;
       }
-      user.isVerified = true; // OAuth users are verified
+      user.isVerified = true;
     }
     
     // Return user without password field
@@ -2790,6 +2888,7 @@ app.get('/api/health', (req, res) => {
 // Start server with WebSocket support
 server.listen(PORT, () => {
   console.log(`🚀 Development API server running on http://localhost:${PORT}`);
+  console.log(`   Android emulator: http://10.0.2.2:${PORT} (localhost in the emulator is not your PC)`);
   console.log(`📡 Socket.io server ready for real-time chat`);
   console.log(`📋 Available endpoints:`);
   console.log(`   - GET  /api/plans - Get all plans`);

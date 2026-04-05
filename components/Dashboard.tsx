@@ -68,7 +68,7 @@ type DashboardView = 'overview' | 'listings' | 'form' | 'inquiries' | 'analytics
 const HelpTooltip: React.FC<{ text: string }> = memo(({ text }) => (
     <span className="group relative ml-1">
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-reride-text-dark cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-        <span className="absolute bottom-full mb-2 w-48 bg-white text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 left-1/2 -translate-x-1/2 z-10">{text}</span>
+        <span className="absolute bottom-full mb-2 w-48 bg-gray-900 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 left-1/2 -translate-x-1/2 z-10 shadow-lg">{text}</span>
     </span>
 ));
 
@@ -1878,6 +1878,17 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // CRITICAL: All hooks must be called before any conditional returns (React Rules of Hooks)
   // Initialize all state hooks first
   const [activeView, setActiveView] = useState<DashboardView>('overview');
+
+  useEffect(() => {
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('reride_seller_open_inquiries') === '1') {
+        sessionStorage.removeItem('reride_seller_open_inquiries');
+        setActiveView('inquiries');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
@@ -1887,6 +1898,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   // Pagination state for Active Listings
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [soldPage, setSoldPage] = useState(1);
   // Month selector state for analytics
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   // Users state for contact lookup
@@ -1946,43 +1958,6 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
   }, []);
 
-  // Guard against missing seller (AFTER all hooks)
-  if (!seller || !seller.email) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('sellerDashboard.infoMissing')}</h2>
-          <p className="text-gray-600 mb-6">{t('sellerDashboard.loadFailed')}</p>
-          <button
-            onClick={() => onNavigate(View.SELLER_LOGIN)}
-            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
-          >
-            {t('sellerDashboard.goToLogin')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-  
-  // Ensure all callback functions are defined (AFTER all hooks)
-  if (!onAddVehicle || !onUpdateVehicle || !onDeleteVehicle || !onMarkAsSold) {
-    console.error('❌ Dashboard: Missing required callback functions');
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('sellerDashboard.configError')}</h2>
-          <p className="text-gray-600 mb-6">{t('sellerDashboard.configErrorBody')}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
-          >
-            {t('sellerDashboard.reloadPage')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-  
   // Refresh user data from API to get updated plan expiry date
   // FIXED: Removed window.location.reload() to prevent crashes - now uses localStorage update only
   useEffect(() => {
@@ -2146,7 +2121,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         clearInterval(refreshTimeout);
       }
     };
-  }, [seller.email, seller.planExpiryDate, seller.planActivatedDate, seller.subscriptionPlan]); // FIXED: Include all plan-related fields to prevent stale closures
+  }, [seller?.email, seller?.planExpiryDate, seller?.planActivatedDate, seller?.subscriptionPlan]); // FIXED: Include all plan-related fields to prevent stale closures
   
   // Location data is now handled by individual components that need it
   
@@ -2254,6 +2229,124 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         }
     }
   }, [safeConversations, selectedConv]);
+
+  const unreadCount = useMemo(() => {
+    if (!seller?.email) return 0;
+    const normalizedSellerEmail = seller.email.toLowerCase().trim();
+    return safeConversations.filter(c => {
+      if (!c || c.isReadBySeller || !c.sellerId) return false;
+      return c.sellerId.toLowerCase().trim() === normalizedSellerEmail;
+    }).length;
+  }, [safeConversations, seller?.email]);
+  const activeListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status !== 'sold'), [safeSellerVehicles]);
+  const soldListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'sold'), [safeSellerVehicles]);
+  const reportedCount = useMemo(() => safeReportedVehicles.length, [safeReportedVehicles]);
+  
+  // Pagination for sold listings (Sales History)
+  const SOLD_PAGE_SIZE = 10;
+  const totalSoldPages = Math.max(1, Math.ceil(soldListings.length / SOLD_PAGE_SIZE));
+  const paginatedSoldListings = useMemo(() => {
+    const start = (soldPage - 1) * SOLD_PAGE_SIZE;
+    return soldListings.slice(start, start + SOLD_PAGE_SIZE);
+  }, [soldListings, soldPage]);
+  useEffect(() => {
+    // Reset to first page whenever the underlying list changes
+    setSoldPage(1);
+  }, [soldListings]);
+  
+  // Filter listings by selected month for analytics
+  const filteredActiveListings = useMemo(() => 
+    filterVehiclesByMonth(activeListings, selectedMonth), 
+    [activeListings, selectedMonth, filterVehiclesByMonth]
+  );
+  const filteredSoldListings = useMemo(() => 
+    filterVehiclesByMonth(soldListings, selectedMonth), 
+    [soldListings, selectedMonth, filterVehiclesByMonth]
+  );
+  
+  // Pagination calculations for Active Listings
+  const totalPages = useMemo(() => Math.ceil(activeListings.length / itemsPerPage), [activeListings.length, itemsPerPage]);
+  const paginatedListings = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return activeListings.slice(startIndex, endIndex);
+  }, [activeListings, currentPage, itemsPerPage]);
+  
+  // Reset to page 1 when listings change or view changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeListings.length, activeView]);
+  
+  const analyticsData = useMemo(() => {
+    // FIXED: Added safety checks to prevent crashes from null/undefined data
+    try {
+      const safeFilteredSoldListings = Array.isArray(filteredSoldListings) ? filteredSoldListings : [];
+      const safeFilteredActiveListings = Array.isArray(filteredActiveListings) ? filteredActiveListings : [];
+      
+      const totalSalesValue = safeFilteredSoldListings.reduce((sum: number, v) => {
+        if (!v || typeof v.price !== 'number') return sum;
+        return sum + v.price;
+      }, 0);
+      
+      const totalViews = safeFilteredActiveListings.reduce((sum, v) => {
+        if (!v || typeof v.views !== 'number') return sum;
+        return sum + v.views;
+      }, 0);
+      
+      const totalInquiries = safeFilteredActiveListings.reduce((sum, v) => {
+        if (!v || typeof v.inquiriesCount !== 'number') return sum;
+        return sum + v.inquiriesCount;
+      }, 0);
+      
+      const chartLabels = safeFilteredActiveListings.map(v => {
+        if (!v) return '';
+        const year = v.year || '';
+        const model = v.model || '';
+        const variant = v.variant || '';
+        return `${year} ${model} ${variant}`.trim().slice(0, 25);
+      }).filter(label => label.length > 0);
+      
+      const chartData = {
+        labels: chartLabels,
+        datasets: [
+          {
+            label: 'Views',
+            data: safeFilteredActiveListings.map(v => (v && typeof v.views === 'number') ? v.views : 0),
+            backgroundColor: 'rgba(255, 107, 53, 0.5)',
+            borderColor: 'rgba(255, 107, 53, 1)',
+            borderWidth: 1,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Inquiries',
+            data: safeFilteredActiveListings.map(v => (v && typeof v.inquiriesCount === 'number') ? v.inquiriesCount : 0),
+            backgroundColor: 'rgba(30, 136, 229, 0.5)',
+            borderColor: 'rgba(30, 136, 229, 1)',
+            borderWidth: 1,
+            yAxisID: 'y1',
+          },
+        ],
+      };
+      return { totalSalesValue, totalViews, totalInquiries, chartData };
+    } catch (error) {
+      // Return safe defaults if computation fails
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Error computing analytics data:', error);
+      }
+      return {
+        totalSalesValue: 0,
+        totalViews: 0,
+        totalInquiries: 0,
+        chartData: {
+          labels: [],
+          datasets: [
+            { label: 'Views', data: [], backgroundColor: 'rgba(255, 107, 53, 0.5)', borderColor: 'rgba(255, 107, 53, 1)', borderWidth: 1, yAxisID: 'y' },
+            { label: 'Inquiries', data: [], backgroundColor: 'rgba(30, 136, 229, 0.5)', borderColor: 'rgba(30, 136, 229, 1)', borderWidth: 1, yAxisID: 'y1' }
+          ]
+        }
+      };
+    }
+  }, [filteredActiveListings, filteredSoldListings]);
 
   const handleNavigate = (view: DashboardView) => {
     if (view !== 'inquiries') {
@@ -2579,124 +2672,42 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
   };
 
-  const unreadCount = useMemo(() => {
-    if (!seller?.email) return 0;
-    const normalizedSellerEmail = seller.email.toLowerCase().trim();
-    return safeConversations.filter(c => {
-      if (!c || c.isReadBySeller || !c.sellerId) return false;
-      return c.sellerId.toLowerCase().trim() === normalizedSellerEmail;
-    }).length;
-  }, [safeConversations, seller?.email]);
-  const activeListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status !== 'sold'), [safeSellerVehicles]);
-  const soldListings = useMemo(() => safeSellerVehicles.filter(v => v && v.status === 'sold'), [safeSellerVehicles]);
-  const reportedCount = useMemo(() => safeReportedVehicles.length, [safeReportedVehicles]);
-  
-  // Pagination for sold listings (Sales History)
-  const [soldPage, setSoldPage] = useState(1);
-  const SOLD_PAGE_SIZE = 10;
-  const totalSoldPages = Math.max(1, Math.ceil(soldListings.length / SOLD_PAGE_SIZE));
-  const paginatedSoldListings = useMemo(() => {
-    const start = (soldPage - 1) * SOLD_PAGE_SIZE;
-    return soldListings.slice(start, start + SOLD_PAGE_SIZE);
-  }, [soldListings, soldPage]);
-  useEffect(() => {
-    // Reset to first page whenever the underlying list changes
-    setSoldPage(1);
-  }, [soldListings]);
-  
-  // Filter listings by selected month for analytics
-  const filteredActiveListings = useMemo(() => 
-    filterVehiclesByMonth(activeListings, selectedMonth), 
-    [activeListings, selectedMonth, filterVehiclesByMonth]
-  );
-  const filteredSoldListings = useMemo(() => 
-    filterVehiclesByMonth(soldListings, selectedMonth), 
-    [soldListings, selectedMonth, filterVehiclesByMonth]
-  );
-  
-  // Pagination calculations for Active Listings
-  const totalPages = useMemo(() => Math.ceil(activeListings.length / itemsPerPage), [activeListings.length, itemsPerPage]);
-  const paginatedListings = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return activeListings.slice(startIndex, endIndex);
-  }, [activeListings, currentPage, itemsPerPage]);
-  
-  // Reset to page 1 when listings change or view changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeListings.length, activeView]);
-  
-  const analyticsData = useMemo(() => {
-    // FIXED: Added safety checks to prevent crashes from null/undefined data
-    try {
-      const safeFilteredSoldListings = Array.isArray(filteredSoldListings) ? filteredSoldListings : [];
-      const safeFilteredActiveListings = Array.isArray(filteredActiveListings) ? filteredActiveListings : [];
-      
-      const totalSalesValue = safeFilteredSoldListings.reduce((sum: number, v) => {
-        if (!v || typeof v.price !== 'number') return sum;
-        return sum + v.price;
-      }, 0);
-      
-      const totalViews = safeFilteredActiveListings.reduce((sum, v) => {
-        if (!v || typeof v.views !== 'number') return sum;
-        return sum + v.views;
-      }, 0);
-      
-      const totalInquiries = safeFilteredActiveListings.reduce((sum, v) => {
-        if (!v || typeof v.inquiriesCount !== 'number') return sum;
-        return sum + v.inquiriesCount;
-      }, 0);
-      
-      const chartLabels = safeFilteredActiveListings.map(v => {
-        if (!v) return '';
-        const year = v.year || '';
-        const model = v.model || '';
-        const variant = v.variant || '';
-        return `${year} ${model} ${variant}`.trim().slice(0, 25);
-      }).filter(label => label.length > 0);
-      
-      const chartData = {
-        labels: chartLabels,
-        datasets: [
-          {
-            label: 'Views',
-            data: safeFilteredActiveListings.map(v => (v && typeof v.views === 'number') ? v.views : 0),
-            backgroundColor: 'rgba(255, 107, 53, 0.5)',
-            borderColor: 'rgba(255, 107, 53, 1)',
-            borderWidth: 1,
-            yAxisID: 'y',
-          },
-          {
-            label: 'Inquiries',
-            data: safeFilteredActiveListings.map(v => (v && typeof v.inquiriesCount === 'number') ? v.inquiriesCount : 0),
-            backgroundColor: 'rgba(30, 136, 229, 0.5)',
-            borderColor: 'rgba(30, 136, 229, 1)',
-            borderWidth: 1,
-            yAxisID: 'y1',
-          },
-        ],
-      };
-      return { totalSalesValue, totalViews, totalInquiries, chartData };
-    } catch (error) {
-      // Return safe defaults if computation fails
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('⚠️ Error computing analytics data:', error);
-      }
-      return {
-        totalSalesValue: 0,
-        totalViews: 0,
-        totalInquiries: 0,
-        chartData: {
-          labels: [],
-          datasets: [
-            { label: 'Views', data: [], backgroundColor: 'rgba(255, 107, 53, 0.5)', borderColor: 'rgba(255, 107, 53, 1)', borderWidth: 1, yAxisID: 'y' },
-            { label: 'Inquiries', data: [], backgroundColor: 'rgba(30, 136, 229, 0.5)', borderColor: 'rgba(30, 136, 229, 1)', borderWidth: 1, yAxisID: 'y1' }
-          ]
-        }
-      };
-    }
-  }, [filteredActiveListings, filteredSoldListings]);
+
+  // Guard against missing seller / callbacks (after all hooks — Rules of Hooks)
+  if (!seller || !seller.email) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('sellerDashboard.infoMissing')}</h2>
+          <p className="text-gray-600 mb-6">{t('sellerDashboard.loadFailed')}</p>
+          <button
+            onClick={() => onNavigate(View.SELLER_LOGIN)}
+            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+          >
+            {t('sellerDashboard.goToLogin')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!onAddVehicle || !onUpdateVehicle || !onDeleteVehicle || !onMarkAsSold) {
+    console.error('❌ Dashboard: Missing required callback functions');
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6 text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('sellerDashboard.configError')}</h2>
+          <p className="text-gray-600 mb-6">{t('sellerDashboard.configErrorBody')}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+          >
+            {t('sellerDashboard.reloadPage')}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const getCertificationButton = (vehicle: Vehicle) => {
         const status = vehicle.certificationStatus || 'none';

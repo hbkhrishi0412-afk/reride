@@ -122,23 +122,40 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
           style={{ height: 'calc(70px - env(safe-area-inset-bottom, 0px))' }}
         >
           {navItems.map((item) => {
-            // For Sell button, check active state against all sell-related views
-            // Menu button is never active (it's just a toggle)
-            const isActive = item.id === 'sell' 
-              ? (currentView === ViewEnum.SELLER_DASHBOARD || 
-                 currentView === ViewEnum.SELLER_LOGIN || 
-                 currentView === ViewEnum.SELL_CAR)
-              : item.id === 'menu' 
-              ? false // Menu button is never active
-              : currentView === item.view;
-            
+            const messagesTabActive =
+              item.id === 'messages' &&
+              (currentUser?.role === 'seller'
+                ? currentView === ViewEnum.SELLER_DASHBOARD
+                : currentView === ViewEnum.INBOX);
+
+            const isActive = item.id === 'sell'
+              ? currentView === ViewEnum.SELLER_DASHBOARD ||
+                currentView === ViewEnum.SELLER_LOGIN ||
+                currentView === ViewEnum.SELL_CAR
+              : item.id === 'menu'
+                ? false
+                : item.id === 'messages'
+                  ? messagesTabActive
+                  : currentView === item.view;
+
             const handleClick = () => {
-              // For menu button, toggle menu drawer instead of navigating
               if (item.id === 'menu' && onToggleMenu) {
                 onToggleMenu();
                 return;
               }
-              // Messaging requires an account (same as website: browse is public, inbox is authenticated)
+              if (item.id === 'messages' && !currentUser) {
+                onNavigate(ViewEnum.LOGIN_PORTAL);
+                return;
+              }
+              if (item.id === 'messages' && currentUser?.role === 'seller') {
+                try {
+                  sessionStorage.setItem('reride_seller_open_inquiries', '1');
+                } catch {
+                  /* ignore */
+                }
+                onNavigate(ViewEnum.SELLER_DASHBOARD);
+                return;
+              }
               if (item.view === ViewEnum.INBOX && !currentUser) {
                 onNavigate(ViewEnum.LOGIN_PORTAL);
                 return;

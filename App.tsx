@@ -25,6 +25,7 @@ import MobileLayout from './components/MobileLayout';
 import MobileSearch from './components/MobileSearch';
 import MobilePushNotificationManager from './components/MobilePushNotificationManager';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates } from './types';
+import { countUnreadMessageThreads } from './utils/unreadCounts';
 import { parseDeepLink } from './utils/mobileFeatures';
 import { planService } from './services/planService';
 import { saveConversationWithSync } from './services/syncService';
@@ -206,6 +207,7 @@ const NewCarsAdminLogin = React.lazy(() => import('./NewCarsAdminLogin'));
 const MobileDashboard = React.lazy(() => import('./components/MobileDashboard'));
 const MobileVehicleDetail = React.lazy(() => import('./components/MobileVehicleDetail'));
 const MobileInbox = React.lazy(() => import('./components/MobileInbox'));
+const NotificationsPage = React.lazy(() => import('./components/NotificationsPage'));
 const MobileProfile = React.lazy(() => import('./components/MobileProfile'));
 const MobileWishlist = React.lazy(() => import('./components/MobileWishlist'));
 const MobileComparison = React.lazy(() => import('./components/MobileComparison'));
@@ -440,6 +442,44 @@ const AppContent: React.FC = () => {
     // Then clear the active chat state
     setActiveChat(null);
   }, [setActiveChat]);
+
+  const [inboxConversationIdToOpen, setInboxConversationIdToOpen] = React.useState<string | null>(null);
+
+  const unreadMessagesCount = React.useMemo(
+    () => countUnreadMessageThreads(conversations, currentUser?.role, currentUser?.email),
+    [conversations, currentUser?.role, currentUser?.email]
+  );
+
+  const unreadNotificationsCount = React.useMemo(() => {
+    if (!currentUser?.email) return 0;
+    const n = currentUser.email.toLowerCase().trim();
+    return notifications.filter(
+      (x) =>
+        x.recipientEmail &&
+        x.recipientEmail.toLowerCase().trim() === n &&
+        !x.isRead
+    ).length;
+  }, [notifications, currentUser?.email]);
+
+  const handleOpenMessages = React.useCallback(() => {
+    if (!currentUser) return;
+    if (currentUser.role === 'customer') {
+      navigate(ViewEnum.INBOX);
+      return;
+    }
+    if (currentUser.role === 'seller') {
+      try {
+        sessionStorage.setItem('reride_seller_open_inquiries', '1');
+      } catch {
+        /* ignore */
+      }
+      navigate(ViewEnum.SELLER_DASHBOARD);
+    }
+  }, [currentUser, navigate]);
+
+  const handleInboxInitialConversationConsumed = React.useCallback(() => {
+    setInboxConversationIdToOpen(null);
+  }, []);
 
   /** Dealers & seller profiles are public to view; calling, follow, save, compare require an account. */
   const requireLoginForDealerInteraction = React.useCallback(() => {
@@ -2387,21 +2427,27 @@ const AppContent: React.FC = () => {
 
       case ViewEnum.INBOX:
         if (isMobileApp && currentUser) {
+          const inboxEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+          const mobileInboxThreads = conversations.filter((c) => {
+            if (!c || !inboxEmail) return false;
+            if (currentUser.role === 'seller') {
+              return c.sellerId?.toLowerCase().trim() === inboxEmail;
+            }
+            return (
+              !!c.customerId && c.customerId.toLowerCase().trim() === inboxEmail
+            );
+          });
           return (
             <MobileInbox
-              conversations={conversations.filter(c => {
-                if (!c || !c.customerId || !currentUser?.email) return false;
-                return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-              })}
+              conversations={mobileInboxThreads}
+              inboxRole={currentUser.role === 'seller' ? 'seller' : 'customer'}
+              initialOpenConversationId={inboxConversationIdToOpen}
+              onConsumedInitialConversation={handleInboxInitialConversationConsumed}
               vehicles={vehicles}
-              onSendMessage={(vehicleId, messageText, type, payload) => {
-                const normalizedCustomerEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
-                const conversation = normalizedCustomerEmail ? conversations.find(c => {
-                  if (!c || !c.customerId) return false;
-                  return c.vehicleId === vehicleId && c.customerId.toLowerCase().trim() === normalizedCustomerEmail;
-                }) : undefined;
-                if (conversation) {
-                  sendMessageWithType(conversation.id, messageText, type, payload);
+              onSendMessage={(conversationId, messageText, type, payload) => {
+                const conv = conversations.find((c) => c && c.id === conversationId);
+                if (conv) {
+                  sendMessageWithType(conv.id, messageText, type, payload);
                 }
               }}
               onMarkAsRead={markAsRead}
@@ -2426,6 +2472,8 @@ const AppContent: React.FC = () => {
               if (!c || !c.customerId || !currentUser?.email) return false;
               return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
             })}
+            initialOpenConversationId={inboxConversationIdToOpen}
+            onConsumedInitialConversation={handleInboxInitialConversationConsumed}
             vehicles={vehicles}
             onSendMessage={(vehicleId, messageText, type, payload) => {
               // Only find conversations that belong to the current user
@@ -2848,6 +2896,55 @@ const AppContent: React.FC = () => {
           />
         );
 
+      case ViewEnum.NOTIFICATIONS_CENTER:
+        if (!currentUser?.email) {
+          return (
+            <div className="min-h-[calc(100vh-140px)] flex items-center justify-center px-4">
+              <div className="text-center max-w-sm">
+                <h2 className="text-2xl font-bold text-gray-600 mb-4">Sign in required</h2>
+                <p className="text-gray-500 mb-4">Log in to see your activity and notifications.</p>
+                <button
+                  type="button"
+                  onClick={() => navigate(ViewEnum.LOGIN_PORTAL)}
+                  className="btn-brand-primary"
+                >
+                  Login
+                </button>
+              </div>
+            </div>
+          );
+        }
+        {
+          const normalizedEmail = currentUser.email.toLowerCase().trim();
+          const userNotifs = notifications.filter(
+            (n) =>
+              n.recipientEmail &&
+              n.recipientEmail.toLowerCase().trim() === normalizedEmail
+          );
+          return (
+            <Suspense fallback={<LoadingSpinner />}>
+              <NotificationsPage
+                notifications={userNotifs}
+                vehicles={vehicles}
+                conversations={conversations}
+                onNotificationClick={handleNotificationClick}
+                onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+                onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
+                onBack={() => goBack(ViewEnum.HOME)}
+                contentBottomPadding={isMobileApp}
+                profileMuteKeys={currentUser.notificationMuteKeys}
+                onPersistMuteKeys={
+                  currentUser.email
+                    ? async (keys) => {
+                        await updateUser(currentUser.email, { notificationMuteKeys: keys });
+                      }
+                    : undefined
+                }
+              />
+            </Suspense>
+          );
+        }
+
       default:
         return (
           <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
@@ -2880,21 +2977,17 @@ const AppContent: React.FC = () => {
     onDeleteFaq, onCertificationApproval, onOfferResponse, addSellerRating,
     sendMessage, setActiveChat, setConversations,     setForgotPasswordRole,
     requireLoginForDealerInteraction,
-    openSellerProfileByEmail
+    openSellerProfileByEmail,
+    isMobileApp,
   ]);
 
-  const handleNotificationClick = React.useCallback((notification: Notification) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Notification clicked:', notification);
-    }
-    
-    // Navigate based on notification type
-    if (notification.targetType === 'conversation') {
-      // Find the conversation
-      const conversation = conversations.find(conv => conv.id === notification.targetId);
-      if (conversation) {
-        // Set the active chat
-        setActiveChat(conversation);
+  const handleNotificationClick = React.useCallback(
+    (notification: Notification) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Notification clicked:', notification);
+      }
+
+      const patchConversationRead = (conversation: Conversation) => {
         setConversations((prev: Conversation[]) =>
           prev.map((conv: Conversation) =>
             conv.id === conversation.id
@@ -2906,16 +2999,93 @@ const AppContent: React.FC = () => {
               : conv
           )
         );
-        
-        // Navigate to appropriate dashboard based on user role
+      };
+
+      if (notification.targetType === 'conversation') {
+        const conversation = conversations.find(
+          (conv) => String(conv.id) === String(notification.targetId)
+        );
+        if (!conversation || !currentUser) {
+          return;
+        }
+        patchConversationRead(conversation);
+
+        if (currentUser.role === 'customer') {
+          handleCloseChat();
+          setInboxConversationIdToOpen(conversation.id);
+          navigate(ViewEnum.INBOX);
+          return;
+        }
+        if (currentUser.role === 'seller') {
+          setActiveChat(conversation);
+          try {
+            sessionStorage.setItem('reride_seller_open_inquiries', '1');
+          } catch {
+            /* ignore */
+          }
+          navigate(ViewEnum.SELLER_DASHBOARD);
+        }
+        return;
+      }
+
+      const rawVid =
+        notification.vehicleId ??
+        (typeof notification.targetId === 'number'
+          ? notification.targetId
+          : Number(notification.targetId));
+      const vehicleMatch =
+        rawVid !== undefined && rawVid !== null && !Number.isNaN(Number(rawVid))
+          ? vehicles.find((v) => v.id === Number(rawVid))
+          : undefined;
+
+      if (
+        (notification.targetType === 'vehicle' || notification.targetType === 'price_drop') &&
+        vehicleMatch
+      ) {
+        selectVehicle(vehicleMatch);
+        navigate(ViewEnum.DETAIL);
+        return;
+      }
+
+      if (notification.targetType === 'price_drop' || notification.targetType === 'vehicle') {
+        navigate(ViewEnum.USED_CARS);
+        return;
+      }
+
+      if (notification.type === 'wishlist') {
+        navigate(ViewEnum.WISHLIST);
+        return;
+      }
+
+      if (notification.targetType === 'insurance_expiry') {
+        navigate(ViewEnum.PROFILE);
+        return;
+      }
+
+      if (notification.targetType === 'general_admin') {
         if (currentUser?.role === 'seller') {
           navigate(ViewEnum.SELLER_DASHBOARD);
         } else if (currentUser?.role === 'customer') {
           navigate(ViewEnum.BUYER_DASHBOARD);
+        } else {
+          navigate(ViewEnum.HOME);
         }
+        return;
       }
-    }
-  }, [conversations, currentUser, navigate, setActiveChat, setConversations]);
+
+      navigate(ViewEnum.HOME);
+    },
+    [
+      conversations,
+      currentUser,
+      handleCloseChat,
+      navigate,
+      selectVehicle,
+      setActiveChat,
+      setConversations,
+      vehicles,
+    ]
+  );
 
   const persistNotifications = React.useCallback((updated: Notification[]) => {
     try {
@@ -3028,6 +3198,8 @@ const AppContent: React.FC = () => {
         return selectedCity || 'City';
       case ViewEnum.SELLER_PROFILE:
         return publicSellerProfile?.name || 'Seller Profile';
+      case ViewEnum.NOTIFICATIONS_CENTER:
+        return 'Activity';
       default:
         return 'ReRide';
     }
@@ -3105,10 +3277,8 @@ const AppContent: React.FC = () => {
             onNavigate={navigate}
             currentView={currentView}
             wishlistCount={wishlist.length}
-            inboxCount={conversations.filter(c => {
-              if (!c || !c.sellerId || !currentUser?.email || c.isReadBySeller) return false;
-              return c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-            }).length}
+            inboxCount={unreadMessagesCount}
+            unreadNotificationCount={unreadNotificationsCount}
           >
             <MobileDashboard
               currentUser={currentUser}
@@ -3305,10 +3475,8 @@ const AppContent: React.FC = () => {
             onNavigate={navigate}
             currentView={currentView}
             wishlistCount={wishlist.length}
-            inboxCount={conversations.filter(c => {
-              if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
-              return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-            }).length}
+            inboxCount={unreadMessagesCount}
+            unreadNotificationCount={unreadNotificationsCount}
           >
             <MobileBuyerDashboard
               currentUser={currentUser}
@@ -3410,13 +3578,15 @@ const AppContent: React.FC = () => {
     // Hide header for HOME view since it has its own hero section
     const shouldHideHeader = currentView === ViewEnum.HOME;
     // Vehicle detail: full-bleed listing UX (no tab bar) — matches native listing apps / reference
-    const hideBottomNavOnDetail = currentView === ViewEnum.DETAIL;
+    const hideBottomNavOnDetail =
+      currentView === ViewEnum.DETAIL || currentView === ViewEnum.NOTIFICATIONS_CENTER;
     return (
       <>
         {/* Mobile Feature Managers */}
         <MobilePushNotificationManager
           notifications={notifications}
           onNotificationClick={handleNotificationClick}
+          profileMuteKeys={currentUser?.notificationMuteKeys}
         />
         <ShareTargetHandler
           onNavigate={navigate}
@@ -3427,24 +3597,21 @@ const AppContent: React.FC = () => {
           showHeader={!shouldHideHeader}
           showBottomNav={!hideBottomNavOnDetail}
           headerTitle={getPageTitle()}
-          showBack={currentView === ViewEnum.DETAIL}
-          onBack={() => navigate(ViewEnum.USED_CARS)}
+          showBack={
+            currentView === ViewEnum.DETAIL || currentView === ViewEnum.NOTIFICATIONS_CENTER
+          }
+          onBack={() =>
+            currentView === ViewEnum.NOTIFICATIONS_CENTER
+              ? goBack(ViewEnum.HOME)
+              : navigate(ViewEnum.USED_CARS)
+          }
           currentView={currentView}
           onNavigate={navigate}
           currentUser={currentUser}
           onLogout={handleLogout}
           wishlistCount={wishlist.length}
-          inboxCount={
-            currentUser?.role === 'seller'
-              ? conversations.filter(c => {
-                  if (!c || !c.sellerId || !currentUser?.email || c.isReadBySeller) return false;
-                  return c.sellerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-                }).length
-              : conversations.filter(c => {
-                  if (!c || !c.customerId || !currentUser?.email || c.isReadByCustomer) return false;
-                  return c.customerId.toLowerCase().trim() === currentUser.email.toLowerCase().trim();
-                }).length
-          }
+          inboxCount={unreadMessagesCount}
+          unreadNotificationCount={unreadNotificationsCount}
         >
         <ErrorBoundary>
           <Suspense fallback={<LoadingSpinner />}>
@@ -3514,6 +3681,7 @@ const AppContent: React.FC = () => {
       <MobilePushNotificationManager
         notifications={notifications}
         onNotificationClick={handleNotificationClick}
+        profileMuteKeys={currentUser?.notificationMuteKeys}
       />
       <ShareTargetHandler
         onNavigate={navigate}
@@ -3527,7 +3695,8 @@ const AppContent: React.FC = () => {
           onLogout={handleLogout}
           compareCount={comparisonList.length}
           wishlistCount={wishlist.length}
-          inboxCount={conversations.filter(c => !c.isReadByCustomer).length}
+          inboxCount={unreadMessagesCount}
+          onOpenMessages={handleOpenMessages}
           notifications={notifications.filter(n => {
             if (!n.recipientEmail || !currentUser?.email) return false;
             return n.recipientEmail.toLowerCase().trim() === currentUser.email.toLowerCase().trim();

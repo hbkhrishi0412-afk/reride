@@ -16,6 +16,12 @@ import AdminServiceOps from './AdminServiceOps';
 import ServiceManagement from './ServiceManagement';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 
+/** Safe ₹ formatting — API/mock data can omit or invalidate numeric fields. */
+function formatInrAmount(value: unknown): string {
+    const n = typeof value === 'number' ? value : Number(value);
+    return (Number.isFinite(n) ? n : 0).toLocaleString('en-IN');
+}
+
 // --- Seller Filter Dropdown Component ---
 interface SellerFilterDropdownProps {
     sellers: User[];
@@ -1288,7 +1294,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             <StatCard title="Total Users" value={analytics.totalUsers} icon={<span className="text-2xl">👥</span>} />
                             <StatCard title="Total Vehicles" value={analytics.totalVehicles} icon={<span className="text-2xl">🚗</span>} />
                             <StatCard title="Active Listings" value={analytics.activeListings} icon={<span className="text-2xl">📋</span>} />
-                            <StatCard title="Total Sales" value={`₹${analytics.totalSales.toLocaleString('en-IN')}`} icon={<span className="text-2xl">💰</span>} />
+                            <StatCard title="Total Sales" value={`₹${formatInrAmount(analytics.totalSales)}`} icon={<span className="text-2xl">💰</span>} />
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <BarChart title="Top Vehicle Makes" data={analytics.listingsByMake} />
@@ -1709,7 +1715,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         <tr key={vehicle.id}>
                                             <td className="px-6 py-4 whitespace-nowrap font-medium">{vehicle.year} {vehicle.make} {vehicle.model}</td>
                                             <td className="px-6 py-4 whitespace-nowrap">{vehicle.sellerEmail}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap">₹{vehicle.price.toLocaleString('en-IN')}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">₹{formatInrAmount(vehicle.price)}</td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                                     vehicle.status === 'published' ? 'bg-green-100 text-green-800' :
@@ -1981,7 +1987,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                                         {vehicle.year} {vehicle.make} {vehicle.model}
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">{vehicle.sellerEmail}</td>
-                                                    <td className="px-6 py-4 whitespace-nowrap">₹{vehicle.price.toLocaleString('en-IN')}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">₹{formatInrAmount(vehicle.price)}</td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
                                                             FLAGGED
@@ -2652,6 +2658,8 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                 isCustomPlan(plan.id).then(setIsCustom);
             }, [plan.id]);
 
+            const featureList = Array.isArray(plan.features) ? plan.features : [];
+
             return (
                 <div key={plan.id} className={`border rounded-lg p-6 hover:shadow-lg transition-shadow ${
                     isCustom 
@@ -2669,7 +2677,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                 )}
                             </div>
                             <p className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mt-2">
-                                ₹{plan.price.toLocaleString()}
+                                ₹{formatInrAmount(plan?.price)}
                                 <span className="text-sm font-normal text-gray-500">/month</span>
                             </p>
                         </div>
@@ -2709,7 +2717,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     <div className="space-y-1">
                         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Features:</p>
                         <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                            {plan.features.map((feature, index) => (
+                            {featureList.map((feature, index) => (
                                 <li key={index} className="flex items-center gap-2">
                                     <span className="w-1 h-1 bg-green-500 rounded-full"></span>
                                     {feature}

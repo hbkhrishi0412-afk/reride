@@ -57,10 +57,12 @@ const normalizePlan = (raw: any): PlanDetails => {
     const id = String(raw?.id || raw?.planId || 'free') as SubscriptionPlan;
     const base = PLAN_DETAILS[id];
     const fallbackLimit = base?.listingLimit ?? 1;
+    const rawPrice = Number(raw?.price ?? base?.price ?? 0);
+    const safePrice = Number.isFinite(rawPrice) ? rawPrice : 0;
     return {
         id,
         name: String(raw?.name || base?.name || 'Custom Plan'),
-        price: Number(raw?.price ?? base?.price ?? 0),
+        price: safePrice,
         features: Array.isArray(raw?.features)
             ? raw.features.map(String)
             : base?.features ?? [],

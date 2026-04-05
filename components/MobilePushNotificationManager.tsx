@@ -3,21 +3,27 @@
  * Handles push notification subscription and display
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { usePushNotifications, useAppBadge } from '../hooks/useMobileFeatures';
 import type { Notification } from '../types';
+import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
 
 interface MobilePushNotificationManagerProps {
   notifications: Notification[];
   onNotificationClick?: (notification: Notification) => void;
+  /** When set (including `[]`), mutes follow the logged-in profile; otherwise localStorage. */
+  profileMuteKeys?: string[];
 }
 
 export const MobilePushNotificationManager: React.FC<MobilePushNotificationManagerProps> = ({
   notifications,
-  onNotificationClick
+  onNotificationClick,
+  profileMuteKeys,
 }) => {
-  const { permission, subscribe, unsubscribe, isSubscribed, notify } = usePushNotifications();
+  const { permission, subscribe, isSubscribed, notify } = usePushNotifications();
   const { updateBadge } = useAppBadge();
+  /** Avoid re-firing local notifications when the parent passes a new `notifications` array reference. */
+  const shownLocalNotificationIdsRef = useRef<Set<number>>(new Set());
 
   // Update app badge with unread notification count
   useEffect(() => {
@@ -34,28 +40,41 @@ export const MobilePushNotificationManager: React.FC<MobilePushNotificationManag
     }
   }, [permission, isSubscribed, subscribe]);
 
-  // Show local notification for new notifications
+  // Show local notification once per unread id (stable across re-renders / refetches)
   useEffect(() => {
-    const unreadNotifications = notifications.filter(n => !n.isRead);
-    if (unreadNotifications.length > 0 && permission === 'granted') {
-      const latestNotification = unreadNotifications[unreadNotifications.length - 1];
-      
-      notify({
-        title: latestNotification.title || 'ReRide',
-        body: latestNotification.message,
+    if (permission !== 'granted') return;
+
+    const validIds = new Set(notifications.map((n) => n.id));
+    if (shownLocalNotificationIdsRef.current.size > 100) {
+      shownLocalNotificationIdsRef.current = new Set(
+        [...shownLocalNotificationIdsRef.current].filter((id) => validIds.has(id))
+      );
+    }
+
+    const muted = getEffectiveMuteKeys(profileMuteKeys);
+    const unreadNew = notifications
+      .filter((n) => !n.isRead && !shownLocalNotificationIdsRef.current.has(n.id))
+      .filter((n) => !isStoryMuted(n, muted))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    for (const n of unreadNew) {
+      shownLocalNotificationIdsRef.current.add(n.id);
+      void notify({
+        title: n.title || 'ReRide',
+        body: n.message,
         icon: '/icon-192.png',
         badge: '/icon-192.png',
-        tag: `notification-${latestNotification.id}`,
+        tag: `notification-${n.id}`,
         data: {
-          notificationId: latestNotification.id,
-          url: getNotificationUrl(latestNotification),
-          view: getNotificationView(latestNotification)
+          notificationId: n.id,
+          url: getNotificationUrl(n),
+          view: getNotificationView(n),
         },
         requireInteraction: false,
-        vibrate: [200, 100, 200]
+        vibrate: [200, 100, 200],
       });
     }
-  }, [notifications, permission, notify]);
+  }, [notifications, permission, notify, profileMuteKeys]);
 
   // Handle notification clicks from service worker
   useEffect(() => {

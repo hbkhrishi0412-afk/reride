@@ -270,6 +270,9 @@ export interface User {
     verifiedBy?: string;
     uploadedAt?: string;
   };
+
+  /** Story keys muted for Activity / push / browser notifications; stored in Supabase user metadata when logged in. */
+  notificationMuteKeys?: string[];
 }
 
 export interface ChatMessage {
@@ -354,6 +357,8 @@ export enum View {
   SELL_CAR_ADMIN = 'SELL_CAR_ADMIN',
   NEW_CARS_ADMIN_LOGIN = 'NEW_CARS_ADMIN_LOGIN',
   NEW_CARS_ADMIN_PANEL = 'NEW_CARS_ADMIN_PANEL',
+  /** Full-screen activity feed (grouped notifications, mute) — not Messages. */
+  NOTIFICATIONS_CENTER = 'NOTIFICATIONS_CENTER',
 }
 
 export interface ProsAndCons {

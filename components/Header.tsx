@@ -26,6 +26,8 @@ interface HeaderProps {
     onNotificationClick: (notification: Notification) => void;
     onMarkNotificationsAsRead: (ids: number[]) => void;
     onMarkAllNotificationsAsRead: () => void;
+    /** Opens the Messages hub (inbox / seller inquiries), separate from the notification bell. */
+    onOpenMessages: () => void;
     onOpenCommandPalette: () => void;
     userLocation: string;
     onLocationChange: (location: string) => void;
@@ -45,6 +47,7 @@ const Header: React.FC<HeaderProps> = memo(({
     onNotificationClick,
     onMarkNotificationsAsRead,
     onMarkAllNotificationsAsRead,
+    onOpenMessages,
     onOpenCommandPalette,
     userLocation,
     onLocationChange,
@@ -101,6 +104,12 @@ const Header: React.FC<HeaderProps> = memo(({
         setIsNotificationsOpen(false);
         setIsUserMenuOpen(false);
         setIsServiceProviderMenuOpen(false);
+    };
+
+    const handleViewAllNotifications = () => {
+        setIsNotificationsOpen(false);
+        if (!currentUser) return;
+        handleNavigate(ViewEnum.NOTIFICATIONS_CENTER);
     };
 
     const DropdownLink: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
@@ -268,10 +277,32 @@ const Header: React.FC<HeaderProps> = memo(({
                                     )}
                                 </button>
 
+                                {currentUser && (currentUser.role === 'customer' || currentUser.role === 'seller') && (
+                                    <button
+                                        type="button"
+                                        onClick={onOpenMessages}
+                                        className="relative p-2 rounded-full transition-colors"
+                                        style={{ backgroundColor: 'transparent' }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'; }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                        aria-label={t('nav.messages')}
+                                        title={t('nav.messages')}
+                                    >
+                                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1A1A1A' }} aria-hidden>
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                        </svg>
+                                        {inboxCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 text-white text-[10px] font-bold rounded-full flex items-center justify-center" style={{ backgroundColor: '#1E88E5' }}>
+                                                {inboxCount > 99 ? '99+' : inboxCount}
+                                            </span>
+                                        )}
+                                    </button>
+                                )}
+
                                 {currentUser && (
                                     <div className="relative" ref={notificationsRef}>
-                                        <button onClick={() => setIsNotificationsOpen(p => !p)} className="relative p-2 rounded-full transition-colors" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                                            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1A1A1A' }}>
+                                        <button type="button" onClick={() => setIsNotificationsOpen(p => !p)} className="relative p-2 rounded-full transition-colors" style={{ backgroundColor: 'transparent' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(30, 136, 229, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'} aria-label={t('notifications.title', { defaultValue: 'Notifications' })} title={t('notifications.title', { defaultValue: 'Notifications' })}>
+                                            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#1A1A1A' }} aria-hidden>
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                             </svg>
                                             {unreadNotifications.length > 0 && (
@@ -285,6 +316,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                                 notifications={notifications}
                                                 onNotificationClick={handleNotificationItemClick}
                                                 onMarkAllAsRead={onMarkAllNotificationsAsRead}
+                                                onViewAll={handleViewAllNotifications}
                                             />
                                         )}
                                     </div>
@@ -307,8 +339,9 @@ const Header: React.FC<HeaderProps> = memo(({
                                                     </p>
                                                 </div>
                                                 {currentUser.role === 'customer' && <DropdownLink onClick={() => handleNavigate(ViewEnum.BUYER_DASHBOARD)}>{t('nav.myDashboard')}</DropdownLink>}
-                                                {currentUser.role === 'customer' && <DropdownLink onClick={() => handleNavigate(ViewEnum.INBOX)}>{t('nav.inbox')} {inboxCount > 0 && `(${inboxCount})`}</DropdownLink>}
+                                                {currentUser.role === 'customer' && <DropdownLink onClick={onOpenMessages}>{t('nav.inbox')} {inboxCount > 0 && `(${inboxCount})`}</DropdownLink>}
                                                 {currentUser.role === 'seller' && <DropdownLink onClick={() => handleNavigate(ViewEnum.SELLER_DASHBOARD)}>{t('nav.dashboard')}</DropdownLink>}
+                                                {currentUser.role === 'seller' && <DropdownLink onClick={onOpenMessages}>{t('nav.messages')} {inboxCount > 0 && `(${inboxCount})`}</DropdownLink>}
                                                 {currentUser.role === 'admin' && <DropdownLink onClick={() => handleNavigate(ViewEnum.ADMIN_PANEL)}>{t('nav.adminPanel')}</DropdownLink>}
                                                 <DropdownLink onClick={() => handleNavigate(ViewEnum.PROFILE)}>{t('nav.myProfile')}</DropdownLink>
                                                 <div className="border-t dark:border-gray-200-200">
@@ -438,13 +471,18 @@ const Header: React.FC<HeaderProps> = memo(({
                             {(currentUser && currentUser.role === 'customer') && (
                                 <>
                                     <button onClick={() => handleNavigate(ViewEnum.BUYER_DASHBOARD)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.myDashboard')}</button>
-                                    <button onClick={() => handleNavigate(ViewEnum.INBOX)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.inboxCount', { count: inboxCount })}</button>
+                                    <button type="button" onClick={() => { onOpenMessages(); setIsMobileMenuOpen(false); }} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.inboxCount', { count: inboxCount })}</button>
                                 </>
                             )}
                             <hr className="border-gray-200"/>
                             {currentUser ? (
                                 <>
                                     {currentUser.role === 'seller' && <button onClick={() => handleNavigate(ViewEnum.SELLER_DASHBOARD)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.dashboard')}</button>}
+                                    {currentUser.role === 'seller' && (
+                                        <button type="button" onClick={() => { onOpenMessages(); setIsMobileMenuOpen(false); }} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">
+                                            {t('nav.messages')}{inboxCount > 0 ? ` (${inboxCount})` : ''}
+                                        </button>
+                                    )}
                                     {currentUser.role === 'admin' && <button onClick={() => handleNavigate(ViewEnum.ADMIN_PANEL)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.adminPanel')}</button>}
                                     <button onClick={() => handleNavigate(ViewEnum.PROFILE)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.myProfile')}</button>
                                     <button onClick={onLogout} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.logout')}</button>

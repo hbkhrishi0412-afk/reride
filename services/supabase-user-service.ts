@@ -18,12 +18,13 @@ function supabaseRowToUser(row: any): User {
     console.warn(`⚠️ User row missing id, generating from email:`, { email: row.email, generatedId: userId });
   }
   
-  return {
+  const user = {
     id: userId || '', // Ensure id is never undefined
     name: row.name || '',
     email: row.email || '',
     mobile: row.mobile || '',
-    password: row.password || undefined, // Include password field
+    // Password hash is required server-side for email login; never send it to the browser
+    ...(isServerSide ? { password: row.password || undefined } : {}),
     role: (row.role || 'customer') as 'customer' | 'seller' | 'admin',
     status: (row.status || 'active') as 'active' | 'inactive',
     avatarUrl: row.avatar_url || undefined,
@@ -47,7 +48,13 @@ function supabaseRowToUser(row: any): User {
     updatedAt: row.updated_at || new Date().toISOString(),
     // Extract additional fields from metadata
     ...(row.metadata || {}),
-  };
+  } as User;
+
+  if (!isServerSide) {
+    delete (user as { password?: string }).password;
+  }
+
+  return user;
 }
 
 // Helper to convert User type to Supabase row
@@ -61,7 +68,7 @@ function userToSupabaseRow(user: Partial<User>): any {
     'reportedCount', 'isBanned', 'alternatePhone', 'preferredContactHours',
     'showEmailPublicly', 'partnerBanks', 'verificationStatus', 'aadharCard',
     'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade',
-    'rerideRecommended'
+    'rerideRecommended', 'notificationMuteKeys'
   ];
   
   metadataFields.forEach(field => {
@@ -551,7 +558,8 @@ export const supabaseUserService = {
       'joinedDate', 'lastActiveAt', 'activeListings', 'soldListings', 'totalViews',
       'reportedCount', 'isBanned', 'alternatePhone', 'preferredContactHours',
       'showEmailPublicly', 'partnerBanks', 'verificationStatus', 'aadharCard',
-      'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade'
+      'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade',
+      'notificationMuteKeys'
     ];
     
     const metadata: any = {};
@@ -687,7 +695,8 @@ export const supabaseUserService = {
       'joinedDate', 'lastActiveAt', 'activeListings', 'soldListings', 'totalViews',
       'reportedCount', 'isBanned', 'alternatePhone', 'preferredContactHours',
       'showEmailPublicly', 'partnerBanks', 'verificationStatus', 'aadharCard',
-      'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade'
+      'panCard', 'planActivatedDate', 'planExpiryDate', 'pendingPlanUpgrade',
+      'notificationMuteKeys'
     ];
     
     const metadata: any = {};

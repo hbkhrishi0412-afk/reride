@@ -9,6 +9,8 @@ import PricingGuidance from './PricingGuidance';
 import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
+import { formatRelativeTime } from '../utils/date';
+import { getThreadLastMessagePreview } from '../utils/messagePreview';
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -736,7 +738,9 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-bold text-gray-900">Messages</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{safeConversations.length} total • {unreadMessages} unread</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Chats with buyers · {safeConversations.length} total · {unreadMessages} unread
+          </p>
         </div>
       </div>
 
@@ -756,7 +760,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             <div 
               key={conversation.id} 
               className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
-              onClick={() => onNavigate(ViewEnum.INBOX)}
+              onClick={() => {
+                try {
+                  sessionStorage.setItem('reride_seller_open_inquiries', '1');
+                } catch {
+                  /* ignore */
+                }
+                onNavigate(ViewEnum.SELLER_DASHBOARD);
+              }}
             >
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
@@ -769,28 +780,34 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     <h4 className="font-bold text-gray-900 truncate text-base">
                       {conversation.customerName || 'Customer'}
                     </h4>
-                    {!conversation.isReadByCustomer && (
-                      <span className="w-2.5 h-2.5 bg-orange-500 rounded-full flex-shrink-0"></span>
+                    {!conversation.isReadBySeller && (
+                      <span className="w-2.5 h-2.5 bg-orange-500 rounded-full flex-shrink-0" aria-hidden />
                     )}
                   </div>
                   <p className="text-sm text-gray-600 truncate mb-1">
                     {conversation.vehicleName || 'Vehicle inquiry'}
                   </p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">
-                      {new Date(conversation.lastMessageAt).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric',
-                        ...(new Date(conversation.lastMessageAt).getFullYear() !== new Date().getFullYear() && {
-                          year: 'numeric'
-                        })
-                      })}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs text-gray-500 shrink-0">
+                      {formatRelativeTime(conversation.lastMessageAt)}
                     </span>
                     {conversation.messages && conversation.messages.length > 0 && (
                       <>
-                        <span className="text-gray-300">•</span>
+                        <span className="text-gray-300 shrink-0">·</span>
                         <span className="text-xs text-gray-500 truncate">
-                          {conversation.messages[conversation.messages.length - 1]?.text || ''}
+                          {(() => {
+                            const last = conversation.messages[conversation.messages.length - 1];
+                            const p = getThreadLastMessagePreview(last, {
+                              otherLabel: conversation.customerName || 'Buyer',
+                              viewer: 'seller',
+                            });
+                            return (
+                              <>
+                                {p.prefix && <span className="text-gray-400">{p.prefix}</span>}
+                                {p.text}
+                              </>
+                            );
+                          })()}
                         </span>
                       </>
                     )}
@@ -801,10 +818,18 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           ))}
           {safeConversations.length > 5 && (
             <button 
-              onClick={() => onNavigate(ViewEnum.INBOX)}
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem('reride_seller_open_inquiries', '1');
+                } catch {
+                  /* ignore */
+                }
+                onNavigate(ViewEnum.SELLER_DASHBOARD);
+              }}
               className="w-full py-3.5 text-orange-600 font-semibold native-button native-button-secondary"
             >
-              View All Messages ({safeConversations.length})
+              View all messages ({safeConversations.length})
             </button>
           )}
         </div>
@@ -1555,17 +1580,27 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           <div>
             <h3 className="text-lg font-bold text-gray-900">Notifications</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              {filteredNotifications.length} total • {unreadNotifications.length} unread
+              Activity (not Messages) · {filteredNotifications.length} total · {unreadNotifications.length} unread
             </p>
           </div>
-          {unreadNotifications.length > 0 && onMarkNotificationsAsRead && (
+          <div className="flex flex-col items-end gap-2">
             <button
-              onClick={() => onMarkNotificationsAsRead(unreadNotifications.map(n => n.id))}
-              className="text-sm font-semibold text-orange-600 active:opacity-70 native-transition"
+              type="button"
+              onClick={() => onNavigate(ViewEnum.NOTIFICATIONS_CENTER)}
+              className="text-xs font-semibold text-blue-600 active:opacity-70"
             >
-              Mark all read
+              Grouped view
             </button>
-          )}
+            {unreadNotifications.length > 0 && onMarkNotificationsAsRead && (
+              <button
+                type="button"
+                onClick={() => onMarkNotificationsAsRead(unreadNotifications.map(n => n.id))}
+                className="text-sm font-semibold text-orange-600 active:opacity-70 native-transition"
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
         </div>
 
         {filteredNotifications.length === 0 ? (
@@ -2479,7 +2514,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               <div 
                 key={conversation.id} 
                 className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
-                onClick={() => onNavigate(ViewEnum.INBOX)}
+                onClick={() => setActiveTab('messages')}
               >
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
