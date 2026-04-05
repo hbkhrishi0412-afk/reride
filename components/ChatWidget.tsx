@@ -4,6 +4,10 @@ import { createPortal } from 'react-dom';
 import type { Conversation, ChatMessage } from '../types';
 import ReadReceiptIcon, { OfferMessage, OfferModal } from './ReadReceiptIcon';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
+import { uploadImage, uploadChatAudio } from '../services/imageUploadService';
+import { ChatMessageImage } from './ChatMessageImage';
+import { ChatMessageVoice } from './ChatMessageVoice';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 
 interface ChatWidgetProps {
   conversation: Conversation;
@@ -13,9 +17,12 @@ interface ChatWidgetProps {
   onSendMessage: (messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
+  onUserStoppedTyping?: (conversationId: string) => void;
+  uploaderEmail?: string;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onFlagContent: (type: 'vehicle' | 'conversation', id: number | string, reason: string) => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
+  onClearChat?: (conversationId: string) => void | Promise<void>;
   onMakeOffer?: () => void; // For seller dashboard
   onStartCall?: (phone: string) => void;
   callTargetPhone?: string;
@@ -37,7 +44,28 @@ const TypingIndicator: React.FC<{ name: string }> = ({ name }) => (
     </div>
 );
 
-export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, currentUserRole, otherUserName, onClose, onSendMessage, typingStatus, onUserTyping, onMarkMessagesAsRead, onFlagContent, onOfferResponse, onMakeOffer, onStartCall, callTargetPhone, callTargetName, isInlineLaunch, otherUserOnline }) => {
+export const ChatWidget: React.FC<ChatWidgetProps> = memo(
+  ({
+    conversation,
+    currentUserRole,
+    otherUserName,
+    onClose,
+    onSendMessage,
+    typingStatus,
+    onUserTyping,
+    onUserStoppedTyping,
+    onMarkMessagesAsRead,
+    onFlagContent,
+    onOfferResponse,
+    onClearChat,
+    onMakeOffer,
+    onStartCall,
+    callTargetPhone,
+    callTargetName,
+    isInlineLaunch,
+    otherUserOnline,
+    uploaderEmail,
+  }) => {
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(!isInlineLaunch); // Inline launches (CTA click) start opened
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -47,7 +75,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   const [isAnimating, setIsAnimating] = useState(false);
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
   const [userManuallyClosed, setUserManuallyClosed] = useState(false); // Track if user explicitly closed
-  
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const voiceRecorder = useVoiceRecorder();
+
   // Detect mobile on mount and resize
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -92,6 +124,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMarkReadSignatureRef = useRef<string>('');
 
   useEffect(() => {
@@ -120,20 +154,103 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputText(e.target.value);
-    onUserTyping(conversation.id, currentUserRole);
+  const scheduleTypingStop = () => {
+    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+    typingStopTimerRef.current = setTimeout(() => {
+      onUserStoppedTyping?.(conversation.id);
+      typingStopTimerRef.current = null;
+    }, 1500);
   };
-  
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setInputText(v);
+    setAttachError(null);
+    if (v.trim()) {
+      onUserTyping(conversation.id, currentUserRole);
+      scheduleTypingStop();
+    } else {
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      onUserStoppedTyping?.(conversation.id);
+    }
+  };
+
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
+    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+    onUserStoppedTyping?.(conversation.id);
     if (process.env.NODE_ENV === 'development') {
       console.log('🔧 ChatWidget sending message:', inputText);
     }
     onSendMessage(inputText);
     setInputText('');
   };
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !uploaderEmail) {
+      if (!uploaderEmail) setAttachError('Sign in to send photos.');
+      return;
+    }
+    setIsUploadingPhoto(true);
+    setAttachError(null);
+    if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+    onUserStoppedTyping?.(conversation.id);
+    try {
+      const result = await uploadImage(file, 'chat-messages', uploaderEmail);
+      if (!result.success || !result.url) {
+        setAttachError(result.error || 'Upload failed');
+        return;
+      }
+      const cap = inputText.trim();
+      onSendMessage(cap || '📷 Photo', 'image', { imageUrl: result.url });
+      setInputText('');
+    } catch {
+      setAttachError('Upload failed. Try again.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleVoiceTap = async () => {
+    if (!uploaderEmail) {
+      setAttachError('Sign in to send voice notes.');
+      return;
+    }
+    setAttachError(null);
+    if (voiceRecorder.isRecording) {
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+      onUserStoppedTyping?.(conversation.id);
+      const r = await voiceRecorder.stopRecording();
+      if (!r) return;
+      setIsUploadingVoice(true);
+      try {
+        const ext = r.mimeType.includes('webm') ? 'webm' : r.mimeType.includes('mp4') ? 'm4a' : 'webm';
+        const result = await uploadChatAudio(r.blob, `voice_${Date.now()}.${ext}`, r.mimeType);
+        if (!result.success || !result.url) {
+          setAttachError(result.error || 'Voice upload failed');
+          return;
+        }
+        onSendMessage('🎤 Voice message', 'voice', {
+          audioUrl: result.url,
+          durationSeconds: r.durationSeconds,
+        });
+      } finally {
+        setIsUploadingVoice(false);
+      }
+    } else {
+      voiceRecorder.clearError();
+      await voiceRecorder.startRecording();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
+    };
+  }, []);
 
   const handleEmojiClick = (emoji: string) => {
     setInputText(prev => prev + emoji);
@@ -403,6 +520,32 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                     </svg>
                   </button>
                 )}
+                {onClearChat && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        window.confirm(
+                          'Clear all messages in this chat? The conversation will stay open.',
+                        )
+                      ) {
+                        void onClearChat(conversation.id);
+                      }
+                    }}
+                    className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors"
+                    aria-label="Clear chat history"
+                    title="Clear chat history"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                      <path
+                        fillRule="evenodd"
+                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                )}
                 <button onClick={handleFlagClick} disabled={conversation.isFlagged} className="disabled:opacity-50 p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors" aria-label="Report conversation" title={conversation.isFlagged ? "This conversation has been reported" : "Report conversation"}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 6a3 3 0 013-3h10a1 1 0 01.8 1.6L14.25 8l2.55 3.4A1 1 0 0116 13H6a1 1 0 01-1-1V6z" clipRule="evenodd" /></svg>
                 </button>
@@ -512,7 +655,35 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                       {msg.sender !== 'system' && (
                           <>
                               <div className={`px-3 py-2 max-w-xs text-sm leading-5 ${ msg.sender === senderType ? 'text-white rounded-2xl rounded-tr-sm' : 'bg-white text-gray-900 rounded-2xl rounded-tl-sm'}`} style={msg.sender === senderType ? { background: 'linear-gradient(135deg, #5f48ff 0%, #7b5bff 100%)' } : { backgroundColor: '#FFFFFF', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)' }}>
-                                  {msg.type === 'offer' ? <OfferMessage msg={msg} currentUserRole={currentUserRole} listingPrice={conversation.vehiclePrice} onRespond={(messageId, response, counterPrice) => onOfferResponse(conversation.id, messageId, response, counterPrice)} /> : <p className="text-sm break-words">{msg.text}</p>}
+                                  {msg.type === 'offer' ? (
+                                    <OfferMessage
+                                      msg={msg}
+                                      currentUserRole={currentUserRole}
+                                      listingPrice={conversation.vehiclePrice}
+                                      onRespond={(messageId, response, counterPrice) =>
+                                        onOfferResponse(conversation.id, messageId, response, counterPrice)
+                                      }
+                                    />
+                                  ) : msg.type === 'image' && msg.payload?.imageUrl ? (
+                                    <div className="space-y-2">
+                                      <ChatMessageImage src={msg.payload.imageUrl} />
+                                      {msg.text?.trim() && msg.text.trim() !== '📷 Photo' && (
+                                        <p className="text-sm break-words">{msg.text}</p>
+                                      )}
+                                    </div>
+                                  ) : msg.type === 'voice' && msg.payload?.audioUrl ? (
+                                    <div className="space-y-2">
+                                      <ChatMessageVoice
+                                        src={msg.payload.audioUrl}
+                                        durationSeconds={msg.payload.durationSeconds}
+                                      />
+                                      {msg.text?.trim() && msg.text.trim() !== '🎤 Voice message' && (
+                                        <p className="text-sm break-words">{msg.text}</p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm break-words">{msg.text}</p>
+                                  )}
                               </div>
                               <div className="text-[11px] text-gray-400 mt-1 px-1 flex items-center gap-1">
                                   {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -566,6 +737,23 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
 
         {/* Input - Facebook Messenger style */}
         <div className="p-3 border-t border-gray-200 bg-white relative">
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            {attachError && (
+              <p className="text-xs text-red-600 mb-2 px-1" role="alert">
+                {attachError}
+              </p>
+            )}
+            {voiceRecorder.error && (
+              <p className="text-xs text-red-600 mb-2 px-1" role="alert">
+                {voiceRecorder.error}
+              </p>
+            )}
             {showEmojiPicker && (
                 <div ref={emojiPickerRef} className="absolute bottom-full mb-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-lg p-2 grid grid-cols-6 gap-2">
                     {EMOJIS.map(emoji => (
@@ -576,6 +764,32 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                 </div>
             )}
             <form onSubmit={handleSendMessage} className="flex gap-1 items-center">
+                <button
+                  type="button"
+                  onClick={() => attachmentInputRef.current?.click()}
+                  disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording || !uploaderEmail}
+                  className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors disabled:opacity-40"
+                  aria-label="Send a photo"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleVoiceTap()}
+                  disabled={isUploadingPhoto || isUploadingVoice || !uploaderEmail}
+                  className={`p-2 rounded-full transition-colors disabled:opacity-40 ${
+                    voiceRecorder.isRecording
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  aria-label={voiceRecorder.isRecording ? 'Stop recording and send voice' : 'Record voice message'}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z" />
+                  </svg>
+                </button>
                 <button type="button" onClick={() => setShowEmojiPicker(prev => !prev)} className="p-2 text-gray-500 hover:text-gray-700 rounded-full transition-colors" aria-label="Add emoji">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </button>
@@ -628,8 +842,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                     type="text"
                     value={inputText}
                     onChange={handleInputChange}
-                    placeholder="Type a message..."
-                    className="flex-grow bg-gray-100 rounded-full px-4 py-2 focus:outline-none border border-transparent text-sm transition-colors"
+                    placeholder={
+                      voiceRecorder.isRecording
+                        ? 'Recording… tap mic to send'
+                        : isUploadingPhoto || isUploadingVoice
+                          ? 'Uploading…'
+                          : 'Type a message...'
+                    }
+                    disabled={isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording}
+                    className="flex-grow bg-gray-100 rounded-full px-4 py-2 focus:outline-none border border-transparent text-sm transition-colors disabled:opacity-60"
                     style={{ 
                         WebkitAppearance: 'none',
                         MozAppearance: 'none',
@@ -646,7 +867,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(({ conversation, curre
                         e.currentTarget.style.boxShadow = ''; 
                     }}
                 />
-                <button type="submit" className="p-2 transition-colors rounded-full hover:bg-gray-100" aria-label="Send message" style={{ color: '#0084FF' }} onMouseEnter={(e) => e.currentTarget.style.color = '#0066CC'} onMouseLeave={(e) => e.currentTarget.style.color = '#0084FF'}>
+                <button type="submit" disabled={!inputText.trim() || isUploadingPhoto || isUploadingVoice || voiceRecorder.isRecording} className="p-2 transition-colors rounded-full hover:bg-gray-100 disabled:opacity-40" aria-label="Send message" style={{ color: '#0084FF' }} onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.color = '#0066CC'; }} onMouseLeave={(e) => { e.currentTarget.style.color = '#0084FF'; }}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                 </button>
             </form>

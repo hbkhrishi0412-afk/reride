@@ -20,6 +20,7 @@ interface DashboardOptimizedProps {
   onMarkConversationAsReadBySeller: (conversationId: string) => void;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
+  onUserStoppedTyping?: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onUpdateSellerProfile: (details: { dealershipName: string; bio: string; logoUrl: string; }) => void;
   vehicleData: VehicleData;
@@ -28,6 +29,7 @@ interface DashboardOptimizedProps {
   onNavigate: (view: View) => void;
   onTestDriveResponse?: (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
+  chatPeerOnlineByConversationId?: Record<string, boolean>;
 }
 
 type DashboardView = 'overview' | 'listings' | 'messages' | 'analytics' | 'profile';
@@ -46,9 +48,11 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
     onMarkConversationAsReadBySeller,
     typingStatus,
     onUserTyping,
+    onUserStoppedTyping,
     onMarkMessagesAsRead,
     onOfferResponse,
-    onAddMultipleVehicles
+    onAddMultipleVehicles,
+    chatPeerOnlineByConversationId
   } = props;
 
   const [activeView, setActiveView] = useState<DashboardView>('overview');
@@ -116,8 +120,11 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
             onMarkConversationAsReadBySeller={onMarkConversationAsReadBySeller}
             typingStatus={typingStatus}
             onUserTyping={onUserTyping}
+            onUserStoppedTyping={onUserStoppedTyping}
+            sellerEmail={seller.email}
             onMarkMessagesAsRead={onMarkMessagesAsRead}
             onOfferResponse={onOfferResponse}
+            chatPeerOnlineByConversationId={chatPeerOnlineByConversationId}
           />
         );
       case 'analytics':

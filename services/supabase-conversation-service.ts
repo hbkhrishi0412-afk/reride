@@ -128,12 +128,17 @@ export interface ChatMessage {
   isRead: boolean;
   /** Client-only; never rely on this field from persisted rows (see sanitizePersistedChatMessage). */
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
-  type?: 'text' | 'test_drive_request' | 'offer';
+  type?: 'text' | 'test_drive_request' | 'offer' | 'image' | 'voice';
   payload?: {
     date?: string;
     time?: string;
     offerPrice?: number;
     counterPrice?: number;
+    price?: number;
+    message?: string;
+    imageUrl?: string;
+    audioUrl?: string;
+    durationSeconds?: number;
     status?: 'pending' | 'accepted' | 'rejected' | 'countered' | 'confirmed';
   };
 }
@@ -622,6 +627,34 @@ export const supabaseConversationService = {
 
     const [hydrated] = await hydrateConversationRows(supabase, [row]);
     return hydrated ?? null;
+  },
+
+  async markMessagesRead(conversationId: string, messageIds: (number | string)[]): Promise<void> {
+    if (!messageIds.length) return;
+    const conversation = await this.findById(String(conversationId));
+    if (!conversation) {
+      throw new Error(`Conversation not found: ${conversationId}`);
+    }
+    const idSet = new Set(messageIds.map((id) => String(id)));
+    const updatedMessages = (conversation.messages || []).map((m) =>
+      idSet.has(String(m.id)) ? { ...m, isRead: true } : m,
+    );
+    await this.update(conversation.id, { messages: updatedMessages });
+  },
+
+  async clearConversationMessages(conversationId: string): Promise<void> {
+    const conversation = await this.findById(String(conversationId));
+    if (!conversation) {
+      throw new Error(`Conversation not found: ${conversationId}`);
+    }
+    const now = new Date().toISOString();
+    await this.update(conversation.id, {
+      messages: [],
+      lastMessage: '',
+      lastMessageAt: now,
+      isReadBySeller: true,
+      isReadByCustomer: true,
+    });
   },
 
   // Add message to conversation

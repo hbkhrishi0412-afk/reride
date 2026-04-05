@@ -53,7 +53,9 @@ interface DashboardProps {
   onMarkConversationAsReadBySeller: (conversationId: string) => void;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
+  onUserStoppedTyping?: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
+  onClearChat?: (conversationId: string) => void | Promise<void>;
   onUpdateSellerProfile: (details: { dealershipName: string; bio: string; logoUrl: string; partnerBanks?: string[] }) => void;
   vehicleData: VehicleData;
   onFeatureListing: (vehicleId: number) => Promise<void>;
@@ -62,9 +64,10 @@ interface DashboardProps {
   onTestDriveResponse?: (conversationId: string, messageId: number, newStatus: 'confirmed' | 'rejected') => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onViewVehicle?: (vehicle: Vehicle) => void;
+  chatPeerOnlineByConversationId?: Record<string, boolean>;
 }
 
-type DashboardView = 'overview' | 'listings' | 'form' | 'inquiries' | 'analytics' | 'salesHistory' | 'reports' | 'settings';
+type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings';
 
 const HelpTooltip: React.FC<{ text: string }> = memo(({ text }) => (
     <span className="group relative ml-1">
@@ -1682,6 +1685,7 @@ const InquiriesView: React.FC<{
   onSelectConv: (conv: Conversation) => void;
 
 }> = memo(({ conversations, sellerEmail, onMarkConversationAsReadBySeller, onMarkMessagesAsRead, onSelectConv }) => {
+    const { t } = useTranslation();
 
     const handleSelectConversation = (conv: Conversation) => {
       onSelectConv(conv);
@@ -1763,7 +1767,7 @@ const InquiriesView: React.FC<{
 
     return (
        <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">Customer Inquiries</h2>
+         <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">{t('sellerDashboard.nav.messages')}</h2>
          <div className="space-y-2">
             {sortedConversations.length > 0 ? sortedConversations.map(conv => {
               if (!conv) return null;
@@ -1794,8 +1798,8 @@ const InquiriesView: React.FC<{
                     <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
-                    <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">No inquiries yet</h3>
-                    <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">When a customer sends a message about one of your listings, it will appear here.</p>
+                    <h3 className="mt-2 text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark">{t('sellerDashboard.messages.emptyTitle')}</h3>
+                    <p className="mt-1 text-sm text-reride-text-dark dark:text-reride-text-dark">{t('sellerDashboard.messages.emptyBody')}</p>
                 </div>
             )}
          </div>
@@ -1868,7 +1872,7 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onMarkMessagesAsRead, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId }) => {
   // Note: onRequestCertification, and onTestDriveResponse are part of the interface contract
   // but are not currently used in this component. They may be used in future features or passed to child components.
   void onRequestCertification;
@@ -1884,7 +1888,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     try {
       if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('reride_seller_open_inquiries') === '1') {
         sessionStorage.removeItem('reride_seller_open_inquiries');
-        setActiveView('inquiries');
+        setActiveView('messages');
       }
     } catch {
       /* ignore */
@@ -2349,7 +2353,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
   }, [filteredActiveListings, filteredSoldListings]);
 
   const handleNavigate = (view: DashboardView) => {
-    if (view !== 'inquiries') {
+    if (view !== 'messages') {
         setSelectedConv(null);
     }
     setActiveView(view);
@@ -2663,7 +2667,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
       const conv = safeConversations.find(c => c && c.id === conversationId);
       if (conv) {
         setSelectedConv(conv);
-        handleNavigate('inquiries');
+        handleNavigate('messages');
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -3404,7 +3408,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             onFeatureListing={onFeatureListing}
             allVehicles={allVehicles}
         />;
-      case 'inquiries':
+      case 'messages':
         return (
           <div className="space-y-6">
             <InquiriesView 
@@ -3420,6 +3424,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   conversation={selectedConv}
                   currentUserRole="seller"
                   otherUserName={selectedConv.customerName}
+                  otherUserOnline={chatPeerOnlineByConversationId?.[String(selectedConv.id)]}
                   callTargetPhone={(() => {
                     const contact = findUserByParticipantId(allUsers || [], selectedConv.customerId);
                     return contact?.mobile || (contact as any)?.phone || '';
@@ -3428,12 +3433,21 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                   isInlineLaunch={true}
                   onStartCall={(phone) => { if (phone) window.open(`tel:${phone}`); }}
                   onClose={() => setSelectedConv(null)}
-                  onSendMessage={(messageText) => onSellerSendMessage(selectedConv.id, messageText)}
+                  onSendMessage={(messageText, type, payload) => {
+                    if (type || payload) {
+                      onSellerSendMessage(selectedConv.id, messageText, type, payload);
+                    } else {
+                      onSellerSendMessage(selectedConv.id, messageText);
+                    }
+                  }}
                   typingStatus={typingStatus}
                   onUserTyping={onUserTyping}
+                  onUserStoppedTyping={onUserStoppedTyping}
+                  uploaderEmail={seller.email}
                   onMarkMessagesAsRead={onMarkMessagesAsRead}
                   onFlagContent={() => {}}
                   onOfferResponse={onOfferResponse}
+                  onClearChat={onClearChat}
                 />
               </div>
             )}
@@ -3604,12 +3618,12 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                 </div>
               </NavItem>
               
-              <NavItem view="inquiries" count={unreadCount}>
+              <NavItem view="messages" count={unreadCount}>
                 <div className="flex items-center gap-3">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                   </svg>
-                  <span>{t('sellerDashboard.nav.inquiries')}</span>
+                  <span>{t('sellerDashboard.nav.messages')}</span>
                 </div>
               </NavItem>
               
@@ -3670,6 +3684,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             conversation={selectedConv}
             currentUserRole="seller"
             otherUserName={selectedConv.customerName}
+            otherUserOnline={chatPeerOnlineByConversationId?.[String(selectedConv.id)]}
             callTargetPhone={(() => {
               const contact = findUserByParticipantId(allUsers || [], selectedConv.customerId);
               return contact?.mobile || (contact as any)?.phone || '';
@@ -3680,10 +3695,13 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             onSendMessage={(messageText, type, payload) => onSellerSendMessage(selectedConv.id, messageText, type, payload)}
             onClose={() => setSelectedConv(null)}
             onUserTyping={onUserTyping}
+            onUserStoppedTyping={onUserStoppedTyping}
+            uploaderEmail={seller.email}
             onMarkMessagesAsRead={onMarkMessagesAsRead}
             onFlagContent={() => {}}
             typingStatus={typingStatus}
             onOfferResponse={onOfferResponse}
+            onClearChat={onClearChat}
           />
         )}
         

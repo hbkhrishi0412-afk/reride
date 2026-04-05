@@ -2,6 +2,50 @@ import type { Conversation } from '../types';
 import { queueRequest } from '../utils/requestQueue';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 
+/** Mark specific messages as read (persists to Supabase). */
+export async function patchConversationMarkRead(
+  conversationId: string,
+  messageIds: (number | string)[],
+): Promise<{ success: boolean; data?: Conversation; error?: string }> {
+  try {
+    if (!messageIds.length) {
+      return { success: true };
+    }
+    const response = await authenticatedFetch('/api/conversations', {
+      method: 'PATCH',
+      body: JSON.stringify({ conversationId, markReadMessageIds: messageIds }),
+    });
+    const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to mark messages read' };
+    }
+    return { success: true, data: result.data?.data };
+  } catch (error) {
+    console.error('patchConversationMarkRead error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+/** Clear all messages in a thread without deleting the conversation row. */
+export async function patchConversationClearMessages(
+  conversationId: string,
+): Promise<{ success: boolean; data?: Conversation; error?: string }> {
+  try {
+    const response = await authenticatedFetch('/api/conversations', {
+      method: 'PATCH',
+      body: JSON.stringify({ conversationId, clearMessages: true }),
+    });
+    const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to clear chat' };
+    }
+    return { success: true, data: result.data?.data };
+  } catch (error) {
+    console.error('patchConversationClearMessages error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 /**
  * Save conversation to Supabase
  */

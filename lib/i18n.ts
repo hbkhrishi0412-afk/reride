@@ -227,6 +227,10 @@ const en = {
   'sellerDashboard.nav.salesHistory': 'Sales History',
   'sellerDashboard.nav.addVehicle': 'Add Vehicle',
   'sellerDashboard.nav.inquiries': 'Inquiries',
+  'sellerDashboard.nav.messages': 'Messages',
+  'sellerDashboard.messages.emptyTitle': 'No messages yet',
+  'sellerDashboard.messages.emptyBody':
+    'When a customer sends a message about one of your listings, it will appear here.',
   'sellerDashboard.nav.settings': 'Settings',
   'sellerDashboard.databaseIssue': 'Database Connection Issue',
   'sellerDashboard.databaseErrorSupabase':
@@ -926,6 +930,10 @@ const hi: Record<string, string> = {
   'sellerDashboard.nav.salesHistory': 'बिक्री इतिहास',
   'sellerDashboard.nav.addVehicle': 'वाहन जोड़ें',
   'sellerDashboard.nav.inquiries': 'पूछताछ',
+  'sellerDashboard.nav.messages': 'संदेश',
+  'sellerDashboard.messages.emptyTitle': 'अभी कोई संदेश नहीं',
+  'sellerDashboard.messages.emptyBody':
+    'जब कोई ग्राहक आपकी लिस्टिंग के बारे में संदेश भेजेगा, वह यहाँ दिखाई देगा।',
   'sellerDashboard.nav.settings': 'सेटिंग्स',
   'sellerDashboard.databaseIssue': 'डेटाबेस कनेक्शन समस्या',
   'sellerDashboard.databaseErrorSupabase':
@@ -1988,6 +1996,10 @@ const te: Record<string, string> = {
   'sellerDashboard.nav.salesHistory': 'అమ్మకాల చరిత్ర',
   'sellerDashboard.nav.addVehicle': 'వాహనం జోడించండి',
   'sellerDashboard.nav.inquiries': 'విచారణలు',
+  'sellerDashboard.nav.messages': 'సందేశాలు',
+  'sellerDashboard.messages.emptyTitle': 'ఇంకా సందేశాలు లేవు',
+  'sellerDashboard.messages.emptyBody':
+    'గిరాకీదారు మీ లిస్టింగ్ గురించి సందేశం పంపినప్పుడు అది ఇక్కడ కనిపిస్తుంది.',
   'sellerDashboard.nav.settings': 'సెట్టింగ్‌లు',
   'sellerDashboard.dbIssue': 'డేటాబేస్ కనెక్షన్ సమస్య',
   'sellerDashboard.dbUnavailable': 'డేటాబేస్ అందుబాటులో లేదు. కాన్ఫిగరేషన్ తనిఖీ చేయండి.',
@@ -2647,6 +2659,10 @@ const ta: Record<string, string> = {
   'sellerDashboard.nav.salesHistory': 'விற்பனை வரலாறு',
   'sellerDashboard.nav.addVehicle': 'வாகனம் சேர்',
   'sellerDashboard.nav.inquiries': 'விசாரணைகள்',
+  'sellerDashboard.nav.messages': 'செய்திகள்',
+  'sellerDashboard.messages.emptyTitle': 'இன்னும் செய்திகள் இல்லை',
+  'sellerDashboard.messages.emptyBody':
+    'வாடிக்கையாளர் உங்கள் பட்டியல் பற்றி செய்தி அனுப்பும்போது அது இங்கே தோன்றும்.',
   'sellerDashboard.nav.settings': 'அமைப்புகள்',
   'sellerDashboard.dbIssue': 'தரவுத்தள இணைப்பு சிக்கல்',
   'sellerDashboard.dbUnavailable': 'தரவுத்தளம் கிடைக்கவில்லை. உள்ளமைவைச் சரிபார்க்கவும்.',

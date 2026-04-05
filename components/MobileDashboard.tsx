@@ -9,8 +9,6 @@ import PricingGuidance from './PricingGuidance';
 import BoostListingModal from './BoostListingModal';
 import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
-import { formatRelativeTime } from '../utils/date';
-import { getThreadLastMessagePreview } from '../utils/messagePreview';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
 
@@ -58,7 +56,7 @@ interface MobileDashboardProps {
   onSellerOpenChat?: (conversation: Conversation) => void;
 }
 
-type DashboardTab = 'overview' | 'listings' | 'messages' | 'inquiries' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'profile' | 'addVehicle' | 'editVehicle' | 'notifications';
+type DashboardTab = 'overview' | 'listings' | 'analytics' | 'salesHistory' | 'reports' | 'settings' | 'profile' | 'addVehicle' | 'editVehicle' | 'notifications';
 
 const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   currentUser,
@@ -245,7 +243,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   const totalListings = safeUserVehicles.length;
   const activeListings = safeUserVehicles.filter(v => v && v.status === 'published').length;
   const soldListings = safeUserVehicles.filter(v => v && v.status === 'sold').length;
-  const unreadMessages = safeConversations.filter(c => c && !c.isReadBySeller).length;
   const totalViews = safeUserVehicles.reduce((sum, v) => sum + (v?.views || 0), 0);
   const totalInquiries = safeConversations.length;
   const reportedCount = safeReportedVehicles.length;
@@ -255,15 +252,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     () => [
       { id: 'overview' as const, label: t('sellerDashboard.mobile.tab.overview'), icon: '📊', count: null },
       { id: 'listings' as const, label: t('sellerDashboard.mobile.tab.listings'), icon: '🚗', count: totalListings },
-      { id: 'messages' as const, label: t('sellerDashboard.mobile.tab.messages'), icon: '💬', count: unreadMessages },
-      { id: 'inquiries' as const, label: t('sellerDashboard.mobile.tab.inquiries'), icon: '📥', count: totalInquiries },
       { id: 'analytics' as const, label: t('sellerDashboard.mobile.tab.analytics'), icon: '📈', count: null },
       { id: 'salesHistory' as const, label: t('sellerDashboard.mobile.tab.sales'), icon: '💰', count: soldListings },
       { id: 'reports' as const, label: t('sellerDashboard.mobile.tab.reports'), icon: '🚩', count: reportedCount },
       { id: 'settings' as const, label: t('sellerDashboard.mobile.tab.settings'), icon: '⚙️', count: null },
       { id: 'profile' as const, label: t('sellerDashboard.mobile.tab.profile'), icon: '👤', count: null },
     ],
-    [t, totalListings, unreadMessages, totalInquiries, soldListings, reportedCount]
+    [t, totalListings, soldListings, reportedCount]
   );
 
   const renderOverview = () => (
@@ -327,31 +322,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalListings}</p>
           {activeListings > 0 && (
             <p className="text-xs text-gray-500 mt-1">{t('sellerDashboard.mobile.nActive', { count: activeListings })}</p>
-          )}
-        </div>
-
-        <div 
-          onClick={() => setActiveTab('messages')}
-          className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-              <span className="text-xl">💬</span>
-            </div>
-            {unreadMessages > 0 && (
-              <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                {unreadMessages}
-              </span>
-            )}
-            </div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
-            {t('sellerDashboard.mobile.tab.messages')}
-          </p>
-          <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{unreadMessages}</p>
-          {safeConversations.length > 0 && (
-            <p className="text-xs text-gray-500 mt-1">
-              {t('sellerDashboard.mobile.nTotal', { count: safeConversations.length })}
-            </p>
           )}
         </div>
 
@@ -467,7 +437,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               if (vehicle && onViewVehicle) onViewVehicle(vehicle);
             }}
             onNavigateToInquiry={(conversationId) => {
-              setActiveTab('inquiries');
+              const conv = safeConversations.find((c) => c && c.id === conversationId);
+              if (conv && onSellerOpenChat) onSellerOpenChat(conv);
             }}
           />
         </div>
@@ -541,7 +512,8 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             </>
           )}
           <button 
-            onClick={() => setActiveTab('messages')}
+            type="button"
+            onClick={() => onNavigate(ViewEnum.INBOX)}
             className="flex flex-col items-center justify-center gap-2 p-4 bg-green-50 rounded-xl text-green-700 font-semibold native-button active:opacity-70 min-h-[80px]"
           >
             <span className="text-2xl">💬</span>
@@ -733,104 +705,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
               </div>
             </div>
           ))}
-        </div>
-      )}
-    </div>
-  );
-
-  const renderMessages = () => (
-    <div className="space-y-5 pb-4">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-bold text-gray-900">Messages</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Chats with buyers · {safeConversations.length} total · {unreadMessages} unread
-          </p>
-        </div>
-      </div>
-
-      {safeConversations.length === 0 ? (
-        <div className="text-center py-12 px-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-green-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-4xl">💬</span>
-          </div>
-          <h4 className="text-xl font-bold text-gray-900 mb-2">No messages yet</h4>
-          <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
-            Your conversations with potential buyers will appear here
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {safeConversations.slice(0, 5).map((conversation) => (
-            <button
-              key={conversation.id}
-              type="button"
-              className="native-card p-4 cursor-pointer active:opacity-80 native-transition w-full text-left border-0 appearance-none bg-white"
-              style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
-              onClick={() => {
-                if (onSellerOpenChat) {
-                  onSellerOpenChat(conversation);
-                  return;
-                }
-                setActiveTab('messages');
-              }}
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-orange-600 font-bold text-base">
-                    {conversation.customerName?.charAt(0).toUpperCase() || 'C'}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h4 className="font-bold text-gray-900 truncate text-base">
-                      {conversation.customerName || 'Customer'}
-                    </h4>
-                    {!conversation.isReadBySeller && (
-                      <span className="w-2.5 h-2.5 bg-orange-500 rounded-full flex-shrink-0" aria-hidden />
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600 truncate mb-1">
-                    {conversation.vehicleName || 'Vehicle inquiry'}
-                  </p>
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs text-gray-500 shrink-0">
-                      {formatRelativeTime(conversation.lastMessageAt)}
-                    </span>
-                    {conversation.messages && conversation.messages.length > 0 && (
-                      <>
-                        <span className="text-gray-300 shrink-0">·</span>
-                        <span className="text-xs text-gray-500 truncate">
-                          {(() => {
-                            const last = conversation.messages[conversation.messages.length - 1];
-                            const p = getThreadLastMessagePreview(last, {
-                              otherLabel: conversation.customerName || 'Buyer',
-                              viewer: 'seller',
-                            });
-                            return (
-                              <>
-                                {p.prefix && <span className="text-gray-400">{p.prefix}</span>}
-                                {p.text}
-                              </>
-                            );
-                          })()}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </button>
-          ))}
-          {safeConversations.length > 5 && (
-            <button 
-              type="button"
-              onClick={() => onNavigate(ViewEnum.INBOX)}
-              className="w-full py-3.5 text-orange-600 font-semibold native-button native-button-secondary"
-            >
-              View all messages ({safeConversations.length})
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -2450,94 +2324,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   );
   };
 
-  // Render Inquiries View (separate from Messages)
-  const renderInquiries = () => (
-    <div className="space-y-5 pb-4">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 className="text-lg font-bold text-gray-900">Customer Inquiries</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{safeConversations.length} total inquiries</p>
-        </div>
-      </div>
-
-      {safeConversations.length === 0 ? (
-        <div className="text-center py-12 px-4">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-4xl">📥</span>
-          </div>
-          <h4 className="text-xl font-bold text-gray-900 mb-2">No inquiries yet</h4>
-          <p className="text-gray-600 text-sm leading-relaxed max-w-sm mx-auto">
-            Customer inquiries about your vehicles will appear here
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {safeConversations.map((conversation) => {
-            const vehicle = safeUserVehicles.find(v => v.id === conversation.vehicleId);
-            return (
-              <button
-                key={conversation.id}
-                type="button"
-                className="native-card p-4 cursor-pointer active:opacity-80 native-transition w-full text-left border-0 appearance-none bg-white"
-                style={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
-                onClick={() => {
-                  if (onSellerOpenChat) {
-                    onSellerOpenChat(conversation);
-                    return;
-                  }
-                  setActiveTab('messages');
-                }}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-orange-600 font-bold text-base">
-                      {conversation.customerName?.charAt(0).toUpperCase() || 'C'}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h4 className="font-bold text-gray-900 truncate text-base">
-                        {conversation.customerName || 'Customer'}
-                      </h4>
-                      {!conversation.isReadBySeller && (
-                        <span className="w-2.5 h-2.5 bg-orange-500 rounded-full flex-shrink-0"></span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-600 truncate mb-1 font-medium">
-                      {vehicle ? `${vehicle.year} ${vehicle.make} ${vehicle.model}` : conversation.vehicleName}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {conversation.messages && conversation.messages.length > 0 
-                        ? conversation.messages[conversation.messages.length - 1]?.text?.substring(0, 60) + '...'
-                        : 'New inquiry'}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-xs text-gray-400">
-                        {new Date(conversation.lastMessageAt).toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric',
-                          ...(new Date(conversation.lastMessageAt).getFullYear() !== new Date().getFullYear() && {
-                            year: 'numeric'
-                          })
-                        })}
-                      </span>
-                      {vehicle && (
-                        <>
-                          <span className="text-gray-300">•</span>
-                          <span className="text-xs font-semibold text-orange-600">₹{vehicle.price.toLocaleString('en-IN')}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-
   // Render Sales History View
   const renderSalesHistory = () => {
     const soldVehicles = safeUserVehicles.filter(v => v && v.status === 'sold');
@@ -2838,8 +2624,6 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     switch (activeTab) {
       case 'overview': return renderOverview();
       case 'listings': return renderListings();
-      case 'messages': return renderMessages();
-      case 'inquiries': return renderInquiries();
       case 'analytics': return renderAnalytics();
       case 'salesHistory': return renderSalesHistory();
       case 'reports': return renderReports();

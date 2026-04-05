@@ -52,6 +52,60 @@ export const uploadImages = async (files: File[], folder: string = 'vehicles', u
   return Promise.all(uploadPromises);
 };
 
+function blobToBase64Payload(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const s = String(reader.result || '');
+      resolve(s.replace(/^data:[^;]+;base64,/, ''));
+    };
+    reader.onerror = () => reject(new Error('Failed to read audio blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Upload a short voice note (WebM/MP4/etc.) via the same authenticated API as chat images.
+ */
+export async function uploadChatAudio(
+  blob: Blob,
+  fileName: string,
+  mimeType: string,
+): Promise<UploadResult> {
+  try {
+    const fileBase64 = await blobToBase64Payload(blob);
+    const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+    const res = await authenticatedFetch('/api/upload-image', {
+      method: 'POST',
+      body: JSON.stringify({
+        fileBase64,
+        fileName,
+        mimeType: mimeType || blob.type || 'audio/webm',
+        folder: 'chat-messages',
+      }),
+      credentials: 'include',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const reason = (data.reason || data.error || `Upload failed (${res.status})`).toString();
+      if (res.status === 401) {
+        return {
+          success: false,
+          error: 'Your session may have expired. Please log out and log back in, then try again.',
+        };
+      }
+      return { success: false, error: reason };
+    }
+    if (data.success && data.url) {
+      return { success: true, url: data.url, imageId: data.imageId };
+    }
+    return { success: false, error: (data.reason || 'Upload failed').toString() };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return { success: false, error: msg };
+  }
+}
+
 /**
  * Upload image via server API when Supabase session is missing (e.g. admin or API-only login).
  * Uses app JWT for auth; server uploads to Storage with service role.

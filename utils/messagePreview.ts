@@ -27,6 +27,20 @@ export function getThreadLastMessagePreview(
   if (last.type === 'test_drive_request') {
     return { prefix: '', text: 'Test drive request' };
   }
+  if (last.type === 'image') {
+    const body = '📷 Photo';
+    if (last.sender === youSender) {
+      return { prefix: `${you}: `, text: body };
+    }
+    return { prefix: other ? `${other}: ` : '', text: body };
+  }
+  if (last.type === 'voice') {
+    const body = '🎤 Voice message';
+    if (last.sender === youSender) {
+      return { prefix: `${you}: `, text: body };
+    }
+    return { prefix: other ? `${other}: ` : '', text: body };
+  }
   const body = last.text?.trim() || 'Message';
   if (last.sender === youSender) {
     return { prefix: `${you}: `, text: body };
