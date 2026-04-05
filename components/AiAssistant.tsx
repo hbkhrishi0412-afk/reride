@@ -1,6 +1,16 @@
 import React, { useState, useEffect, memo } from 'react';
 import type { Vehicle, Conversation, Suggestion } from '../types';
 import { generateSellerSuggestions } from '../services/geminiService';
+import { getLastVisibleMessageForViewer } from '../utils/conversationView';
+
+/** Matches `generateSellerSuggestions` inquiry filter: unread for seller + last visible line from customer. */
+function sellerHasUrgentStyleInquiry(conversations: Conversation[]): boolean {
+  return conversations.some((c) => {
+    if (c.isReadBySeller) return false;
+    const last = getLastVisibleMessageForViewer(c, 'seller');
+    return Boolean(last && last.sender === 'user');
+  });
+}
 
 interface AiAssistantProps {
   vehicles: Vehicle[];
@@ -56,7 +66,8 @@ const AiAssistant: React.FC<AiAssistantProps> = ({ vehicles, conversations, onNa
       setIsLoading(true);
       setError(null);
       try {
-        if (vehicles.length > 0 || conversations.some(c => !c.isReadBySeller)) {
+        const shouldCallGemini = vehicles.length > 0 || sellerHasUrgentStyleInquiry(conversations);
+        if (shouldCallGemini) {
           const fetchedSuggestions = await generateSellerSuggestions(vehicles, conversations);
           setSuggestions(fetchedSuggestions);
         } else {

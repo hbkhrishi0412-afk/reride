@@ -160,6 +160,10 @@ export interface Conversation {
   isFlagged?: boolean;
   flagReason?: string;
   flaggedAt?: string;
+  /** ISO: customer cleared their view of history (messages still stored for the other party). */
+  customerHistoryClearedAt?: string;
+  /** ISO: seller cleared their view of history. */
+  sellerHistoryClearedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -169,6 +173,7 @@ const isServerSide = typeof window === 'undefined';
 
 // Helper to convert Supabase row to Conversation type
 export function supabaseRowToConversation(row: any): Conversation {
+  const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
   return {
     id: row.id,
     customerId: row.customer_id || '',
@@ -178,7 +183,7 @@ export function supabaseRowToConversation(row: any): Conversation {
     vehicleId: row.vehicle_id != null ? Number(row.vehicle_id) : 0,
     vehicleName: row.vehicle_name || '',
     vehiclePrice: row.vehicle_price ? Number(row.vehicle_price) : undefined,
-    messages: sanitizePersistedChatMessages((row.metadata?.messages || []) as ChatMessage[]),
+    messages: sanitizePersistedChatMessages((meta.messages || []) as ChatMessage[]),
     lastMessage: row.last_message || undefined,
     lastMessageAt: row.last_message_at || row.lastMessageAt || new Date().toISOString(),
     isReadBySeller: row.is_read_by_seller || false,
@@ -186,6 +191,10 @@ export function supabaseRowToConversation(row: any): Conversation {
     isFlagged: row.is_flagged || false,
     flagReason: row.flag_reason || undefined,
     flaggedAt: row.flagged_at || undefined,
+    customerHistoryClearedAt:
+      typeof meta.customer_history_cleared_at === 'string' ? meta.customer_history_cleared_at : undefined,
+    sellerHistoryClearedAt:
+      typeof meta.seller_history_cleared_at === 'string' ? meta.seller_history_cleared_at : undefined,
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString(),
   };
@@ -228,13 +237,27 @@ function conversationToSupabaseRow(conversation: Partial<Conversation>, isUpdate
     row.updated_at = conversation.updatedAt || new Date().toISOString();
   }
   
-  // Only include metadata if messages are provided
-  if (conversation.messages !== undefined) {
-    row.metadata = {
-      messages: Array.isArray(conversation.messages) ? conversation.messages : [],
-    };
+  const needsMeta =
+    conversation.messages !== undefined ||
+    conversation.customerHistoryClearedAt !== undefined ||
+    conversation.sellerHistoryClearedAt !== undefined;
+  if (needsMeta) {
+    row.metadata = {} as Record<string, unknown>;
+    if (conversation.messages !== undefined) {
+      (row.metadata as Record<string, unknown>).messages = Array.isArray(conversation.messages)
+        ? conversation.messages
+        : [];
+    }
+    if (conversation.customerHistoryClearedAt !== undefined) {
+      (row.metadata as Record<string, unknown>).customer_history_cleared_at =
+        conversation.customerHistoryClearedAt ?? null;
+    }
+    if (conversation.sellerHistoryClearedAt !== undefined) {
+      (row.metadata as Record<string, unknown>).seller_history_cleared_at =
+        conversation.sellerHistoryClearedAt ?? null;
+    }
   }
-  
+
   return row;
 }
 
@@ -642,19 +665,18 @@ export const supabaseConversationService = {
     await this.update(conversation.id, { messages: updatedMessages });
   },
 
-  async clearConversationMessages(conversationId: string): Promise<void> {
+  /**
+   * Clear chat history for one participant only. Messages stay in DB for the other party.
+   */
+  async clearHistoryForParticipant(conversationId: string, role: 'customer' | 'seller'): Promise<void> {
     const conversation = await this.findById(String(conversationId));
     if (!conversation) {
       throw new Error(`Conversation not found: ${conversationId}`);
     }
     const now = new Date().toISOString();
-    await this.update(conversation.id, {
-      messages: [],
-      lastMessage: '',
-      lastMessageAt: now,
-      isReadBySeller: true,
-      isReadByCustomer: true,
-    });
+    const patch: Partial<Conversation> =
+      role === 'customer' ? { customerHistoryClearedAt: now } : { sellerHistoryClearedAt: now };
+    await this.update(conversation.id, patch);
   },
 
   // Add message to conversation

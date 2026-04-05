@@ -5053,19 +5053,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
         const server = res.data;
-        const now = server?.lastMessageAt || new Date().toISOString();
+        if (!server) {
+          addToast(res.error || t('toast.failedSendMessageGeneric'), 'error');
+          return;
+        }
         setConversations((prev) => {
           const next = Array.isArray(prev)
             ? prev.map((c) =>
                 String(c.id) === String(conversationId)
                   ? {
                       ...c,
-                      messages: Array.isArray(server?.messages) ? server.messages : [],
-                      lastMessage: server?.lastMessage ?? '',
-                      lastMessageAt: now,
-                      isReadBySeller: server?.isReadBySeller !== undefined ? server.isReadBySeller : true,
-                      isReadByCustomer:
-                        server?.isReadByCustomer !== undefined ? server.isReadByCustomer : true,
+                      ...server,
+                      messages: Array.isArray(server.messages) ? server.messages : c.messages,
+                      customerHistoryClearedAt: server.customerHistoryClearedAt ?? c.customerHistoryClearedAt,
+                      sellerHistoryClearedAt: server.sellerHistoryClearedAt ?? c.sellerHistoryClearedAt,
                     }
                   : c,
               )
@@ -5081,14 +5082,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!prev || String(prev.id) !== String(conversationId)) return prev;
           return {
             ...prev,
-            messages: Array.isArray(server?.messages) ? server.messages : [],
-            lastMessage: server?.lastMessage ?? '',
-            lastMessageAt: now,
-            isReadBySeller: true,
-            isReadByCustomer: true,
+            ...server,
+            messages: Array.isArray(server.messages) ? server.messages : prev.messages,
+            customerHistoryClearedAt: server.customerHistoryClearedAt ?? prev.customerHistoryClearedAt,
+            sellerHistoryClearedAt: server.sellerHistoryClearedAt ?? prev.sellerHistoryClearedAt,
           };
         });
-        addToast('Chat cleared', 'success');
+        addToast(
+          'Chat cleared for you. The other person still sees the full history until they clear it.',
+          'success',
+        );
       } catch (error) {
         console.error('clearConversationMessages:', error);
         addToast(t('toast.failedSendMessageGeneric'), 'error');

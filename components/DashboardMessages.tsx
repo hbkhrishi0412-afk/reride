@@ -1,7 +1,8 @@
 import React, { memo, useState } from 'react';
 import type { Conversation } from '../types';
-import { ChatWidget } from './ChatWidget';
 import InlineChat from './InlineChat';
+import { getLastVisibleMessageForViewer } from '../utils/conversationView';
+import { getThreadLastMessagePreview } from '../utils/messagePreview';
 
 interface DashboardMessagesProps {
   conversations: Conversation[];
@@ -57,9 +58,12 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
   };
 
   const getLastMessage = (conversation: Conversation) => {
-    if (!conversation || !conversation.messages || conversation.messages.length === 0) return 'No messages';
-    const lastMessage = conversation.messages[conversation.messages.length - 1];
-    return lastMessage?.text || 'Media message';
+    const last = getLastVisibleMessageForViewer(conversation, 'seller');
+    const { prefix, text } = getThreadLastMessagePreview(last, {
+      otherLabel: conversation.customerName,
+      viewer: 'seller',
+    });
+    return `${prefix}${text}`;
   };
 
   return (

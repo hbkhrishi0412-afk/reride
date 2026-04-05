@@ -6,6 +6,7 @@ import InlineChat from './InlineChat.js';
 import { useConversationList } from '../hooks/useConversationList';
 import { formatRelativeTime } from '../utils/date';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
+import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
 
 interface CustomerInboxProps {
   conversations: Conversation[];
@@ -29,10 +30,11 @@ interface CustomerInboxProps {
 
 // Helper function to count unread messages
 const countUnreadMessages = (conversation: Conversation, userRole: 'customer' | 'seller'): number => {
+  const visible = filterMessagesForViewer(conversation, userRole);
   if (userRole === 'customer') {
-    return conversation.messages.filter(msg => msg.sender === 'seller' && !msg.isRead).length;
+    return visible.filter((msg) => msg.sender === 'seller' && !msg.isRead).length;
   }
-  return conversation.messages.filter(msg => msg.sender === 'user' && !msg.isRead).length;
+  return visible.filter((msg) => msg.sender === 'user' && !msg.isRead).length;
 };
 
 const CustomerInbox: React.FC<CustomerInboxProps> = ({
@@ -203,8 +205,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
               {filteredConversations.length > 0 ? (
                 <ul className="divide-y divide-gray-100">
                   {filteredConversations.map(conv => {
-                    const lastMessage =
-                      conv.messages?.length > 0 ? conv.messages[conv.messages.length - 1] : undefined;
+                    const lastMessage = getLastVisibleMessageForViewer(conv, 'customer');
                     const unreadMsgCount = countUnreadMessages(conv, 'customer');
                     const preview = getThreadLastMessagePreview(lastMessage, {
                       otherLabel: getSellerName(conv.sellerId),
@@ -253,14 +254,12 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                               isUnread ? 'text-gray-900 font-medium' : 'text-gray-600'
                             }`}
                           >
-                            {lastMessage ? (
-                              <span>
-                                {preview.prefix && (
-                                  <span className="text-gray-500 font-normal">{preview.prefix}</span>
-                                )}
-                                {preview.text}
-                              </span>
-                            ) : null}
+                            <span>
+                              {preview.prefix && (
+                                <span className="text-gray-500 font-normal">{preview.prefix}</span>
+                              )}
+                              {preview.text}
+                            </span>
                           </p>
                           {conv.vehiclePrice && (
                             <p className="text-xs text-gray-500 mt-1">

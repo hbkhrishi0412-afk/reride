@@ -7304,7 +7304,13 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
 
       try {
         if (doClear) {
-          await conversationService.clearConversationMessages(String(conversation.id));
+          const clearedAsCustomer = normalizedAuthEmail === normalizedCustomerId;
+          const clearedAsSeller = normalizedAuthEmail === normalizedSellerId;
+          if (!clearedAsCustomer && !clearedAsSeller && !isAdmin) {
+            return res.status(403).json({ success: false, reason: 'Unauthorized conversation update' });
+          }
+          const role: 'customer' | 'seller' = clearedAsCustomer ? 'customer' : 'seller';
+          await conversationService.clearHistoryForParticipant(String(conversation.id), role);
         } else if (markIds.length > 0) {
           await conversationService.markMessagesRead(String(conversation.id), markIds);
         } else {

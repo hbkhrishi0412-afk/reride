@@ -11,6 +11,8 @@ import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
+import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
+import { getThreadLastMessagePreview } from '../utils/messagePreview';
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -714,7 +716,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     // Calculate additional metrics
     const averageViewsPerListing = activeListings > 0 ? Math.round(totalViews / activeListings) : 0;
     const conversionRate = totalViews > 0 ? ((totalInquiries / totalViews) * 100).toFixed(1) : '0.0';
-    const responseRate = totalInquiries > 0 ? ((safeConversations.filter(c => c.messages && c.messages.length > 0).length / totalInquiries) * 100).toFixed(0) : '0';
+    const responseRate =
+      totalInquiries > 0
+        ? (
+            (safeConversations.filter((c) => filterMessagesForViewer(c, 'seller').length > 0).length /
+              totalInquiries) *
+            100
+          ).toFixed(0)
+        : '0';
     const avgPrice = safeUserVehicles.length > 0 
       ? safeUserVehicles.reduce((sum, v) => sum + (v?.price || 0), 0) / safeUserVehicles.length 
       : 0;
@@ -923,11 +932,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                     <p className="text-sm font-medium text-gray-900 truncate">
                       New inquiry: {conv.vehicleName || 'Vehicle'}
                     </p>
-                    {conv.messages && conv.messages.length > 0 && (
-                      <p className="text-xs text-gray-500 truncate mt-1">
-                        {conv.messages[conv.messages.length - 1]?.text?.substring(0, 50) || 'New message'}
-                      </p>
-                    )}
+                    {(() => {
+                      const last = getLastVisibleMessageForViewer(conv, 'seller');
+                      if (!last) return null;
+                      const { prefix, text } = getThreadLastMessagePreview(last, { viewer: 'seller' });
+                      const line = `${prefix}${text}`;
+                      const short = line.length > 50 ? `${line.slice(0, 50)}…` : line;
+                      return (
+                        <p className="text-xs text-gray-500 truncate mt-1">{short}</p>
+                      );
+                    })()}
                     <p className="text-xs text-gray-400 mt-1">
                       {conv.lastMessageAt ? new Date(conv.lastMessageAt).toLocaleDateString() : ''}
                     </p>

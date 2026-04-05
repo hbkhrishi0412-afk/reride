@@ -26,6 +26,8 @@ import { VehicleOfferBanner } from './VehicleOfferBanner';
 import { isSellerListingOfferVisible } from '../utils/vehicleOffer';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
 import { conversationBelongsToSeller } from '../utils/conversationParticipants';
+import { getLastVisibleMessageForViewer } from '../utils/conversationView';
+import { getThreadLastMessagePreview } from '../utils/messagePreview';
 // Firebase status utilities removed - using Supabase
 
 // Safely register Chart.js components - wrap in try-catch to prevent crashes if Chart.js fails to load
@@ -65,6 +67,8 @@ interface DashboardProps {
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   onViewVehicle?: (vehicle: Vehicle) => void;
   chatPeerOnlineByConversationId?: Record<string, boolean>;
+  /** Mobile seller dashboard uses this; desktop dashboard may ignore. */
+  onSellerOpenChat?: (conversation: Conversation) => void;
 }
 
 type DashboardView = 'overview' | 'listings' | 'form' | 'messages' | 'analytics' | 'salesHistory' | 'reports' | 'settings';
@@ -1771,9 +1775,12 @@ const InquiriesView: React.FC<{
          <div className="space-y-2">
             {sortedConversations.length > 0 ? sortedConversations.map(conv => {
               if (!conv) return null;
-              const lastMessage = conv.messages && Array.isArray(conv.messages) && conv.messages.length > 0 
-                ? conv.messages[conv.messages.length - 1] 
-                : null;
+              const lastVisible = getLastVisibleMessageForViewer(conv, 'seller');
+              const snippet = getThreadLastMessagePreview(lastVisible, {
+                otherLabel: conv.customerName || '',
+                viewer: 'seller',
+              });
+              const lastLine = `${snippet.prefix}${snippet.text}`;
               const lastMessageTime = conv.lastMessageAt 
                 ? new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
                 : 'N/A';
@@ -1786,7 +1793,7 @@ const InquiriesView: React.FC<{
                         {conv.customerName || 'Unknown'} - <span className="font-normal text-reride-text-dark dark:text-reride-text-dark">{conv.vehicleName || 'Unknown Vehicle'}</span>
                       </p>
                       <p className="text-sm text-reride-text-dark dark:text-reride-text-dark truncate max-w-md">
-                        {lastMessage?.text || 'New conversation'}
+                        {lastVisible ? lastLine : snippet.text}
                       </p>
                     </div>
                 </div>
@@ -1872,11 +1879,12 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat }) => {
   // Note: onRequestCertification, and onTestDriveResponse are part of the interface contract
   // but are not currently used in this component. They may be used in future features or passed to child components.
   void onRequestCertification;
   void onTestDriveResponse;
+  void onSellerOpenChat;
 
   const { t } = useTranslation();
   
