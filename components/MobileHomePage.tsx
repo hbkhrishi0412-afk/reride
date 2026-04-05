@@ -71,6 +71,12 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
   } | null>(null);
   /** After pointer-up navigation, skip the follow-up synthetic click (selectVehicle dedupes, but avoids double work). */
   const carouselTapSuppressClickRef = useRef(false);
+  /** Touch fallback when Pointer Events + click are unreliable inside horizontal scroll (Android WebView). */
+  const carouselTouchRef = useRef<{
+    x: number;
+    y: number;
+    vehicleId: number;
+  } | null>(null);
 
   const publishedVehicles = useMemo(
     () => allVehicles.filter(vehicle => vehicle && vehicle.status === 'published' && vehicle.listingType !== 'rental'),
@@ -337,7 +343,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               const handlePointerDown = (e: React.PointerEvent) => {
                 if (e.pointerType === 'mouse' && e.button !== 0) return;
                 const el = e.target as HTMLElement | null;
-                if (el?.closest?.('button, a, [role="button"]')) return;
+                // Only skip real controls — not [role="button"] on this slide (the slide root uses it for a11y).
+                if (el?.closest?.('button, a')) return;
                 carouselPointerRef.current = {
                   pointerId: e.pointerId,
                   x: e.clientX,
@@ -348,7 +355,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
               const handlePointerUp = (e: React.PointerEvent) => {
                 const el = e.target as HTMLElement | null;
-                if (el?.closest?.('button, a, [role="button"]')) return;
+                if (el?.closest?.('button, a')) return;
                 const start = carouselPointerRef.current;
                 if (
                   !start ||
@@ -362,6 +369,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 const dy = Math.abs(e.clientY - start.y);
                 if (dx < TAP_MOVE_SLACK_PX && dy < TAP_MOVE_SLACK_PX) {
                   e.preventDefault();
+                  carouselTouchRef.current = null;
                   openVehicleFromCarousel();
                 }
               };
@@ -371,6 +379,41 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 if (start && start.pointerId === e.pointerId) {
                   carouselPointerRef.current = null;
                 }
+                carouselTouchRef.current = null;
+              };
+
+              const handleTouchStart = (e: React.TouchEvent) => {
+                const el = e.target as HTMLElement | null;
+                if (el?.closest?.('button, a')) return;
+                const t = e.touches[0];
+                if (!t) return;
+                carouselTouchRef.current = {
+                  x: t.clientX,
+                  y: t.clientY,
+                  vehicleId: vehicle.id,
+                };
+              };
+
+              const handleTouchEnd = (e: React.TouchEvent) => {
+                if (carouselTapSuppressClickRef.current) return;
+                const el = e.target as HTMLElement | null;
+                if (el?.closest?.('button, a')) return;
+                const start = carouselTouchRef.current;
+                if (!start || start.vehicleId !== vehicle.id) return;
+                carouselTouchRef.current = null;
+                const t = e.changedTouches[0];
+                if (!t) return;
+                const dx = Math.abs(t.clientX - start.x);
+                const dy = Math.abs(t.clientY - start.y);
+                if (dx < TAP_MOVE_SLACK_PX && dy < TAP_MOVE_SLACK_PX) {
+                  e.preventDefault();
+                  carouselPointerRef.current = null;
+                  openVehicleFromCarousel();
+                }
+              };
+
+              const handleTouchCancel = () => {
+                carouselTouchRef.current = null;
               };
 
               const handleClick = () => {
@@ -381,14 +424,17 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
               return (
                 <div
                   key={vehicle.id}
-                  className="flex-shrink-0 w-[calc(100%-2rem)] snap-center cursor-pointer touch-pan-x"
-                  role="button"
+                  className="flex-shrink-0 w-[calc(100%-2rem)] snap-center cursor-pointer touch-manipulation"
+                  role="group"
                   tabIndex={0}
                   aria-label={`View ${vehicle.year} ${vehicle.make} ${vehicle.model}`}
                   onClick={handleClick}
                   onPointerDown={handlePointerDown}
                   onPointerUp={handlePointerUp}
                   onPointerCancel={handlePointerCancel}
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchCancel={handleTouchCancel}
                   onKeyDown={(e) => {
                     if ((e.key === 'Enter' || e.key === ' ') && onSelectVehicle) {
                       e.preventDefault();
@@ -424,6 +470,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
                       onPointerUp={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         onToggleWishlist(vehicle.id);

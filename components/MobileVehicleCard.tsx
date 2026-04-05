@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
@@ -29,6 +29,20 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
   showActions = true
 }) => {
   const { t } = useTranslation();
+  const TAP_SLOP_PX = 40;
+  const suppressClickRef = useRef(false);
+  const pointerStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const openDetails = useCallback(() => {
+    if (!onSelect) return;
+    suppressClickRef.current = true;
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 450);
+    onSelect(vehicle);
+  }, [onSelect, vehicle]);
+
   const handleWishlistClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (onToggleWishlist) {
@@ -43,11 +57,79 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
     }
   }, [onToggleCompare, vehicle.id]);
 
-  const handleSelect = useCallback(() => {
-    if (onSelect) {
-      onSelect(vehicle);
-    }
-  }, [onSelect, vehicle]);
+  const handleSelectClick = useCallback(() => {
+    if (suppressClickRef.current) return;
+    openDetails();
+  }, [openDetails]);
+
+  const isActionTarget = (target: EventTarget | null) =>
+    (target as HTMLElement | null)?.closest?.('button, a') != null;
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (isActionTarget(e.target)) return;
+      pointerStartRef.current = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+    },
+    []
+  );
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (isActionTarget(e.target)) return;
+      const start = pointerStartRef.current;
+      if (!start || start.pointerId !== e.pointerId) return;
+      pointerStartRef.current = null;
+      const dx = Math.abs(e.clientX - start.x);
+      const dy = Math.abs(e.clientY - start.y);
+      if (dx < TAP_SLOP_PX && dy < TAP_SLOP_PX) {
+        e.preventDefault();
+        touchStartRef.current = null;
+        openDetails();
+      }
+    },
+    [openDetails, TAP_SLOP_PX]
+  );
+
+  const handlePointerCancel = useCallback((e: React.PointerEvent) => {
+    const start = pointerStartRef.current;
+    if (start && start.pointerId === e.pointerId) pointerStartRef.current = null;
+    touchStartRef.current = null;
+  }, []);
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (isActionTarget(e.target)) return;
+      const t = e.touches[0];
+      if (!t) return;
+      touchStartRef.current = { x: t.clientX, y: t.clientY };
+    },
+    []
+  );
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (suppressClickRef.current) return;
+      if (isActionTarget(e.target)) return;
+      const start = touchStartRef.current;
+      touchStartRef.current = null;
+      if (!start) return;
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const dx = Math.abs(t.clientX - start.x);
+      const dy = Math.abs(t.clientY - start.y);
+      if (dx < TAP_SLOP_PX && dy < TAP_SLOP_PX) {
+        e.preventDefault();
+        pointerStartRef.current = null;
+        openDetails();
+      }
+    },
+    [openDetails, TAP_SLOP_PX]
+  );
+
+  const handleTouchCancel = useCallback(() => {
+    touchStartRef.current = null;
+  }, []);
 
   const formattedPrice = useMemo(() => {
     const price = vehicle.price;
@@ -64,12 +146,30 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
 
   return (
     <div
-      onClick={handleSelect}
-      onTouchStart={() => {
+      role="group"
+      tabIndex={0}
+      aria-label={t('vehicle.card.viewDetailsAria', {
+        make: vehicle.make,
+        model: vehicle.model,
+      })}
+      onClick={handleSelectClick}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onTouchStart={(e) => {
         void import('./VehicleDetail.js');
         void import('./MobileVehicleDetail.js');
+        handleTouchStart(e);
       }}
-      className="cursor-pointer"
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && onSelect) {
+          e.preventDefault();
+          openDetails();
+        }
+      }}
+      className="cursor-pointer touch-manipulation outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 rounded-2xl"
       style={{
         background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%)',
         borderRadius: '16px',
@@ -80,10 +180,12 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
         marginBottom: '16px'
       }}
       onMouseDown={(e) => {
+        if (e.button !== 0) return;
         e.currentTarget.style.transform = 'scale(0.98)';
         e.currentTarget.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.08)';
       }}
       onMouseUp={(e) => {
+        if (e.button !== 0) return;
         e.currentTarget.style.transform = 'scale(1)';
         e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08)';
       }}
@@ -117,6 +219,11 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
           <div className="absolute top-2 right-2 flex flex-col gap-2">
             {onToggleWishlist && (
               <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
                 onClick={handleWishlistClick}
                 className="mobile-tap-target bg-white/90 backdrop-blur-sm rounded-full p-2 shadow-md active:scale-90 transition-transform"
                 aria-label={
@@ -140,6 +247,11 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
             )}
             {onToggleCompare && (
               <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => e.stopPropagation()}
                 onClick={handleCompareClick}
                 className={`mobile-tap-target backdrop-blur-sm rounded-full p-2 shadow-md active:scale-90 transition-transform ${
                   isInCompare ? 'bg-orange-500/90' : 'bg-white/90'
