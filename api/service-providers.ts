@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
-import { supabaseUserService } from '../services/supabase-user-service.js';
+import { emailToKey, supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
 import { applyCors } from './_cors.js';
 
@@ -47,6 +47,22 @@ async function doesAuthUserExistByEmail(
   }
 
   return false;
+}
+
+async function cleanupStaleUserRecord(email: string): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const emailKey = emailToKey(email);
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Delete by both id and email to handle legacy rows not keyed by emailKey.
+  const { error } = await supabase
+    .from('users')
+    .delete()
+    .or(`id.eq.${emailKey},email.eq.${normalizedEmail}`);
+
+  if (error) {
+    throw new Error(`Failed to clean stale users row: ${error.message}`);
+  }
 }
 
 /**
@@ -101,6 +117,11 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
         error:
           'An account with this email already exists. Please sign in or use Forgot password.',
       });
+    }
+    if (existingUser && !authUserExists) {
+      // Existing public.users row without matching auth.users can break createUser
+      // via auth trigger unique constraints; remove stale row before retrying.
+      await cleanupStaleUserRecord(email);
     }
 
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
