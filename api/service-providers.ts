@@ -1,11 +1,154 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
+import { getSupabaseAdminClient } from '../lib/supabase.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
 import { applyCors } from './_cors.js';
 
-// ServiceProviderPayload is now imported from the service file
+function parseStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((s) => String(s).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/**
+ * Public registration for car service providers: creates Supabase Auth user via Admin API
+ * (email pre-confirmed), then service_providers + users rows. Avoids client signUp(), which
+ * often surfaces "Database error saving new user" when auth triggers or hooks fail on anon sign-up.
+ */
+export async function handleServiceProviderRegister(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
+  if (req.method === 'OPTIONS') return;
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const body = req.body as Record<string, unknown>;
+    const name = String(body.name || '').trim();
+    const email = String(body.email || '').toLowerCase().trim();
+    const password = String(body.password || '');
+    const phone = String(body.phone || '').trim();
+    const city = String(body.city || '').trim();
+    const workshops = parseStringList(body.workshops);
+    const skills = parseStringList(body.skills);
+    const availability = String(body.availability || 'weekdays').trim() || 'weekdays';
+
+    if (!name || !email || !password || !phone || !city) {
+      return res.status(400).json({
+        error: 'Missing required fields: name, email, password, phone, city',
+      });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const existingUser = await supabaseUserService.findByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({
+        error:
+          'An account with this email already exists. Please sign in or use Forgot password.',
+      });
+    }
+
+    const existingProvider = await supabaseServiceProviderService.findByEmail(email);
+    if (existingProvider) {
+      return res.status(409).json({
+        error: 'A service provider profile already exists for this email. Please sign in.',
+      });
+    }
+
+    const supabase = getSupabaseAdminClient();
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        name,
+        mobile: phone,
+      },
+    });
+
+    if (authError || !authData?.user?.id) {
+      console.error('Service provider admin createUser error:', authError);
+      const msg = authError?.message || 'Failed to create auth account';
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes('already') ||
+        lower.includes('registered') ||
+        lower.includes('exists') ||
+        authError?.status === 422
+      ) {
+        return res.status(409).json({
+          error: 'This email is already registered. Please sign in instead.',
+        });
+      }
+      return res.status(400).json({ error: msg });
+    }
+
+    const uid = authData.user.id;
+
+    const payload: ServiceProviderPayload = {
+      name,
+      email,
+      phone,
+      city,
+      workshops,
+      skills,
+      availability,
+    };
+
+    try {
+      await supabaseServiceProviderService.create({ ...payload, id: uid });
+    } catch (createErr) {
+      console.error('service_providers insert failed after auth user created:', createErr);
+      try {
+        await supabase.auth.admin.deleteUser(uid);
+      } catch (delErr) {
+        console.error('Rollback: failed to delete auth user after provider insert error:', delErr);
+      }
+      return res.status(500).json({
+        error: 'Could not complete registration. Please try again or contact support.',
+      });
+    }
+
+    try {
+      const u = await supabaseUserService.findByEmail(email);
+      if (!u) {
+        await supabaseUserService.create({
+          name,
+          email,
+          mobile: phone,
+          role: 'seller',
+          location: city,
+          status: 'active',
+          authProvider: 'email',
+          firebaseUid: uid,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    } catch (userSyncErr) {
+      console.warn('Service provider users table sync failed (non-fatal):', userSyncErr);
+    }
+
+    return res.status(201).json({ success: true, uid });
+  } catch (err) {
+    console.error('Service provider register error:', err);
+    const message = err instanceof Error ? err.message : 'Unexpected error';
+    if (message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+      return res.status(500).json({ error: 'Server configuration error. Please contact support.' });
+    }
+    return res.status(500).json({ error: message });
+  }
+}
 
 export async function handleServiceProviders(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;

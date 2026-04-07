@@ -1358,6 +1358,134 @@ app.patch('/api/provider-services', (req, res) => {
   return res.json(list);
 });
 
+function devEmailToKey(email) {
+  return String(email || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[.#$[\]]/g, '_');
+}
+
+// Parity with api/service-providers.ts: server-side Auth user + rows (when service role is configured)
+app.post('/api/service-providers/register', async (req, res) => {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || String(key).includes('your_')) {
+    return res.status(404).json({ error: 'Service provider register is not available in this dev setup' });
+  }
+
+  const body = req.body || {};
+  const name = String(body.name || '').trim();
+  const email = String(body.email || '').toLowerCase().trim();
+  const password = String(body.password || '');
+  const phone = String(body.phone || '').trim();
+  const city = String(body.city || '').trim();
+  const workshops = Array.isArray(body.workshops)
+    ? body.workshops.map((s) => String(s).trim()).filter(Boolean)
+    : String(body.workshops || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+  const skills = Array.isArray(body.skills)
+    ? body.skills.map((s) => String(s).trim()).filter(Boolean)
+    : String(body.skills || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+  const availability = String(body.availability || 'weekdays').trim() || 'weekdays';
+
+  if (!name || !email || !password || !phone || !city) {
+    return res.status(400).json({ error: 'Missing required fields: name, email, password, phone, city' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(url, key, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const emailKey = devEmailToKey(email);
+    const { data: existingById } = await supabase.from('users').select('id').eq('id', emailKey).maybeSingle();
+    const { data: existingByEmail } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
+    if (existingById || existingByEmail) {
+      return res.status(409).json({
+        error: 'An account with this email already exists. Please sign in or use Forgot password.',
+      });
+    }
+
+    const { data: spRow } = await supabase.from('service_providers').select('id').eq('email', email).maybeSingle();
+    if (spRow) {
+      return res.status(409).json({
+        error: 'A service provider profile already exists for this email. Please sign in.',
+      });
+    }
+
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { name, mobile: phone },
+    });
+
+    if (authError || !authData?.user?.id) {
+      const msg = authError?.message || 'Failed to create auth account';
+      const lower = msg.toLowerCase();
+      if (lower.includes('already') || lower.includes('registered') || lower.includes('exists')) {
+        return res.status(409).json({ error: 'This email is already registered. Please sign in instead.' });
+      }
+      return res.status(400).json({ error: msg });
+    }
+
+    const uid = authData.user.id;
+    const metadata = { workshops, availability };
+    const { error: insSp } = await supabase.from('service_providers').insert({
+      id: uid,
+      name,
+      email,
+      phone,
+      location: city,
+      services: skills,
+      metadata,
+    });
+
+    if (insSp) {
+      try {
+        await supabase.auth.admin.deleteUser(uid);
+      } catch {
+        /* ignore rollback errors */
+      }
+      return res.status(500).json({
+        error: 'Could not complete registration. Please try again or contact support.',
+      });
+    }
+
+    const { error: insUser } = await supabase.from('users').insert({
+      id: emailKey,
+      email,
+      name,
+      mobile: phone,
+      role: 'seller',
+      status: 'active',
+      auth_provider: 'email',
+      location: city,
+      firebase_uid: uid,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    if (insUser) {
+      console.warn('service provider register: users insert failed (non-fatal):', insUser.message);
+    }
+
+    return res.status(201).json({ success: true, uid });
+  } catch (e) {
+    console.error('POST /api/service-providers/register:', e);
+    return res.status(500).json({ error: e instanceof Error ? e.message : 'Registration failed' });
+  }
+});
+
 app.post('/api/service-providers', (req, res) => {
   const { name, email, phone, city, workshops = [], skills = [], availability = 'weekdays' } = req.body || {};
   if (!name || !email || !phone || !city) {
