@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User, Vehicle, SavedSearch, Conversation } from '../types';
 import { View } from '../types';
@@ -6,6 +6,8 @@ import * as buyerService from '../services/buyerService';
 import VehicleCard from './VehicleCard';
 import LazyImage from './LazyImage';
 import { getFirstValidImage } from '../utils/imageUtils';
+
+const ServiceCart = lazy(() => import('./ServiceCart'));
 
 interface BuyerDashboardProps {
   currentUser: User;
@@ -33,7 +35,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   onViewSellerProfile,
 }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'alerts'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'alerts' | 'serviceTrack'>('overview');
   // Removed unused showSaveSearchModal state
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>(
     () => buyerService.getSavedSearches(currentUser?.email || '')
@@ -225,6 +227,20 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                     {priceDrops.length + newMatches.length}
                   </span>
                 )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('serviceTrack')}
+                className={`group flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl transition-all duration-300 ${
+                  activeTab === 'serviceTrack'
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105'
+                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-md hover:-translate-y-0.5'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+                <span className="font-medium">{t('buyerDashboard.tab.trackRequests')}</span>
               </button>
             </div>
           </aside>
@@ -615,6 +631,37 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'serviceTrack' && (
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
+                      {t('buyerDashboard.trackRequests.title')}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {t('buyerDashboard.trackRequests.subtitle')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(View.SERVICE_CART)}
+                    className="btn-brand-primary text-white px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap"
+                  >
+                    {t('buyerDashboard.trackRequests.bookService')}
+                  </button>
+                </div>
+                <Suspense
+                  fallback={
+                    <div className="text-sm text-gray-600 dark:text-gray-400 py-8 text-center">
+                      {t('buyerDashboard.trackRequests.loading')}
+                    </div>
+                  }
+                >
+                  <ServiceCart isLoggedIn embedTrackOnly />
+                </Suspense>
               </div>
             )}
           </div>

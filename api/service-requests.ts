@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { authenticateRequest } from './auth.js';
 import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
+import { supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceRequestPayload } from '../services/supabase-service-request-service.js';
 import { applyCors } from './_cors.js';
 
@@ -22,11 +23,23 @@ async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo
   }
   try {
     const decoded = await verifyIdTokenFromHeader(req);
-    const roleFromMeta =
+    let resolvedRole =
       decoded.user?.app_metadata?.role ||
       decoded.user?.user_metadata?.role ||
       'customer';
-    return { id: decoded.uid, role: String(roleFromMeta) };
+
+    // If JWT metadata doesn't carry role, resolve from users table by email.
+    if (resolvedRole !== 'admin' && decoded.email) {
+      try {
+        const profile = await supabaseUserService.findByEmail(decoded.email);
+        if (profile?.role) {
+          resolvedRole = profile.role;
+        }
+      } catch {
+        // Keep JWT-derived role if user lookup fails
+      }
+    }
+    return { id: decoded.uid, role: String(resolvedRole) };
   } catch {
     const legacy = authenticateRequest(req);
     if (!legacy.isValid || !legacy.user?.userId) {
