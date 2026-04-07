@@ -41,6 +41,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const roleConfig = useMemo(
@@ -108,6 +109,50 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       setRememberMe(false);
     }
   }, [selectedRole]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const parseUrlParams = () => {
+      const fromSearch = new URLSearchParams(window.location.search);
+      const hash = window.location.hash || '';
+      const hashQueryIndex = hash.indexOf('?');
+      const fromHash =
+        hashQueryIndex >= 0
+          ? new URLSearchParams(hash.slice(hashQueryIndex + 1))
+          : new URLSearchParams();
+
+      const getParam = (key: string): string =>
+        fromSearch.get(key) || fromHash.get(key) || '';
+
+      return {
+        type: getParam('type'),
+        error: getParam('error'),
+        errorDescription: getParam('error_description'),
+        accessToken: getParam('access_token'),
+      };
+    };
+
+    const { type, error: authError, errorDescription, accessToken } = parseUrlParams();
+
+    if (authError) {
+      setSuccessMessage('');
+      setError(
+        decodeURIComponent(errorDescription || authError).replace(/\+/g, ' ')
+      );
+      return;
+    }
+
+    if (mode === 'login' && (type === 'signup' || (type === 'recovery' && accessToken))) {
+      setSuccessMessage('Email confirmed successfully. Please sign in to continue.');
+      try {
+        const cleanUrl = `${window.location.origin}${window.location.pathname}${window.location.hash.split('?')[0] || ''}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [mode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -480,6 +525,12 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               </div>
             )}
 
+            {successMessage && !error && (
+              <div className="bg-green-50 border-l-4 border-green-500 rounded-md p-3">
+                <p className="text-sm text-green-700">{successMessage}</p>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={isLoading}
@@ -756,6 +807,12 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     <p className="text-sm text-red-700">{error}</p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {successMessage && !error && (
+              <div className="bg-green-50 border-l-4 border-green-500 rounded-md p-4">
+                <p className="text-sm text-green-700">{successMessage}</p>
               </div>
             )}
 

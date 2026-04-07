@@ -45,6 +45,9 @@ interface MobileInboxProps {
   onClearChat?: (conversationId: string) => void | Promise<void>;
   /** Counterpart online per conversation id (Supabase presence / Socket.io). */
   chatPeerOnlineByConversationId?: Record<string, boolean>;
+  /** Optional manual read/unread toggle for thread rows. */
+  onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
+  onMarkAllAsRead?: (role: 'customer' | 'seller') => void;
   /**
    * When set (e.g. seller on mobile), tapping a thread opens the global floating ChatWidget
    * instead of the built-in full-screen thread (same pattern as the website dashboard).
@@ -79,12 +82,14 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   onConsumedInitialConversation,
   onClearChat,
   chatPeerOnlineByConversationId,
+  onSetConversationReadState,
+  onMarkAllAsRead,
   openThreadInFloatingChat,
 }) => {
   const { t } = useTranslation();
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterUnread, setFilterUnread] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
   const [swipedId, setSwipedId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -93,6 +98,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const [attachError, setAttachError] = useState<string | null>(null);
   const voiceRecorder = useVoiceRecorder();
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const firstUnreadRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number>(0);
   const touchEndX = useRef<number>(0);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -141,7 +147,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   const { sortedConversations, filteredConversations, unreadCount } = useConversationList(
     conversations,
     searchQuery,
-    filterUnread,
+    filterMode,
     {
       viewerRole: inboxRole,
       getCounterpartLabel,
@@ -312,7 +318,10 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
   }, [selectedConv?.id, onTypingActivity]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    firstUnreadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!firstUnreadRef.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [
     selectedConv?.id,
     selectedConv?.messages,
@@ -321,6 +330,13 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
     inboxRole,
     typingStatus,
   ]);
+
+  const firstUnreadMessageId = useMemo(() => {
+    if (!selectedConv) return null;
+    const otherSender = inboxRole === 'seller' ? 'user' : 'seller';
+    const first = visibleThreadMessages.find((m) => m.sender === otherSender && !m.isRead);
+    return first ? String(first.id) : null;
+  }, [selectedConv, visibleThreadMessages, inboxRole]);
 
   useEffect(() => {
     if (initialOpenConversationId) {
@@ -442,6 +458,29 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                       Clear chat
                     </button>
                   )}
+                  {onSetConversationReadState && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="w-full text-left px-4 py-2.5 text-[15px] text-gray-900 active:bg-black/5"
+                      onClick={() => {
+                        setThreadMenuOpen(false);
+                        const isUnreadNow =
+                          inboxRole === 'customer'
+                            ? !selectedConv.isReadByCustomer
+                            : !selectedConv.isReadBySeller;
+                        onSetConversationReadState(selectedConv.id, isUnreadNow);
+                      }}
+                    >
+                      {inboxRole === 'customer'
+                        ? selectedConv.isReadByCustomer
+                          ? 'Mark unread'
+                          : 'Mark read'
+                        : selectedConv.isReadBySeller
+                          ? 'Mark unread'
+                          : 'Mark read'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -491,6 +530,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             return (
               <div
                 key={msg.id ?? idx}
+                ref={firstUnreadMessageId && String(msg.id) === firstUnreadMessageId ? firstUnreadRef : null}
                 className={`flex items-end gap-2 ${isUser ? 'justify-end' : 'justify-start'}`}
               >
                 {!isUser && (
@@ -725,17 +765,43 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
-        <div className="flex gap-2 mt-3">
+        <div className="flex gap-2 mt-3 flex-wrap">
           <button
-            onClick={() => setFilterUnread(!filterUnread)}
+            onClick={() => setFilterMode('all')}
             className={`px-4 py-2 rounded-full text-sm font-semibold ${
-              filterUnread
-                ? 'bg-orange-500 text-white'
-                : 'bg-gray-100 text-gray-700'
+              filterMode === 'all' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
             }`}
+            aria-label="Show all conversations"
+          >
+            All
+          </button>
+          <button
+            onClick={() => setFilterMode('unread')}
+            className={`px-4 py-2 rounded-full text-sm font-semibold ${
+              filterMode === 'unread' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+            aria-label="Show unread conversations"
           >
             Unread ({unreadCount})
           </button>
+          <button
+            onClick={() => setFilterMode('read')}
+            className={`px-4 py-2 rounded-full text-sm font-semibold ${
+              filterMode === 'read' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+            aria-label="Show read conversations"
+          >
+            Read
+          </button>
+          {onMarkAllAsRead && unreadCount > 0 && (
+            <button
+              onClick={() => onMarkAllAsRead(inboxRole)}
+              className="px-4 py-2 rounded-full text-sm font-semibold bg-blue-50 text-blue-700"
+              aria-label="Mark all conversations as read"
+            >
+              Mark all read
+            </button>
+          )}
         </div>
       </div>
 
@@ -787,9 +853,24 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
                       <h3 className="font-semibold text-gray-900 truncate">
                         {counterpart}
                       </h3>
-                      <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
-                        {formatRelativeTime(conv.lastMessageAt)}
-                      </span>
+                      <div className="flex flex-col items-end flex-shrink-0 ml-2">
+                        <span className="text-xs text-gray-500">
+                          {formatRelativeTime(conv.lastMessageAt)}
+                        </span>
+                        {inboxRole === 'seller' && onSetConversationReadState && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSetConversationReadState(conv.id, isUnread);
+                            }}
+                            className="text-[11px] text-gray-500 hover:text-orange-500 mt-0.5"
+                            aria-label={isUnread ? 'Mark conversation as read' : 'Mark conversation as unread'}
+                          >
+                            {isUnread ? 'Mark read' : 'Mark unread'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <p className="text-sm text-gray-600 truncate mb-1">
                       {conv.vehicleName}

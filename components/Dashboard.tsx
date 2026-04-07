@@ -53,6 +53,8 @@ interface DashboardProps {
   conversations: Conversation[];
   onSellerSendMessage: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: any) => void;
   onMarkConversationAsReadBySeller: (conversationId: string) => void;
+  onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
+  onMarkAllAsReadBySeller?: () => void;
   typingStatus: { conversationId: string; userRole: 'customer' | 'seller' } | null;
   onUserTyping: (conversationId: string, userRole: 'customer' | 'seller') => void;
   onUserStoppedTyping?: (conversationId: string) => void;
@@ -1687,9 +1689,12 @@ const InquiriesView: React.FC<{
   onMarkConversationAsReadBySeller: (conversationId: string) => void;
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onSelectConv: (conv: Conversation) => void;
+  onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
+  onMarkAllAsReadBySeller?: () => void;
 
-}> = memo(({ conversations, sellerEmail, onMarkConversationAsReadBySeller, onMarkMessagesAsRead, onSelectConv }) => {
+}> = memo(({ conversations, sellerEmail, onMarkConversationAsReadBySeller, onMarkMessagesAsRead, onSelectConv, onSetConversationReadState, onMarkAllAsReadBySeller }) => {
     const { t } = useTranslation();
+    const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
 
     const handleSelectConversation = (conv: Conversation) => {
       onSelectConv(conv);
@@ -1762,16 +1767,29 @@ const InquiriesView: React.FC<{
           });
         }
         
-        return [...sellerConversations].sort((a, b) => {
+        const filtered = sellerConversations.filter((conv) => {
+          if (filterMode === 'unread') return !conv.isReadBySeller;
+          if (filterMode === 'read') return conv.isReadBySeller;
+          return true;
+        });
+        return [...filtered].sort((a, b) => {
           const dateA = a?.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
           const dateB = b?.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
           return dateB - dateA;
         });
-    }, [conversations, sellerEmail]);
+    }, [conversations, sellerEmail, filterMode]);
 
     return (
        <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
          <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6">{t('sellerDashboard.nav.messages')}</h2>
+         <div className="mb-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => setFilterMode('all')} className={`px-3 py-1 rounded-full text-sm ${filterMode === 'all' ? 'bg-reride-orange text-white' : 'bg-gray-200 text-gray-700'}`}>All</button>
+            <button type="button" onClick={() => setFilterMode('unread')} className={`px-3 py-1 rounded-full text-sm ${filterMode === 'unread' ? 'bg-reride-orange text-white' : 'bg-gray-200 text-gray-700'}`}>Unread</button>
+            <button type="button" onClick={() => setFilterMode('read')} className={`px-3 py-1 rounded-full text-sm ${filterMode === 'read' ? 'bg-reride-orange text-white' : 'bg-gray-200 text-gray-700'}`}>Read</button>
+            {onMarkAllAsReadBySeller && (
+              <button type="button" onClick={onMarkAllAsReadBySeller} className="px-3 py-1 rounded-full text-sm bg-blue-50 text-blue-700" aria-label="Mark all conversations as read">Mark all read</button>
+            )}
+         </div>
          <div className="space-y-2">
             {sortedConversations.length > 0 ? sortedConversations.map(conv => {
               if (!conv) return null;
@@ -1797,7 +1815,22 @@ const InquiriesView: React.FC<{
                       </p>
                     </div>
                 </div>
-                <span className="text-xs text-reride-text-dark dark:text-reride-text-dark">{lastMessageTime}</span>
+                <div className="flex items-center gap-3">
+                  {onSetConversationReadState && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetConversationReadState(conv.id, !conv.isReadBySeller);
+                      }}
+                      className="text-xs text-gray-500 hover:text-reride-orange"
+                      aria-label={conv.isReadBySeller ? 'Mark conversation as unread' : 'Mark conversation as read'}
+                    >
+                      {conv.isReadBySeller ? 'Mark unread' : 'Mark read'}
+                    </button>
+                  )}
+                  <span className="text-xs text-reride-text-dark dark:text-reride-text-dark">{lastMessageTime}</span>
+                </div>
               </div>
             );
             }) : (
@@ -1879,7 +1912,7 @@ const ReportsView: React.FC<{
 
 
 // Main Dashboard Component
-const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat }) => {
+const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedVehicles, onAddVehicle, onAddMultipleVehicles, onUpdateVehicle, onDeleteVehicle, onMarkAsSold, onMarkAsUnsold, conversations, onSellerSendMessage, onMarkConversationAsReadBySeller, onSetConversationReadState, onMarkAllAsReadBySeller, typingStatus, onUserTyping, onUserStoppedTyping, onMarkMessagesAsRead, onClearChat, onUpdateSellerProfile, vehicleData, onFeatureListing, onRequestCertification, onNavigate, onTestDriveResponse, allVehicles, onOfferResponse, onViewVehicle, chatPeerOnlineByConversationId, onSellerOpenChat }) => {
   // Note: onRequestCertification, and onTestDriveResponse are part of the interface contract
   // but are not currently used in this component. They may be used in future features or passed to child components.
   void onRequestCertification;
@@ -3425,6 +3458,8 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               onMarkConversationAsReadBySeller={onMarkConversationAsReadBySeller} 
               onMarkMessagesAsRead={onMarkMessagesAsRead}
               onSelectConv={setSelectedConv}
+              onSetConversationReadState={onSetConversationReadState}
+              onMarkAllAsReadBySeller={onMarkAllAsReadBySeller}
             />
           </div>
         );

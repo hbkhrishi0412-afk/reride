@@ -17,7 +17,7 @@ export interface UseConversationListConfig {
 export const useConversationList = (
   conversations: Conversation[],
   searchQuery: string,
-  filterUnread: boolean,
+  filterMode: 'all' | 'unread' | 'read',
   config: UseConversationListConfig
 ) => {
   const { viewerRole, getCounterpartLabel } = config;
@@ -44,14 +44,14 @@ export const useConversationList = (
       });
     }
 
-    if (filterUnread) {
-      filtered = filtered.filter((c) =>
-        viewerRole === 'customer' ? !c.isReadByCustomer : !c.isReadBySeller
-      );
+    if (filterMode === 'unread') {
+      filtered = filtered.filter((c) => (viewerRole === 'customer' ? !c.isReadByCustomer : !c.isReadBySeller));
+    } else if (filterMode === 'read') {
+      filtered = filtered.filter((c) => (viewerRole === 'customer' ? c.isReadByCustomer : c.isReadBySeller));
     }
 
     return filtered;
-  }, [sortedConversations, searchQuery, filterUnread, getCounterpartLabel, viewerRole]);
+  }, [sortedConversations, searchQuery, filterMode, getCounterpartLabel, viewerRole]);
 
   const unreadCount = useMemo(() => {
     return conversations.filter((c) =>

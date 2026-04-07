@@ -375,7 +375,15 @@ interface AppContextType {
   addSellerRating: (sellerEmail: string, rating: number) => void;
   sendMessage: (conversationId: string, message: string) => void;
   sendMessageWithType: (conversationId: string, messageText: string, type?: ChatMessage['type'], payload?: ChatMessage['payload']) => void;
-  markAsRead: (conversationId: string) => void;
+  markAsRead: (
+    conversationId: string,
+    options?: { readerRole?: 'customer' | 'seller'; forceReadState?: boolean },
+  ) => void;
+  setConversationReadState: (
+    conversationId: string,
+    readerRole: 'customer' | 'seller',
+    isRead: boolean,
+  ) => void;
   clearConversationMessages: (conversationId: string) => Promise<void>;
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
   flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => void;
@@ -3039,6 +3047,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser?.email, currentUser?.role]);
 
+  // Reliability: force a conversation sync after resume / reconnect.
+  useEffect(() => {
+    if (!currentUser?.email || (currentUser.role !== 'seller' && currentUser.role !== 'customer')) return;
+    const email = currentUser.email.toLowerCase().trim();
+    const role = currentUser.role;
+
+    const syncConversationsNow = async () => {
+      try {
+        const { getConversationsFromSupabase } = await import('../services/conversationService');
+        const result =
+          role === 'seller'
+            ? await getConversationsFromSupabase(undefined, email)
+            : await getConversationsFromSupabase(email);
+        if (!result.success || !result.data) return;
+        const normalized = result.data.map((conv) => ({
+          ...conv,
+          sellerId: conv.sellerId ? conv.sellerId.toLowerCase().trim() : conv.sellerId,
+          customerId: conv.customerId ? conv.customerId.toLowerCase().trim() : conv.customerId,
+        }));
+        setConversations((prev) => {
+          const changed =
+            prev.length !== normalized.length ||
+            normalized.some((n) => {
+              const p = prev.find((x) => x.id === n.id);
+              return !p || p.messages.length !== n.messages.length || p.isReadBySeller !== n.isReadBySeller || p.isReadByCustomer !== n.isReadByCustomer;
+            });
+          if (!changed) return prev;
+          try {
+            saveConversations(normalized);
+          } catch {
+            /* ignore */
+          }
+          return normalized;
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const onOnline = () => {
+      void syncConversationsNow();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void syncConversationsNow();
+      }
+    };
+
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [currentUser?.email, currentUser?.role]);
+
   // Helper function to join all relevant conversation rooms
   const joinAllConversationRooms = useCallback(() => {
     if (!currentUser || !realtimeChatService.isConnected()) {
@@ -5100,7 +5164,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },
-    markAsRead: async (conversationId: string) => {
+    markAsRead: async (
+      conversationId: string,
+      options?: { readerRole?: 'customer' | 'seller'; forceReadState?: boolean },
+    ) => {
       if (!currentUser) return;
 
       const conversation = conversations.find(
@@ -5108,14 +5175,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
       if (!conversation) return;
 
-      const readerRole = currentUser.role as 'customer' | 'seller';
+      const readerRole = options?.readerRole ?? (currentUser.role as 'customer' | 'seller');
       const otherSender: 'user' | 'seller' = readerRole === 'customer' ? 'seller' : 'user';
       const msgs = Array.isArray(conversation.messages) ? conversation.messages : [];
       const unreadMessageIds = msgs
         .filter((msg) => msg.sender === otherSender && !msg.isRead)
         .map((msg) => msg.id);
-
-      if (unreadMessageIds.length === 0) return;
+      const forceReadState = Boolean(options?.forceReadState);
+      if (unreadMessageIds.length === 0 && !forceReadState) return;
+      const previousConversation = conversation;
 
       setConversations((prev) =>
         Array.isArray(prev)
@@ -5136,13 +5204,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : [],
       );
 
-      await realtimeChatService.markAsRead(conversationId, unreadMessageIds, readerRole);
+      if (unreadMessageIds.length > 0) {
+        await realtimeChatService.markAsRead(conversationId, unreadMessageIds, readerRole);
+      }
 
       import('../services/conversationService')
-        .then(({ patchConversationMarkRead }) =>
-          patchConversationMarkRead(conversationId, unreadMessageIds),
+        .then(({ patchConversationMarkRead, patchConversationSetThreadReadState }) =>
+          unreadMessageIds.length > 0
+            ? patchConversationMarkRead(conversationId, unreadMessageIds)
+            : patchConversationSetThreadReadState(conversationId, readerRole, true),
         )
-        .catch((err) => console.warn('Persist mark-read failed (non-fatal):', err));
+        .then((res) => {
+          if (!res?.success && previousConversation) {
+            setConversations((prev) =>
+              Array.isArray(prev)
+                ? prev.map((conv) =>
+                    conv && String(conv.id) === String(conversationId) ? previousConversation : conv,
+                  )
+                : [],
+            );
+            addToast(res?.error || 'Failed to update read state.', 'error');
+          }
+        })
+        .catch((err) => {
+          console.warn('Persist mark-read failed (non-fatal):', err);
+          if (previousConversation) {
+            setConversations((prev) =>
+              Array.isArray(prev)
+                ? prev.map((conv) =>
+                    conv && String(conv.id) === String(conversationId) ? previousConversation : conv,
+                  )
+                : [],
+            );
+          }
+          addToast('Failed to update read state.', 'error');
+        });
+    },
+    setConversationReadState: async (
+      conversationId: string,
+      readerRole: 'customer' | 'seller',
+      isRead: boolean,
+    ) => {
+      if (!currentUser) return;
+      if (isRead) {
+        await appActions.markAsRead(conversationId, { readerRole, forceReadState: true });
+        addToast('Conversation marked as read.', 'success');
+        return;
+      }
+
+      const previousConversation = conversations.find((c) => c && String(c.id) === String(conversationId)) || null;
+      setConversations((prev) =>
+        Array.isArray(prev)
+          ? prev.map((conv) =>
+              conv && String(conv.id) === String(conversationId)
+                ? {
+                    ...conv,
+                    isReadBySeller: readerRole === 'seller' ? false : conv.isReadBySeller,
+                    isReadByCustomer: readerRole === 'customer' ? false : conv.isReadByCustomer,
+                  }
+                : conv,
+            )
+          : [],
+      );
+
+      import('../services/conversationService')
+        .then(({ patchConversationSetThreadReadState }) =>
+          patchConversationSetThreadReadState(conversationId, readerRole, false),
+        )
+        .then((res) => {
+          if (!res?.success) {
+            if (previousConversation) {
+              setConversations((prev) =>
+                Array.isArray(prev)
+                  ? prev.map((conv) =>
+                      conv && String(conv.id) === String(conversationId) ? previousConversation : conv,
+                    )
+                  : [],
+              );
+            }
+            addToast(res?.error || 'Failed to mark conversation unread.', 'error');
+            return;
+          }
+          addToast('Conversation marked as unread.', 'success');
+        })
+        .catch((err) => {
+          console.warn('Persist mark-unread failed (non-fatal):', err);
+          if (previousConversation) {
+            setConversations((prev) =>
+              Array.isArray(prev)
+                ? prev.map((conv) =>
+                    conv && String(conv.id) === String(conversationId) ? previousConversation : conv,
+                  )
+                : [],
+            );
+          }
+          addToast('Failed to mark conversation unread.', 'error');
+        });
     },
     clearConversationMessages: async (conversationId: string) => {
       if (!currentUser) return;

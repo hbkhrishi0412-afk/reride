@@ -15,6 +15,8 @@ interface DashboardMessagesProps {
   onMarkMessagesAsRead: (conversationId: string, readerRole: 'customer' | 'seller') => void;
   onOfferResponse: (conversationId: string, messageId: number, response: 'accepted' | 'rejected' | 'countered', counterPrice?: number) => void;
   chatPeerOnlineByConversationId?: Record<string, boolean>;
+  onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
+  onMarkAllAsRead?: () => void;
 }
 
 const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
@@ -27,10 +29,12 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
   sellerEmail,
   onMarkMessagesAsRead,
   onOfferResponse,
-  chatPeerOnlineByConversationId
+  chatPeerOnlineByConversationId,
+  onSetConversationReadState,
+  onMarkAllAsRead
 }) => {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
 
   // Safety check
   const safeConversations = conversations || [];
@@ -39,6 +43,9 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
     if (!conv) return false;
     if (filter === 'unread') {
       return !conv.isReadBySeller;
+    }
+    if (filter === 'read') {
+      return conv.isReadBySeller;
     }
     return true;
   });
@@ -94,6 +101,25 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
           >
             Unread ({unreadCount})
           </button>
+          <button
+            onClick={() => setFilter('read')}
+            className={`px-3 py-1 rounded-full text-sm ${
+              filter === 'read'
+                ? 'bg-reride-orange text-white'
+                : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            Read
+          </button>
+          {onMarkAllAsRead && unreadCount > 0 && (
+            <button
+              onClick={onMarkAllAsRead}
+              className="px-3 py-1 rounded-full text-sm bg-blue-50 text-blue-700"
+              aria-label="Mark all conversations as read"
+            >
+              Mark all read
+            </button>
+          )}
         </div>
       </div>
 
@@ -139,6 +165,19 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
                         <span className="text-xs text-gray-500">
                           {formatTime(conversation.lastMessageAt)}
                         </span>
+                        {onSetConversationReadState && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSetConversationReadState(conversation.id, !conversation.isReadBySeller);
+                            }}
+                            className="text-[11px] text-gray-500 hover:text-reride-orange mt-1"
+                            aria-label={conversation.isReadBySeller ? 'Mark conversation as unread' : 'Mark conversation as read'}
+                          >
+                            {conversation.isReadBySeller ? 'Mark unread' : 'Mark read'}
+                          </button>
+                        )}
                         {!conversation.isReadBySeller && (
                           <div className="w-2 h-2 bg-blue-500 rounded-full mt-1"></div>
                         )}

@@ -26,6 +26,32 @@ export async function patchConversationMarkRead(
   }
 }
 
+/** Explicitly set thread-level read state for one participant. */
+export async function patchConversationSetThreadReadState(
+  conversationId: string,
+  readerRole: 'customer' | 'seller',
+  isRead: boolean,
+): Promise<{ success: boolean; data?: Conversation; error?: string }> {
+  try {
+    const response = await authenticatedFetch('/api/conversations', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        conversationId,
+        threadReadBy: readerRole,
+        threadReadState: Boolean(isRead),
+      }),
+    });
+    const result = await handleApiResponse<{ data?: Conversation; reason?: string; error?: string }>(response);
+    if (!result.success) {
+      return { success: false, error: result.reason || result.error || 'Failed to update read state' };
+    }
+    return { success: true, data: result.data?.data };
+  } catch (error) {
+    console.error('patchConversationSetThreadReadState error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 /** Clear all messages in a thread without deleting the conversation row. */
 export async function patchConversationClearMessages(
   conversationId: string,
