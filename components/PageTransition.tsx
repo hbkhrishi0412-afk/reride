@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Safe page transition wrapper that gracefully handles framer-motion errors.
@@ -15,6 +16,10 @@ interface PageTransitionProps {
 const VIEWS_WITHOUT_TRANSITION = ['DEALER_PROFILES', 'DETAIL'];
 
 const PageTransition: React.FC<PageTransitionProps> = ({ children, currentView }) => {
+  const { i18n } = useTranslation();
+  const langKey = (i18n.resolvedLanguage || i18n.language || 'en').split('-')[0];
+  const transitionKey = `${String(currentView)}-${langKey}`;
+
   const [useAnimations, setUseAnimations] = React.useState(true);
   const [MotionDiv, setMotionDiv] = React.useState<any>(null);
   const [AnimatePresence, setAnimatePresence] = React.useState<any>(null);
@@ -40,14 +45,14 @@ const PageTransition: React.FC<PageTransitionProps> = ({ children, currentView }
 
   // No animation for map-containing views: avoids Leaflet container re-init
   if (skipTransition) {
-    return <>{children}</>;
+    return <React.Fragment key={transitionKey}>{children}</React.Fragment>;
   }
 
   if (useAnimations && MotionDiv && AnimatePresence) {
     return (
       <AnimatePresence mode="wait">
         <MotionDiv
-          key={currentView}
+          key={transitionKey}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
@@ -59,7 +64,7 @@ const PageTransition: React.FC<PageTransitionProps> = ({ children, currentView }
     );
   }
 
-  return <>{children}</>;
+  return <React.Fragment key={transitionKey}>{children}</React.Fragment>;
 };
 
 export default PageTransition;
