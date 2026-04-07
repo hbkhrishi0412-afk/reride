@@ -5381,6 +5381,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // CRITICAL: Never allow role to be updated via this function (security)
         const safeUpdates = { ...updates };
         delete safeUpdates.role; // Prevent role changes through profile updates
+        const normalizedTargetEmail = String(email || '').toLowerCase().trim();
         
         // Debug logging for partnerBanks updates
         if (safeUpdates.partnerBanks !== undefined) {
@@ -5482,23 +5483,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
             
             // Update React state - ensure partnerBanks is properly merged
-            setUsers(prev => Array.isArray(prev) ? prev.map(user => {
-              if (user && user.email === email) {
-                const merged = { ...user, ...updatedUserData };
-                // Explicitly ensure partnerBanks is included if it was in the update
-                if (safeUpdates.partnerBanks !== undefined) {
-                  merged.partnerBanks = safeUpdates.partnerBanks;
-                  console.log('✅ Updated users array with partnerBanks:', { email, partnerBanks: merged.partnerBanks });
+            setUsers(prev => {
+              const source = Array.isArray(prev) ? prev : [];
+              let matched = false;
+              const mapped = source.map(user => {
+                if (user && String(user.email || '').toLowerCase().trim() === normalizedTargetEmail) {
+                  matched = true;
+                  const merged = { ...user, ...updatedUserData };
+                  // Explicitly ensure partnerBanks is included if it was in the update
+                  if (safeUpdates.partnerBanks !== undefined) {
+                    merged.partnerBanks = safeUpdates.partnerBanks;
+                    console.log('✅ Updated users array with partnerBanks:', { email, partnerBanks: merged.partnerBanks });
+                  }
+                  if (safeUpdates.notificationMuteKeys !== undefined) {
+                    merged.notificationMuteKeys = safeUpdates.notificationMuteKeys;
+                  }
+                  return merged;
                 }
-                if (safeUpdates.notificationMuteKeys !== undefined) {
-                  merged.notificationMuteKeys = safeUpdates.notificationMuteKeys;
-                }
-                return merged;
-              }
-              return user;
-            }) : []);
+                return user;
+              });
+              // Keep seller metadata immediately visible even if the users cache did not include this row yet.
+              return matched ? mapped : [...mapped, updatedUserData as User];
+            });
             
-            if (currentUser && currentUser.email === email) {
+            if (currentUser && String(currentUser.email || '').toLowerCase().trim() === normalizedTargetEmail) {
               // CRITICAL: Always preserve role when updating currentUser
               const mergedUser = { 
                 ...currentUser, 
@@ -5523,11 +5531,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } else {
             // Fallback: If API doesn't return user, still update local state with safeUpdates
             // This ensures partnerBanks and other fields are saved even if API response is incomplete
-            setUsers(prev => prev.map(user => 
-              user.email === email ? { ...user, ...safeUpdates } : user
-            ));
+            setUsers(prev => {
+              const source = Array.isArray(prev) ? prev : [];
+              let matched = false;
+              const mapped = source.map(user => {
+                if (String(user.email || '').toLowerCase().trim() === normalizedTargetEmail) {
+                  matched = true;
+                  return { ...user, ...safeUpdates };
+                }
+                return user;
+              });
+              if (matched) return mapped;
+              const fallbackUser = currentUser
+                ? ({ ...currentUser, ...safeUpdates } as User)
+                : ({ email: normalizedTargetEmail, role: 'customer', ...safeUpdates } as User);
+              return [...mapped, fallbackUser];
+            });
             
-            if (currentUser && currentUser.email === email) {
+            if (currentUser && String(currentUser.email || '').toLowerCase().trim() === normalizedTargetEmail) {
               const mergedUser = { 
                 ...currentUser, 
                 ...safeUpdates,
@@ -5556,7 +5577,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (usersJson) {
                 const users = JSON.parse(usersJson);
                 const updatedUsers = users.map((user: User) => 
-                  user.email === email ? { ...user, ...safeUpdates } : user
+                  String(user.email || '').toLowerCase().trim() === normalizedTargetEmail
+                    ? { ...user, ...safeUpdates }
+                    : user
                 );
                 localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
                 console.log('✅ User updated in localStorage (manual fallback)');

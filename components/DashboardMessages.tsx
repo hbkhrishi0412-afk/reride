@@ -82,6 +82,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
         </h2>
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => setFilter('all')}
             className={`px-3 py-1 rounded-full text-sm ${
               filter === 'all' 
@@ -92,6 +93,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
             All
           </button>
           <button
+            type="button"
             onClick={() => setFilter('unread')}
             className={`px-3 py-1 rounded-full text-sm ${
               filter === 'unread' 
@@ -102,6 +104,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
             Unread ({unreadCount})
           </button>
           <button
+            type="button"
             onClick={() => setFilter('read')}
             className={`px-3 py-1 rounded-full text-sm ${
               filter === 'read'
@@ -113,6 +116,7 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
           </button>
           {onMarkAllAsRead && unreadCount > 0 && (
             <button
+              type="button"
               onClick={onMarkAllAsRead}
               className="px-3 py-1 rounded-full text-sm bg-blue-50 text-blue-700"
               aria-label="Mark all conversations as read"
