@@ -19,6 +19,36 @@ function parseStringList(value: unknown): string[] {
   return [];
 }
 
+async function doesAuthUserExistByEmail(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  email: string,
+): Promise<boolean> {
+  const normalized = email.toLowerCase().trim();
+  let page = 1;
+  const perPage = 200;
+
+  while (page <= 50) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+    if (error) {
+      throw new Error(`Failed to verify auth user existence: ${error.message}`);
+    }
+
+    const users = data?.users || [];
+    if (users.some((u) => (u.email || '').toLowerCase().trim() === normalized)) {
+      return true;
+    }
+    if (users.length < perPage) {
+      break;
+    }
+    page += 1;
+  }
+
+  return false;
+}
+
 /**
  * Public registration for car service providers: creates Supabase Auth user via Admin API
  * (email pre-confirmed), then service_providers + users rows. Avoids client signUp(), which
@@ -51,22 +81,28 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
+    const supabase = getSupabaseAdminClient();
+    const authUserExists = await doesAuthUserExistByEmail(supabase, email);
+
+    const existingProvider = await supabaseServiceProviderService.findByEmail(email);
+    if (existingProvider) {
+      if (authUserExists) {
+        return res.status(409).json({
+          error: 'A service provider profile already exists for this email. Please sign in.',
+        });
+      }
+      // Stale profile without matching auth user; remove and recreate cleanly.
+      await supabaseServiceProviderService.delete(String(existingProvider.id));
+    }
+
     const existingUser = await supabaseUserService.findByEmail(email);
-    if (existingUser) {
+    if (existingUser && authUserExists) {
       return res.status(409).json({
         error:
           'An account with this email already exists. Please sign in or use Forgot password.',
       });
     }
 
-    const existingProvider = await supabaseServiceProviderService.findByEmail(email);
-    if (existingProvider) {
-      return res.status(409).json({
-        error: 'A service provider profile already exists for this email. Please sign in.',
-      });
-    }
-
-    const supabase = getSupabaseAdminClient();
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -133,6 +169,16 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
           authProvider: 'email',
           firebaseUid: uid,
           createdAt: new Date().toISOString(),
+        });
+      } else {
+        await supabaseUserService.update(email, {
+          name,
+          mobile: phone,
+          role: 'seller',
+          location: city,
+          status: 'active',
+          authProvider: 'email',
+          firebaseUid: uid,
         });
       }
     } catch (userSyncErr) {

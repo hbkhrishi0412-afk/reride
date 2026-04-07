@@ -50,6 +50,23 @@ type Coupon = {
     amountOff: number;
 };
 
+type CustomerServiceRequest = {
+    id: string;
+    title: string;
+    serviceType?: string;
+    providerId?: string | null;
+    status: 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+    city?: string;
+    scheduledAt?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    claimedAt?: string;
+    startedAt?: string;
+    completedAt?: string;
+    cancelledAt?: string;
+    notes?: string;
+};
+
 type Props = {
     isLoggedIn: boolean;
     onLogin?: () => void;
@@ -103,6 +120,38 @@ const mockCoupons: Coupon[] = [
 ];
 
 const CART_KEY = 'service_cart_v1';
+const REQUEST_STATUS_STYLES: Record<CustomerServiceRequest['status'], string> = {
+    open: 'bg-amber-100 text-amber-800 border border-amber-200',
+    accepted: 'bg-blue-100 text-blue-800 border border-blue-200',
+    in_progress: 'bg-indigo-100 text-indigo-800 border border-indigo-200',
+    completed: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    cancelled: 'bg-gray-100 text-gray-700 border border-gray-200',
+};
+
+const TRACKING_STEPS = [
+    { key: 'raised', label: 'Raised' },
+    { key: 'accepted', label: 'Accepted' },
+    { key: 'in_progress', label: 'In Progress' },
+    { key: 'completed', label: 'Completed' },
+] as const;
+
+const getStepState = (req: CustomerServiceRequest, stepKey: (typeof TRACKING_STEPS)[number]['key']) => {
+    if (req.status === 'cancelled') {
+        return stepKey === 'raised' ? 'done' : 'cancelled';
+    }
+    switch (stepKey) {
+        case 'raised':
+            return 'done';
+        case 'accepted':
+            return req.status === 'accepted' || req.status === 'in_progress' || req.status === 'completed' ? 'done' : 'pending';
+        case 'in_progress':
+            return req.status === 'in_progress' || req.status === 'completed' ? 'done' : 'pending';
+        case 'completed':
+            return req.status === 'completed' ? 'done' : 'pending';
+        default:
+            return 'pending';
+    }
+};
 
 const ServiceCart: React.FC<Props> = ({
     isLoggedIn,
@@ -117,6 +166,11 @@ const ServiceCart: React.FC<Props> = ({
     isLocating = false,
     locationError,
 }) => {
+    const [activeTab, setActiveTab] = useState<'book' | 'track'>('book');
+    const [customerRequests, setCustomerRequests] = useState<CustomerServiceRequest[]>([]);
+    const [providerNameById, setProviderNameById] = useState<Record<string, string>>({});
+    const [requestsLoading, setRequestsLoading] = useState(false);
+    const [requestsError, setRequestsError] = useState<string | null>(null);
     const [items, setItems] = useState<CartItem[]>([]);
     const [addresses, setAddresses] = useState<Address[]>(initialAddresses);
     const [selectedAddress, setSelectedAddress] = useState(addresses[0]?.id || '');
@@ -217,6 +271,67 @@ const ServiceCart: React.FC<Props> = ({
         const interval = setInterval(fetchProviderServices, 30000); // Every 30 seconds
         return () => clearInterval(interval);
     }, []);
+
+    const loadCustomerRequests = async () => {
+        if (!isLoggedIn) {
+            setCustomerRequests([]);
+            return;
+        }
+        try {
+            setRequestsLoading(true);
+            setRequestsError(null);
+            const resp = await authenticatedFetch('/api/service-requests?scope=customer');
+            if (!resp.ok) {
+                throw new Error(`Failed to load requests (${resp.status})`);
+            }
+            const data = await resp.json();
+            const records = Array.isArray(data) ? data : [];
+            records.sort((a, b) => {
+                const at = new Date(a.updatedAt || a.createdAt || 0).getTime();
+                const bt = new Date(b.updatedAt || b.createdAt || 0).getTime();
+                return bt - at;
+            });
+            setCustomerRequests(records);
+        } catch (error) {
+            setRequestsError(error instanceof Error ? error.message : 'Failed to load your requests');
+        } finally {
+            setRequestsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab !== 'track') return;
+        loadCustomerRequests();
+    }, [activeTab, isLoggedIn]);
+
+    useEffect(() => {
+        if (activeTab !== 'track' || !isLoggedIn) return;
+        const timer = setInterval(() => {
+            loadCustomerRequests();
+        }, 15000);
+        return () => clearInterval(timer);
+    }, [activeTab, isLoggedIn]);
+
+    useEffect(() => {
+        const loadProvidersForNames = async () => {
+            if (!isLoggedIn || activeTab !== 'track') return;
+            try {
+                const resp = await authenticatedFetch('/api/service-providers?scope=all');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (!Array.isArray(data)) return;
+                const next: Record<string, string> = {};
+                data.forEach((p: any) => {
+                    const id = p?.id || p?.uid;
+                    if (id) next[id] = p?.name || id;
+                });
+                setProviderNameById(next);
+            } catch {
+                // Ignore provider-name map failures in tracking tab
+            }
+        };
+        loadProvidersForNames();
+    }, [activeTab, isLoggedIn]);
     const [note, setNote] = useState('');
     const [carDetails, setCarDetails] = useState<any>(null);
     const [carForm, setCarForm] = useState({ make: '', model: '', year: '', fuel: '', reg: '', city: '' });
@@ -585,6 +700,8 @@ const ServiceCart: React.FC<Props> = ({
         
         try {
             await onSubmitRequest?.(payload);
+            setActiveTab('track');
+            await loadCustomerRequests();
         } catch (error) {
             console.error('Error submitting service request:', error);
             setCarFormError(error instanceof Error ? error.message : 'Failed to submit service request. Please try again.');
@@ -603,6 +720,134 @@ const ServiceCart: React.FC<Props> = ({
 
     return (
         <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
+                <div className="inline-flex bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-1 shadow-sm">
+                    <button
+                        onClick={() => setActiveTab('book')}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                            activeTab === 'book'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                        Book Service
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('track')}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                            activeTab === 'track'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                        Track Requests
+                    </button>
+                </div>
+            </div>
+            {activeTab === 'track' ? (
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-black text-gray-900 dark:text-white">My Service Requests</h2>
+                            <button
+                                type="button"
+                                onClick={loadCustomerRequests}
+                                disabled={requestsLoading || !isLoggedIn}
+                                className="px-3 py-2 rounded-lg text-sm border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                        {!isLoggedIn && (
+                            <div className="text-sm text-gray-600 dark:text-gray-300">Login to see your request progress.</div>
+                        )}
+                        {isLoggedIn && requestsLoading && (
+                            <div className="text-sm text-gray-600 dark:text-gray-300">Loading requests...</div>
+                        )}
+                        {isLoggedIn && requestsError && (
+                            <div className="text-sm text-red-600">{requestsError}</div>
+                        )}
+                        {isLoggedIn && !requestsLoading && !requestsError && (
+                            <div className="space-y-3">
+                                {customerRequests.map((req) => (
+                                    <div key={req.id} className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <div className="font-bold text-gray-900 dark:text-white">{req.serviceType || req.title || 'Service request'}</div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {req.city || 'City not provided'} {req.scheduledAt ? `• Slot: ${req.scheduledAt}` : ''}
+                                                </div>
+                                            </div>
+                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${REQUEST_STATUS_STYLES[req.status] || REQUEST_STATUS_STYLES.open}`}>
+                                                {req.status.replace('_', ' ')}
+                                            </span>
+                                        </div>
+                                        {req.providerId && (
+                                            <div className="mt-2 text-xs text-blue-700 dark:text-blue-400">
+                                                Assigned provider: {providerNameById[req.providerId] || req.providerId}
+                                            </div>
+                                        )}
+                                        <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+                                            <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Progress Timeline</div>
+                                            <div className="mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    {TRACKING_STEPS.map((step, idx) => {
+                                                        const stepState = getStepState(req, step.key);
+                                                        return (
+                                                            <React.Fragment key={step.key}>
+                                                                <div className="flex flex-col items-center min-w-[56px]">
+                                                                    <div
+                                                                        className={`h-6 w-6 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                                                                            stepState === 'done'
+                                                                                ? 'bg-emerald-500 text-white'
+                                                                                : stepState === 'cancelled'
+                                                                                    ? 'bg-gray-300 text-gray-600'
+                                                                                    : 'bg-gray-200 text-gray-500'
+                                                                        }`}
+                                                                    >
+                                                                        {idx + 1}
+                                                                    </div>
+                                                                    <span className="mt-1 text-[10px] text-gray-600 dark:text-gray-400 text-center">{step.label}</span>
+                                                                </div>
+                                                                {idx < TRACKING_STEPS.length - 1 && (
+                                                                    <div
+                                                                        className={`h-1 flex-1 rounded ${
+                                                                            getStepState(req, TRACKING_STEPS[idx + 1].key) === 'done'
+                                                                                ? 'bg-emerald-400'
+                                                                                : req.status === 'cancelled'
+                                                                                    ? 'bg-gray-300'
+                                                                                    : 'bg-gray-200'
+                                                                        }`}
+                                                                    />
+                                                                )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-gray-600 dark:text-gray-400">
+                                                <div>Raised: {req.createdAt || '-'}</div>
+                                                <div>Accepted: {req.claimedAt || '-'}</div>
+                                                <div>In progress: {req.startedAt || '-'}</div>
+                                                <div>Completed: {req.completedAt || '-'}</div>
+                                            </div>
+                                        </div>
+                                        {req.notes && (
+                                            <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                                                Note: {req.notes}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                {customerRequests.length === 0 && (
+                                    <div className="text-sm text-gray-600 dark:text-gray-300">No service requests yet.</div>
+                                )}
+                            </div>
+                        )}
+                    </section>
+                </div>
+            ) : (
+            <>
             {/* Header Section */}
             <section className="relative overflow-hidden bg-gradient-to-br from-blue-700 via-indigo-700 to-purple-700 text-white">
                 <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.3),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.2),transparent_25%)]" />
@@ -1289,6 +1534,8 @@ const ServiceCart: React.FC<Props> = ({
                     </div>
                 </div>
             </div>
+            </>
+            )}
         </div>
     );
 };

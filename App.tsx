@@ -126,6 +126,12 @@ interface ApiResponse<T = unknown> {
   remainingCertifications?: number;
 }
 
+interface CustomerTrackedServiceRequest {
+  id: string;
+  status: 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  serviceType?: string;
+}
+
 // Window extension for service worker properties
 interface WindowWithSW extends Window {
   __swUpdateAction?: () => void;
@@ -666,6 +672,13 @@ const AppContent: React.FC = () => {
   const [userCoords, setUserCoords] = React.useState<LocationCoordinates | null>(null);
   const [isLocating, setIsLocating] = React.useState(false);
   const [locationError, setLocationError] = React.useState<string | null>(null);
+  const serviceRequestStatusRef = React.useRef<Record<string, string>>({});
+  const hasInitializedServiceRequestTrackingRef = React.useRef(false);
+  const notificationsRef = React.useRef<Notification[]>(notifications);
+
+  React.useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
 
   // Load cached coords on mount
   React.useEffect(() => {
@@ -708,6 +721,75 @@ const AppContent: React.FC = () => {
       setIsLocating(false);
     }
   }, [addToast]);
+
+  React.useEffect(() => {
+    if (!currentUser || currentUser.role !== 'customer') {
+      serviceRequestStatusRef.current = {};
+      hasInitializedServiceRequestTrackingRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    const statusLabel = (status: string) => status.replace('_', ' ');
+    const serviceLabel = (serviceType?: string) => serviceType || 'Service request';
+
+    const pollCustomerRequestStatuses = async () => {
+      try {
+        const resp = await authenticatedFetch('/api/service-requests?scope=customer');
+        if (!resp.ok) return;
+        const rows = await resp.json();
+        if (!Array.isArray(rows) || cancelled) return;
+
+        const nextMap: Record<string, string> = {};
+        const changed: CustomerTrackedServiceRequest[] = [];
+        rows.forEach((row: CustomerTrackedServiceRequest) => {
+          const previous = serviceRequestStatusRef.current[row.id];
+          nextMap[row.id] = row.status;
+          if (hasInitializedServiceRequestTrackingRef.current && previous && previous !== row.status) {
+            changed.push(row);
+          }
+        });
+
+        serviceRequestStatusRef.current = nextMap;
+        if (!hasInitializedServiceRequestTrackingRef.current) {
+          hasInitializedServiceRequestTrackingRef.current = true;
+          return;
+        }
+
+        if (changed.length === 0) return;
+
+        const generatedNotifications: Notification[] = changed.map((row, idx) => ({
+          id: Date.now() + idx,
+          recipientEmail: currentUser.email,
+          message: `${serviceLabel(row.serviceType)} is now ${statusLabel(row.status)}.`,
+          title: 'Service Request Update',
+          targetId: row.id,
+          targetType: 'general_admin',
+          type: 'service_request_status',
+          isRead: false,
+          timestamp: new Date().toISOString(),
+        }));
+
+        generatedNotifications.forEach((notif) => addToast(notif.message, 'info'));
+        const updatedNotifications = [...generatedNotifications, ...notificationsRef.current];
+        setNotifications(updatedNotifications);
+        try {
+          localStorage.setItem('reRideNotifications', JSON.stringify(updatedNotifications));
+        } catch {
+          // ignore localStorage failures
+        }
+      } catch {
+        // ignore transient polling failures
+      }
+    };
+
+    pollCustomerRequestStatuses();
+    const interval = setInterval(pollCustomerRequestStatuses, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [addToast, currentUser, setNotifications]);
 
   // Derive registered service providers (sellers) for the service cart
   const [serviceProviderOptions, setServiceProviderOptions] = React.useState<Array<{ id: string; name: string; city: string; distanceKm?: number; serviceCategories?: string[] }>>([]);

@@ -10,20 +10,29 @@ import { applyCors } from './_cors.js';
  * app JWT stored as reRideAccessToken (same pattern as api/services.ts). Service requests
  * previously only accepted Supabase tokens, so email/password logins failed verification.
  */
-async function resolveServiceRequestActorId(req: VercelRequest): Promise<string> {
+type ActorInfo = {
+  id: string;
+  role: string;
+};
+
+async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ') || authHeader.substring(7).trim() === '') {
     throw new Error('Missing bearer token');
   }
   try {
     const decoded = await verifyIdTokenFromHeader(req);
-    return decoded.uid;
+    const roleFromMeta =
+      decoded.user?.app_metadata?.role ||
+      decoded.user?.user_metadata?.role ||
+      'customer';
+    return { id: decoded.uid, role: String(roleFromMeta) };
   } catch {
     const legacy = authenticateRequest(req);
     if (!legacy.isValid || !legacy.user?.userId) {
       throw new Error(legacy.error || 'Authentication required');
     }
-    return legacy.user.userId;
+    return { id: legacy.user.userId, role: legacy.user.role || 'customer' };
   }
 }
 
@@ -32,7 +41,9 @@ async function resolveServiceRequestActorId(req: VercelRequest): Promise<string>
 export async function handleServiceRequests(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   try {
-    const providerId = await resolveServiceRequestActorId(req);
+    const actor = await resolveServiceRequestActor(req);
+    const actorId = actor.id;
+    const isAdmin = actor.role === 'admin';
     const scope = (req.query.scope as string) || 'mine';
 
     if (req.method === 'GET') {
@@ -46,18 +57,26 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           const candidateOk =
             !item.candidateProviderIds ||
             item.candidateProviderIds.length === 0 ||
-            item.candidateProviderIds.includes(providerId);
+            item.candidateProviderIds.includes(actorId);
           return cityMatches && serviceMatches && candidateOk;
         });
         return res.status(200).json(filtered);
       }
 
       if (scope === 'all') {
+        if (!isAdmin) {
+          return res.status(403).json({ error: 'Admin access required for scope=all' });
+        }
         const all = await supabaseServiceRequestService.findAll();
         return res.status(200).json(all);
       }
 
-      const records = await supabaseServiceRequestService.findByProviderId(providerId);
+      if (scope === 'customer') {
+        const customerRecords = await supabaseServiceRequestService.findByCustomerId(actorId);
+        return res.status(200).json(customerRecords);
+      }
+
+      const records = await supabaseServiceRequestService.findByProviderId(actorId);
       return res.status(200).json(records);
     }
 
@@ -69,6 +88,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
 
       const payload: ServiceRequestPayload = {
         providerId: body.providerId ?? null,
+        customerId: actorId,
         candidateProviderIds: Array.isArray(body.candidateProviderIds) ? body.candidateProviderIds : [],
         title: body.title,
         serviceType: body.serviceType || 'General',
@@ -109,12 +129,12 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         const candidateOk =
           !existing.candidateProviderIds ||
           existing.candidateProviderIds.length === 0 ||
-          existing.candidateProviderIds.includes(providerId);
+          existing.candidateProviderIds.includes(actorId);
         if (!candidateOk) {
           return res.status(403).json({ error: 'Not allowed to claim this request' });
         }
         await supabaseServiceRequestService.update(id, {
-          providerId,
+          providerId: actorId,
           status: 'accepted',
           claimedAt: new Date().toISOString(),
         });
@@ -122,8 +142,19 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         return res.status(200).json(updatedClaim || existing);
       }
 
-      if (existing.providerId !== providerId) {
+      if (!isAdmin && existing.providerId !== actorId) {
         return res.status(403).json({ error: 'Not allowed to update this request' });
+      }
+
+      const normalizedStatus = updates.status as ServiceRequestPayload['status'] | undefined;
+      if (normalizedStatus === 'in_progress' && !updates.startedAt) {
+        updates.startedAt = new Date().toISOString();
+      }
+      if (normalizedStatus === 'completed' && !updates.completedAt) {
+        updates.completedAt = new Date().toISOString();
+      }
+      if (normalizedStatus === 'cancelled' && !updates.cancelledAt) {
+        updates.cancelledAt = new Date().toISOString();
       }
 
       await supabaseServiceRequestService.update(id, updates);
