@@ -282,7 +282,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
   // Mobile app detection
   const { isMobileApp } = useIsMobileApp();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const sortOptions = useMemo(
     () => ({
       YEAR_DESC: t('listings.sort.yearDesc'),
@@ -291,7 +291,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       PRICE_DESC: t('listings.sort.priceDesc'),
       MILEAGE_ASC: t('listings.sort.mileageAsc'),
     }),
-    [t, i18n.language]
+    [t]
   );
 
   const aiSearchRef = useRef<HTMLDivElement>(null);
@@ -332,13 +332,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       if (categoryFilter !== 'ALL' && categoryFilter) {
         const normalizedCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
         // Find matching category key in vehicleData
-        const categoryKey = Object.keys(vehicleData).find(key => {
+        const categoryEntry = Object.entries(vehicleData).find(([key]) => {
           const normalizedKey = String(key).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
           return normalizedKey === normalizedCategory;
         });
         
-        if (categoryKey && vehicleData[categoryKey]) {
-          vehicleData[categoryKey].forEach((make: VehicleMake) => {
+        if (categoryEntry) {
+          const [, categoryData] = categoryEntry;
+          categoryData.forEach((make: VehicleMake) => {
             makesFromDb.add(make.name);
           });
         }
@@ -374,13 +375,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
         const normalizedCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
         // Find matching category key in vehicleData
-        const categoryKey = Object.keys(vehicleData).find(key => {
+        const categoryEntry = Object.entries(vehicleData).find(([key]) => {
           const normalizedKey = String(key).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
           return normalizedKey === normalizedCategory;
         });
         
-        if (categoryKey && vehicleData[categoryKey]) {
-          vehicleData[categoryKey].forEach((make: VehicleMake) => {
+        if (categoryEntry) {
+          const [, categoryData] = categoryEntry;
+          categoryData.forEach((make: VehicleMake) => {
             makesFromDb.add(make.name);
           });
         }
@@ -416,13 +418,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       if (categoryFilter !== 'ALL' && categoryFilter) {
         // Filter by category
         const normalizedCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-        const categoryKey = Object.keys(vehicleData).find(key => {
+        const categoryEntry = Object.entries(vehicleData).find(([key]) => {
           const normalizedKey = String(key).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
           return normalizedKey === normalizedCategory;
         });
         
-        if (categoryKey && vehicleData[categoryKey]) {
-          vehicleData[categoryKey].forEach((make: any) => {
+        if (categoryEntry) {
+          const [, categoryData] = categoryEntry;
+          categoryData.forEach((make: VehicleMake) => {
             if (make.name === makeFilter) {
               make.models.forEach((model: VehicleModel) => {
                 modelsFromDb.add(model.name);
@@ -432,8 +435,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         }
       } else {
         // No category filter - show all models for the make across all categories
-        Object.values(vehicleData).forEach((categoryData: any) => {
-          categoryData.forEach((make: any) => {
+        Object.values(vehicleData).forEach((categoryData: VehicleMake[]) => {
+          categoryData.forEach((make: VehicleMake) => {
             if (make.name === makeFilter) {
               make.models.forEach((model: VehicleModel) => {
                 modelsFromDb.add(model.name);
@@ -467,13 +470,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
           // Filter by category
           const normalizedCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-          const categoryKey = Object.keys(vehicleData).find(key => {
+          const categoryEntry = Object.entries(vehicleData).find(([key]) => {
             const normalizedKey = String(key).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
             return normalizedKey === normalizedCategory;
           });
           
-          if (categoryKey && vehicleData[categoryKey]) {
-            vehicleData[categoryKey].forEach((make: any) => {
+          if (categoryEntry) {
+            const [, categoryData] = categoryEntry;
+            categoryData.forEach((make: VehicleMake) => {
               if (make.name === tempFilters.makeFilter) {
                 make.models.forEach((model: VehicleModel) => {
                   modelsFromDb.add(model.name);
@@ -483,8 +487,8 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           }
         } else {
           // No category filter - show all models for the make across all categories
-          Object.values(vehicleData).forEach((categoryData: any) => {
-            categoryData.forEach((make: any) => {
+          Object.values(vehicleData).forEach((categoryData: VehicleMake[]) => {
+            categoryData.forEach((make: VehicleMake) => {
               if (make.name === tempFilters.makeFilter) {
                 make.models.forEach((model: VehicleModel) => {
                   modelsFromDb.add(model.name);
@@ -1024,6 +1028,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     setCurrentPage(1);
     setMileageRange({ min: MIN_MILEAGE, max: MAX_MILEAGE }); 
     setFuelTypeFilter('');
+
+    // If filters were entered from a city route (Buy Cars dropdown), clear city too.
+    // Otherwise the city->state sync effect will immediately re-apply state filter.
+    if (onCityChange && selectedCity?.trim()) {
+      onCityChange('');
+    }
   };
 
   // Reset model filter when make filter changes
@@ -1466,7 +1476,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </select>
             </div>
             <div>
-                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-2">Price Range</label>
+                <label htmlFor="price-range-min" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-2">Price Range</label>
                 <div className="flex justify-between items-center text-xs text-brand-gray-600 dark:text-reride-text">
                     <span>₹{state.priceRange.min.toLocaleString('en-IN')}</span>
                     <span>₹{state.priceRange.max.toLocaleString('en-IN')}</span>
@@ -1475,12 +1485,12 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     <div className="relative w-full h-1.5 bg-reride-light-gray dark:bg-brand-gray-600 rounded-full">
                         <div className="absolute h-1.5 rounded-full" style={{ left: `${((state.priceRange.min - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100}%`, right: `${100 - ((state.priceRange.max - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100}%`, background: 'var(--gradient-warm)' }}></div>
                     </div>
-                    <input name="min" type="range" min={MIN_PRICE} max={MAX_PRICE} step="10000" value={state.priceRange.min} onChange={(e) => handleRangeChange(e, 'price')} className="absolute w-full h-1.5 bg-transparent appearance-none z-20 slider-thumb" />
+                    <input id="price-range-min" name="min" type="range" min={MIN_PRICE} max={MAX_PRICE} step="10000" value={state.priceRange.min} onChange={(e) => handleRangeChange(e, 'price')} className="absolute w-full h-1.5 bg-transparent appearance-none z-20 slider-thumb" />
                     <input name="max" type="range" min={MIN_PRICE} max={MAX_PRICE} step="10000" value={state.priceRange.max} onChange={(e) => handleRangeChange(e, 'price')} className="absolute w-full h-1.5 bg-transparent appearance-none z-30 slider-thumb" />
                 </div>
             </div>
              <div>
-                <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-2">Mileage (kms)</label>
+                <label htmlFor="mileage-range-min" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-2">Mileage (kms)</label>
                 <div className="flex justify-between items-center text-xs text-brand-gray-600 dark:text-reride-text">
                     <span>{state.mileageRange.min.toLocaleString('en-IN')}</span>
                     <span>{state.mileageRange.max.toLocaleString('en-IN')}</span>
@@ -1489,7 +1499,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     <div className="relative w-full h-1.5 bg-reride-light-gray dark:bg-brand-gray-600 rounded-full">
                         <div className="absolute h-1.5 rounded-full" style={{ left: `${((state.mileageRange.min - MIN_MILEAGE) / (MAX_MILEAGE - MIN_MILEAGE)) * 100}%`, right: `${100 - ((state.mileageRange.max - MIN_MILEAGE) / (MAX_MILEAGE - MIN_MILEAGE)) * 100}%`, background: 'var(--gradient-warm)' }}></div>
                     </div>
-                    <input name="min" type="range" min={MIN_MILEAGE} max={MAX_MILEAGE} step="1000" value={state.mileageRange.min} onChange={(e) => handleRangeChange(e, 'mileage')} className="absolute w-full h-1.5 bg-transparent appearance-none z-20 slider-thumb" />
+                    <input id="mileage-range-min" name="min" type="range" min={MIN_MILEAGE} max={MAX_MILEAGE} step="1000" value={state.mileageRange.min} onChange={(e) => handleRangeChange(e, 'mileage')} className="absolute w-full h-1.5 bg-transparent appearance-none z-20 slider-thumb" />
                     <input name="max" type="range" min={MIN_MILEAGE} max={MAX_MILEAGE} step="1000" value={state.mileageRange.max} onChange={(e) => handleRangeChange(e, 'mileage')} className="absolute w-full h-1.5 bg-transparent appearance-none z-30 slider-thumb" />
                 </div>
             </div>
@@ -1861,7 +1871,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
               <div className="flex items-center gap-2 mb-1.5 lg:mb-1.5">
                 <label htmlFor="ai-search" className="text-xs lg:text-sm font-semibold text-reride-text-dark dark:text-reride-text-dark flex-shrink-0">✨ Intelligent Search</label>
                 <p className={`hidden lg:block text-xs text-reride-text dark:text-reride-text flex-1 truncate`}>
-                  Describe what you're looking for, e.g., "a white Tata Nexon under ₹15 lakhs with a sunroof"
+                  Describe what you&apos;re looking for, e.g., &quot;a white Tata Nexon under ₹15 lakhs with a sunroof&quot;
                 </p>
                 <button 
                   onClick={() => setIsAiSearchCollapsed(prev => !prev)}
@@ -1874,7 +1884,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </button>
               </div>
               <p className={`lg:hidden text-xs text-reride-text dark:text-reride-text mb-1.5 ${isAiSearchCollapsed ? 'hidden' : ''}`}>
-                Describe what you're looking for, e.g., "a white Tata Nexon under ₹15 lakhs with a sunroof"
+                Describe what you&apos;re looking for, e.g., &quot;a white Tata Nexon under ₹15 lakhs with a sunroof&quot;
               </p>
               <div className={`relative ${isAiSearchCollapsed ? 'hidden lg:block' : ''}`} ref={aiSearchRef}>
                   <div className="flex gap-2">
@@ -2072,10 +2082,26 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
 
       {/* Desktop Filter Modal - Keep existing for desktop */}
       {!isMobileApp && isFilterModalOpen && (
-        <div className="lg:hidden fixed inset-0 bg-black/50 z-50 animate-fade-in" onClick={handleCloseFilterModal} style={{ backdropFilter: 'blur(4px)' }}>
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-50 animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCloseFilterModal();
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleCloseFilterModal();
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label="Close filters overlay"
+          style={{ backdropFilter: 'blur(4px)' }}
+        >
             <div 
               className="bg-white rounded-t-3xl h-[90vh] flex flex-col absolute bottom-0 left-0 right-0 safe-bottom shadow-2xl" 
-              onClick={e => e.stopPropagation()}
               style={{ 
                 animation: 'slideUp 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
               }}

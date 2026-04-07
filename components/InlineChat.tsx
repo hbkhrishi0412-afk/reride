@@ -79,13 +79,23 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   );
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const firstUnreadRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const firstUnreadMessageId = useMemo(() => {
+    const otherSender = currentUserRole === 'customer' ? 'seller' : 'user';
+    const first = visibleMessages.find((m) => m.sender === otherSender && !m.isRead);
+    return first ? String(first.id) : null;
+  }, [visibleMessages, currentUserRole]);
+
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [visibleMessages, typingStatus]);
+    firstUnreadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!firstUnreadRef.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [visibleMessages, typingStatus, firstUnreadMessageId]);
   
   useEffect(() => {
     onMarkMessagesAsRead(conversation.id, currentUserRole);
@@ -314,7 +324,11 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
         ) : (
           <>
             {visibleMessages.map((msg) => (
-              <div key={msg.id} className={`flex flex-col ${msg.sender === senderType ? 'items-end' : 'items-start'}`}>
+              <div
+                key={msg.id}
+                ref={firstUnreadMessageId && String(msg.id) === firstUnreadMessageId ? firstUnreadRef : null}
+                className={`flex flex-col ${msg.sender === senderType ? 'items-end' : 'items-start'}`}
+              >
                 {msg.sender === 'system' && (
                   <div className="text-center text-xs text-gray-600 italic py-2 w-full">{msg.text}</div>
                 )}

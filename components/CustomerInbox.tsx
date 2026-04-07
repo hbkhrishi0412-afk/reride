@@ -26,6 +26,8 @@ interface CustomerInboxProps {
   currentUserEmail?: string | null;
   onClearChat?: (conversationId: string) => void | Promise<void>;
   chatPeerOnlineByConversationId?: Record<string, boolean>;
+  onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
+  onMarkAllAsRead?: () => void;
 }
 
 // Helper function to count unread messages
@@ -54,10 +56,12 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   currentUserEmail,
   onClearChat,
   chatPeerOnlineByConversationId,
+  onSetConversationReadState,
+  onMarkAllAsRead,
 }) => {
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterUnread, setFilterUnread] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'unread' | 'read'>('all');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
 
@@ -78,7 +82,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
   const { sortedConversations, filteredConversations, unreadCount } = useConversationList(
     conversations,
     searchQuery,
-    filterUnread,
+    filterMode,
     {
       viewerRole: 'customer',
       getCounterpartLabel: (c) => getSellerName(c.sellerId),
@@ -184,19 +188,47 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                 />
               </div>
               {conversations.length > 0 && (
+                <div className="w-full flex flex-wrap gap-2">
                 <button
-                  onClick={() => setFilterUnread(!filterUnread)}
-                  className={`w-full px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                    filterUnread 
-                      ? 'bg-orange-500 text-white' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  onClick={() => setFilterMode('all')}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    filterMode === 'all' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
+                  aria-label="Show all conversations"
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setFilterMode('unread')}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                    filterMode === 'unread' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  aria-label="Show unread conversations"
                 >
                   <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
-                  {filterUnread ? 'Show All' : `Unread (${unreadCount})`}
+                  Unread ({unreadCount})
                 </button>
+                <button
+                  onClick={() => setFilterMode('read')}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    filterMode === 'read' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  aria-label="Show read conversations"
+                >
+                  Read
+                </button>
+                {onMarkAllAsRead && unreadCount > 0 && (
+                  <button
+                    onClick={onMarkAllAsRead}
+                    className="px-3 py-1.5 text-sm rounded-lg bg-blue-50 text-blue-700"
+                    aria-label="Mark all conversations as read"
+                  >
+                    Mark all read
+                  </button>
+                )}
+                </div>
               )}
             </div>
 
@@ -242,6 +274,19 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                               <span className="text-xs text-gray-500 whitespace-nowrap">
                                 {formatRelativeTime(conv.lastMessageAt)}
                               </span>
+                              {onSetConversationReadState && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onSetConversationReadState(conv.id, isUnread);
+                                  }}
+                                  className="text-[11px] text-gray-500 hover:text-orange-500"
+                                  aria-label={isUnread ? 'Mark conversation as read' : 'Mark conversation as unread'}
+                                >
+                                  {isUnread ? 'Mark read' : 'Mark unread'}
+                                </button>
+                              )}
                               {unreadMsgCount > 0 && (
                                 <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold text-white bg-orange-500 rounded-full">
                                   {unreadMsgCount > 9 ? '9+' : unreadMsgCount}

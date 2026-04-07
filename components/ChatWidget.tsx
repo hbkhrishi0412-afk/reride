@@ -32,6 +32,8 @@ interface ChatWidgetProps {
   callTargetName?: string;
   isInlineLaunch?: boolean;
   otherUserOnline?: boolean; // Online/offline status
+  /** Toggle thread-level read state (list + badges); optional. */
+  onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
 }
 
 const EMOJIS = ['😀', '😂', '👍', '❤️', '🙏', '😊', '🔥', '🎉', '🚗', '🤔', '👋', '👀'];
@@ -68,6 +70,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     isInlineLaunch,
     otherUserOnline,
     uploaderEmail,
+    onSetConversationReadState,
   }) => {
   const [inputText, setInputText] = useState('');
   const [isMinimized, setIsMinimized] = useState(!isInlineLaunch); // Inline launches (CTA click) start opened
@@ -87,6 +90,12 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     () => filterMessagesForViewer(conversation, currentUserRole),
     [conversation, currentUserRole],
   );
+
+  const firstUnreadMessageId = useMemo(() => {
+    const otherSender = currentUserRole === 'customer' ? 'seller' : 'user';
+    const first = visibleMessages.find((m) => m.sender === otherSender && !m.isRead);
+    return first ? String(first.id) : null;
+  }, [visibleMessages, currentUserRole]);
 
   // Detect mobile on mount and resize
   useEffect(() => {
@@ -134,14 +143,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   }, [conversation.id]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const firstUnreadRef = useRef<HTMLDivElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMarkReadSignatureRef = useRef<string>('');
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [visibleMessages, typingStatus]);
+    firstUnreadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!firstUnreadRef.current) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [visibleMessages, typingStatus, firstUnreadMessageId]);
 
   const lastMessageId =
     visibleMessages.length > 0
@@ -349,6 +362,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
   const mobileCallHref = callTargetPhone ? telHrefFromRawPhone(callTargetPhone) : null;
   const mobileCallLabel = callTargetPhone ? phoneDisplayCompact(callTargetPhone) : '';
 
+  const threadIsRead =
+    currentUserRole === 'seller' ? conversation.isReadBySeller : conversation.isReadByCustomer;
+
   // Handle minimize/maximize with animation
   const handleToggleMinimize = () => {
     if (!isMinimized) {
@@ -531,6 +547,19 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
                 </div>
             </div>
             <div className="flex items-center gap-1">
+                {onSetConversationReadState && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetConversationReadState(conversation.id, !threadIsRead);
+                    }}
+                    className="px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 rounded-lg"
+                    aria-label={threadIsRead ? 'Mark conversation as unread' : 'Mark conversation as read'}
+                  >
+                    {threadIsRead ? 'Unread' : 'Read'}
+                  </button>
+                )}
                 {callTargetPhone && (!isMobile || !mobileCallHref) && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onStartCall ? onStartCall(callTargetPhone) : window.open(`tel:${callTargetPhone}`); }}
@@ -673,7 +702,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
             ) : (
               <>
                 {visibleMessages.map((msg) => (
-                  <div key={msg.id} className={`flex flex-col ${msg.sender === senderType ? 'items-end' : 'items-start'}`}>
+                  <div
+                    key={msg.id}
+                    ref={
+                      firstUnreadMessageId && String(msg.id) === firstUnreadMessageId
+                        ? firstUnreadRef
+                        : null
+                    }
+                    className={`flex flex-col ${msg.sender === senderType ? 'items-end' : 'items-start'}`}
+                  >
                       {msg.sender === 'system' && <div className="text-center text-xs text-gray-600 dark:text-gray-400 italic py-2 w-full">{msg.text}</div>}
                       {msg.sender !== 'system' && (
                           <>

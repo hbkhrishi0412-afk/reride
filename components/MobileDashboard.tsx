@@ -11,7 +11,9 @@ import ListingLifecycleIndicator from './ListingLifecycleIndicator';
 import PaymentStatusCard from './PaymentStatusCard';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
-import { filterMessagesForViewer } from '../utils/conversationView';
+import { filterMessagesForViewer, getLastVisibleMessageForViewer } from '../utils/conversationView';
+import { formatRelativeTime } from '../utils/date';
+import { getThreadLastMessagePreview } from '../utils/messagePreview';
 
 interface MobileDashboardProps {
   currentUser: User;
@@ -55,6 +57,8 @@ interface MobileDashboardProps {
   onRequestCertification?: (vehicleId: number) => void;
   /** Opens this buyer thread so the seller can reply (inbox + composer). */
   onSellerOpenChat?: (conversation: Conversation) => void;
+  onSetConversationReadState?: (conversationId: string, isRead: boolean) => void;
+  onMarkAllAsReadBySeller?: () => void;
 }
 
 type DashboardTab =
@@ -103,10 +107,13 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
   addToast,
   onBoostListing,
   onRequestCertification,
-  onSellerOpenChat
+  onSellerOpenChat,
+  onSetConversationReadState,
+  onMarkAllAsReadBySeller,
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [messagesHubFilter, setMessagesHubFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editFormData, setEditFormData] = useState<Vehicle | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -263,6 +270,17 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     () => safeConversations.filter((c) => c && !c.isReadBySeller).length,
     [safeConversations]
   );
+
+  const hubConversationList = useMemo(() => {
+    if (!isSeller) return [];
+    const sorted = [...safeConversations].sort(
+      (a, b) =>
+        new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+    );
+    if (messagesHubFilter === 'unread') return sorted.filter((c) => c && !c.isReadBySeller);
+    if (messagesHubFilter === 'read') return sorted.filter((c) => c && c.isReadBySeller);
+    return sorted;
+  }, [isSeller, safeConversations, messagesHubFilter]);
 
   const tabs = useMemo(() => {
     const row: { id: DashboardTab; label: string; icon: string; count: number | null }[] = [
@@ -736,12 +754,117 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     </div>
   );
 
-  /** No per-thread list here — seller opens floating ChatWidget from the global inbox (same as website). */
   const renderMessagesHub = () => (
     <div className="space-y-5 pb-4">
       <div className="native-card p-5">
         <h3 className="text-lg font-bold text-gray-900 mb-2">{t('sellerDashboard.mobile.tab.messages')}</h3>
-        <p className="text-sm text-gray-600 leading-relaxed mb-5">{t('sellerDashboard.mobile.messagesHubBody')}</p>
+        <p className="text-sm text-gray-600 leading-relaxed mb-4">{t('sellerDashboard.mobile.messagesHubBody')}</p>
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setMessagesHubFilter('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold ${
+              messagesHubFilter === 'all' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+            aria-label="Show all conversations"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setMessagesHubFilter('unread')}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold ${
+              messagesHubFilter === 'unread' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+            aria-label="Show unread conversations"
+          >
+            Unread ({unreadSellerThreads})
+          </button>
+          <button
+            type="button"
+            onClick={() => setMessagesHubFilter('read')}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold ${
+              messagesHubFilter === 'read' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+            aria-label="Show read conversations"
+          >
+            Read
+          </button>
+          {onMarkAllAsReadBySeller && unreadSellerThreads > 0 && (
+            <button
+              type="button"
+              onClick={onMarkAllAsReadBySeller}
+              className="px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700"
+              aria-label="Mark all conversations as read"
+            >
+              Mark all read
+            </button>
+          )}
+        </div>
+
+        {hubConversationList.length === 0 ? (
+          <p className="text-sm text-gray-500 mb-4">{t('sellerDashboard.messages.emptyTitle')}</p>
+        ) : (
+          <div className="space-y-2 mb-5 max-h-[min(50vh,420px)] overflow-y-auto">
+            {hubConversationList.map((conv) => {
+              if (!conv) return null;
+              const last = getLastVisibleMessageForViewer(conv, 'seller');
+              const preview = getThreadLastMessagePreview(last, {
+                otherLabel: conv.customerName || '',
+                viewer: 'seller',
+              });
+              const line = `${preview.prefix}${preview.text}`;
+              const isUnread = !conv.isReadBySeller;
+              return (
+                <div
+                  key={conv.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSellerOpenChat?.(conv)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSellerOpenChat?.(conv);
+                    }
+                  }}
+                  className={`w-full text-left p-3 rounded-xl border ${
+                    isUnread ? 'border-orange-200 bg-orange-50/40' : 'border-gray-100 bg-white'
+                  } active:opacity-90`}
+                >
+                  <div className="flex justify-between gap-2 items-start">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-gray-900 truncate">
+                        {conv.customerName || 'Customer'}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{conv.vehicleName}</p>
+                      <p className="text-sm text-gray-600 truncate mt-1">{line}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                        {formatRelativeTime(conv.lastMessageAt)}
+                      </span>
+                      {onSetConversationReadState && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSetConversationReadState(conv.id, isUnread);
+                          }}
+                          className="text-[11px] text-blue-600 font-semibold"
+                          aria-label={isUnread ? 'Mark conversation as read' : 'Mark conversation as unread'}
+                        >
+                          {isUnread ? 'Mark read' : 'Mark unread'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={() => onNavigate(ViewEnum.INBOX)}

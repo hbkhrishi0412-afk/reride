@@ -7362,6 +7362,8 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             conversationId?: string;
             markReadMessageIds?: (number | string)[];
             clearMessages?: boolean;
+            threadReadBy?: 'customer' | 'seller';
+            threadReadState?: boolean;
           }
         | string
         | undefined;
@@ -7393,6 +7395,14 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           ? body.markReadMessageIds
           : [];
       const doClear = Boolean(body && typeof body === 'object' && body.clearMessages);
+      const threadReadBy =
+        body &&
+        typeof body === 'object' &&
+        (body.threadReadBy === 'customer' || body.threadReadBy === 'seller')
+          ? body.threadReadBy
+          : undefined;
+      const hasThreadReadState = body && typeof body === 'object' && typeof body.threadReadState === 'boolean';
+      const threadReadState = hasThreadReadState ? Boolean((body as { threadReadState?: boolean }).threadReadState) : undefined;
 
       try {
         if (doClear) {
@@ -7403,12 +7413,24 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
           }
           const role: 'customer' | 'seller' = clearedAsCustomer ? 'customer' : 'seller';
           await conversationService.clearHistoryForParticipant(String(conversation.id), role);
+        } else if (threadReadBy && hasThreadReadState) {
+          if (!isAdmin) {
+            const actorRole: 'customer' | 'seller' =
+              normalizedAuthEmail === normalizedCustomerId ? 'customer' : 'seller';
+            if (actorRole !== threadReadBy) {
+              return res.status(403).json({ success: false, reason: 'Unauthorized read-state update' });
+            }
+          }
+          await conversationService.update(String(conversation.id), {
+            isReadBySeller: threadReadBy === 'seller' ? threadReadState : conversation.isReadBySeller,
+            isReadByCustomer: threadReadBy === 'customer' ? threadReadState : conversation.isReadByCustomer,
+          });
         } else if (markIds.length > 0) {
           await conversationService.markMessagesRead(String(conversation.id), markIds);
         } else {
           return res.status(400).json({
             success: false,
-            reason: 'Provide clearMessages: true and/or markReadMessageIds array.',
+            reason: 'Provide clearMessages, markReadMessageIds, or threadReadBy/threadReadState.',
           });
         }
         const updatedConversation = await conversationService.findById(String(conversation.id));

@@ -347,6 +347,7 @@ const AppContent: React.FC = () => {
     sendMessage,
     sendMessageWithType,
     markAsRead,
+    setConversationReadState,
     clearConversationMessages,
     toggleTyping,
     flagContent,
@@ -499,6 +500,24 @@ const AppContent: React.FC = () => {
     setInboxConversationIdToOpen(null);
   }, []);
 
+  const markAllVisibleAsRead = React.useCallback(
+    async (role: 'customer' | 'seller') => {
+      if (!currentUser?.email) return;
+      const email = currentUser.email.toLowerCase().trim();
+      const unread = (conversations || []).filter((c) => {
+        if (!c) return false;
+        if (role === 'seller') {
+          if (!conversationBelongsToSeller(c, email, currentUser.id)) return false;
+          return !c.isReadBySeller;
+        }
+        if (!conversationBelongsToCustomer(c, email, currentUser.id)) return false;
+        return !c.isReadByCustomer;
+      });
+      await Promise.all(unread.map((c) => setConversationReadState(c.id, role, true)));
+    },
+    [conversations, setConversationReadState, currentUser],
+  );
+
   /** Seller dashboard message rows: open reply UI. On native/mobile app, use global ChatWidget; elsewhere deep-link inbox. */
   const handleSellerOpenChatFromDashboard = useCallback(
     (conv: Conversation) => {
@@ -509,7 +528,7 @@ const AppContent: React.FC = () => {
       const useFloatingSellerChat = isMobileApp || isCapacitorNativeApp();
       if (useFloatingSellerChat && currentUser?.role === 'seller') {
         setActiveChat(latest);
-        void markAsRead(id);
+        void markAsRead(id, { readerRole: 'seller', forceReadState: true });
         return;
       }
 
@@ -517,7 +536,7 @@ const AppContent: React.FC = () => {
       if (currentView !== ViewEnum.INBOX) {
         navigate(ViewEnum.INBOX);
       }
-      void markAsRead(id);
+      void markAsRead(id, { readerRole: 'seller', forceReadState: true });
     },
     [conversations, currentView, currentUser?.role, isMobileApp, markAsRead, navigate, setActiveChat]
   );
@@ -1809,7 +1828,7 @@ const AppContent: React.FC = () => {
                     toggleTyping(conversationId, true);
                   }}
                   onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                    markAsRead(conversationId);
+                    markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
                   }}
                   onFlagContent={flagContent}
                   onLogout={handleLogout}
@@ -1871,6 +1890,10 @@ const AppContent: React.FC = () => {
                   onNotificationClick={handleNotificationClick}
                   onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
                   addToast={addToast}
+                  onSetConversationReadState={(conversationId, isRead) =>
+                    setConversationReadState(conversationId, 'seller', isRead)
+                  }
+                  onMarkAllAsReadBySeller={() => void markAllVisibleAsRead('seller')}
                   onSellerOpenChat={handleSellerOpenChatFromDashboard}
                 />
             </DashboardErrorBoundary>
@@ -2018,11 +2041,19 @@ const AppContent: React.FC = () => {
                   sendMessage(conversationId, messageText);
                 }
               }}
-              onMarkConversationAsReadBySeller={(conversationId) => markAsRead(conversationId)}
+              onMarkConversationAsReadBySeller={(conversationId) =>
+                markAsRead(conversationId, { readerRole: 'seller', forceReadState: true })
+              }
+              onSetConversationReadState={(conversationId, isRead) =>
+                setConversationReadState(conversationId, 'seller', isRead)
+              }
+              onMarkAllAsReadBySeller={() => void markAllVisibleAsRead('seller')}
               typingStatus={typingStatus}
               onUserTyping={(conversationId, _userRole) => toggleTyping(conversationId, true)}
               onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
-              onMarkMessagesAsRead={(conversationId, _readerRole) => markAsRead(conversationId)}
+              onMarkMessagesAsRead={(conversationId, _readerRole) =>
+                markAsRead(conversationId, { readerRole: 'seller', forceReadState: true })
+              }
               onClearChat={clearConversationMessages}
               onUpdateSellerProfile={async (details) => {
                 if (currentUser) {
@@ -2526,6 +2557,14 @@ const AppContent: React.FC = () => {
               typingStatus={typingStatus}
               onTypingActivity={(conversationId, isTyping) => toggleTyping(conversationId, isTyping)}
               onMarkMessagesAsRead={markAsRead}
+              onMarkAllAsRead={markAllVisibleAsRead}
+              onSetConversationReadState={(conversationId, isRead) =>
+                setConversationReadState(
+                  conversationId,
+                  normalizeInboxRole(currentUser.role) === 'seller' ? 'seller' : 'customer',
+                  isRead,
+                )
+              }
               onFlagContent={(type, id, _reason) => flagContent(type, id)}
               onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                 onOfferResponse(conversationId, messageId, response, counterPrice);
@@ -2565,6 +2604,10 @@ const AppContent: React.FC = () => {
             }}
             onUserStoppedTyping={(conversationId: string) => toggleTyping(conversationId, false)}
             onMarkMessagesAsRead={markAsRead}
+            onMarkAllAsRead={() => void markAllVisibleAsRead('customer')}
+            onSetConversationReadState={(conversationId, isRead) =>
+              setConversationReadState(conversationId, 'customer', isRead)
+            }
             onFlagContent={(type, id, _reason) => flagContent(type, id)}
             onOfferResponse={(conversationId, messageId, response, counterPrice) => {
               // Handle offer responses using the AppProvider function
@@ -3401,7 +3444,7 @@ const AppContent: React.FC = () => {
                 toggleTyping(conversationId, true);
               }}
               onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                markAsRead(conversationId);
+                markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
               }}
               onFlagContent={flagContent}
               onLogout={handleLogout}
@@ -3484,6 +3527,10 @@ const AppContent: React.FC = () => {
             notifications={notifications.filter(n => n.recipientEmail === currentUser.email)}
             onNotificationClick={handleNotificationClick}
             onMarkNotificationsAsRead={handleMarkNotificationsAsRead}
+            onSetConversationReadState={(conversationId, isRead) =>
+              setConversationReadState(conversationId, 'seller', isRead)
+            }
+            onMarkAllAsReadBySeller={() => void markAllVisibleAsRead('seller')}
             onSellerOpenChat={handleSellerOpenChatFromDashboard}
           />
         </MobileLayout>
@@ -3530,7 +3577,7 @@ const AppContent: React.FC = () => {
                   onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
                   uploaderEmail={currentUser?.email}
                   onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                    markAsRead(conversationId);
+                    markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
                   }}
                   onFlagContent={(type, id, reason) => {
                     flagContent(type, id, reason);
@@ -3543,6 +3590,9 @@ const AppContent: React.FC = () => {
                     addToast(`Offer ${response}`, 'success');
                   }}
                   onClearChat={clearConversationMessages}
+                  onSetConversationReadState={(conversationId, isRead) =>
+                    setConversationReadState(conversationId, 'seller', isRead)
+                  }
                 />
               </Suspense>
             </ChatErrorBoundary>
@@ -3649,7 +3699,7 @@ const AppContent: React.FC = () => {
                     onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
                     uploaderEmail={currentUser?.email}
                     onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                      markAsRead(conversationId);
+                      markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
                     }}
                     onFlagContent={(type, id, _reason) => {
                       flagContent(type, id);
@@ -3662,6 +3712,9 @@ const AppContent: React.FC = () => {
                       addToast(`Offer ${response}`, 'success');
                     }}
                     onClearChat={clearConversationMessages}
+                    onSetConversationReadState={(conversationId, isRead) =>
+                      setConversationReadState(conversationId, 'customer', isRead)
+                    }
                   />
                 </Suspense>
               </ChatErrorBoundary>
@@ -3757,7 +3810,7 @@ const AppContent: React.FC = () => {
                 onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
                 uploaderEmail={currentUser?.email}
                 onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                  markAsRead(conversationId);
+                  markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
                 }}
                 onFlagContent={(type, id, _reason) => {
                   flagContent(type, id);
@@ -3767,6 +3820,13 @@ const AppContent: React.FC = () => {
                   addToast(`Offer ${response}`, 'success');
                 }}
                 onClearChat={clearConversationMessages}
+                onSetConversationReadState={(conversationId, isRead) =>
+                  setConversationReadState(
+                    conversationId,
+                    currentUser.role === 'seller' ? 'seller' : 'customer',
+                    isRead,
+                  )
+                }
               />
             </Suspense>
           </ChatErrorBoundary>
@@ -3879,7 +3939,7 @@ const AppContent: React.FC = () => {
                 onUserStoppedTyping={(conversationId) => toggleTyping(conversationId, false)}
                 uploaderEmail={currentUser?.email}
                 onMarkMessagesAsRead={(conversationId, _readerRole) => {
-                  markAsRead(conversationId);
+                  markAsRead(conversationId, { readerRole: _readerRole, forceReadState: true });
                 }}
                 onFlagContent={(type, id, _reason) => {
                   flagContent(type, id);
@@ -3889,6 +3949,13 @@ const AppContent: React.FC = () => {
                   addToast(`Offer ${response}`, 'success');
                 }}
                 onClearChat={clearConversationMessages}
+                onSetConversationReadState={(conversationId, isRead) =>
+                  setConversationReadState(
+                    conversationId,
+                    currentUser.role === 'seller' ? 'seller' : 'customer',
+                    isRead,
+                  )
+                }
               />
             </Suspense>
           </ChatErrorBoundary>

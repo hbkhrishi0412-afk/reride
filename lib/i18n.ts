@@ -717,6 +717,75 @@ const en = {
   'vehicle.detail.historyAndDocs': 'Vehicle History & Documents',
   'vehicle.detail.availableDocuments': 'Available Documents',
 
+  'carServices.badge': 'Professional Service',
+  'carServices.heroTitle': 'Car Service at Your Doorstep',
+  'carServices.heroSubtitle':
+    'Expert mechanics, genuine parts, and transparent pricing. Get your car serviced by professionals.',
+  'carServices.bookNow': 'Book Service Now',
+  'carServices.viewServices': 'View Services',
+  'carServices.workshops': '200+ Workshops',
+  'carServices.pickupDrop': 'Free Pickup & Drop',
+  'carServices.warranty': '3-Month Warranty',
+  'carServices.chooseService': 'Choose a Service',
+  'carServices.allServices': 'All Services',
+  'carServices.howItWorks': 'How It Works',
+  'carServices.commonQuestions': 'Common Questions',
+  'carServices.needHelp': 'Need Help?',
+  'carServices.needHelpSubtitle':
+    'Talk to our service advisor and get a slot within minutes',
+  'carServices.callCta': 'Call 727-727-7275',
+  'carServices.moreCount': '+{{count}} more',
+  'carServices.category.periodic': 'Periodic Service',
+  'carServices.category.ac': 'AC Service',
+  'carServices.category.diagnostics': 'Car Scan',
+  'carServices.category.wheel': 'Wheel Care',
+  'carServices.category.interior': 'Interior Clean',
+  'carServices.category.engine': 'Engine Care',
+  'carServices.step.pickup.title': 'Pick-up',
+  'carServices.step.pickup.detail': 'We pick your car from your location',
+  'carServices.step.service.title': 'Service',
+  'carServices.step.service.detail': 'Expert mechanics service your car',
+  'carServices.step.drop.title': 'Drop',
+  'carServices.step.drop.detail': 'We deliver your car back to you',
+  'carServices.faq.0.q': 'How often should I service my car?',
+  'carServices.faq.0.a':
+    'Generally, service your car every 10 months or every 10,000 km, whichever comes first.',
+  'carServices.faq.1.q': 'What does a service include?',
+  'carServices.faq.1.a':
+    'Our service includes oil & filter replacement, fluid top-ups, brake maintenance, washing, and complete car health scanning.',
+  'carServices.faq.2.q': 'Do you provide pickup and drop?',
+  'carServices.faq.2.a': 'Yes! We offer free pickup and drop service for your convenience.',
+  'carServices.services.diagnostics.title': 'Car Diagnostics',
+  'carServices.services.diagnostics.description':
+    "Advanced diagnostic scanning to find issues with your vehicle's engine, electronics, battery, ABS, and more.",
+  'carServices.services.diagnostics.bullets':
+    'Advanced diagnostic scanning|||Engine diagnostics|||Electronics system check|||Battery health analysis|||ABS system inspection|||Complete car health scanning',
+  'carServices.services.engine.title': 'Engine Maintenance & Repairs',
+  'carServices.services.engine.description':
+    'Keep your engine running at its highest performance with regular maintenance.',
+  'carServices.services.engine.bullets':
+    'Engine oil and filter change|||Air filter clean|||Fuel filter clean|||Spark plug inspection|||Cooling system check',
+  'carServices.services.ac.title': 'Car AC Servicing',
+  'carServices.services.ac.description':
+    'Complete AC servicing ensures reliable performance in all weather conditions.',
+  'carServices.services.ac.bullets':
+    'Refrigerant refill|||Compressor check|||Blower check|||Cabin filter cleaning|||AC system diagnostics',
+  'carServices.services.interior.title': 'Interior Deep Cleaning',
+  'carServices.services.interior.description':
+    'Deep cleaning to keep your car interior fresh and hygienic.',
+  'carServices.services.interior.bullets':
+    'Upholstery vacuuming|||Dashboard sanitisation|||Floor mat washing|||Complete interior sanitization|||Odor removal',
+  'carServices.services.wheel.title': 'Wheel Alignment & Balancing',
+  'carServices.services.wheel.description':
+    'Factory-spec wheel alignment for better stability and fuel efficiency.',
+  'carServices.services.wheel.bullets':
+    'Factory-spec alignment|||Digital tyre balancing|||Suspension inspection|||Tyre rotation|||Tyre pressure check',
+  'carServices.services.periodic.title': 'Periodic Services',
+  'carServices.services.periodic.description':
+    'OEM recommended service schedules with genuine parts.',
+  'carServices.services.periodic.bullets':
+    'Engine oil change|||Oil filter replacement|||Air filter replacement|||25-point safety check|||Battery health check',
+
   ...toastEn,
 } as const;
 
@@ -1408,6 +1477,76 @@ const hi: Record<string, string> = {
   'vehicle.detail.historyAndDocs': 'वाहन इतिहास और दस्तावेज़',
   'vehicle.detail.availableDocuments': 'उपलब्ध दस्तावेज़',
 
+  'carServices.badge': 'प्रोफेशनल सर्विस',
+  'carServices.heroTitle': 'आपके दरवाजे पर कार सर्विस',
+  'carServices.heroSubtitle':
+    'विशेषज्ञ मैकेनिक, असली पार्ट्स और पारदर्शी कीमतें। प्रोफेशनल्स से अपनी कार सर्विस कराएं।',
+  'carServices.bookNow': 'अभी सर्विस बुक करें',
+  'carServices.viewServices': 'सेवाएं देखें',
+  'carServices.workshops': '200+ वर्कशॉप',
+  'carServices.pickupDrop': 'फ्री पिकअप और ड्रॉप',
+  'carServices.warranty': '3 महीने की वारंटी',
+  'carServices.chooseService': 'एक सेवा चुनें',
+  'carServices.allServices': 'सभी सेवाएं',
+  'carServices.howItWorks': 'यह कैसे काम करता है',
+  'carServices.commonQuestions': 'सामान्य प्रश्न',
+  'carServices.needHelp': 'मदद चाहिए?',
+  'carServices.needHelpSubtitle':
+    'हमारे सर्विस एडवाइजर से बात करें और मिनटों में स्लॉट पाएं',
+  'carServices.callCta': 'कॉल करें 727-727-7275',
+  'carServices.moreCount': '+{{count}} और',
+  'carServices.category.periodic': 'पीरियॉडिक सर्विस',
+  'carServices.category.ac': 'एसी सर्विस',
+  'carServices.category.diagnostics': 'कार स्कैन',
+  'carServices.category.wheel': 'व्हील केयर',
+  'carServices.category.interior': 'इंटीरियर क्लीन',
+  'carServices.category.engine': 'इंजन केयर',
+  'carServices.step.pickup.title': 'पिक-अप',
+  'carServices.step.pickup.detail': 'हम आपकी लोकेशन से कार लेते हैं',
+  'carServices.step.service.title': 'सर्विस',
+  'carServices.step.service.detail': 'एक्सपर्ट मैकेनिक आपकी कार सर्विस करते हैं',
+  'carServices.step.drop.title': 'ड्रॉप',
+  'carServices.step.drop.detail': 'हम आपकी कार वापस डिलीवर करते हैं',
+  'carServices.faq.0.q': 'मुझे अपनी कार कितनी बार सर्विस करानी चाहिए?',
+  'carServices.faq.0.a':
+    'आम तौर पर हर 10 महीने या हर 10,000 किमी पर सर्विस कराएं, जो पहले हो।',
+  'carServices.faq.1.q': 'सर्विस में क्या शामिल होता है?',
+  'carServices.faq.1.a':
+    'हमारी सर्विस में ऑयल और फिल्टर बदलना, फ्लुइड टॉप-अप, ब्रेक मेंटेनेंस, वॉश और कम्प्लीट कार हेल्थ स्कैन शामिल है।',
+  'carServices.faq.2.q': 'क्या आप पिकअप और ड्रॉप देते हैं?',
+  'carServices.faq.2.a':
+    'हाँ! आपकी सुविधा के लिए हम फ्री पिकअप और ड्रॉप सेवा देते हैं।',
+  'carServices.services.diagnostics.title': 'कार डायग्नोस्टिक्स',
+  'carServices.services.diagnostics.description':
+    'इंजन, इलेक्ट्रॉनिक्स, बैटरी, ABS और अन्य सिस्टम की समस्या पहचानने के लिए एडवांस स्कैनिंग।',
+  'carServices.services.diagnostics.bullets':
+    'एडवांस डायग्नोस्टिक स्कैनिंग|||इंजन डायग्नोस्टिक्स|||इलेक्ट्रॉनिक्स सिस्टम चेक|||बैटरी हेल्थ एनालिसिस|||ABS सिस्टम इंस्पेक्शन|||कम्प्लीट कार हेल्थ स्कैनिंग',
+  'carServices.services.engine.title': 'इंजन मेंटेनेंस और रिपेयर्स',
+  'carServices.services.engine.description':
+    'नियमित मेंटेनेंस से आपके इंजन की परफॉर्मेंस बेहतर बनी रहती है।',
+  'carServices.services.engine.bullets':
+    'इंजन ऑयल और फिल्टर बदलना|||एयर फिल्टर क्लीन|||फ्यूल फिल्टर क्लीन|||स्पार्क प्लग जांच|||कूलिंग सिस्टम चेक',
+  'carServices.services.ac.title': 'कार एसी सर्विसिंग',
+  'carServices.services.ac.description':
+    'सभी मौसम में भरोसेमंद परफॉर्मेंस के लिए कम्प्लीट एसी सर्विसिंग।',
+  'carServices.services.ac.bullets':
+    'रेफ्रिजरेंट रीफिल|||कम्प्रेसर चेक|||ब्लोअर चेक|||केबिन फिल्टर सफाई|||एसी सिस्टम डायग्नोस्टिक्स',
+  'carServices.services.interior.title': 'इंटीरियर डीप क्लीनिंग',
+  'carServices.services.interior.description':
+    'आपकी कार के इंटीरियर को ताजा और स्वच्छ रखने के लिए डीप क्लीनिंग।',
+  'carServices.services.interior.bullets':
+    'अपहोल्स्ट्री वैक्यूमिंग|||डैशबोर्ड सैनिटाइजेशन|||फ्लोर मैट वॉशिंग|||पूरा इंटीरियर सैनिटाइजेशन|||गंध हटाना',
+  'carServices.services.wheel.title': 'व्हील एलाइनमेंट और बैलेंसिंग',
+  'carServices.services.wheel.description':
+    'बेहतर स्थिरता और माइलेज के लिए फैक्ट्री-स्पेक एलाइनमेंट।',
+  'carServices.services.wheel.bullets':
+    'फैक्ट्री-स्पेक एलाइनमेंट|||डिजिटल टायर बैलेंसिंग|||सस्पेंशन निरीक्षण|||टायर रोटेशन|||टायर प्रेशर चेक',
+  'carServices.services.periodic.title': 'पीरियॉडिक सर्विस',
+  'carServices.services.periodic.description':
+    'OEM की सिफारिश के अनुसार असली पार्ट्स के साथ सर्विस शेड्यूल।',
+  'carServices.services.periodic.bullets':
+    'इंजन ऑयल चेंज|||ऑयल फिल्टर बदलना|||एयर फिल्टर बदलना|||25-पॉइंट सेफ्टी चेक|||बैटरी हेल्थ चेक',
+
   ...toastHi,
 };
 
@@ -2069,6 +2208,76 @@ const te: Record<string, string> = {
   'sellerDashboard.mobile.messagesReplied': 'సందేశాలకు స్పందించారు',
   'sellerDashboard.mobile.salesHistory': 'అమ్మకాల చరిత్ర',
   'sellerDashboard.mobile.settings': 'సెట్టింగ్‌లు',
+
+  'carServices.badge': 'ప్రొఫెషనల్ సర్వీస్',
+  'carServices.heroTitle': 'మీ ఇంటి వద్ద కార్ సర్వీస్',
+  'carServices.heroSubtitle':
+    'నిపుణులైన మెకానిక్స్, అసలు భాగాలు, పారదర్శక ధరలు. మీ కార్‌ను నిపుణులతో సర్వీస్ చేయించండి.',
+  'carServices.bookNow': 'ఇప్పుడే సర్వీస్ బుక్ చేయండి',
+  'carServices.viewServices': 'సర్వీసులు చూడండి',
+  'carServices.workshops': '200+ వర్క్‌షాప్స్',
+  'carServices.pickupDrop': 'ఉచిత పికప్ & డ్రాప్',
+  'carServices.warranty': '3 నెలల వారంటీ',
+  'carServices.chooseService': 'ఒక సేవను ఎంచుకోండి',
+  'carServices.allServices': 'అన్ని సర్వీసులు',
+  'carServices.howItWorks': 'ఇది ఎలా పనిచేస్తుంది',
+  'carServices.commonQuestions': 'సాధారణ ప్రశ్నలు',
+  'carServices.needHelp': 'సహాయం కావాలా?',
+  'carServices.needHelpSubtitle':
+    'మా సర్వీస్ అడ్వైజర్‌తో మాట్లాడి నిమిషాల్లో స్లాట్ పొందండి',
+  'carServices.callCta': 'కాల్ 727-727-7275',
+  'carServices.moreCount': '+{{count}} మరిన్ని',
+  'carServices.category.periodic': 'పీరియాడిక్ సర్వీస్',
+  'carServices.category.ac': 'ఏసీ సర్వీస్',
+  'carServices.category.diagnostics': 'కార్ స్కాన్',
+  'carServices.category.wheel': 'వీల్ కేర్',
+  'carServices.category.interior': 'ఇంటీరియర్ క్లీన్',
+  'carServices.category.engine': 'ఇంజిన్ కేర్',
+  'carServices.step.pickup.title': 'పిక్-అప్',
+  'carServices.step.pickup.detail': 'మీ స్థానం నుండి మీ కారును మేమే తీసుకువస్తాం',
+  'carServices.step.service.title': 'సర్వీస్',
+  'carServices.step.service.detail': 'నిపుణ మెకానిక్స్ మీ కారును సర్వీస్ చేస్తారు',
+  'carServices.step.drop.title': 'డ్రాప్',
+  'carServices.step.drop.detail': 'మీ కారును మళ్లీ మీకే డెలివర్ చేస్తాం',
+  'carServices.faq.0.q': 'నా కారును ఎంత తరచుగా సర్వీస్ చేయించుకోవాలి?',
+  'carServices.faq.0.a':
+    'సాధారణంగా ప్రతి 10 నెలలకు లేదా ప్రతి 10,000 కి.మీ.కు సర్వీస్ చేయించుకోండి, ఏది ముందు వస్తే అది.',
+  'carServices.faq.1.q': 'సర్వీస్‌లో ఏమి ఉంటుంది?',
+  'carServices.faq.1.a':
+    'మా సర్వీస్‌లో ఆయిల్ & ఫిల్టర్ మార్పు, ఫ్లూయిడ్ టాప్-అప్, బ్రేక్ మెయింటెనెన్స్, వాషింగ్ మరియు సంపూర్ణ కార్ హెల్త్ స్కానింగ్ ఉంటాయి.',
+  'carServices.faq.2.q': 'మీరు పికప్ మరియు డ్రాప్ అందిస్తారా?',
+  'carServices.faq.2.a':
+    'అవును! మీ సౌకర్యం కోసం మేము ఉచిత పికప్ మరియు డ్రాప్ సేవ అందిస్తాం.',
+  'carServices.services.diagnostics.title': 'కార్ డయాగ్నోస్టిక్స్',
+  'carServices.services.diagnostics.description':
+    'ఇంజిన్, ఎలక్ట్రానిక్స్, బ్యాటరీ, ABS తదితర వ్యవస్థల సమస్యలను కనుగొనడానికి అధునాతన స్కానింగ్.',
+  'carServices.services.diagnostics.bullets':
+    'అధునాతన డయాగ్నోస్టిక్ స్కానింగ్|||ఇంజిన్ డయాగ్నోస్టిక్స్|||ఎలక్ట్రానిక్స్ సిస్టమ్ తనిఖీ|||బ్యాటరీ ఆరోగ్య విశ్లేషణ|||ABS సిస్టమ్ పరిశీలన|||సంపూర్ణ కార్ హెల్త్ స్కానింగ్',
+  'carServices.services.engine.title': 'ఇంజిన్ మెయింటెనెన్స్ & రిపేర్స్',
+  'carServices.services.engine.description':
+    'నియమిత సంరక్షణతో మీ ఇంజిన్ అత్యుత్తమ పనితీరులో నడుస్తుంది.',
+  'carServices.services.engine.bullets':
+    'ఇంజిన్ ఆయిల్ & ఫిల్టర్ మార్పు|||ఎయిర్ ఫిల్టర్ శుభ్రపరచడం|||ఫ్యూయల్ ఫిల్టర్ శుభ్రపరచడం|||స్పార్క్ ప్లగ్ తనిఖీ|||కూలింగ్ సిస్టమ్ చెక్',
+  'carServices.services.ac.title': 'కార్ AC సర్వీసింగ్',
+  'carServices.services.ac.description':
+    'అన్ని వాతావరణాల్లో నమ్మకమైన పనితీరు కోసం పూర్తి AC సర్వీసింగ్.',
+  'carServices.services.ac.bullets':
+    'రెఫ్రిజిరెంట్ రీఫిల్|||కంప్రెసర్ చెక్|||బ్లోవర్ చెక్|||కేబిన్ ఫిల్టర్ క్లీనింగ్|||AC సిస్టమ్ డయాగ్నోస్టిక్స్',
+  'carServices.services.interior.title': 'ఇంటీరియర్ డీప్ క్లీనింగ్',
+  'carServices.services.interior.description':
+    'మీ కార్ లోపలిని తాజాగా మరియు పరిశుభ్రంగా ఉంచేందుకు లోతైన శుభ్రపరచడం.',
+  'carServices.services.interior.bullets':
+    'అప్‌హోల్స్టరీ వాక్యూమింగ్|||డ్యాష్‌బోర్డ్ శానిటైజేషన్|||ఫ్లోర్ మ్యాట్ వాషింగ్|||పూర్తి ఇంటీరియర్ శానిటైజేషన్|||దుర్వాసన తొలగింపు',
+  'carServices.services.wheel.title': 'వీల్ అలైన్‌మెంట్ & బ్యాలెన్సింగ్',
+  'carServices.services.wheel.description':
+    'మంచి స్థిరత్వం మరియు ఇంధన సామర్థ్యం కోసం ఫ్యాక్టరీ-స్పెక్ అలైన్‌మెంట్.',
+  'carServices.services.wheel.bullets':
+    'ఫ్యాక్టరీ-స్పెక్ అలైన్‌మెంట్|||డిజిటల్ టైర్ బ్యాలెన్సింగ్|||సస్పెన్షన్ తనిఖీ|||టైర్ రొటేషన్|||టైర్ ప్రెషర్ చెక్',
+  'carServices.services.periodic.title': 'పీరియాడిక్ సర్వీసులు',
+  'carServices.services.periodic.description':
+    'OEM సిఫార్సు చేసిన షెడ్యూల్స్ ప్రకారం అసలైన పార్ట్స్‌తో సర్వీసింగ్.',
+  'carServices.services.periodic.bullets':
+    'ఇంజిన్ ఆయిల్ మార్పు|||ఆయిల్ ఫిల్టర్ మార్పు|||ఎయిర్ ఫిల్టర్ మార్పు|||25-పాయింట్ సేఫ్టీ చెక్|||బ్యాటరీ హెల్త్ చెక్',
 
   ...toastTe,
 };
@@ -2732,6 +2941,76 @@ const ta: Record<string, string> = {
   'sellerDashboard.mobile.messagesReplied': 'செய்திகளுக்கு பதிலளித்தல்',
   'sellerDashboard.mobile.salesHistory': 'விற்பனை வரலாறு',
   'sellerDashboard.mobile.settings': 'அமைப்புகள்',
+
+  'carServices.badge': 'தொழில்முறை சேவை',
+  'carServices.heroTitle': 'உங்கள் வீட்டுத் தளபாடத்தில் கார் சேவை',
+  'carServices.heroSubtitle':
+    'நிபுணர் மெக்கானிக்குகள், அசல் பாகங்கள், வெளிப்படையான விலை. உங்கள் காரை நிபுணர்களிடம் சேவை செய்யுங்கள்.',
+  'carServices.bookNow': 'இப்போதே சேவையை பதிவு செய்யுங்கள்',
+  'carServices.viewServices': 'சேவைகளை பார்க்கவும்',
+  'carServices.workshops': '200+ பணிமனைகள்',
+  'carServices.pickupDrop': 'இலவச பிக்-அப் & டிராப்',
+  'carServices.warranty': '3 மாத வாரண்டி',
+  'carServices.chooseService': 'ஒரு சேவையைத் தேர்வுசெய்க',
+  'carServices.allServices': 'அனைத்து சேவைகள்',
+  'carServices.howItWorks': 'இது எப்படி செயல்படுகிறது',
+  'carServices.commonQuestions': 'பொதுவான கேள்விகள்',
+  'carServices.needHelp': 'உதவி வேண்டுமா?',
+  'carServices.needHelpSubtitle':
+    'எங்கள் சேவை ஆலோசகரிடம் பேசி நிமிடங்களில் ஸ்லாட் பெறுங்கள்',
+  'carServices.callCta': 'அழைக்கவும் 727-727-7275',
+  'carServices.moreCount': '+{{count}} மேலும்',
+  'carServices.category.periodic': 'காலந்தோறும் சேவை',
+  'carServices.category.ac': 'ஏசி சேவை',
+  'carServices.category.diagnostics': 'கார் ஸ்கேன்',
+  'carServices.category.wheel': 'சக்கர பராமரிப்பு',
+  'carServices.category.interior': 'உள் சுத்தம்',
+  'carServices.category.engine': 'எஞ்சின் பராமரிப்பு',
+  'carServices.step.pickup.title': 'பிக்-அப்',
+  'carServices.step.pickup.detail': 'உங்கள் இடத்திலிருந்து காரை எடுத்து செல்கிறோம்',
+  'carServices.step.service.title': 'சேவை',
+  'carServices.step.service.detail': 'நிபுணர் மெக்கானிக்குகள் உங்கள் காரை சேவை செய்கிறார்கள்',
+  'carServices.step.drop.title': 'டிராப்',
+  'carServices.step.drop.detail': 'உங்கள் காரை மீண்டும் உங்களிடம் கொண்டு வருகிறோம்',
+  'carServices.faq.0.q': 'எவ்வளவு அடிக்கடி என் காரை சேவை செய்ய வேண்டும்?',
+  'carServices.faq.0.a':
+    'பொதுவாக ஒவ்வொரு 10 மாதங்களுக்கும் அல்லது ஒவ்வொரு 10,000 கிமீக்கும் சேவை செய்யுங்கள், எது முன் வருகிறதோ அது.',
+  'carServices.faq.1.q': 'சேவையில் என்ன உள்ளடக்கம்?',
+  'carServices.faq.1.a':
+    'எங்கள் சேவையில் எண்ணெய் & ஃபில்டர் மாற்றம், திரவ நிரப்புகள், பிரேக் பராமரிப்பு, கழுவுதல் மற்றும் முழு கார் ஹெல்த் ஸ்கேனிங் அடங்கும்.',
+  'carServices.faq.2.q': 'பிக்-அப் மற்றும் டிராப் வழங்குகிறீர்களா?',
+  'carServices.faq.2.a':
+    'ஆம்! உங்கள் வசதிக்காக இலவச பிக்-அப் மற்றும் டிராப் சேவையை வழங்குகிறோம்.',
+  'carServices.services.diagnostics.title': 'கார் டையக்னோஸ்டிக்ஸ்',
+  'carServices.services.diagnostics.description':
+    'இன்ஜின், எலக்ட்ரானிக்ஸ், பேட்டரி, ABS மற்றும் பிற அமைப்புகளில் உள்ள பிரச்சினைகளை கண்டறிய மேம்பட்ட ஸ்கேனிங்.',
+  'carServices.services.diagnostics.bullets':
+    'மேம்பட்ட டையக்னோஸ்டிக் ஸ்கேனிங்|||இன்ஜின் டையக்னோஸ்டிக்ஸ்|||எலக்ட்ரானிக்ஸ் அமைப்பு சோதனை|||பேட்டரி நிலை பகுப்பாய்வு|||ABS அமைப்பு ஆய்வு|||முழு கார் ஹெல்த் ஸ்கேனிங்',
+  'carServices.services.engine.title': 'இன்ஜின் பராமரிப்பு & பழுது',
+  'carServices.services.engine.description':
+    'தொடர்ந்த பராமரிப்பால் உங்கள் இன்ஜின் சிறந்த செயல்திறனில் இயங்கும்.',
+  'carServices.services.engine.bullets':
+    'இன்ஜின் ஆயில் & ஃபில்டர் மாற்றம்|||ஏர் ஃபில்டர் சுத்தம்|||எரிபொருள் ஃபில்டர் சுத்தம்|||ஸ்பார்க் பிளக் பரிசோதனை|||குளிர்ப்பு அமைப்பு சோதனை',
+  'carServices.services.ac.title': 'கார் AC சேவை',
+  'carServices.services.ac.description':
+    'அனைத்து காலநிலையிலும் நம்பகமான செயல்திறனுக்கான முழுமையான AC சேவை.',
+  'carServices.services.ac.bullets':
+    'ரெப்ரிஜரண்ட் நிரப்பு|||கம்பிரசர் சோதனை|||ப்ளோயர் சோதனை|||கேபின் ஃபில்டர் சுத்தம்|||AC அமைப்பு டையக்னோஸ்டிக்ஸ்',
+  'carServices.services.interior.title': 'உள் பகுதி டீப் கிளீனிங்',
+  'carServices.services.interior.description':
+    'கார் உள்பகுதியை புத்துணர்ச்சியுடனும் சுத்தமாகவும் வைத்திருக்க ஆழமான சுத்தம்.',
+  'carServices.services.interior.bullets':
+    'அப்ஹோல்ஸ்டரி வாக்யூமிங்|||டாஷ்போர்டு சானிடைசேஷன்|||தரை மேட் கழுவல்|||முழு உள் பகுதி சானிடைசேஷன்|||துர்நாற்ற நீக்கம்',
+  'carServices.services.wheel.title': 'சக்கர ஒழுங்குமுறை & சமநிலை',
+  'carServices.services.wheel.description':
+    'சிறந்த நிலைத்தன்மை மற்றும் எரிபொருள் திறனுக்கான தொழிற்சாலை தர ஒழுங்குமுறை.',
+  'carServices.services.wheel.bullets':
+    'தொழிற்சாலை தர ஒழுங்குமுறை|||டிஜிட்டல் டயர் சமநிலை|||சஸ்பென்ஷன் ஆய்வு|||டயர் ரோட்டேஷன்|||டயர் காற்றழுத்த சோதனை',
+  'carServices.services.periodic.title': 'காலந்தோறும் சேவைகள்',
+  'carServices.services.periodic.description':
+    'OEM பரிந்துரைத்த அட்டவணைப்படி அசல் பாகங்களுடன் சேவை.',
+  'carServices.services.periodic.bullets':
+    'இன்ஜின் ஆயில் மாற்றம்|||ஆயில் ஃபில்டர் மாற்றம்|||ஏர் ஃபில்டர் மாற்றம்|||25-பாயிண்ட் பாதுகாப்பு சோதனை|||பேட்டரி நிலை சோதனை',
 
   ...toastTa,
 };

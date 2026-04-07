@@ -63,6 +63,16 @@ export function getOAuthRedirectUrl(): string | undefined {
   return `${origin}${pathname}${search || ''}`;
 }
 
+/**
+ * Build a hash-based redirect URL for email auth links.
+ * Using `/#/...` works on static hosting and mobile WebViews.
+ */
+function getEmailAuthRedirectUrl(path: string): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${window.location.origin}/#${normalizedPath}`;
+}
+
 function mapGoogleProviderError(message: string): string | undefined {
   const m = message.toLowerCase();
   if (
@@ -163,7 +173,10 @@ export const signUpWithEmail = async (
     const { data, error } = await supabase.auth.signUp({
       email: email.toLowerCase().trim(),
       password,
-      options: { data: metadata || {} },
+      options: {
+        data: metadata || {},
+        emailRedirectTo: getEmailAuthRedirectUrl('/login'),
+      },
     });
 
     if (error) {
@@ -285,10 +298,7 @@ export const resetPassword = async (
     const { error } = await supabase.auth.resetPasswordForEmail(
       email.toLowerCase().trim(),
       {
-        redirectTo:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/reset-password`
-            : undefined,
+        redirectTo: getEmailAuthRedirectUrl('/forgot-password'),
       },
     );
 
