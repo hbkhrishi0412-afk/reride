@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
 
 type ServicePackage = {
@@ -90,6 +90,10 @@ type Props = {
     onUseMyLocation?: () => void;
     isLocating?: boolean;
     locationError?: string;
+    /** When true, only the customer tracking UI is rendered (used inside Buyer Dashboard). */
+    embedTrackOnly?: boolean;
+    /** Initial tab when the component mounts (defaults to booking). */
+    initialTab?: 'book' | 'track';
 };
 
 const mockServicePackages: ServicePackage[] = [
@@ -165,8 +169,10 @@ const ServiceCart: React.FC<Props> = ({
     onUseMyLocation,
     isLocating = false,
     locationError,
+    embedTrackOnly = false,
+    initialTab = 'book',
 }) => {
-    const [activeTab, setActiveTab] = useState<'book' | 'track'>('book');
+    const [activeTab, setActiveTab] = useState<'book' | 'track'>(initialTab);
     const [customerRequests, setCustomerRequests] = useState<CustomerServiceRequest[]>([]);
     const [providerNameById, setProviderNameById] = useState<Record<string, string>>({});
     const [requestsLoading, setRequestsLoading] = useState(false);
@@ -179,6 +185,10 @@ const ServiceCart: React.FC<Props> = ({
     const [selectedProviders, setSelectedProviders] = useState<string[]>(serviceProviders[0]?.id ? [serviceProviders[0].id] : []);
     const [providerServices, setProviderServices] = useState<Record<string, ServiceProvider['services']>>({});
     const [availableServicePackages, setAvailableServicePackages] = useState<ServicePackage[]>(servicePackages);
+
+    useLayoutEffect(() => {
+        setActiveTab(embedTrackOnly ? 'track' : initialTab);
+    }, [embedTrackOnly, initialTab]);
 
     useEffect(() => {
         const fetchProviderServices = async () => {
@@ -718,6 +728,124 @@ const ServiceCart: React.FC<Props> = ({
         setCarFormOpen(false);
     };
 
+    const trackSection = (
+        <div className={embedTrackOnly ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6'}>
+            <section
+                className={
+                    embedTrackOnly
+                        ? 'bg-transparent p-0'
+                        : 'bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6'
+                }
+            >
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-black text-gray-900 dark:text-white">My Service Requests</h2>
+                    <button
+                        type="button"
+                        onClick={loadCustomerRequests}
+                        disabled={requestsLoading || !isLoggedIn}
+                        className="px-3 py-2 rounded-lg text-sm border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        Refresh
+                    </button>
+                </div>
+                {!isLoggedIn && (
+                    <div className="text-sm text-gray-600 dark:text-gray-300">Login to see your request progress.</div>
+                )}
+                {isLoggedIn && requestsLoading && (
+                    <div className="text-sm text-gray-600 dark:text-gray-300">Loading requests...</div>
+                )}
+                {isLoggedIn && requestsError && (
+                    <div className="text-sm text-red-600">{requestsError}</div>
+                )}
+                {isLoggedIn && !requestsLoading && !requestsError && (
+                    <div className="space-y-3">
+                        {customerRequests.map((req) => (
+                            <div key={req.id} className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <div className="font-bold text-gray-900 dark:text-white">{req.serviceType || req.title || 'Service request'}</div>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                                            {req.city || 'City not provided'} {req.scheduledAt ? `• Slot: ${req.scheduledAt}` : ''}
+                                        </div>
+                                    </div>
+                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${REQUEST_STATUS_STYLES[req.status] || REQUEST_STATUS_STYLES.open}`}>
+                                        {req.status.replace('_', ' ')}
+                                    </span>
+                                </div>
+                                {req.providerId && (
+                                    <div className="mt-2 text-xs text-blue-700 dark:text-blue-400">
+                                        Assigned provider: {providerNameById[req.providerId] || req.providerId}
+                                    </div>
+                                )}
+                                <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+                                    <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Progress Timeline</div>
+                                    <div className="mb-3">
+                                        <div className="flex items-center gap-2">
+                                            {TRACKING_STEPS.map((step, idx) => {
+                                                const stepState = getStepState(req, step.key);
+                                                return (
+                                                    <React.Fragment key={step.key}>
+                                                        <div className="flex flex-col items-center min-w-[56px]">
+                                                            <div
+                                                                className={`h-6 w-6 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                                                                    stepState === 'done'
+                                                                        ? 'bg-emerald-500 text-white'
+                                                                        : stepState === 'cancelled'
+                                                                            ? 'bg-gray-300 text-gray-600'
+                                                                            : 'bg-gray-200 text-gray-500'
+                                                                }`}
+                                                            >
+                                                                {idx + 1}
+                                                            </div>
+                                                            <span className="mt-1 text-[10px] text-gray-600 dark:text-gray-400 text-center">{step.label}</span>
+                                                        </div>
+                                                        {idx < TRACKING_STEPS.length - 1 && (
+                                                            <div
+                                                                className={`h-1 flex-1 rounded ${
+                                                                    getStepState(req, TRACKING_STEPS[idx + 1].key) === 'done'
+                                                                        ? 'bg-emerald-400'
+                                                                        : req.status === 'cancelled'
+                                                                            ? 'bg-gray-300'
+                                                                            : 'bg-gray-200'
+                                                                }`}
+                                                            />
+                                                        )}
+                                                    </React.Fragment>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-gray-600 dark:text-gray-400">
+                                        <div>Raised: {req.createdAt || '-'}</div>
+                                        <div>Accepted: {req.claimedAt || '-'}</div>
+                                        <div>In progress: {req.startedAt || '-'}</div>
+                                        <div>Completed: {req.completedAt || '-'}</div>
+                                    </div>
+                                </div>
+                                {req.notes && (
+                                    <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                                        Note: {req.notes}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {customerRequests.length === 0 && (
+                            <div className="text-sm text-gray-600 dark:text-gray-300">No service requests yet.</div>
+                        )}
+                    </div>
+                )}
+            </section>
+        </div>
+    );
+
+    if (embedTrackOnly) {
+        return (
+            <div className="min-h-0">
+                {trackSection}
+            </div>
+        );
+    }
+
     return (
         <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6">
@@ -745,107 +873,7 @@ const ServiceCart: React.FC<Props> = ({
                 </div>
             </div>
             {activeTab === 'track' ? (
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-black text-gray-900 dark:text-white">My Service Requests</h2>
-                            <button
-                                type="button"
-                                onClick={loadCustomerRequests}
-                                disabled={requestsLoading || !isLoggedIn}
-                                className="px-3 py-2 rounded-lg text-sm border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:opacity-50"
-                            >
-                                Refresh
-                            </button>
-                        </div>
-                        {!isLoggedIn && (
-                            <div className="text-sm text-gray-600 dark:text-gray-300">Login to see your request progress.</div>
-                        )}
-                        {isLoggedIn && requestsLoading && (
-                            <div className="text-sm text-gray-600 dark:text-gray-300">Loading requests...</div>
-                        )}
-                        {isLoggedIn && requestsError && (
-                            <div className="text-sm text-red-600">{requestsError}</div>
-                        )}
-                        {isLoggedIn && !requestsLoading && !requestsError && (
-                            <div className="space-y-3">
-                                {customerRequests.map((req) => (
-                                    <div key={req.id} className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <div>
-                                                <div className="font-bold text-gray-900 dark:text-white">{req.serviceType || req.title || 'Service request'}</div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                    {req.city || 'City not provided'} {req.scheduledAt ? `• Slot: ${req.scheduledAt}` : ''}
-                                                </div>
-                                            </div>
-                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${REQUEST_STATUS_STYLES[req.status] || REQUEST_STATUS_STYLES.open}`}>
-                                                {req.status.replace('_', ' ')}
-                                            </span>
-                                        </div>
-                                        {req.providerId && (
-                                            <div className="mt-2 text-xs text-blue-700 dark:text-blue-400">
-                                                Assigned provider: {providerNameById[req.providerId] || req.providerId}
-                                            </div>
-                                        )}
-                                        <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
-                                            <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Progress Timeline</div>
-                                            <div className="mb-3">
-                                                <div className="flex items-center gap-2">
-                                                    {TRACKING_STEPS.map((step, idx) => {
-                                                        const stepState = getStepState(req, step.key);
-                                                        return (
-                                                            <React.Fragment key={step.key}>
-                                                                <div className="flex flex-col items-center min-w-[56px]">
-                                                                    <div
-                                                                        className={`h-6 w-6 rounded-full text-[10px] font-bold flex items-center justify-center ${
-                                                                            stepState === 'done'
-                                                                                ? 'bg-emerald-500 text-white'
-                                                                                : stepState === 'cancelled'
-                                                                                    ? 'bg-gray-300 text-gray-600'
-                                                                                    : 'bg-gray-200 text-gray-500'
-                                                                        }`}
-                                                                    >
-                                                                        {idx + 1}
-                                                                    </div>
-                                                                    <span className="mt-1 text-[10px] text-gray-600 dark:text-gray-400 text-center">{step.label}</span>
-                                                                </div>
-                                                                {idx < TRACKING_STEPS.length - 1 && (
-                                                                    <div
-                                                                        className={`h-1 flex-1 rounded ${
-                                                                            getStepState(req, TRACKING_STEPS[idx + 1].key) === 'done'
-                                                                                ? 'bg-emerald-400'
-                                                                                : req.status === 'cancelled'
-                                                                                    ? 'bg-gray-300'
-                                                                                    : 'bg-gray-200'
-                                                                        }`}
-                                                                    />
-                                                                )}
-                                                            </React.Fragment>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-gray-600 dark:text-gray-400">
-                                                <div>Raised: {req.createdAt || '-'}</div>
-                                                <div>Accepted: {req.claimedAt || '-'}</div>
-                                                <div>In progress: {req.startedAt || '-'}</div>
-                                                <div>Completed: {req.completedAt || '-'}</div>
-                                            </div>
-                                        </div>
-                                        {req.notes && (
-                                            <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                                                Note: {req.notes}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                                {customerRequests.length === 0 && (
-                                    <div className="text-sm text-gray-600 dark:text-gray-300">No service requests yet.</div>
-                                )}
-                            </div>
-                        )}
-                    </section>
-                </div>
+                trackSection
             ) : (
             <>
             {/* Header Section */}

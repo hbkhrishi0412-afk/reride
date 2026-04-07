@@ -1409,10 +1409,31 @@ app.post('/api/service-providers/register', async (req, res) => {
     const emailKey = devEmailToKey(email);
     const { data: existingById } = await supabase.from('users').select('id').eq('id', emailKey).maybeSingle();
     const { data: existingByEmail } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
-    if (existingById || existingByEmail) {
+    const { data: authUsersPage, error: authUsersErr } = await supabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (authUsersErr) {
+      return res.status(500).json({ error: `Failed to verify existing auth users: ${authUsersErr.message}` });
+    }
+    const hasAuthUser = (authUsersPage?.users || []).some(
+      (u) => String(u.email || '').toLowerCase().trim() === email,
+    );
+
+    if ((existingById || existingByEmail) && hasAuthUser) {
       return res.status(409).json({
         error: 'An account with this email already exists. Please sign in or use Forgot password.',
       });
+    }
+    if ((existingById || existingByEmail) && !hasAuthUser) {
+      // Stale users row without auth.users counterpart can break auth trigger inserts.
+      const { error: staleDeleteError } = await supabase
+        .from('users')
+        .delete()
+        .or(`id.eq.${emailKey},email.eq.${email}`);
+      if (staleDeleteError) {
+        return res.status(500).json({ error: `Failed to clean stale users row: ${staleDeleteError.message}` });
+      }
     }
 
     const { data: spRow } = await supabase.from('service_providers').select('id').eq('email', email).maybeSingle();

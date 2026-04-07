@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User, Vehicle, Conversation } from '../types';
 import { View as ViewEnum } from '../types';
@@ -6,6 +6,8 @@ import { getFirstValidImage } from '../utils/imageUtils';
 import * as buyerService from '../services/buyerService';
 import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
+
+const ServiceCart = lazy(() => import('./ServiceCart'));
 
 interface MobileBuyerDashboardProps {
   currentUser: User;
@@ -43,7 +45,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
   onLogout
 }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'searches' | 'activity' | 'serviceTrack'>('overview');
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<number[]>([]);
   const savedSearches = useMemo(
     () => buyerService.getSavedSearches(currentUser?.email || ''),
@@ -96,6 +98,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         { id: 'overview' as const, label: t('buyerDashboard.mobile.tab.overview') },
         { id: 'searches' as const, label: t('buyerDashboard.mobile.tab.searches') },
         { id: 'activity' as const, label: t('buyerDashboard.mobile.tab.activity') },
+        { id: 'serviceTrack' as const, label: t('buyerDashboard.mobile.tab.trackRequests') },
       ],
     [t]
   );
@@ -419,6 +422,29 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'serviceTrack' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900 mb-1">{t('buyerDashboard.trackRequests.title')}</h2>
+              <p className="text-sm text-gray-600 mb-4">{t('buyerDashboard.trackRequests.subtitle')}</p>
+              <button
+                type="button"
+                onClick={() => onNavigate(ViewEnum.SERVICE_CART)}
+                className="w-full py-3 rounded-xl bg-orange-500 text-white font-semibold active:scale-95 transition-transform mb-4"
+              >
+                {t('buyerDashboard.trackRequests.bookService')}
+              </button>
+              <Suspense
+                fallback={
+                  <div className="text-sm text-gray-600 py-6 text-center">{t('buyerDashboard.trackRequests.loading')}</div>
+                }
+              >
+                <ServiceCart isLoggedIn embedTrackOnly />
+              </Suspense>
+            </div>
           </div>
         )}
       </div>
