@@ -88,3 +88,7 @@ local.properties
 app/build/
 /build
 .kotlin/
+
+# Playwright and e2e output artifacts
+test-results/
+playwright-report/
