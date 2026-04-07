@@ -59,7 +59,13 @@ export function getOAuthRedirectUrl(): string | undefined {
   if (typeof window === 'undefined') return undefined;
   const native = getNativeOAuthRedirectUrl();
   if (native) return native;
-  const { origin, pathname, search } = window.location;
+  const fallbackOrigin =
+    (import.meta as ImportMeta).env?.VITE_APP_URL?.trim() || 'https://www.reride.co.in';
+  const currentOrigin = window.location.origin;
+  const isLocalOrigin =
+    currentOrigin.includes('localhost') || currentOrigin.includes('127.0.0.1');
+  const origin = isLocalOrigin ? fallbackOrigin : currentOrigin;
+  const { pathname, search } = window.location;
   return `${origin}${pathname}${search || ''}`;
 }
 
@@ -69,8 +75,14 @@ export function getOAuthRedirectUrl(): string | undefined {
  */
 function getEmailAuthRedirectUrl(path: string): string | undefined {
   if (typeof window === 'undefined') return undefined;
+  const fallbackOrigin =
+    (import.meta as ImportMeta).env?.VITE_APP_URL?.trim() || 'https://www.reride.co.in';
+  const currentOrigin = window.location.origin;
+  const isLocalOrigin =
+    currentOrigin.includes('localhost') || currentOrigin.includes('127.0.0.1');
+  const origin = isLocalOrigin ? fallbackOrigin : currentOrigin;
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${window.location.origin}/#${normalizedPath}`;
+  return `${origin}/#${normalizedPath}`;
 }
 
 function mapGoogleProviderError(message: string): string | undefined {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithEmail, signUpWithEmail, resetPassword } from '../services/supabase-auth-service';
+import { signInWithEmail, resetPassword } from '../services/supabase-auth-service';
 import { View as ViewEnum } from '../types';
 
 interface CarServiceLoginProps {
@@ -115,54 +115,9 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
       });
 
       if (registerResp.status === 404) {
-        // Older deployments / local mock API without this route — fall back to client sign-up
-        const result = await signUpWithEmail(email, password, {
-          name,
-          mobile: phone,
-        });
-
-        if (!result.success) {
-          throw new Error(result.reason || 'Signup failed');
-        }
-        if (!result.user) {
-          throw new Error('Failed to create user account');
-        }
-        if (!result.session) {
-          setError('Account created! Please check your email to confirm your account before signing in.');
-          setLoading(false);
-          return;
-        }
-
-        const resp = await fetch('/api/service-providers', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${result.session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name,
-            email,
-            phone,
-            city,
-            workshops: workshopList,
-            skills: skillList,
-            availability,
-          }),
-        });
-
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          const errorMsg = data.error || 'Failed to create provider profile';
-          if (resp.status === 401 || resp.status === 403) {
-            throw new Error('Authentication failed. Please try logging in after confirming your email.');
-          }
-          throw new Error(errorMsg);
-        }
-
-        const provider = await resp.json();
-        onLoginSuccess(provider);
-        onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
-        return;
+        throw new Error(
+          'Registration endpoint is not available yet. Please refresh after deployment or contact support.',
+        );
       }
 
       if (!registerResp.ok) {
