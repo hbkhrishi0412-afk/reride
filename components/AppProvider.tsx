@@ -1084,6 +1084,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [addToast, t]);
 
+  const syncUserCachesByEmail = useCallback((email: string, updates: Partial<User>) => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const userCacheKeys = ['reRideUsers', 'reRideUsers_prod'];
+    let eventPayloadUsers: User[] | null = null;
+
+    for (const cacheKey of userCacheKeys) {
+      try {
+        const cachedUsersJson = localStorage.getItem(cacheKey);
+        if (!cachedUsersJson) continue;
+        const cachedUsers = JSON.parse(cachedUsersJson);
+        if (!Array.isArray(cachedUsers)) continue;
+
+        const updatedCachedUsers = cachedUsers.map((user: User) => {
+          if (!user?.email || user.email.toLowerCase().trim() !== normalizedEmail) return user;
+          return { ...user, ...updates };
+        });
+
+        localStorage.setItem(cacheKey, JSON.stringify(updatedCachedUsers));
+        if (cacheKey === 'reRideUsers_prod' || !eventPayloadUsers) {
+          eventPayloadUsers = updatedCachedUsers;
+        }
+      } catch (error) {
+        console.warn(`⚠️ Failed to sync ${cacheKey}:`, error);
+      }
+    }
+
+    if (eventPayloadUsers && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('usersCacheUpdated', { detail: { users: eventPayloadUsers } }));
+      window.dispatchEvent(new Event('storage'));
+    }
+  }, []);
+
+  const syncAllUserCaches = useCallback((allUsers: User[]) => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem('reRideUsers', JSON.stringify(allUsers));
+      localStorage.setItem('reRideUsers_prod', JSON.stringify(allUsers));
+      if (window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('usersCacheUpdated', { detail: { users: allUsers } }));
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to sync full users caches:', error);
+    }
+  }, []);
+
+  const syncVehicleCachesById = useCallback((id: number, updater: (vehicle: Vehicle) => Vehicle | null) => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+    const vehicleCacheKeys = ['reRideVehicles', 'reRideVehicles_prod'];
+
+    for (const cacheKey of vehicleCacheKeys) {
+      try {
+        const cachedVehiclesJson = localStorage.getItem(cacheKey);
+        if (!cachedVehiclesJson) continue;
+        const cachedVehicles = JSON.parse(cachedVehiclesJson);
+        if (!Array.isArray(cachedVehicles)) continue;
+
+        const updatedVehicles = cachedVehicles
+          .map((vehicle: Vehicle) => {
+            if (!vehicle || vehicle.id !== id) return vehicle;
+            return updater(vehicle);
+          })
+          .filter(Boolean);
+
+        localStorage.setItem(cacheKey, JSON.stringify(updatedVehicles));
+      } catch (error) {
+        console.warn(`⚠️ Failed to sync ${cacheKey}:`, error);
+      }
+    }
+
+    try {
+      const selectedVehicleJson = sessionStorage.getItem('selectedVehicle');
+      if (selectedVehicleJson) {
+        const selectedVehicle = JSON.parse(selectedVehicleJson);
+        if (selectedVehicle?.id === id) {
+          const updatedSelected = updater(selectedVehicle);
+          if (updatedSelected) {
+            sessionStorage.setItem('selectedVehicle', JSON.stringify(updatedSelected));
+          } else {
+            sessionStorage.removeItem('selectedVehicle');
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to sync selectedVehicle cache:', error);
+    }
+  }, []);
+
   const updateUserLocation = useCallback((location: string) => {
     const nextLocation = (location ?? '').trim();
     if (nextLocation.length === 0) {
@@ -3800,6 +3890,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setVehicles(prev =>
         Array.isArray(prev) ? prev.map(vehicle => (vehicle && vehicle.id === id ? result : vehicle)) : []
       );
+      syncVehicleCachesById(id, () => result);
 
       const wasFeatured = Boolean(vehicleToUpdate.isFeatured);
       const isNowFeatured = Boolean(result?.isFeatured);
@@ -3838,7 +3929,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     // PERFORMANCE: Setters (setVehicles, setAuditLog) are stable and don't need to be in deps
     // But including them is harmless and makes the intent clear
-  }, [vehicles, addToast, currentUser, t]);
+  }, [vehicles, addToast, currentUser, t, syncVehicleCachesById]);
 
   const contextValue: AppContextType = useMemo(() => ({
     // State
@@ -3978,6 +4069,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return user;
         }) : []
       );
+      // Optimistically sync user caches so admin edits reflect immediately.
+      if (Object.keys(updateFields).length > 0) {
+        syncUserCachesByEmail(email, updateFields);
+      }
       
       // Also update in API - pass both updates and nulls
       try {
@@ -4012,12 +4107,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Update the users state with fresh data from API
           setUsers(refreshedUsers);
           
-          // Also update localStorage cache
-          if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-            localStorage.setItem('reRideUsers', JSON.stringify(refreshedUsers));
-            // Trigger storage event to notify other components
-            window.dispatchEvent(new Event('storage'));
-          }
+          // Also update all user caches immediately
+          syncAllUserCaches(refreshedUsers);
           
           console.log('✅ Users list refreshed from API after verification update');
         } catch (refreshError) {
@@ -4092,7 +4183,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // User row is already persisted by POST /api/users (register); do not insert again from the
           // browser (anon client would fail RLS or duplicate the row).
           
-          setUsers(prev => [...prev, createdUser]);
+          const nextUsers = [...(Array.isArray(users) ? users : []), createdUser];
+          setUsers(nextUsers);
+          syncAllUserCaches(nextUsers);
           
           // Save to localStorage after Supabase success (dev browser only — not Capacitor localhost)
           const isDevelopment = !isCapacitorNative() &&
@@ -4137,6 +4230,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setUsers(prev => Array.isArray(prev) ? prev.map(user => 
             user && user.email === email ? { ...user, subscriptionPlan: plan } : user
           ) : []);
+          syncUserCachesByEmail(email, { subscriptionPlan: plan });
           
           // Log audit entry for plan update
           const actor = currentUser?.name || currentUser?.email || 'System';
@@ -4164,6 +4258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setUsers(prev => Array.isArray(prev) ? prev.map(user => 
             user && user.email === email ? { ...user, status: newStatus } : user
           ) : []);
+          syncUserCachesByEmail(email, { status: newStatus });
           
           // Log audit entry for user status toggle
           const actor = currentUser?.name || currentUser?.email || 'System';
@@ -4493,6 +4588,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Refresh users list
         const updatedUsers = await dataService.getUsers();
         setUsers(updatedUsers);
+        syncAllUserCaches(updatedUsers);
         
         // Log audit entry for import
         const actor = currentUser?.name || currentUser?.email || 'System';
@@ -4653,6 +4749,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setUsers(prev => Array.isArray(prev) ? prev.map(user => 
         user && user.email === email ? { ...user, isVerified: !user.isVerified } : user
       ) : []);
+      const targetUser = Array.isArray(users) ? users.find(u => u && u.email === email) : undefined;
+      if (targetUser) {
+        syncUserCachesByEmail(email, { isVerified: !targetUser.isVerified });
+      }
       addToast(t('toast.verificationToggled', { email }), 'success');
     },
     onUpdateSupportTicket: async (ticket: SupportTicket) => {
@@ -5308,6 +5408,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               console.error('❌ Failed to update user in localStorage (fallback):', fallbackError);
             }
           }
+
+          // Keep all known users caches in sync immediately.
+          syncUserCachesByEmail(email, safeUpdates);
           
           // Show success message
           if (updates.password) {
@@ -5424,7 +5527,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const entry = logAction(actor, 'Delete User', email, `Deleted user: ${userInfo}`);
       setAuditLog(prev => [entry, ...prev]);
       
-      setUsers(prev => Array.isArray(prev) ? prev.filter(user => user && user.email !== email) : []);
+      const nextUsers = Array.isArray(users) ? users.filter(user => user && user.email !== email) : [];
+      setUsers(nextUsers);
+      syncAllUserCaches(nextUsers);
       addToast(t('toast.userDeletedSuccess'), 'success');
     },
     updateVehicle: async (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => {
@@ -5447,6 +5552,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           // Update local state
           setVehicles(prev => Array.isArray(prev) ? prev.filter(vehicle => vehicle && vehicle.id !== id) : []);
+          syncVehicleCachesById(id, () => null);
           addToast(t('toast.vehicleDeletedSuccess'), 'success');
           console.log('✅ Vehicle deleted via API:', result);
         } else {
@@ -5616,7 +5722,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsCommandPaletteOpen, updateUserLocation, updateSelectedCity, setUsers,
     setPlatformSettings, setAuditLog, setVehicleData, setFaqItems, setSupportTickets,
     setNotifications, addToast, removeToast, navigate, goBack, refreshVehicles, handleLogin, handleLogout,
-    updateVehicleHandler,
+    updateVehicleHandler, syncUserCachesByEmail, syncAllUserCaches, syncVehicleCachesById,
     t,
   ]);
 

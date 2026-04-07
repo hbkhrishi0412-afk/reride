@@ -979,10 +979,10 @@ class DataService {
       // Fetch fresh data in background (don't await)
       this.makeApiRequest<User[] | { users?: User[]; data?: User[]; success?: boolean; reason?: string; diagnostic?: string }>('/users')
         .then(async rawResponse => {
-          // Handle response
+          // Non-admin sessions can legitimately get /users errors; fall back to public sellers
+          // so seller profile metadata (e.g. partnerBanks) still refreshes in the catalog.
           if (rawResponse && typeof rawResponse === 'object' && 'success' in rawResponse && rawResponse.success === false) {
-            console.warn('⚠️ Background user refresh returned error:', rawResponse.reason);
-            return;
+            console.warn('⚠️ Background user refresh returned error; retrying with public sellers:', rawResponse.reason);
           }
 
           const users = await this.resolveProductionUsersFromApi(rawResponse);
