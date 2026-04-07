@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { authenticatedFetch } from '../utils/authenticatedFetch';
 
 type Provider = {
   id: string;
@@ -26,6 +27,11 @@ type ProviderService = {
 type ServiceRequest = {
   id: string;
   providerId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  claimedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
   candidateProviderIds?: string[];
   title: string;
   serviceType?: string;
@@ -50,6 +56,37 @@ const statusColors: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-700 border border-gray-200',
 };
 
+const TRACKING_STEPS = [
+  { key: 'raised', label: 'Raised' },
+  { key: 'accepted', label: 'Accepted' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'completed', label: 'Completed' },
+] as const;
+
+const STEP_TO_STATUS: Partial<Record<(typeof TRACKING_STEPS)[number]['key'], ServiceRequest['status']>> = {
+  accepted: 'accepted',
+  in_progress: 'in_progress',
+  completed: 'completed',
+};
+
+const getStepState = (status: string, stepKey: (typeof TRACKING_STEPS)[number]['key']) => {
+  if (status === 'cancelled') {
+    return stepKey === 'raised' ? 'done' : 'cancelled';
+  }
+  switch (stepKey) {
+    case 'raised':
+      return 'done';
+    case 'accepted':
+      return status === 'accepted' || status === 'in_progress' || status === 'completed' ? 'done' : 'pending';
+    case 'in_progress':
+      return status === 'in_progress' || status === 'completed' ? 'done' : 'pending';
+    case 'completed':
+      return status === 'completed' ? 'done' : 'pending';
+    default:
+      return 'pending';
+  }
+};
+
 const AdminServiceOps: React.FC = () => {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [services, setServices] = useState<ProviderService[]>([]);
@@ -70,16 +107,22 @@ const AdminServiceOps: React.FC = () => {
     providerId: 'all',
   });
   const [serviceSearch, setServiceSearch] = useState('');
+  const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null);
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [p, s, r] = await Promise.all([
-        fetch('/api/service-providers?scope=all').then((res) => res.json()),
-        fetch('/api/provider-services?scope=public').then((res) => res.json()),
-        fetch('/api/service-requests?scope=all').then((res) => res.json()),
+      const [pResp, sResp, rResp] = await Promise.all([
+        authenticatedFetch('/api/service-providers?scope=all'),
+        authenticatedFetch('/api/provider-services?scope=public'),
+        authenticatedFetch('/api/service-requests?scope=all'),
       ]);
+      if (!pResp.ok || !sResp.ok || !rResp.ok) {
+        throw new Error('Failed to load admin service operations data');
+      }
+      const [p, s, r] = await Promise.all([pResp.json(), sResp.json(), rResp.json()]);
       setProviders(Array.isArray(p) ? p : []);
       setServices(Array.isArray(s) ? s : []);
       setRequests(Array.isArray(r) ? r : []);
@@ -117,10 +160,10 @@ const AdminServiceOps: React.FC = () => {
     
     // Also poll periodically to catch updates from other sources
     const pollInterval = setInterval(() => {
-      if (activeTab === 'services' || activeTab === 'providers') {
+      if (activeTab === 'services' || activeTab === 'providers' || activeTab === 'requests') {
         loadData();
       }
-    }, 30000); // Poll every 30 seconds when on relevant tabs
+    }, 15000); // Poll every 15 seconds for near real-time visibility
     
     return () => {
       window.removeEventListener('serviceProviderServicesUpdated', handleServiceUpdate);
@@ -235,6 +278,7 @@ const AdminServiceOps: React.FC = () => {
               <th className="py-2 pr-4 text-left">Location</th>
               <th className="py-2 pr-4 text-left">Provider(s)</th>
               <th className="py-2 pr-4 text-left">Status</th>
+              <th className="py-2 pr-4 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -276,10 +320,45 @@ const AdminServiceOps: React.FC = () => {
                         {r.status.replace('_', ' ')}
                       </span>
                     </td>
+                    <td className="py-2 pr-4">
+                      <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+                        {(['accepted', 'in_progress', 'completed', 'cancelled'] as const).map((next) => (
+                          <button
+                            key={next}
+                            type="button"
+                            disabled={updatingRequestId === r.id || r.status === next}
+                            onClick={async () => {
+                              try {
+                                setUpdatingRequestId(r.id);
+                                setStatusNotice(null);
+                                const resp = await authenticatedFetch('/api/service-requests', {
+                                  method: 'PATCH',
+                                  body: JSON.stringify({ id: r.id, status: next }),
+                                });
+                                if (!resp.ok) {
+                                  const data = await resp.json().catch(() => ({}));
+                                  throw new Error(data.error || `Failed to set status ${next}`);
+                                }
+                                const updated = await resp.json();
+                                setRequests((prev) => prev.map((req) => (req.id === r.id ? { ...req, ...updated } : req)));
+                                setStatusNotice(`Request ${r.id} updated to ${next.replace('_', ' ')}`);
+                              } catch (e) {
+                                setError(e instanceof Error ? e.message : 'Failed to update request status');
+                              } finally {
+                                setUpdatingRequestId(null);
+                              }
+                            }}
+                            className="px-2 py-1 text-xs rounded border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            {next.replace('_', ' ')}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
                   </tr>
                   {expanded && (
                     <tr className="bg-gray-50 border-b">
-                      <td colSpan={5} className="p-3 text-sm text-gray-700">
+                      <td colSpan={6} className="p-3 text-sm text-gray-700">
                         <div className="grid md:grid-cols-2 gap-3">
                           <div>
                             <div className="font-semibold">Customer</div>
@@ -302,6 +381,80 @@ const AdminServiceOps: React.FC = () => {
                             <div className="font-semibold">Vehicle</div>
                             <div className="text-xs text-gray-700">{r.carDetails || r.vehicle || '-'}</div>
                           </div>
+                          <div>
+                            <div className="font-semibold">Progress Timeline</div>
+                            <div className="my-2">
+                              <div className="flex items-center gap-2">
+                                {TRACKING_STEPS.map((step, idx) => {
+                                  const state = getStepState(r.status, step.key);
+                                  return (
+                                    <React.Fragment key={step.key}>
+                                      <div className="flex flex-col items-center min-w-[56px]">
+                                        <button
+                                          type="button"
+                                          disabled={!STEP_TO_STATUS[step.key] || updatingRequestId === r.id}
+                                          onClick={async () => {
+                                            const targetStatus = STEP_TO_STATUS[step.key];
+                                            if (!targetStatus) return;
+                                            try {
+                                              setUpdatingRequestId(r.id);
+                                              setStatusNotice(null);
+                                              const resp = await authenticatedFetch('/api/service-requests', {
+                                                method: 'PATCH',
+                                                body: JSON.stringify({ id: r.id, status: targetStatus }),
+                                              });
+                                              if (!resp.ok) {
+                                                const data = await resp.json().catch(() => ({}));
+                                                throw new Error(data.error || `Failed to set status ${targetStatus}`);
+                                              }
+                                              const updated = await resp.json();
+                                              setRequests((prev) => prev.map((req) => (req.id === r.id ? { ...req, ...updated } : req)));
+                                              setStatusNotice(`Request ${r.id} updated to ${targetStatus.replace('_', ' ')}`);
+                                            } catch (e) {
+                                              setError(e instanceof Error ? e.message : 'Failed to update request status');
+                                            } finally {
+                                              setUpdatingRequestId(null);
+                                            }
+                                          }}
+                                          className={`h-6 w-6 rounded-full text-[10px] font-bold flex items-center justify-center transition-opacity ${
+                                            state === 'done'
+                                              ? 'bg-emerald-500 text-white'
+                                              : state === 'cancelled'
+                                                ? 'bg-gray-300 text-gray-600'
+                                                : 'bg-gray-200 text-gray-500'
+                                          } ${!STEP_TO_STATUS[step.key] ? 'cursor-default' : 'hover:opacity-90'} disabled:opacity-60`}
+                                          title={STEP_TO_STATUS[step.key] ? `Set status to ${step.label}` : step.label}
+                                        >
+                                          {idx + 1}
+                                        </button>
+                                        <span className="mt-1 text-[10px] text-gray-600 text-center">{step.label}</span>
+                                      </div>
+                                      {idx < TRACKING_STEPS.length - 1 && (
+                                        <div
+                                          className={`h-1 flex-1 rounded ${
+                                            getStepState(r.status, TRACKING_STEPS[idx + 1].key) === 'done'
+                                              ? 'bg-emerald-400'
+                                              : r.status === 'cancelled'
+                                                ? 'bg-gray-300'
+                                                : 'bg-gray-200'
+                                          }`}
+                                        />
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            <div className="text-xs text-gray-700">
+                              Raised: {r.createdAt || '-'}
+                              <br />
+                              Accepted: {r.claimedAt || '-'}
+                              <br />
+                              In progress: {r.startedAt || '-'}
+                              <br />
+                              Completed: {r.completedAt || '-'}
+                            </div>
+                          </div>
                         </div>
                       </td>
                     </tr>
@@ -311,7 +464,7 @@ const AdminServiceOps: React.FC = () => {
             })}
             {pagedRequests.length === 0 && (
               <tr>
-                <td className="py-3 text-gray-600" colSpan={5}>
+                <td className="py-3 text-gray-600" colSpan={6}>
                   No requests found.
                 </td>
               </tr>
@@ -338,6 +491,7 @@ const AdminServiceOps: React.FC = () => {
           Next
         </button>
       </div>
+      {statusNotice && <div className="px-3 pb-2 text-xs text-emerald-700">{statusNotice}</div>}
     </section>
   );
 

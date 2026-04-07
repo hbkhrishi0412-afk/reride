@@ -5,6 +5,7 @@ const isServerSide = typeof window === 'undefined';
 
 export interface ServiceRequestPayload extends Record<string, unknown> {
   providerId?: string | null;
+  customerId?: string;
   candidateProviderIds?: string[];
   title: string;
   serviceType?: string;
@@ -22,7 +23,9 @@ export interface ServiceRequestPayload extends Record<string, unknown> {
   createdAt?: string;
   updatedAt?: string;
   claimedAt?: string;
+  startedAt?: string;
   completedAt?: string;
+  cancelledAt?: string;
 }
 
 // Helper to convert Supabase row to ServiceRequestPayload
@@ -31,6 +34,7 @@ function supabaseRowToServiceRequest(row: any): ServiceRequestPayload {
   return {
     id: row.id,
     providerId: row.provider_id || null,
+    customerId: metadata.customerId || '',
     title: metadata.title || row.service_type || '',
     serviceType: row.service_type || metadata.serviceType || 'General',
     customerName: metadata.customerName || '',
@@ -48,7 +52,9 @@ function supabaseRowToServiceRequest(row: any): ServiceRequestPayload {
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString(),
     claimedAt: metadata.claimedAt || undefined,
+    startedAt: metadata.startedAt || undefined,
     completedAt: metadata.completedAt || undefined,
+    cancelledAt: metadata.cancelledAt || undefined,
   };
 }
 
@@ -66,6 +72,7 @@ function serviceRequestToSupabaseRow(request: Partial<ServiceRequestPayload>): a
   const metadata: any = {
     title: request.title,
     customerName: request.customerName,
+    customerId: request.customerId,
     customerPhone: request.customerPhone,
     customerEmail: request.customerEmail,
     vehicle: request.vehicle,
@@ -77,7 +84,9 @@ function serviceRequestToSupabaseRow(request: Partial<ServiceRequestPayload>): a
     carDetails: request.carDetails,
     candidateProviderIds: request.candidateProviderIds,
     claimedAt: request.claimedAt,
+    startedAt: request.startedAt,
     completedAt: request.completedAt,
+    cancelledAt: request.cancelledAt,
   };
 
   // Remove undefined values from metadata
@@ -181,6 +190,22 @@ export const supabaseServiceRequestService = {
 
     if (error) {
       throw new Error(`Failed to fetch service requests by provider: ${error.message}`);
+    }
+
+    return (data || []).map(supabaseRowToServiceRequest) as (ServiceRequestPayload & { id: string })[];
+  },
+
+  // Find service requests raised by customer ID
+  async findByCustomerId(customerId: string): Promise<(ServiceRequestPayload & { id: string })[]> {
+    const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('service_requests')
+      .select('*')
+      .contains('metadata', { customerId });
+
+    if (error) {
+      throw new Error(`Failed to fetch service requests by customer: ${error.message}`);
     }
 
     return (data || []).map(supabaseRowToServiceRequest) as (ServiceRequestPayload & { id: string })[];
