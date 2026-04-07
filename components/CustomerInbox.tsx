@@ -190,6 +190,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
               {conversations.length > 0 && (
                 <div className="w-full flex flex-wrap gap-2">
                 <button
+                  type="button"
                   onClick={() => setFilterMode('all')}
                   className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                     filterMode === 'all' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -199,6 +200,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                   All
                 </button>
                 <button
+                  type="button"
                   onClick={() => setFilterMode('unread')}
                   className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center justify-center gap-2 ${
                     filterMode === 'unread' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -211,6 +213,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                   Unread ({unreadCount})
                 </button>
                 <button
+                  type="button"
                   onClick={() => setFilterMode('read')}
                   className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                     filterMode === 'read' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -221,6 +224,7 @@ const CustomerInbox: React.FC<CustomerInboxProps> = ({
                 </button>
                 {onMarkAllAsRead && unreadCount > 0 && (
                   <button
+                    type="button"
                     onClick={onMarkAllAsRead}
                     className="px-3 py-1.5 text-sm rounded-lg bg-blue-50 text-blue-700"
                     aria-label="Mark all conversations as read"

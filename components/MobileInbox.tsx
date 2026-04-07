@@ -350,17 +350,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
       // Wait for this thread to appear — do not auto-open another conversation
       return;
     }
-    if (!openThreadInFloatingChat && !selectedConv && sortedConversations.length > 0) {
-      handleSelectConversation(sortedConversations[0]);
-    }
-  }, [
-    sortedConversations,
-    selectedConv,
-    initialOpenConversationId,
-    onConsumedInitialConversation,
-    handleSelectConversation,
-    openThreadInFloatingChat,
-  ]);
+    // List-first: stay on inbox until the user opens a thread (no auto-open).
+  }, [sortedConversations, initialOpenConversationId, onConsumedInitialConversation, handleSelectConversation]);
 
   // Show chat view if conversation is selected (Facebook Messenger–style layout)
   if (selectedConv) {
@@ -767,6 +758,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
         </div>
         <div className="flex gap-2 mt-3 flex-wrap">
           <button
+            type="button"
             onClick={() => setFilterMode('all')}
             className={`px-4 py-2 rounded-full text-sm font-semibold ${
               filterMode === 'all' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
@@ -776,6 +768,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             All
           </button>
           <button
+            type="button"
             onClick={() => setFilterMode('unread')}
             className={`px-4 py-2 rounded-full text-sm font-semibold ${
               filterMode === 'unread' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
@@ -785,6 +778,7 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
             Unread ({unreadCount})
           </button>
           <button
+            type="button"
             onClick={() => setFilterMode('read')}
             className={`px-4 py-2 rounded-full text-sm font-semibold ${
               filterMode === 'read' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700'
@@ -795,7 +789,8 @@ export const MobileInbox: React.FC<MobileInboxProps> = ({
           </button>
           {onMarkAllAsRead && unreadCount > 0 && (
             <button
-              onClick={() => onMarkAllAsRead(inboxRole)}
+              type="button"
+              onClick={() => void onMarkAllAsRead(inboxRole)}
               className="px-4 py-2 rounded-full text-sm font-semibold bg-blue-50 text-blue-700"
               aria-label="Mark all conversations as read"
             >

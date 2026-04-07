@@ -513,9 +513,16 @@ const AppContent: React.FC = () => {
         if (!conversationBelongsToCustomer(c, email, currentUser.id)) return false;
         return !c.isReadByCustomer;
       });
-      await Promise.all(unread.map((c) => setConversationReadState(c.id, role, true)));
+      await Promise.all(
+        unread.map((c) =>
+          markAsRead(c.id, {
+            readerRole: role,
+            forceReadState: true,
+          }),
+        ),
+      );
     },
-    [conversations, setConversationReadState, currentUser],
+    [conversations, markAsRead, currentUser],
   );
 
   /** Seller dashboard message rows: open reply UI. On native/mobile app, use global ChatWidget; elsewhere deep-link inbox. */
