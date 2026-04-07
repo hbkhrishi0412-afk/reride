@@ -558,6 +558,7 @@ async function mainHandler(
       pathname.includes('/csrf-token') ||
       pathname.includes('/health') ||
       pathname.includes('/db-health') ||
+      pathname.includes('/service-providers/register') ||
       urlHasGemini ||
       skipCsrfForCapacitorNative;
     if (isStateChanging && !isCsrfExempt) {
@@ -582,6 +583,15 @@ async function mainHandler(
       const originalPath = req.headers['x-vercel-original-path'] as string;
       const invokePath = req.headers['x-invoke-path'] as string;
       const urlPath = req.url || '';
+
+      if (
+        originalPath?.includes('/service-providers/register') ||
+        invokePath?.includes('/service-providers/register') ||
+        urlPath.includes('/service-providers/register')
+      ) {
+        const { handleServiceProviderRegister } = await import('./service-providers.js');
+        return await handleServiceProviderRegister(req, res);
+      }
       
       // Check if any of these indicate a /users endpoint
       if (originalPath?.includes('/users') || invokePath?.includes('/users') || urlPath.includes('/users')) {
@@ -629,13 +639,28 @@ async function mainHandler(
           return await handleContent(req, res, handlerOptions);
         } else if (checkPath.includes('/upload-image') || checkPath.endsWith('/upload-image')) {
           return await handleUploadImage(req, res);
+        } else if (checkPath.includes('/service-providers/register')) {
+          const { handleServiceProviderRegister } = await import('./service-providers.js');
+          return await handleServiceProviderRegister(req, res);
         }
       }
       
       // Fallback: If we can't determine the route from headers, check the request body or method
-      // For PUT/POST requests, if we have a body with email, it's likely a user update
       if ((req.method === 'PUT' || req.method === 'POST') && req.body && req.body.email) {
-        // Only log in development to avoid information leakage
+        const b = req.body as Record<string, unknown>;
+        // Service provider public register (no `action` — unlike POST /users register which sends action: 'register')
+        if (
+          req.method === 'POST' &&
+          b.action === undefined &&
+          typeof b.password === 'string' &&
+          typeof b.phone === 'string' &&
+          typeof b.city === 'string' &&
+          typeof b.name === 'string'
+        ) {
+          const { handleServiceProviderRegister } = await import('./service-providers.js');
+          return await handleServiceProviderRegister(req, res);
+        }
+        // For PUT/POST requests, if we have a body with email, it's likely a user update
         if (process.env.NODE_ENV !== 'production') {
           logInfo(`✅ Routing ${req.method} request from /api/main to handleUsers (fallback: body contains email)`);
         }
@@ -741,6 +766,9 @@ async function mainHandler(
       // Import and call provider-services handler
       const { handleProviderServices } = await import('./provider-services.js');
       return await handleProviderServices(req, res);
+    } else if (pathname.includes('/service-providers/register') || pathname.endsWith('/service-providers/register')) {
+      const { handleServiceProviderRegister } = await import('./service-providers.js');
+      return await handleServiceProviderRegister(req, res);
     } else if (pathname.includes('/service-providers') || pathname.endsWith('/service-providers')) {
       // Import and call service-providers handler
       const { handleServiceProviders } = await import('./service-providers.js');
@@ -903,6 +931,7 @@ function resolveEffectiveApiPathname(req: VercelRequest, pathname: string): stri
     const pathOnly = raw.split('?')[0] || '';
     if (pathOnly.includes('/csrf-token')) return '/api/csrf-token';
     if (pathOnly.includes('/vehicle-data')) return '/api/vehicle-data';
+    if (pathOnly.includes('/service-providers/register')) return '/api/service-providers/register';
     if (pathOnly.includes('/users')) return '/api/users';
     if (pathOnly.includes('/vehicles')) return '/api/vehicles';
     return null;

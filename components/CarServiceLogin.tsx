@@ -93,60 +93,102 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
         setLoading(false);
         return;
       }
-      
-      const result = await signUpWithEmail(email, password, {
-        name,
-        mobile: phone,
-        role: 'seller',
-      });
-      
-      if (!result.success) {
-        throw new Error(result.reason || 'Signup failed');
-      }
 
-      // Check if user was created (even if session is null due to email confirmation)
-      if (!result.user) {
-        throw new Error('Failed to create user account');
-      }
+      const workshopList = workshops ? workshops.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const skillList = skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : [];
 
-      // If session is null, it means email confirmation is required
-      if (!result.session) {
-        setError('Account created! Please check your email to confirm your account before signing in.');
-        setLoading(false);
-        return;
-      }
-
-      // Create service provider profile using the session token
-      const resp = await fetch('/api/service-providers', {
+      // Prefer server-side registration: Supabase client signUp often fails with
+      // "Database error saving new user" when auth DB triggers conflict with public.users.
+      const registerResp = await fetch('/api/service-providers/register', {
         method: 'POST',
-        headers: { 
-          Authorization: `Bearer ${result.session.access_token}`, 
-          'Content-Type': 'application/json' 
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           email,
+          password,
           phone,
           city,
-          workshops: workshops ? workshops.split(',').map(s => s.trim()).filter(Boolean) : [],
-          skills: skills ? skills.split(',').map(s => s.trim()).filter(Boolean) : [],
+          workshops: workshopList,
+          skills: skillList,
           availability,
         }),
       });
 
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        const errorMsg = data.error || 'Failed to create provider profile';
-        
-        // If it's an authentication error, provide helpful message
-        if (resp.status === 401 || resp.status === 403) {
-          throw new Error('Authentication failed. Please try logging in after confirming your email.');
+      if (registerResp.status === 404) {
+        // Older deployments / local mock API without this route — fall back to client sign-up
+        const result = await signUpWithEmail(email, password, {
+          name,
+          mobile: phone,
+        });
+
+        if (!result.success) {
+          throw new Error(result.reason || 'Signup failed');
         }
-        
-        throw new Error(errorMsg);
+        if (!result.user) {
+          throw new Error('Failed to create user account');
+        }
+        if (!result.session) {
+          setError('Account created! Please check your email to confirm your account before signing in.');
+          setLoading(false);
+          return;
+        }
+
+        const resp = await fetch('/api/service-providers', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${result.session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name,
+            email,
+            phone,
+            city,
+            workshops: workshopList,
+            skills: skillList,
+            availability,
+          }),
+        });
+
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          const errorMsg = data.error || 'Failed to create provider profile';
+          if (resp.status === 401 || resp.status === 403) {
+            throw new Error('Authentication failed. Please try logging in after confirming your email.');
+          }
+          throw new Error(errorMsg);
+        }
+
+        const provider = await resp.json();
+        onLoginSuccess(provider);
+        onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+        return;
       }
 
-      const provider = await resp.json();
+      if (!registerResp.ok) {
+        const data = await registerResp.json().catch(() => ({}));
+        throw new Error(data.error || 'Registration failed');
+      }
+
+      const signInResult = await signInWithEmail(email, password);
+      if (!signInResult.success || !signInResult.session) {
+        throw new Error(
+          signInResult.reason ||
+            'Account was created but sign-in failed. Try logging in, or confirm your email if required.',
+        );
+      }
+
+      const providerResp = await fetch('/api/service-providers', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${signInResult.session.access_token}` },
+      });
+
+      if (!providerResp.ok) {
+        const data = await providerResp.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not load your provider profile after sign-in.');
+      }
+
+      const provider = await providerResp.json();
       onLoginSuccess(provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
     } catch (err) {
