@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '../lib/i18n';
 import { View as ViewEnum } from '../types';
 
 interface CarServicesProps {
@@ -102,7 +103,7 @@ function splitBullets(raw: string): string[] {
 }
 
 const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
-  const { t, i18n } = useTranslation();
+  const { t, i18n: i18nFromHook } = useTranslation(undefined, { i18n });
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const servicesSectionRef = useRef<HTMLDivElement>(null);
 
@@ -114,7 +115,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
         title: t(`carServices.category.${slug}`),
         canonicalTitle: CANONICAL_TITLE[slug],
       })),
-    [t, i18n.language, i18n.resolvedLanguage]
+    [t, i18nFromHook.language, i18nFromHook.resolvedLanguage]
   );
 
   const detailedServices = useMemo(
@@ -130,7 +131,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
           services: splitBullets(t(`carServices.services.${slug}.bullets`)),
         };
       }),
-    [t, i18n.language, i18n.resolvedLanguage]
+    [t, i18nFromHook.language, i18nFromHook.resolvedLanguage]
   );
 
   const serviceSteps = useMemo(
@@ -140,7 +141,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
         detail: t(`carServices.step.${key}.detail`),
         icon: key === 'pickup' ? '🚗' : key === 'service' ? '🔧' : '✅',
       })),
-    [t, i18n.language, i18n.resolvedLanguage]
+    [t, i18nFromHook.language, i18nFromHook.resolvedLanguage]
   );
 
   const faqs = useMemo(
@@ -149,7 +150,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
         question: t(`carServices.faq.${i}.q`),
         answer: t(`carServices.faq.${i}.a`),
       })),
-    [t, i18n.language, i18n.resolvedLanguage]
+    [t, i18nFromHook.language, i18nFromHook.resolvedLanguage]
   );
 
   const scrollToServices = () => {
