@@ -117,6 +117,7 @@ module.exports = {
     'dist',
     'node_modules',
     'coverage',
+    'App-backup.tsx',
     '*.config.js',
     '*.config.ts',
     'dev-api-server*.js',

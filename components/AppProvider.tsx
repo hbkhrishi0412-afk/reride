@@ -2496,7 +2496,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const next = [...prev, conv];
           try {
             saveConversations(next);
-          } catch (_) {}
+          } catch {
+            void 0;
+          }
           return next;
         }
         const existing = prev[idx];
@@ -2508,7 +2510,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const next = prev.map((c, i) => (i === idx ? merged : c));
         try {
           saveConversations(next);
-        } catch (_) {}
+        } catch {
+          void 0;
+        }
         return next;
       });
     },
@@ -3995,7 +3999,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // But including them is harmless and makes the intent clear
   }, [vehicles, addToast, currentUser, t, syncVehicleCachesById]);
 
-  const contextValue: AppContextType = useMemo(() => ({
+  const contextValue: AppContextType = useMemo(() => {
+    const inboxMarkRead: { fn?: AppContextType['markAsRead'] } = {};
+    return {
     // State
     currentView,
     previousView,
@@ -5164,7 +5170,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast(t('toast.failedSendMessageGeneric'), 'error');
       }
     },
-    markAsRead: async (
+    markAsRead: (inboxMarkRead.fn = async (
       conversationId: string,
       options?: { readerRole?: 'customer' | 'seller'; forceReadState?: boolean },
     ) => {
@@ -5239,7 +5245,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           addToast('Failed to update read state.', 'error');
         });
-    },
+    }),
     setConversationReadState: async (
       conversationId: string,
       readerRole: 'customer' | 'seller',
@@ -5247,7 +5253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ) => {
       if (!currentUser) return;
       if (isRead) {
-        await appActions.markAsRead(conversationId, { readerRole, forceReadState: true });
+        await inboxMarkRead.fn?.(conversationId, { readerRole, forceReadState: true });
         addToast('Conversation marked as read.', 'success');
         return;
       }
@@ -5416,9 +5422,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const response = await authenticatedFetch('/api/users', {
             method: 'PUT',
             body: JSON.stringify({
-              email: email,
-              ...safeUpdates
-            })
+              email,
+              ...safeUpdates,
+            }),
           });
           
           console.log('📥 API response received:', { status: response.status, ok: response.ok });
@@ -5888,7 +5894,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
       })();
     },
-  }), [
+  };
+  }, [
     currentView, previousView, selectedVehicle, vehicles, isLoading, vehiclesCatalogReady, currentUser,
     comparisonList, ratings, sellerRatings, wishlist, conversations, toasts,
     forgotPasswordRole, typingStatus, chatPeerOnlineByConversationId, selectedCategory, publicSellerProfile,

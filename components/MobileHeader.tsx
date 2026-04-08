@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
 import Logo from './Logo.js';
-import LanguageSwitcher from './LanguageSwitcher';
 
 interface MobileHeaderProps {
   onNavigate: (view: ViewEnum) => void;
@@ -189,8 +188,10 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
       {/* Slide-out Menu */}
       {showMenu && (
         <>
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-[100] animate-fade-in"
+          <button
+            type="button"
+            className="fixed inset-0 z-[100] animate-fade-in cursor-default border-0 bg-black/50 p-0"
+            aria-label="Close menu"
             onClick={() => setShowMenu(false)}
           />
           <div 
@@ -295,8 +296,6 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   </>
                 )}
                 
-                <div className="border-t border-gray-200 my-2"></div>
-                <LanguageSwitcher variant="inline" onSelect={() => setShowMenu(false)} className="!px-0" />
                 <div className="border-t border-gray-200 my-2"></div>
                 <MenuItem
                   icon={<InfoIcon />}

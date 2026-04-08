@@ -102,19 +102,15 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
     return params.length > 0 ? `${url}?${params.join('&')}` : url;
   }
 
-  // Supabase Storage - use transformations API
-  if (url.includes('supabase.co') && url.includes('/storage/')) {
-    const params: string[] = [];
-    
-    // Supabase Storage supports format conversion via transformations
-    const format = formatSupport.avif ? 'avif' : formatSupport.webp ? 'webp' : 'auto';
-    if (format !== 'auto') {
-      params.push(`format=${format}`);
-    }
-    if (width) params.push(`width=${width}`);
-    if (quality) params.push(`quality=${quality}`);
-    params.push('resize=cover'); // Optimize for thumbnails
-    return params.length > 0 ? `${url}?${params.join('&')}` : url;
+  // Supabase: on-the-fly transforms use `/storage/v1/render/image/public/...` (Pro+).
+  // Appending width/format/resize query params to `/object/public/...` URLs does not
+  // serve transformed files and often 404s or errors on Free tier — use the raw public URL.
+  if (url.includes('supabase.co') && url.includes('/storage/v1/object/public/')) {
+    return url.split('?')[0];
+  }
+  // Already a render/transform URL — avoid double-appending params
+  if (url.includes('supabase.co') && url.includes('/storage/v1/render/image/public/')) {
+    return url;
   }
 
   // Firebase Storage / Google Cloud Storage
