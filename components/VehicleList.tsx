@@ -2,7 +2,10 @@ import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 're
 import { useTranslation } from 'react-i18next';
 import VehicleCard from './VehicleCard.js';
 import MobileVehicleCard from './MobileVehicleCard.js';
-import MobileFilterSheet from './MobileFilterSheet.js';
+import MobileMarketplaceFilterModal from './MobileMarketplaceFilterModal.js';
+import MobileSortSheet from './MobileSortSheet.js';
+import { MOBILE_PRICE_BUCKETS, vehicleMatchesPriceBuckets } from './mobileFilterTypes.js';
+import type { MobileFilterCategoryId } from './mobileFilterTypes.js';
 import useIsMobileApp from '../hooks/useIsMobileApp.js';
 import type { Vehicle, VehicleCategory, SavedSearch, SearchFilters } from '../types.js';
 import { VehicleCategory as CategoryEnum } from '../types.js';
@@ -10,7 +13,7 @@ import { parseSearchQuery, getSearchSuggestions } from '../services/geminiServic
 import QuickViewModal from './QuickViewModal.js';
 import VehicleTile from './VehicleTile.js';
 import VehicleTileSkeleton from './VehicleTileSkeleton.js';
-import { saveSearch } from '../services/buyerEngagementService.js';
+import { saveSearch as saveBuyerSearch } from '../services/buyerService.js';
 import { getVehicleData } from '../services/vehicleDataService.js';
 import { logInfo, logError } from '../utils/logger.js';
 import type { VehicleData } from '../types.js';
@@ -160,6 +163,129 @@ function resolveModelFromVehicles(
   return models.find((m) => p.includes(m.toLowerCase()) || m.toLowerCase().includes(p)) ?? null;
 }
 
+function resolveStringFromList(parsed: string | undefined, options: string[]): string | null {
+  if (!parsed?.trim() || options.length === 0) return null;
+  const p = parsed.trim().toLowerCase();
+  const exact = options.find((o) => o.toLowerCase().trim() === p);
+  if (exact) return exact;
+  return options.find((o) => p.includes(o.toLowerCase()) || o.toLowerCase().includes(p)) ?? null;
+}
+
+function resolveCategoryFromParse(
+  raw: string | undefined,
+  categories: string[]
+): VehicleCategory | null {
+  if (!raw?.trim() || categories.length === 0) return null;
+  const p = raw.trim().toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+  const norm = (c: string) => String(c).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+  const exact = categories.find((c) => norm(c) === p);
+  if (exact) return exact as VehicleCategory;
+  return (categories.find((c) => norm(c).includes(p) || p.includes(norm(c))) as VehicleCategory | undefined) ?? null;
+}
+
+function fuelsAndTransmissionsForScope(
+  vehicleList: Vehicle[],
+  cat: VehicleCategory | 'ALL',
+  make: string,
+  model: string
+): { fuels: string[]; transmissions: string[] } {
+  let list = vehicleList || [];
+  if (cat !== 'ALL' && cat) {
+    list = list.filter((v) => {
+      if (!v.category) return false;
+      const vc = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+      const fc = String(cat).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+      return vc === fc;
+    });
+  }
+  if (make.trim()) {
+    list = list.filter((v) => v.make?.toLowerCase().trim() === make.toLowerCase().trim());
+  }
+  if (model.trim()) {
+    list = list.filter((v) => v.model?.toLowerCase().trim() === model.toLowerCase().trim());
+  }
+  const fuels = [...new Set(list.map((v) => v.fuelType).filter(Boolean))] as string[];
+  const transmissions = [...new Set(list.map((v) => v.transmission).filter(Boolean))] as string[];
+  return { fuels, transmissions };
+}
+
+type OwnershipFilterValue = '' | '1' | '2' | '3plus';
+
+function normalizeParsedOwnership(raw: string | undefined): OwnershipFilterValue | '' {
+  if (!raw?.trim()) return '';
+  const s = raw.trim().toLowerCase();
+  if (s === '1' || s === 'first' || s.includes('first owner')) return '1';
+  if (s === '2' || s === 'second' || s.includes('second owner')) return '2';
+  if (s === '3plus' || s.includes('third owner') || s.includes('3+') || s.includes('fourth')) return '3plus';
+  return '';
+}
+
+interface VehicleListFilterSnapshot {
+  categoryFilter: VehicleCategory | 'ALL';
+  makeFilter: string;
+  modelFilter: string;
+  priceRange: { min: number; max: number };
+  selectedPriceBuckets: string[];
+  mileageRange: { min: number; max: number };
+  fuelTypeFilter: string;
+  yearFilter: string;
+  stateFilter: string;
+  isStateFilterUserSet: boolean;
+  selectedCity: string | undefined;
+  transmissionFilter: string;
+  ownershipFilter: OwnershipFilterValue;
+  yearBounds: { min: number | null; max: number | null };
+}
+
+function matchesVehicleFilters(vehicle: Vehicle, snap: VehicleListFilterSnapshot, aiSearchQuery: string): boolean {
+  if (snap.categoryFilter !== 'ALL' && snap.categoryFilter) {
+    if (!vehicle.category) return false;
+    const vehicleCategory = String(vehicle.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+    const filterCategory = String(snap.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+    if (vehicleCategory !== filterCategory) return false;
+  }
+  if (snap.makeFilter && snap.makeFilter.trim() !== '') {
+    if (vehicle.make?.toLowerCase().trim() !== snap.makeFilter.toLowerCase().trim()) return false;
+  }
+  if (snap.modelFilter && snap.modelFilter.trim() !== '') {
+    if (vehicle.model?.toLowerCase().trim() !== snap.modelFilter.toLowerCase().trim()) return false;
+  }
+  if (snap.selectedPriceBuckets.length > 0) {
+    if (!vehicleMatchesPriceBuckets(vehicle.price, snap.selectedPriceBuckets)) return false;
+  } else if (vehicle.price != null && typeof vehicle.price === 'number') {
+    if (vehicle.price < snap.priceRange.min || vehicle.price > snap.priceRange.max) return false;
+  }
+  if (vehicle.mileage != null && typeof vehicle.mileage === 'number') {
+    if (vehicle.mileage < snap.mileageRange.min || vehicle.mileage > snap.mileageRange.max) return false;
+  }
+  if (snap.fuelTypeFilter && snap.fuelTypeFilter.trim() !== '') {
+    if (vehicle.fuelType?.toLowerCase().trim() !== snap.fuelTypeFilter.toLowerCase().trim()) return false;
+  }
+  if (snap.yearFilter && snap.yearFilter !== '0' && snap.yearFilter.trim() !== '') {
+    const filterYear = Number(snap.yearFilter);
+    if (isNaN(filterYear) || vehicle.year !== filterYear) return false;
+  } else {
+    if (snap.yearBounds.min != null && vehicle.year < snap.yearBounds.min) return false;
+    if (snap.yearBounds.max != null && vehicle.year > snap.yearBounds.max) return false;
+  }
+  const cityScopeActive = Boolean(snap.selectedCity?.trim());
+  if (snap.stateFilter && snap.stateFilter.trim() !== '' && snap.isStateFilterUserSet && !cityScopeActive) {
+    if (vehicle.state?.trim() !== snap.stateFilter.trim()) return false;
+  }
+  if (snap.transmissionFilter && snap.transmissionFilter.trim() !== '') {
+    if (vehicle.transmission?.toLowerCase().trim() !== snap.transmissionFilter.toLowerCase().trim()) return false;
+  }
+  if (snap.ownershipFilter) {
+    const n = vehicle.noOfOwners;
+    if (typeof n !== 'number' || Number.isNaN(n)) return false;
+    if (snap.ownershipFilter === '1' && n !== 1) return false;
+    if (snap.ownershipFilter === '2' && n !== 2) return false;
+    if (snap.ownershipFilter === '3plus' && n < 3) return false;
+  }
+  if (!vehicleMatchesSearchText(vehicle, aiSearchQuery)) return false;
+  return true;
+}
+
 const VehicleList: React.FC<VehicleListProps> = React.memo(({ 
   vehicles, 
   onSelectVehicle, 
@@ -240,13 +366,16 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [priceRange, setPriceRange] = useState({ min: MIN_PRICE, max: MAX_PRICE });
   const [mileageRange, setMileageRange] = useState({ min: MIN_MILEAGE, max: MAX_MILEAGE });
   const [fuelTypeFilter, setFuelTypeFilter] = useState('');
+  const [transmissionFilter, setTransmissionFilter] = useState('');
+  const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilterValue>('');
+  const [selectedPriceBuckets, setSelectedPriceBuckets] = useState<string[]>([]);
   const [yearFilter, setYearFilter] = useState('0');
-  const [colorFilter, setColorFilter] = useState('');
+  const [yearBounds, setYearBounds] = useState<{ min: number | null; max: number | null }>({
+    min: null,
+    max: null,
+  });
   const [stateFilter, setStateFilter] = useState('');
   const [isStateFilterUserSet, setIsStateFilterUserSet] = useState(false); // Track if state filter was explicitly set by user
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
-  const [featureSearch, setFeatureSearch] = useState('');
-  const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState('YEAR_DESC');
   const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<VehicleCategory | 'ALL'>(initialCategory || 'ALL');
@@ -270,15 +399,18 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     priceRange: { min: MIN_PRICE, max: MAX_PRICE },
     mileageRange: { min: MIN_MILEAGE, max: MAX_MILEAGE },
     fuelTypeFilter: '',
+    transmissionFilter: '',
+    ownershipFilter: '' as OwnershipFilterValue,
+    selectedPriceBuckets: [] as string[],
     yearFilter: '0',
-    colorFilter: '',
+    yearMin: null as number | null,
+    yearMax: null as number | null,
     stateFilter: '',
-    selectedFeatures: [] as string[],
-    featureSearch: ''
   });
+  const [mobileFilterCategory, setMobileFilterCategory] = useState<MobileFilterCategoryId>('price');
+  const [isSortSheetOpen, setIsSortSheetOpen] = useState(false);
   const [initialStateFilter, setInitialStateFilter] = useState('');
   const [initialIsStateFilterUserSet, setInitialIsStateFilterUserSet] = useState(false);
-  const [isMobileFeaturesOpen, setIsMobileFeaturesOpen] = useState(false);
 
   // Mobile app detection
   const { isMobileApp } = useIsMobileApp();
@@ -295,9 +427,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   );
 
   const aiSearchRef = useRef<HTMLDivElement>(null);
-  const featuresFilterRef = useRef<HTMLDivElement>(null);
-  const mobileFeaturesFilterRef = useRef<HTMLDivElement>(null);
-  const featuresSearchInputRef = useRef<HTMLInputElement>(null);
   const suggestionDebounceRef = useRef<number | null>(null);
 
   // Get categories from admin database vehicle data
@@ -540,32 +669,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     return [...new Set(filteredVehicles.map(v => v.year))].sort((a, b) => Number(b) - Number(a));
   }, [vehicles, categoryFilter, makeFilter, modelFilter]);
   
-  const uniqueColors = useMemo(() => {
-    let filteredVehicles = vehicles || [];
-    
-    // Filter by category if active
-    if (categoryFilter !== 'ALL' && categoryFilter) {
-      filteredVehicles = filteredVehicles.filter(v => {
-        if (!v.category) return false;
-        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-        const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-        return vehicleCategory === filterCategory;
-      });
-    }
-    
-    // Filter by make if active
-    if (makeFilter && makeFilter.trim() !== '') {
-      filteredVehicles = filteredVehicles.filter(v => v.make?.toLowerCase().trim() === makeFilter.toLowerCase().trim());
-    }
-    
-    // Filter by model if active
-    if (modelFilter && modelFilter.trim() !== '') {
-      filteredVehicles = filteredVehicles.filter(v => v.model?.toLowerCase().trim() === modelFilter.toLowerCase().trim());
-    }
-    
-    return [...new Set(filteredVehicles.map(v => v.color))].sort();
-  }, [vehicles, categoryFilter, makeFilter, modelFilter]);
-  
   // Filter fuel types based on selected category and make/model
   const uniqueFuelTypes = useMemo(() => {
     let filteredVehicles = vehicles || [];
@@ -591,6 +694,25 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     }
     
     return [...new Set(filteredVehicles.map(v => v.fuelType).filter(Boolean))].sort();
+  }, [vehicles, categoryFilter, makeFilter, modelFilter]);
+
+  const uniqueTransmissions = useMemo(() => {
+    let filteredVehicles = vehicles || [];
+    if (categoryFilter !== 'ALL' && categoryFilter) {
+      filteredVehicles = filteredVehicles.filter((v) => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    if (makeFilter && makeFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter((v) => v.make?.toLowerCase().trim() === makeFilter.toLowerCase().trim());
+    }
+    if (modelFilter && modelFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter((v) => v.model?.toLowerCase().trim() === modelFilter.toLowerCase().trim());
+    }
+    return [...new Set(filteredVehicles.map((v) => v.transmission).filter(Boolean))].sort();
   }, [vehicles, categoryFilter, makeFilter, modelFilter]);
   
   const uniqueStates = useMemo(() => indianStates, [indianStates]);
@@ -622,32 +744,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     return [...new Set(filteredVehicles.map(v => v.year))].sort((a, b) => Number(b) - Number(a));
   }, [vehicles, tempFilters.categoryFilter, tempFilters.makeFilter, tempFilters.modelFilter]);
   
-  const tempUniqueColors = useMemo(() => {
-    let filteredVehicles = vehicles || [];
-    
-    // Filter by category if active
-    if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
-      filteredVehicles = filteredVehicles.filter(v => {
-        if (!v.category) return false;
-        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-        const filterCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-        return vehicleCategory === filterCategory;
-      });
-    }
-    
-    // Filter by make if active
-    if (tempFilters.makeFilter && tempFilters.makeFilter.trim() !== '') {
-      filteredVehicles = filteredVehicles.filter(v => v.make?.toLowerCase().trim() === tempFilters.makeFilter.toLowerCase().trim());
-    }
-    
-    // Filter by model if active
-    if (tempFilters.modelFilter && tempFilters.modelFilter.trim() !== '') {
-      filteredVehicles = filteredVehicles.filter(v => v.model?.toLowerCase().trim() === tempFilters.modelFilter.toLowerCase().trim());
-    }
-    
-    return [...new Set(filteredVehicles.map(v => v.color))].sort();
-  }, [vehicles, tempFilters.categoryFilter, tempFilters.makeFilter, tempFilters.modelFilter]);
-  
   const tempUniqueFuelTypes = useMemo(() => {
     let filteredVehicles = vehicles || [];
     
@@ -674,15 +770,28 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     return [...new Set(filteredVehicles.map(v => v.fuelType).filter(Boolean))].sort();
   }, [vehicles, tempFilters.categoryFilter, tempFilters.makeFilter, tempFilters.modelFilter]);
 
-  const allFeatures = useMemo(() => [...new Set((vehicles || []).flatMap(v => v.features))].sort(), [vehicles]);
-  
-  const filteredFeatures = useMemo(() => {
-      return allFeatures.filter(feature => feature.toLowerCase().includes(featureSearch.toLowerCase()));
-  }, [allFeatures, featureSearch]);
-
-  const tempFilteredFeatures = useMemo(() => {
-    return allFeatures.filter(feature => feature.toLowerCase().includes(tempFilters.featureSearch.toLowerCase()));
-  }, [allFeatures, tempFilters.featureSearch]);
+  const tempUniqueTransmissions = useMemo(() => {
+    let filteredVehicles = vehicles || [];
+    if (tempFilters.categoryFilter !== 'ALL' && tempFilters.categoryFilter) {
+      filteredVehicles = filteredVehicles.filter((v) => {
+        if (!v.category) return false;
+        const vehicleCategory = String(v.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        const filterCategory = String(tempFilters.categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
+        return vehicleCategory === filterCategory;
+      });
+    }
+    if (tempFilters.makeFilter && tempFilters.makeFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter((v) =>
+        v.make?.toLowerCase().trim() === tempFilters.makeFilter.toLowerCase().trim()
+      );
+    }
+    if (tempFilters.modelFilter && tempFilters.modelFilter.trim() !== '') {
+      filteredVehicles = filteredVehicles.filter((v) =>
+        v.model?.toLowerCase().trim() === tempFilters.modelFilter.toLowerCase().trim()
+      );
+    }
+    return [...new Set(filteredVehicles.map((v) => v.transmission).filter(Boolean))].sort();
+  }, [vehicles, tempFilters.categoryFilter, tempFilters.makeFilter, tempFilters.modelFilter]);
 
   const handleAiSearch = async (queryOverride?: string) => {
     const query = typeof queryOverride === 'string' ? queryOverride : aiSearchQuery;
@@ -692,24 +801,99 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     setIsAiSearching(true);
     const parsedFilters = await parseSearchQuery(query);
 
-    const resolvedMake = resolveMakeFromList(parsedFilters.make, uniqueMakes);
-    if (resolvedMake) {
-      setMakeFilter(resolvedMake);
-      const resolvedModel = resolveModelFromVehicles(parsedFilters.model, resolvedMake, vehicles || []);
-      setModelFilter(resolvedModel ?? '');
-    } else if (parsedFilters.model && makeFilter) {
-      const resolvedModel = resolveModelFromVehicles(parsedFilters.model, makeFilter, vehicles || []);
-      if (resolvedModel) setModelFilter(resolvedModel);
+    let nextCat: VehicleCategory | 'ALL' = categoryFilter;
+    let nextMake = makeFilter;
+    let nextModel = modelFilter;
+
+    if (parsedFilters.category) {
+      const rc = resolveCategoryFromParse(parsedFilters.category, uniqueCategories as string[]);
+      if (rc) {
+        nextCat = rc;
+        nextMake = '';
+        nextModel = '';
+        setCategoryFilter(rc);
+        setMakeFilter('');
+        setModelFilter('');
+      }
     }
 
-    if (parsedFilters.minPrice || parsedFilters.maxPrice) {
-      setPriceRange({ min: parsedFilters.minPrice || MIN_PRICE, max: parsedFilters.maxPrice || MAX_PRICE });
+    const resolvedMake = resolveMakeFromList(parsedFilters.make, uniqueMakes);
+    if (resolvedMake) {
+      nextMake = resolvedMake;
+      setMakeFilter(resolvedMake);
+      const resolvedModel = resolveModelFromVehicles(parsedFilters.model, resolvedMake, vehicles || []);
+      nextModel = resolvedModel ?? '';
+      setModelFilter(resolvedModel ?? '');
+    } else if (parsedFilters.model && nextMake) {
+      const resolvedModel = resolveModelFromVehicles(parsedFilters.model, nextMake, vehicles || []);
+      if (resolvedModel) {
+        nextModel = resolvedModel;
+        setModelFilter(resolvedModel);
+      }
     }
-    if (parsedFilters.features) {
-      const validFeatures = parsedFilters.features
-        .map((f) => allFeatures.find((af) => af.toLowerCase() === f.toLowerCase().trim()))
-        .filter((x): x is string => Boolean(x));
-      setSelectedFeatures(validFeatures);
+
+    const { fuels, transmissions } = fuelsAndTransmissionsForScope(vehicles || [], nextCat, nextMake, nextModel);
+    if (parsedFilters.fuelType) {
+      const f = resolveStringFromList(parsedFilters.fuelType, fuels);
+      if (f) setFuelTypeFilter(f);
+    }
+    if (parsedFilters.transmission) {
+      const tr = resolveStringFromList(parsedFilters.transmission, transmissions);
+      if (tr) setTransmissionFilter(tr);
+    }
+
+    const ownStr = String(parsedFilters.ownership ?? '').trim();
+    const own =
+      ownStr && ['1', '2', '3plus'].includes(ownStr)
+        ? (ownStr as OwnershipFilterValue)
+        : normalizeParsedOwnership(ownStr || undefined);
+    if (own) setOwnershipFilter(own);
+
+    if (parsedFilters.minMileage != null || parsedFilters.maxMileage != null) {
+      setMileageRange({
+        min: parsedFilters.minMileage != null ? parsedFilters.minMileage : MIN_MILEAGE,
+        max: parsedFilters.maxMileage != null ? parsedFilters.maxMileage : MAX_MILEAGE,
+      });
+    }
+
+    if (parsedFilters.minPrice != null || parsedFilters.maxPrice != null) {
+      setSelectedPriceBuckets([]);
+      setPriceRange({
+        min: parsedFilters.minPrice != null ? parsedFilters.minPrice : MIN_PRICE,
+        max: parsedFilters.maxPrice != null ? parsedFilters.maxPrice : MAX_PRICE,
+      });
+    }
+
+    if (parsedFilters.year != null && Number.isFinite(parsedFilters.year)) {
+      setYearFilter(String(Math.round(parsedFilters.year)));
+      setYearBounds({ min: null, max: null });
+    } else if (parsedFilters.minYear != null || parsedFilters.maxYear != null) {
+      setYearFilter('0');
+      setYearBounds({
+        min:
+          parsedFilters.minYear != null && Number.isFinite(parsedFilters.minYear)
+            ? Math.round(parsedFilters.minYear)
+            : null,
+        max:
+          parsedFilters.maxYear != null && Number.isFinite(parsedFilters.maxYear)
+            ? Math.round(parsedFilters.maxYear)
+            : null,
+      });
+    }
+
+    if (parsedFilters.location?.trim() && indianStates.length > 0) {
+      const loc = parsedFilters.location.trim().toLowerCase();
+      const st = indianStates.find(
+        (s) =>
+          s.name.toLowerCase() === loc ||
+          s.code.toLowerCase() === loc ||
+          s.name.toLowerCase().includes(loc) ||
+          loc.includes(s.name.toLowerCase())
+      );
+      if (st) {
+        setStateFilter(st.code);
+        setIsStateFilterUserSet(true);
+      }
     }
 
     setIsAiSearching(false);
@@ -777,7 +961,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     if (selectedCity.trim() !== '' && indianStates.length > 0) {
       // Import city mapping utility
       import('../utils/cityMapping').then(({ getStateCodeForCity }) => {
-        import('../constants').then(({ CITIES_BY_STATE }) => {
+        import('../constants/location.js').then(({ CITIES_BY_STATE }) => {
           const stateCode = getStateCodeForCity(selectedCity, CITIES_BY_STATE);
           if (stateCode && stateCode !== stateFilter) {
             if (process.env.NODE_ENV === 'development') {
@@ -810,7 +994,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     if (prevStateFilterRef.current !== stateFilter && isStateFilterUserSet) {
       // Check if the current city matches the new state
       import('../utils/cityMapping').then(({ getStateCodeForCity }) => {
-        import('../constants').then(({ CITIES_BY_STATE }) => {
+        import('../constants/location.js').then(({ CITIES_BY_STATE }) => {
           const cityStateCode = getStateCodeForCity(selectedCity, CITIES_BY_STATE);
           if (cityStateCode !== stateFilter) {
             // City doesn't match the selected state, clear city
@@ -828,8 +1012,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (aiSearchRef.current && !aiSearchRef.current.contains(event.target as Node)) setShowSuggestions(false);
-        if (featuresFilterRef.current && !featuresFilterRef.current.contains(event.target as Node)) setIsFeaturesOpen(false);
-        if (mobileFeaturesFilterRef.current && !mobileFeaturesFilterRef.current.contains(event.target as Node)) setIsMobileFeaturesOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
@@ -838,11 +1020,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     };
   }, []);
 
-  useEffect(() => {
-    if (isFeaturesOpen) {
-        setTimeout(() => featuresSearchInputRef.current?.focus(), 0);
-    }
-  }, [isFeaturesOpen]);
   
   useEffect(() => {
     const body = document.body;
@@ -858,8 +1035,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   }, [isFilterModalOpen]);
 
   // Mobile Modal Filter Logic
-  const handleOpenFilterModal = () => {
-    // Store the initial state filter value and user-set flag when opening the modal
+  const handleOpenFilterModal = (section?: MobileFilterCategoryId) => {
     setInitialStateFilter(stateFilter);
     setInitialIsStateFilterUserSet(isStateFilterUserSet);
     setTempFilters({
@@ -869,12 +1045,15 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       priceRange,
       mileageRange,
       fuelTypeFilter,
+      transmissionFilter,
+      ownershipFilter,
+      selectedPriceBuckets: [...selectedPriceBuckets],
       yearFilter,
-      colorFilter,
+      yearMin: yearBounds.min,
+      yearMax: yearBounds.max,
       stateFilter,
-      selectedFeatures,
-      featureSearch: ''
     });
+    if (section) setMobileFilterCategory(section);
     setIsFilterModalOpen(true);
   };
   
@@ -907,13 +1086,9 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         }
       }
       
-      // Validate color - reset if not available for selected category/make/model
-      let validColor = tempFilters.colorFilter?.trim() || '';
-      if (validColor) {
-        const tempColors = tempUniqueColors;
-        if (!tempColors.includes(validColor)) {
-          validColor = '';
-        }
+      let validTransmission = tempFilters.transmissionFilter?.trim() || '';
+      if (validTransmission && !tempUniqueTransmissions.includes(validTransmission)) {
+        validTransmission = '';
       }
       
       // Batch all state updates together - use functional updates to ensure consistency
@@ -930,8 +1105,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         max: Number(tempFilters.mileageRange.max) 
       });
       setFuelTypeFilter(validFuelType);
+      setTransmissionFilter(validTransmission);
+      setOwnershipFilter(tempFilters.ownershipFilter || '');
+      setSelectedPriceBuckets(
+        Array.isArray(tempFilters.selectedPriceBuckets) ? [...tempFilters.selectedPriceBuckets] : []
+      );
       setYearFilter(validYear);
-      setColorFilter(validColor);
+      setYearBounds({ min: tempFilters.yearMin ?? null, max: tempFilters.yearMax ?? null });
       setStateFilter(tempFilters.stateFilter?.trim() || '');
       
       // Only mark state filter as user-set if it was actually changed in the modal
@@ -939,9 +1119,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       const stateFilterChanged = newStateFilter !== initialStateFilter;
       setIsStateFilterUserSet(stateFilterChanged ? !!(newStateFilter && newStateFilter !== '') : initialIsStateFilterUserSet);
       
-      // Create new array to ensure React detects the change
-      setSelectedFeatures(tempFilters.selectedFeatures ? [...tempFilters.selectedFeatures] : []);
-      setFeatureSearch(''); // Clear feature search when applying filters
       setCurrentPage(1); // Reset to first page when filters are applied
       
       // Close modal
@@ -976,11 +1153,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           priceRange: { min: MIN_PRICE, max: MAX_PRICE },
           mileageRange: { min: MIN_MILEAGE, max: MAX_MILEAGE },
           fuelTypeFilter: '',
+          transmissionFilter: '',
+          ownershipFilter: '',
+          selectedPriceBuckets: [],
           yearFilter: '0',
-          colorFilter: '',
+          yearMin: null,
+          yearMax: null,
           stateFilter: '',
-          selectedFeatures: [],
-          featureSearch: '',
       });
   };
 
@@ -1018,16 +1197,17 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     setModelFilter('');
     setPriceRange({ min: MIN_PRICE, max: MAX_PRICE }); 
     setYearFilter('0'); 
-    setColorFilter(''); 
     setStateFilter('');
     setIsStateFilterUserSet(false); // Reset user-set flag
-    setSelectedFeatures([]); 
-    setFeatureSearch(''); 
     setSortOrder('YEAR_DESC'); 
     onClearCompare(); 
     setCurrentPage(1);
     setMileageRange({ min: MIN_MILEAGE, max: MAX_MILEAGE }); 
     setFuelTypeFilter('');
+    setTransmissionFilter('');
+    setOwnershipFilter('');
+    setSelectedPriceBuckets([]);
+    setYearBounds({ min: null, max: null });
 
     // If filters were entered from a city route (Buy Cars dropdown), clear city too.
     // Otherwise the city->state sync effect will immediately re-apply state filter.
@@ -1059,14 +1239,23 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       minMileage: mileageRange.min !== MIN_MILEAGE ? mileageRange.min : undefined,
       maxMileage: mileageRange.max !== MAX_MILEAGE ? mileageRange.max : undefined,
       fuelType: fuelTypeFilter || undefined,
-      year: yearFilter !== '0' ? parseInt(yearFilter) : undefined,
+      transmission: transmissionFilter?.trim() || undefined,
+      ownership: ownershipFilter || undefined,
+      year: yearFilter !== '0' ? parseInt(yearFilter, 10) : undefined,
+      minYear: yearFilter === '0' && yearBounds.min != null ? yearBounds.min : undefined,
+      maxYear: yearFilter === '0' && yearBounds.max != null ? yearBounds.max : undefined,
       location: stateFilter || undefined,
-      features: selectedFeatures.length > 0 ? selectedFeatures : undefined
-      // Note: query is stored separately in SavedSearch, not in SearchFilters
     };
 
     try {
-      const savedSearch = saveSearch(currentUser.email, searchName, filters, true);
+      const savedSearch = saveBuyerSearch(currentUser.email, {
+        userId: currentUser.email,
+        name: searchName,
+        filters,
+        emailAlerts: true,
+        smsAlerts: false,
+        notificationFrequency: 'instant',
+      });
       if (onSaveSearch) {
         onSaveSearch(savedSearch);
       }
@@ -1082,83 +1271,33 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, sortOrder, aiSearchQuery]);
+  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, selectedPriceBuckets, yearFilter, yearBounds, stateFilter, sortOrder, aiSearchQuery]);
 
 
   const processedVehicles = useMemo(() => {
     const sourceVehicles = isWishlistMode ? vehicles.filter(v => wishlist.includes(v.id)) : vehicles;
 
-    // Early return if no vehicles
     if (sourceVehicles.length === 0) return [];
 
-    const filtered = sourceVehicles.filter(vehicle => {
-        // Use early returns for better performance
-        // Normalize category comparison to handle different formats
-        if (categoryFilter !== 'ALL' && categoryFilter) {
-          // If vehicle has no category, exclude it when a category filter is active
-          if (!vehicle.category) return false;
-          
-          // Normalize both values for comparison
-          const vehicleCategory = String(vehicle.category).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-          const filterCategory = String(categoryFilter).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').trim();
-          
-          // Strict comparison - must match exactly after normalization
-          if (vehicleCategory !== filterCategory) return false;
-        }
-        // Make filter - case-insensitive comparison
-        if (makeFilter && makeFilter.trim() !== '') {
-          if (vehicle.make?.toLowerCase().trim() !== makeFilter.toLowerCase().trim()) return false;
-        }
-        // Model filter - case-insensitive comparison
-        if (modelFilter && modelFilter.trim() !== '') {
-          if (vehicle.model?.toLowerCase().trim() !== modelFilter.toLowerCase().trim()) return false;
-        }
-        // Price range filter - only apply if vehicle has valid price
-        // If price is outside range, exclude the vehicle
-        if (vehicle.price != null && typeof vehicle.price === 'number') {
-          if (vehicle.price < priceRange.min || vehicle.price > priceRange.max) return false;
-        }
-        // Note: Vehicles without price are still shown (they just don't match price filters)
-        
-        // Mileage range filter - only apply if vehicle has valid mileage
-        // If mileage is outside range, exclude the vehicle
-        if (vehicle.mileage != null && typeof vehicle.mileage === 'number') {
-          if (vehicle.mileage < mileageRange.min || vehicle.mileage > mileageRange.max) return false;
-        }
-        // Note: Vehicles without mileage are still shown (they just don't match mileage filters)
-        // Fuel type filter - case-insensitive comparison
-        if (fuelTypeFilter && fuelTypeFilter.trim() !== '') {
-          if (vehicle.fuelType?.toLowerCase().trim() !== fuelTypeFilter.toLowerCase().trim()) return false;
-        }
-        // Year filter
-        if (yearFilter && yearFilter !== '0' && yearFilter.trim() !== '') {
-          const filterYear = Number(yearFilter);
-          if (isNaN(filterYear) || vehicle.year !== filterYear) return false;
-        }
-        // Color filter - case-insensitive comparison
-        if (colorFilter && colorFilter.trim() !== '') {
-          if (vehicle.color?.toLowerCase().trim() !== colorFilter.toLowerCase().trim()) return false;
-        }
-        // State filter - only apply if explicitly set by user (not auto-set from location)
-        if (stateFilter && stateFilter.trim() !== '' && isStateFilterUserSet) {
-          if (vehicle.state?.trim() !== stateFilter.trim()) return false;
-        }
-        // Features filter - vehicle must have all selected features
-        if (selectedFeatures.length > 0) {
-          if (!vehicle.features || !Array.isArray(vehicle.features)) return false;
-          const vehicleFeaturesLower = vehicle.features.map(f => f.toLowerCase().trim());
-          const allFeaturesMatch = selectedFeatures.every(feature => 
-            vehicleFeaturesLower.includes(feature.toLowerCase().trim())
-          );
-          if (!allFeaturesMatch) return false;
-        }
+    const snap: VehicleListFilterSnapshot = {
+      categoryFilter,
+      makeFilter,
+      modelFilter,
+      priceRange,
+      selectedPriceBuckets,
+      mileageRange,
+      fuelTypeFilter,
+      yearFilter,
+      stateFilter,
+      isStateFilterUserSet,
+      selectedCity,
+      transmissionFilter,
+      ownershipFilter,
+      yearBounds,
+    };
 
-        if (!vehicleMatchesSearchText(vehicle, aiSearchQuery)) return false;
+    const filtered = sourceVehicles.filter((vehicle) => matchesVehicleFilters(vehicle, snap, aiSearchQuery));
 
-        return true;
-    });
-
-    // Debug: Log filter results (only in development)
     if (process.env.NODE_ENV === 'development') {
       logInfo('Filter Results:', {
         totalVehicles: sourceVehicles.length,
@@ -1168,12 +1307,13 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           make: makeFilter,
           model: modelFilter,
           priceRange,
+          selectedPriceBuckets,
           mileageRange,
           fuelType: fuelTypeFilter,
+          transmission: transmissionFilter,
+          ownership: ownershipFilter,
           year: yearFilter,
-          color: colorFilter,
           state: stateFilter,
-          features: selectedFeatures
         }
       });
     }
@@ -1216,7 +1356,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             default: return b.year - a.year;
         }
     });
-  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, selectedFeatures, sortOrder, isWishlistMode, wishlist, colorFilter, stateFilter, isStateFilterUserSet, aiSearchQuery]);
+  }, [vehicles, categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, yearFilter, yearBounds, sortOrder, isWishlistMode, wishlist, stateFilter, isStateFilterUserSet, selectedCity, aiSearchQuery]);
   
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -1231,18 +1371,55 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     // Only count non-empty string filters
     if (makeFilter && makeFilter.trim() !== '') count++;
     if (modelFilter && modelFilter.trim() !== '') count++;
-    // Only count price range if it's been explicitly changed from defaults
-    if (priceRange.min !== MIN_PRICE || priceRange.max !== MAX_PRICE) count++;
+    if (selectedPriceBuckets.length > 0) {
+      count++;
+    } else if (priceRange.min !== MIN_PRICE || priceRange.max !== MAX_PRICE) {
+      count++;
+    }
     // Only count mileage range if it's been explicitly changed from defaults
     if (mileageRange.min !== MIN_MILEAGE || mileageRange.max !== MAX_MILEAGE) count++;
     if (fuelTypeFilter && fuelTypeFilter.trim() !== '') count++;
+    if (transmissionFilter && transmissionFilter.trim() !== '') count++;
+    if (ownershipFilter) count++;
     if (yearFilter && yearFilter !== '0' && yearFilter.trim() !== '') count++;
-    if (colorFilter && colorFilter.trim() !== '') count++;
+    else if (yearBounds.min != null || yearBounds.max != null) count++;
     // Only count state filter if it was explicitly set by the user (not auto-set from location)
     if (stateFilter && stateFilter.trim() !== '' && isStateFilterUserSet) count++;
-    count += selectedFeatures.length;
     return count;
-  }, [categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, isWishlistMode, isStateFilterUserSet, initialCategory]);
+  }, [categoryFilter, makeFilter, modelFilter, priceRange, selectedPriceBuckets, mileageRange, fuelTypeFilter, transmissionFilter, ownershipFilter, yearFilter, yearBounds, stateFilter, isWishlistMode, isStateFilterUserSet, initialCategory]);
+
+  const mobileTempPreviewCount = useMemo(() => {
+    const sourceVehicles = isWishlistMode ? vehicles.filter((v) => wishlist.includes(v.id)) : vehicles;
+    if (sourceVehicles.length === 0) return 0;
+    const previewStateUserSet =
+      tempFilters.stateFilter === stateFilter ? isStateFilterUserSet : tempFilters.stateFilter.trim() !== '';
+    const snap: VehicleListFilterSnapshot = {
+      categoryFilter: tempFilters.categoryFilter,
+      makeFilter: tempFilters.makeFilter,
+      modelFilter: tempFilters.modelFilter,
+      priceRange: tempFilters.priceRange,
+      selectedPriceBuckets: tempFilters.selectedPriceBuckets,
+      mileageRange: tempFilters.mileageRange,
+      fuelTypeFilter: tempFilters.fuelTypeFilter,
+      yearFilter: tempFilters.yearFilter,
+      stateFilter: tempFilters.stateFilter,
+      isStateFilterUserSet: previewStateUserSet,
+      selectedCity,
+      transmissionFilter: tempFilters.transmissionFilter,
+      ownershipFilter: tempFilters.ownershipFilter,
+      yearBounds: { min: tempFilters.yearMin ?? null, max: tempFilters.yearMax ?? null },
+    };
+    return sourceVehicles.filter((v) => matchesVehicleFilters(v, snap, aiSearchQuery)).length;
+  }, [
+    vehicles,
+    isWishlistMode,
+    wishlist,
+    tempFilters,
+    stateFilter,
+    isStateFilterUserSet,
+    selectedCity,
+    aiSearchQuery,
+  ]);
 
   // Pagination with infinite scroll - show 12 vehicles per page
   const paginatedVehicles = useMemo(() => {
@@ -1305,6 +1482,334 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     };
   }, [hasMore, currentPage, processedVehicles.length, isLoading, isAiSearching]);
 
+  const toggleTempPriceBucket = (id: string) => {
+    setTempFilters((prev) => {
+      const has = prev.selectedPriceBuckets.includes(id);
+      return {
+        ...prev,
+        selectedPriceBuckets: has ? prev.selectedPriceBuckets.filter((x) => x !== id) : [...prev.selectedPriceBuckets, id],
+      };
+    });
+  };
+
+  const renderMobileFilterRightPanel = () => {
+    const handleTempSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const { name, value } = e.target;
+      setTempFilters((prev) => {
+        const newState = { ...prev, [name]: value } as typeof prev;
+        if (name === 'categoryFilter') {
+          newState.makeFilter = '';
+          newState.modelFilter = '';
+          newState.fuelTypeFilter = '';
+          newState.transmissionFilter = '';
+          newState.ownershipFilter = '';
+          newState.yearFilter = '0';
+          newState.yearMin = null;
+          newState.yearMax = null;
+        } else if (name === 'makeFilter') {
+          newState.modelFilter = '';
+          newState.fuelTypeFilter = '';
+          newState.transmissionFilter = '';
+          newState.ownershipFilter = '';
+          newState.yearFilter = '0';
+          newState.yearMin = null;
+          newState.yearMax = null;
+        } else if (name === 'modelFilter') {
+          newState.fuelTypeFilter = '';
+          newState.transmissionFilter = '';
+          newState.ownershipFilter = '';
+          newState.yearFilter = '0';
+          newState.yearMin = null;
+          newState.yearMax = null;
+        }
+        return newState;
+      });
+    };
+
+    const rowCheckbox = (key: string, label: string, checked: boolean, onToggle: () => void) => (
+      <label
+        key={key}
+        className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50"
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          className="h-4 w-4 rounded border-gray-400 shrink-0"
+          style={{ accentColor: '#222222' }}
+        />
+        <span className="text-sm font-medium text-gray-900">{label}</span>
+      </label>
+    );
+
+    switch (mobileFilterCategory) {
+      case 'price':
+        return (
+          <div className="pb-2">
+            {MOBILE_PRICE_BUCKETS.map((b) =>
+              rowCheckbox(
+                b.id,
+                t(b.labelKey),
+                tempFilters.selectedPriceBuckets.includes(b.id),
+                () => toggleTempPriceBucket(b.id)
+              )
+            )}
+          </div>
+        );
+      case 'brand':
+        return (
+          <div className="space-y-4 pb-2">
+            <div>
+              <label htmlFor="m-make" className="block text-xs font-semibold text-gray-500 mb-1">
+                {t('listings.mobileFilter.make')}
+              </label>
+              <select
+                id="m-make"
+                name="makeFilter"
+                value={tempFilters.makeFilter}
+                onChange={handleTempSelect}
+                className={formElementClass}
+              >
+                <option value="">{t('listings.mobileFilter.anyMake')}</option>
+                {tempUniqueMakes.map((make) => (
+                  <option key={make} value={make}>
+                    {make}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="m-model" className="block text-xs font-semibold text-gray-500 mb-1">
+                {t('listings.mobileFilter.model')}
+              </label>
+              <select
+                id="m-model"
+                name="modelFilter"
+                value={tempFilters.modelFilter}
+                onChange={handleTempSelect}
+                disabled={!tempFilters.makeFilter || tempAvailableModels.length === 0}
+                className={formElementClass}
+              >
+                <option value="">{t('listings.mobileFilter.anyModel')}</option>
+                {tempAvailableModels.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        );
+      case 'body':
+        return (
+          <div className="pb-2">
+            {rowCheckbox(
+              'all-cat',
+              t('listings.mobileFilter.allBodyTypes'),
+              tempFilters.categoryFilter === 'ALL' || !tempFilters.categoryFilter,
+              () => setTempFilters((p) => ({ ...p, categoryFilter: 'ALL' as VehicleCategory | 'ALL' }))
+            )}
+            {uniqueCategories.map((cat) =>
+              rowCheckbox(
+                `cat-${cat}`,
+                String(cat).replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+                tempFilters.categoryFilter === cat,
+                () => setTempFilters((p) => ({ ...p, categoryFilter: cat as VehicleCategory }))
+              )
+            )}
+          </div>
+        );
+      case 'year':
+        return (
+          <div className="pb-2 space-y-1">
+            <label className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50">
+              <input
+                type="radio"
+                name="m-year"
+                checked={tempFilters.yearFilter === '0'}
+                onChange={() => setTempFilters((p) => ({ ...p, yearFilter: '0', yearMin: null, yearMax: null }))}
+                className="h-4 w-4 shrink-0"
+                style={{ accentColor: '#222222' }}
+              />
+              <span className="text-sm font-medium text-gray-900">{t('listings.mobileFilter.anyYear')}</span>
+            </label>
+            {tempUniqueYears.map((year) => (
+              <label
+                key={year}
+                className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50"
+              >
+                <input
+                  type="radio"
+                  name="m-year"
+                  checked={tempFilters.yearFilter === String(year)}
+                  onChange={() =>
+                    setTempFilters((p) => ({ ...p, yearFilter: String(year), yearMin: null, yearMax: null }))
+                  }
+                  className="h-4 w-4 shrink-0"
+                  style={{ accentColor: '#222222' }}
+                />
+                <span className="text-sm font-medium text-gray-900">{year}</span>
+              </label>
+            ))}
+          </div>
+        );
+      case 'kms': {
+        const handleMileage = (e: React.ChangeEvent<HTMLInputElement>) => {
+          const { name, value } = e.target;
+          const val = parseInt(value, 10);
+          setTempFilters((prev) => {
+            const currentRange = prev.mileageRange;
+            const newRange = { ...currentRange, [name]: val };
+            if (name === 'min' && newRange.min > currentRange.max) newRange.max = newRange.min;
+            else if (name === 'max' && newRange.max < currentRange.min) newRange.min = newRange.max;
+            return { ...prev, mileageRange: newRange };
+          });
+        };
+        return (
+          <div className="pb-4 space-y-3">
+            <div className="flex justify-between text-xs text-gray-600">
+              <span>{tempFilters.mileageRange.min.toLocaleString('en-IN')} km</span>
+              <span>{tempFilters.mileageRange.max.toLocaleString('en-IN')} km</span>
+            </div>
+            <div className="relative h-8 flex items-center">
+              <div className="relative w-full h-1.5 bg-gray-200 rounded-full">
+                <div
+                  className="absolute h-1.5 rounded-full bg-gray-800"
+                  style={{
+                    left: `${((tempFilters.mileageRange.min - MIN_MILEAGE) / (MAX_MILEAGE - MIN_MILEAGE)) * 100}%`,
+                    right: `${100 - ((tempFilters.mileageRange.max - MIN_MILEAGE) / (MAX_MILEAGE - MIN_MILEAGE)) * 100}%`,
+                  }}
+                />
+              </div>
+              <input
+                name="min"
+                type="range"
+                min={MIN_MILEAGE}
+                max={MAX_MILEAGE}
+                step={1000}
+                value={tempFilters.mileageRange.min}
+                onChange={handleMileage}
+                className="mobile-filter-slider absolute w-full h-1.5 bg-transparent appearance-none z-20"
+              />
+              <input
+                name="max"
+                type="range"
+                min={MIN_MILEAGE}
+                max={MAX_MILEAGE}
+                step={1000}
+                value={tempFilters.mileageRange.max}
+                onChange={handleMileage}
+                className="mobile-filter-slider absolute w-full h-1.5 bg-transparent appearance-none z-30"
+              />
+            </div>
+          </div>
+        );
+      }
+      case 'fuel':
+        return (
+          <div className="pb-2">
+            <select
+              name="fuelTypeFilter"
+              value={tempFilters.fuelTypeFilter}
+              onChange={handleTempSelect}
+              className={formElementClass}
+            >
+              <option value="">{t('listings.mobileFilter.anyFuel')}</option>
+              {tempUniqueFuelTypes.map((fuel) => (
+                <option key={fuel} value={fuel}>
+                  {fuel}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      case 'transmission':
+        return (
+          <div className="pb-2">
+            <select
+              name="transmissionFilter"
+              value={tempFilters.transmissionFilter}
+              onChange={(e) =>
+                setTempFilters((p) => ({ ...p, transmissionFilter: e.target.value }))
+              }
+              className={formElementClass}
+            >
+              <option value="">{t('listings.mobileFilter.anyTransmission')}</option>
+              {tempUniqueTransmissions.map((tr) => (
+                <option key={tr} value={tr}>
+                  {tr}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      case 'ownership':
+        return (
+          <div className="pb-2 space-y-1">
+            {(
+              [
+                { id: '' as OwnershipFilterValue, label: t('listings.mobileFilter.anyOwnership') },
+                { id: '1' as OwnershipFilterValue, label: t('listings.mobileFilter.owner1') },
+                { id: '2' as OwnershipFilterValue, label: t('listings.mobileFilter.owner2') },
+                { id: '3plus' as OwnershipFilterValue, label: t('listings.mobileFilter.owner3plus') },
+              ] as const
+            ).map((opt) => (
+              <label
+                key={opt.id || 'any'}
+                className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50"
+              >
+                <input
+                  type="radio"
+                  name="m-ownership"
+                  checked={tempFilters.ownershipFilter === opt.id}
+                  onChange={() => setTempFilters((p) => ({ ...p, ownershipFilter: opt.id }))}
+                  className="h-4 w-4 shrink-0"
+                  style={{ accentColor: '#222222' }}
+                />
+                <span className="text-sm font-medium text-gray-900">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        );
+      case 'state':
+        // Native <select> pickers misalign on iOS when body is position:fixed (modal scroll lock).
+        // Radio list matches year/ownership panels and stays inside the scrollable panel.
+        return (
+          <div className="pb-2 space-y-1">
+            <label className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50">
+              <input
+                type="radio"
+                name="m-state"
+                checked={!tempFilters.stateFilter?.trim()}
+                onChange={() => setTempFilters((p) => ({ ...p, stateFilter: '' }))}
+                className="h-4 w-4 shrink-0"
+                style={{ accentColor: '#222222' }}
+              />
+              <span className="text-sm font-medium text-gray-900">{t('listings.mobileFilter.anyState')}</span>
+            </label>
+            {uniqueStates.map((st) => (
+              <label
+                key={st.code}
+                className="flex items-center gap-3 py-3 border-b border-gray-100 cursor-pointer active:bg-gray-50"
+              >
+                <input
+                  type="radio"
+                  name="m-state"
+                  checked={tempFilters.stateFilter === st.code}
+                  onChange={() => setTempFilters((p) => ({ ...p, stateFilter: st.code }))}
+                  className="h-4 w-4 shrink-0"
+                  style={{ accentColor: '#222222' }}
+                />
+                <span className="text-sm font-medium text-gray-900">{st.name}</span>
+              </label>
+            ))}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   if (isWishlistMode) {
      return (
       <div className="animate-fade-in container mx-auto py-8">
@@ -1331,7 +1836,20 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const formElementClass = "block w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg focus:outline-none transition bg-white dark:bg-white dark:text-reride-text-dark disabled:bg-reride-light-gray dark:disabled:bg-reride-light-gray disabled:cursor-not-allowed";
 
   const renderFilterControls = (isMobile: boolean) => {
-    const state = isMobile ? tempFilters : { categoryFilter, makeFilter, modelFilter, priceRange, mileageRange, fuelTypeFilter, yearFilter, colorFilter, stateFilter, selectedFeatures, featureSearch };
+    const state = isMobile
+      ? tempFilters
+      : {
+          categoryFilter,
+          makeFilter,
+          modelFilter,
+          priceRange,
+          mileageRange,
+          fuelTypeFilter,
+          yearFilter,
+          stateFilter,
+          transmissionFilter,
+          ownershipFilter,
+        };
     
     const handleRangeChange = (e: React.ChangeEvent<HTMLInputElement>, rangeType: 'price' | 'mileage') => {
         const { name, value } = e.target;
@@ -1367,23 +1885,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             });
         }
     };
-    
-    const handleFeatureToggleLocal = (feature: string) => {
-        if (isMobile) {
-            setTempFilters(prev => ({
-                ...prev,
-                selectedFeatures: prev.selectedFeatures.includes(feature)
-                    ? prev.selectedFeatures.filter(f => f !== feature)
-                    : [...prev.selectedFeatures, feature]
-            }));
-        } else {
-            setSelectedFeatures(prev =>
-                prev.includes(feature)
-                    ? prev.filter(f => f !== feature)
-                    : [...prev, feature]
-            );
-        }
-    };
 
     const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -1391,55 +1892,68 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             setTempFilters(prev => {
                 const newState = { ...prev, [name]: value };
                 if (name === 'categoryFilter') {
-                    // Reset make, model, fuel type, year, and color when category changes
                     newState.makeFilter = '';
                     newState.modelFilter = '';
                     newState.fuelTypeFilter = '';
+                    newState.transmissionFilter = '';
+                    newState.ownershipFilter = '';
                     newState.yearFilter = '0';
-                    newState.colorFilter = '';
+                    newState.yearMin = null;
+                    newState.yearMax = null;
                 } else if (name === 'makeFilter') {
-                    // Reset model, fuel type, year, and color when make changes
                     newState.modelFilter = '';
                     newState.fuelTypeFilter = '';
+                    newState.transmissionFilter = '';
+                    newState.ownershipFilter = '';
                     newState.yearFilter = '0';
-                    newState.colorFilter = '';
+                    newState.yearMin = null;
+                    newState.yearMax = null;
                 } else if (name === 'modelFilter') {
-                    // Reset fuel type, year, and color when model changes
                     newState.fuelTypeFilter = '';
+                    newState.transmissionFilter = '';
+                    newState.ownershipFilter = '';
                     newState.yearFilter = '0';
-                    newState.colorFilter = '';
+                    newState.yearMin = null;
+                    newState.yearMax = null;
                 }
                 return newState;
             });
         } else {
             switch(name) {
                 case 'categoryFilter': 
-                    // Reset make, model, fuel type, year, and color when category changes
                     setCategoryFilter(value as VehicleCategory | 'ALL');
                     setMakeFilter('');
                     setModelFilter('');
                     setFuelTypeFilter('');
+                    setTransmissionFilter('');
+                    setOwnershipFilter('');
                     setYearFilter('0');
-                    setColorFilter('');
+                    setYearBounds({ min: null, max: null });
                     break;
                 case 'makeFilter': 
                     setMakeFilter(value); 
                     setModelFilter('');
-                    // Reset fuel type, year, and color when make changes
                     setFuelTypeFilter('');
+                    setTransmissionFilter('');
+                    setOwnershipFilter('');
                     setYearFilter('0');
-                    setColorFilter('');
+                    setYearBounds({ min: null, max: null });
                     break;
                 case 'modelFilter': 
                     setModelFilter(value);
-                    // Reset fuel type, year, and color when model changes
                     setFuelTypeFilter('');
+                    setTransmissionFilter('');
+                    setOwnershipFilter('');
                     setYearFilter('0');
-                    setColorFilter('');
+                    setYearBounds({ min: null, max: null });
                     break;
                 case 'fuelTypeFilter': setFuelTypeFilter(value); break;
-                case 'yearFilter': setYearFilter(value); break;
-                case 'colorFilter': setColorFilter(value); break;
+                case 'yearFilter':
+                    setYearFilter(value);
+                    setYearBounds({ min: null, max: null });
+                    break;
+                case 'transmissionFilter': setTransmissionFilter(value); break;
+                case 'ownershipFilter': setOwnershipFilter((value || '') as OwnershipFilterValue); break;
                 case 'stateFilter': 
                   setStateFilter(value);
                   setIsStateFilterUserSet(true); // Mark as user-set
@@ -1518,10 +2032,21 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                 </select>
             </div>
             <div>
-                <label htmlFor="color-filter" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Color</label>
-                <select id="color-filter" name="colorFilter" value={state.colorFilter} onChange={handleSelectChange} className={formElementClass}>
-                    <option value="">Any Color</option>
-                    {(isMobile ? tempUniqueColors : uniqueColors).map(color => <option key={color} value={color}>{color}</option>)}
+                <label htmlFor="transmission-filter-web" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">{t('listings.mobileFilter.catTransmission')}</label>
+                <select id="transmission-filter-web" name="transmissionFilter" value={state.transmissionFilter} onChange={handleSelectChange} className={formElementClass}>
+                    <option value="">{t('listings.mobileFilter.anyTransmission')}</option>
+                    {(isMobile ? tempUniqueTransmissions : uniqueTransmissions).map((tr) => (
+                      <option key={tr} value={tr}>{tr}</option>
+                    ))}
+                </select>
+            </div>
+            <div>
+                <label htmlFor="ownership-filter-web" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">{t('listings.mobileFilter.catOwnership')}</label>
+                <select id="ownership-filter-web" name="ownershipFilter" value={state.ownershipFilter} onChange={handleSelectChange} className={formElementClass}>
+                    <option value="">{t('listings.mobileFilter.anyOwnership')}</option>
+                    <option value="1">{t('listings.mobileFilter.owner1')}</option>
+                    <option value="2">{t('listings.mobileFilter.owner2')}</option>
+                    <option value="3plus">{t('listings.mobileFilter.owner3plus')}</option>
                 </select>
             </div>
             <div>
@@ -1530,25 +2055,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                     <option value="">Any State</option>
                     {uniqueStates.map(st => <option key={st.code} value={st.code}>{st.name}</option>)}
                 </select>
-            </div>
-            <div className="relative" ref={isMobile ? mobileFeaturesFilterRef : featuresFilterRef}>
-                <label htmlFor="features-filter-button" className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Features</label>
-                <button id="features-filter-button" type="button" onClick={() => isMobile ? setIsMobileFeaturesOpen(p => !p) : setIsFeaturesOpen(p => !p)} className={`${formElementClass} flex justify-between items-center text-left min-h-[50px]`}>
-                    <div className="flex flex-wrap gap-1 items-center">
-                        {state.selectedFeatures.length > 0 ? ( state.selectedFeatures.slice(0, 2).map(feature => ( <span key={feature} className="text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1.5" style={{ background: '#FF6B35' }}>{feature} <button type="button" onClick={(e) => { e.stopPropagation(); handleFeatureToggleLocal(feature); }} className="bg-white/20 hover:bg-white/40 rounded-full h-4 w-4 flex items-center justify-center text-white" aria-label={t('listings.removeFeatureAria', { feature })}>&times;</button></span>)) ) : ( <span className="text-reride-text dark:text-reride-text">{t('listings.selectFeaturesPlaceholder')}</span> )}
-                        {state.selectedFeatures.length > 2 && ( <span className="text-xs font-semibold text-reride-text dark:text-reride-text">{t('listings.moreFeatures', { count: state.selectedFeatures.length - 2 })}</span> )}
-                    </div>
-                    <svg className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 ${(isMobile ? isMobileFeaturesOpen : isFeaturesOpen) ? 'transform rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                </button>
-                {(isMobile ? isMobileFeaturesOpen : isFeaturesOpen) && (
-                    <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200-200 dark:border-gray-200-300 z-20 overflow-hidden animate-fade-in">
-                        <div className="p-2"><input ref={featuresSearchInputRef} type="text" placeholder={t('listings.searchFeaturesPlaceholder')} value={isMobile ? tempFilters.featureSearch : featureSearch} onChange={e => { isMobile ? setTempFilters(p => ({...p, featureSearch: e.target.value})) : setFeatureSearch(e.target.value) }} className="block w-full p-2 border border-gray-200-300 dark:border-gray-200-500 rounded-md bg-white text-sm focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }} /></div>
-                        <div className="max-h-48 overflow-y-auto">
-                            {(isMobile ? tempFilteredFeatures : filteredFeatures).map(feature => ( <label key={feature} className="flex items-center space-x-3 cursor-pointer group p-3 transition-colors hover:bg-reride-off-white dark:hover:bg-brand-gray-600"><input type="checkbox" checked={state.selectedFeatures.includes(feature)} onChange={() => handleFeatureToggleLocal(feature)} className="h-4 w-4 rounded border-gray-200-300 dark:border-gray-200-500 bg-transparent" style={{ accentColor: '#FF6B35' }} /><span className="text-sm text-reride-text-dark dark:text-brand-gray-200">{feature}</span></label> ))}
-                            {(isMobile ? tempFilteredFeatures.length === 0 : filteredFeatures.length === 0) && ( <p className="p-3 text-sm text-center text-reride-text dark:text-reride-text">{t('listings.noFeaturesFound')}</p> )}
-                        </div>
-                    </div>
-                )}
             </div>
             {!isMobile && (
               <div className="space-y-2 mt-2">
@@ -1635,58 +2141,52 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </div>
         </div>
 
-        {/* Premium Filter & Sort Bar - Sticky positioning for mobile app */}
-        <div 
-          className="sticky-filter-bar px-4 py-3 mb-2"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 flex-1">
+        {/* Marketplace-style filter chips + counts */}
+        <div className="sticky-filter-bar bg-[#F5F5F5] px-3 py-2.5 mb-2 space-y-2">
+          <div
+            className="flex gap-2 overflow-x-auto pb-0.5 -mx-0.5 px-0.5 scrollbar-hide"
+            style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}
+          >
+            {(
+              [
+                { id: 'filter' as const, label: t('listings.mobileFilter.chipFilter'), onClick: () => handleOpenFilterModal() },
+                { id: 'sort' as const, label: t('listings.mobileFilter.chipSort'), onClick: () => setIsSortSheetOpen(true) },
+                { id: 'price' as const, label: t('listings.mobileFilter.chipPrice'), onClick: () => handleOpenFilterModal('price') },
+                { id: 'brand' as const, label: t('listings.mobileFilter.chipBrand'), onClick: () => handleOpenFilterModal('brand') },
+                { id: 'body' as const, label: t('listings.mobileFilter.chipBody'), onClick: () => handleOpenFilterModal('body') },
+                { id: 'year' as const, label: t('listings.mobileFilter.chipYear'), onClick: () => handleOpenFilterModal('year') },
+                { id: 'fuel' as const, label: t('listings.mobileFilter.chipFuel'), onClick: () => handleOpenFilterModal('fuel') },
+              ] as const
+            ).map((chip) => (
               <button
-                onClick={handleOpenFilterModal}
-                className="relative p-3 rounded-xl transition-all active:scale-95"
-                style={{
-                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
-                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
-                  minWidth: '48px',
-                  minHeight: '48px'
-                }}
+                key={chip.id}
+                type="button"
+                onClick={chip.onClick}
+                className="relative flex-shrink-0 whitespace-nowrap px-3.5 py-2 rounded-full bg-white border border-gray-800 text-sm font-semibold text-gray-900 active:scale-[0.98] transition-transform"
               >
-                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
-                </svg>
-                {activeFilterCount > 0 && (
-                  <span 
-                    className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold text-white rounded-full"
-                    style={{
-                      background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
-                      boxShadow: '0 2px 4px rgba(239, 68, 68, 0.4)',
-                      minWidth: '20px'
-                    }}
-                  >
+                {chip.label}
+                {chip.id === 'filter' && activeFilterCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full border-2 border-[#F5F5F5]">
                     {activeFilterCount}
                   </span>
                 )}
               </button>
-              <div className="flex-1">
-                <p className="text-xs text-gray-500 font-medium">{t('listings.showing')}</p>
-                <p className="text-sm font-bold text-gray-900">
-                  {paginatedVehicles.length} {t('listings.of')} {processedVehicles.length}
-                </p>
-              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between px-1">
+            <div>
+              <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">{t('listings.showing')}</p>
+              <p className="text-sm font-bold text-gray-900">
+                {paginatedVehicles.length} {t('listings.of')} {processedVehicles.length}
+              </p>
             </div>
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
-              className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
-              style={{
-                fontSize: '14px',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
-              }}
+            <button
+              type="button"
+              onClick={() => setIsSortSheetOpen(true)}
+              className="text-xs font-semibold text-orange-600"
             >
-              {Object.entries(sortOptions).map(([key, value]) => (
-                <option key={key} value={key}>{value}</option>
-              ))}
-            </select>
+              {sortOptions[sortOrder as keyof typeof sortOptions] ?? sortOrder}
+            </button>
           </div>
         </div>
 
@@ -1790,42 +2290,59 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           </div>
         </div>
 
-        {/* Mobile Filter Sheet */}
-        <MobileFilterSheet
+        <MobileMarketplaceFilterModal
           isOpen={isFilterModalOpen}
           onClose={handleCloseFilterModal}
-          title={t('listings.filtersTitle')}
+          activeCategory={mobileFilterCategory}
+          onActiveCategoryChange={setMobileFilterCategory}
+          t={t}
           footer={
-            <div className="flex gap-3 px-4 pb-4">
-              <button 
-                onClick={handleResetTempFilters} 
-                className="flex-1 py-4 px-4 rounded-2xl font-bold text-base text-gray-700 bg-white border-2 border-gray-200 transition-all active:scale-95"
-                style={{
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
-                }}
+            <div className="flex items-stretch min-h-[56px]">
+              <button
+                type="button"
+                onClick={handleResetTempFilters}
+                className="flex-1 flex items-center justify-center gap-2 text-white font-bold text-xs uppercase tracking-wide px-2"
               >
-                {t('listings.reset')}
+                <svg className="w-5 h-5 shrink-0 opacity-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7h12M8 12h12m-12 5h12M4 7h.01M4 12h.01M4 17h.01"
+                  />
+                </svg>
+                {t('listings.mobileFilter.clearAll')}
               </button>
-              <button 
-                onClick={handleApplyFilters} 
-                className="flex-1 py-4 px-4 rounded-2xl font-bold text-base text-white transition-all active:scale-95"
-                style={{
-                  background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
-                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)'
-                }}
+              <div className="w-px bg-white/25 self-stretch my-2 shrink-0" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={handleApplyFilters}
+                className="flex-[1.25] mx-2 my-2 rounded-lg font-bold text-sm px-3 text-gray-900 active:opacity-90 transition-opacity"
+                style={{ background: '#FFD700', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
               >
-                {t('listings.applyFilters')}
-                {activeFilterCount > 0 && (
-                  <span className="ml-2 bg-white/30 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                    {activeFilterCount}
-                  </span>
-                )}
+                {t('listings.mobileFilter.viewResults', { count: mobileTempPreviewCount })}
               </button>
             </div>
           }
         >
-          {renderFilterControls(true)}
-        </MobileFilterSheet>
+          <>
+            <style>{`
+              .mobile-filter-slider { -webkit-appearance: none; appearance: none; background: transparent; pointer-events: none; }
+              .mobile-filter-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background-color: #222; border: 3px solid #fff; box-shadow: 0 0 0 1px #ccc; border-radius: 50%; cursor: pointer; pointer-events: auto; }
+              .mobile-filter-slider::-moz-range-thumb { width: 20px; height: 20px; background-color: #222; border: 3px solid #fff; box-shadow: 0 0 0 1px #ccc; border-radius: 50%; cursor: pointer; pointer-events: auto; }
+            `}</style>
+            {renderMobileFilterRightPanel()}
+          </>
+        </MobileMarketplaceFilterModal>
+
+        <MobileSortSheet
+          isOpen={isSortSheetOpen}
+          onClose={() => setIsSortSheetOpen(false)}
+          sortOrder={sortOrder}
+          onSortChange={setSortOrder}
+          options={sortOptions}
+          t={t}
+        />
 
         <QuickViewModal
           vehicle={quickViewVehicle}
@@ -1907,7 +2424,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
                 </button>
                 <button 
-                  onClick={handleOpenFilterModal} 
+                  onClick={() => handleOpenFilterModal()} 
                   className="lg:hidden relative p-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors native-button active:opacity-80 min-h-[40px] min-w-[40px] flex items-center justify-center shadow-md"
                   style={{ backgroundColor: '#FF6B35' }}
                   aria-label={`Open filters${activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}`}
@@ -2048,39 +2565,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         </main>
       </div>
 
-      {/* Mobile Filter Sheet - Using MobileFilterSheet Component */}
-      {isMobileApp && (
-        <MobileFilterSheet
-          isOpen={isFilterModalOpen}
-          onClose={handleCloseFilterModal}
-          title={t('listings.filtersTitle')}
-          footer={
-            <div className="flex gap-3">
-              <button 
-                onClick={handleResetTempFilters} 
-                className="flex-1 native-button native-button-secondary font-semibold py-3"
-              >
-                {t('listings.reset')}
-              </button>
-              <button 
-                onClick={handleApplyFilters} 
-                className="flex-1 native-button native-button-primary font-semibold py-3"
-              >
-                {t('listings.applyFilters')}
-                {activeFilterCount > 0 && (
-                  <span className="ml-2 bg-white/30 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          }
-        >
-          {renderFilterControls(true)}
-        </MobileFilterSheet>
-      )}
-
-      {/* Desktop Filter Modal - Keep existing for desktop */}
+      {/* Mobile web: bottom-sheet filter (not native app) */}
       {!isMobileApp && isFilterModalOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 z-50 animate-fade-in"

@@ -387,6 +387,8 @@ export interface SearchFilters {
     category?: VehicleCategory;
     fuelType?: string;
     transmission?: string;
+    /** 1 = first owner, 2 = second, 3plus = third or more */
+    ownership?: '1' | '2' | '3plus';
     location?: string;
     selectedFeatures?: string[];
 }
