@@ -291,9 +291,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
       {/* Featured Vehicles Carousel */}
       {displayedFeaturedVehicles.length > 0 ? (
-        <div className="px-4 py-6 bg-white">
-          <div className="text-center mb-5">
-            <div className="flex flex-col items-center gap-3">
+        <div className="px-4 py-5 bg-white border-t border-gray-100">
+          <div className="text-center mb-4">
+            <div className="flex flex-col items-center gap-2">
               <button type="button" className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 via-orange-500 to-pink-500 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-wider shadow-lg">
                 <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -301,7 +301,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 {t('home.featured.badge')}
               </button>
               <h2 className="text-3xl font-black text-gray-900 tracking-tight">{t('home.featured.title')}</h2>
-              <p className="text-gray-600 text-sm leading-relaxed">{t('home.featured.subtitle')}</p>
+              <p className="text-gray-600 text-sm leading-snug">{t('home.featured.subtitle')}</p>
             </div>
             <button
               type="button"
@@ -555,7 +555,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           )}
         </div>
       ) : (
-        <div className="px-4 py-6 bg-white">
+        <div className="px-4 py-5 bg-white border-t border-gray-100">
           <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-4 text-center">
             <p className="text-gray-800 font-semibold mb-1">{t('mobile.home.noFeatured')}</p>
             <p className="text-gray-500 text-sm mb-4">{t('mobile.home.browseHint')}</p>
@@ -572,15 +572,15 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
       {/* Categories Section - Compact Mobile Tiles */}
       <section
-        className="px-4 py-6 bg-gradient-to-b from-white to-gray-50"
+        className="px-4 py-5 bg-gradient-to-b from-white to-gray-50 border-t border-gray-100"
         aria-labelledby="mobile-home-categories-heading"
       >
-        <div className="flex items-center justify-between mb-4">
-          <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="space-y-0.5">
             <h2 id="mobile-home-categories-heading" className="text-2xl font-bold text-gray-900">
               {t('home.categories.title')}
             </h2>
-            <p className="text-xs text-gray-500 mt-1">{t('mobile.home.quickTaps')}</p>
+            <p className="text-xs text-gray-500 leading-snug">{t('mobile.home.quickTaps')}</p>
           </div>
           <button
             type="button"
@@ -652,15 +652,15 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
       {/* Cities Section - Smaller Mobile Location Tiles */}
       <section
-        className="px-4 py-6 bg-gradient-to-b from-white to-gray-50"
+        className="px-4 py-5 bg-gradient-to-b from-white to-gray-50 border-t border-gray-100"
         aria-labelledby="mobile-home-locations-heading"
       >
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 id="mobile-home-locations-heading" className="text-2xl font-bold text-gray-900 mb-1">
+        <div className="flex items-center justify-between mb-3">
+          <div className="space-y-0.5">
+            <h2 id="mobile-home-locations-heading" className="text-2xl font-bold text-gray-900">
               {t('mobile.home.exploreLocation')}
             </h2>
-            <p className="text-xs text-gray-500">{t('mobile.home.nearYou')}</p>
+            <p className="text-xs text-gray-500 leading-snug">{t('mobile.home.nearYou')}</p>
           </div>
           <button
             type="button"
@@ -690,7 +690,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                 aria-label={t('mobile.home.cityAria', { name: city.name, count: city.count })}
                 onClick={() => {
                   onSelectCity(city.name);
-                  onNavigate(ViewEnum.USED_CARS);
                 }}
                 className="group flex-shrink-0 rounded-full p-4 text-white w-[118px] h-[118px] active:scale-95 transition-all duration-300 shadow-xl hover:shadow-2xl hover:-translate-y-2 relative overflow-hidden border border-white/30 flex items-center justify-center snap-start motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100 motion-reduce:hover:shadow-xl"
                 style={{
@@ -750,8 +749,8 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 
       {/* Recommendations */}
       {recommendations.length > 0 && (
-        <div className="px-4 py-6 bg-gray-50">
-          <div className="flex items-center justify-between mb-4">
+        <div className="px-4 py-5 bg-gray-50 border-t border-gray-100">
+          <div className="flex items-center justify-between mb-3">
             <h2 className="text-xl font-bold text-gray-900">{t('mobile.home.recommended')}</h2>
             <button
               onClick={() => onNavigate(ViewEnum.USED_CARS)}
@@ -777,9 +776,9 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
       )}
 
       {/* Sell Your Car CTA */}
-      <div className="px-4 py-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white mb-8 rounded-2xl">
-        <h2 className="text-xl font-bold mb-2">{t('mobile.home.readyToSell')}</h2>
-        <p className="text-white/90 text-sm mb-4">{t('mobile.home.listVehicle')}</p>
+      <div className="px-4 py-5 mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl border-t border-white/10">
+        <h2 className="text-xl font-bold mb-1">{t('mobile.home.readyToSell')}</h2>
+        <p className="text-white/90 text-sm leading-snug mb-3">{t('mobile.home.listVehicle')}</p>
         <button
           onClick={() => onNavigate(ViewEnum.SELL_CAR)}
           className="w-full bg-white text-orange-500 py-3 rounded-xl font-semibold active:scale-95 transition-transform"

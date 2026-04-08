@@ -232,7 +232,7 @@ const Home: React.FC<HomeProps> = ({
         <div className="min-h-screen bg-white overflow-x-hidden w-full">
             {/* Hero Section with Search - Exact Design Match */}
             <div 
-                className="relative py-12 md:py-16 px-4 overflow-hidden"
+                className="relative py-10 md:py-14 px-4 pb-10 md:pb-12 overflow-hidden"
                 style={{
                     background: 'linear-gradient(180deg, #6A2D9D 0%, #D24B9F 100%)',
                     fontFamily: "'Poppins', sans-serif"
@@ -285,7 +285,7 @@ const Home: React.FC<HomeProps> = ({
                     
                     {/* Subheading - Exact Match */}
                     <p 
-                        className="text-white mb-6 max-w-3xl mx-auto"
+                        className="text-white mb-5 max-w-3xl mx-auto"
                         style={{
                             fontSize: 'clamp(16px, 2vw, 18px)',
                             fontWeight: 400,
@@ -299,7 +299,7 @@ const Home: React.FC<HomeProps> = ({
 
                     {/* Search Bar - Exact Match */}
                     <div 
-                        className="flex flex-col md:flex-row items-stretch md:items-center bg-white rounded-3xl shadow-lg mb-12 max-w-4xl mx-auto overflow-hidden"
+                        className="flex flex-col md:flex-row items-stretch md:items-center bg-white rounded-3xl shadow-lg mb-8 max-w-4xl mx-auto overflow-hidden"
                         style={{
                             borderRadius: '24px',
                             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)'
@@ -561,10 +561,10 @@ const Home: React.FC<HomeProps> = ({
 
             {/* Featured Collection Section - Premium Style */}
             {featuredVehicles.length > 0 ? (
-                <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
+                <div className="py-10 md:py-14 px-4 bg-gradient-to-b from-white to-gray-50 border-t border-gray-100/80">
                     <div className="max-w-7xl mx-auto">
-                        <div className="text-center mb-12 space-y-4">
-                            <div className="flex flex-col items-center gap-3">
+                        <div className="text-center mb-8 space-y-2">
+                            <div className="flex flex-col items-center gap-2">
                                 <button className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 via-orange-500 to-pink-500 text-white px-6 py-2.5 rounded-full font-black text-xs uppercase tracking-wider shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
                                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                         <path d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -572,7 +572,7 @@ const Home: React.FC<HomeProps> = ({
                                     {t('home.featured.badge')}
                                 </button>
                                 <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.featured.title')}</h2>
-                                <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">{t('home.featured.subtitle')}</p>
+                                <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-snug md:leading-relaxed">{t('home.featured.subtitle')}</p>
                             </div>
                             <button
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
@@ -688,7 +688,7 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : showSkeletons ? (
-                <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
+                <div className="py-10 md:py-14 px-4 bg-gradient-to-b from-white to-gray-50 border-t border-gray-100/80">
                     <div className="max-w-7xl mx-auto space-y-4">
                         <div className="h-4 bg-gray-100 rounded w-40 animate-pulse" />
                         <div className="h-6 bg-gray-100 rounded w-64 animate-pulse" />
@@ -698,16 +698,16 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-white to-gray-50">
+                <div className="py-10 md:py-14 px-4 bg-gradient-to-b from-white to-gray-50 border-t border-gray-100/80">
                     <div className="max-w-7xl mx-auto">
                         <div className="text-center">
-                            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mb-6">
+                            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mb-4">
                                 <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                 </svg>
                             </div>
-                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">{t('home.featured.emptyTitle')}</h2>
-                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-2 tracking-tight">{t('home.featured.emptyTitle')}</h2>
+                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-snug md:leading-relaxed mb-6">
                                 {t('home.featured.emptyBody')}
                             </p>
                             <button 
@@ -726,12 +726,12 @@ const Home: React.FC<HomeProps> = ({
 
             {/* Recently Added Section */}
             {recentVehicles.length > 0 ? (
-                <div className="py-16 md:py-20 px-4 bg-white">
+                <div className="py-10 md:py-14 px-4 bg-white border-t border-gray-100/80">
                     <div className="max-w-7xl mx-auto">
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-                            <div>
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+                            <div className="space-y-1">
                                 <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.recent.title')}</h2>
-                                <p className="text-gray-600 text-base md:text-lg">{t('home.recent.subtitle')}</p>
+                                <p className="text-gray-600 text-base md:text-lg leading-snug md:leading-normal">{t('home.recent.subtitle')}</p>
                             </div>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
@@ -795,7 +795,7 @@ const Home: React.FC<HomeProps> = ({
                     </div>
                 </div>
             ) : showSkeletons ? (
-                <div className="py-16 md:py-20 px-4 bg-white">
+                <div className="py-10 md:py-14 px-4 bg-white border-t border-gray-100/80">
                     <div className="max-w-7xl mx-auto">
                         <div className="h-6 bg-gray-100 rounded w-52 mb-3 animate-pulse" />
                         <div className="h-4 bg-gray-100 rounded w-80 mb-8 animate-pulse" />
@@ -807,18 +807,18 @@ const Home: React.FC<HomeProps> = ({
             ) : null}
 
             {/* Explore by Location Section - Premium Style */}
-            <div className="py-16 md:py-20 px-4 bg-gradient-to-b from-gray-50 to-white">
+            <div className="py-10 md:py-14 px-4 bg-gradient-to-b from-gray-50 to-white border-t border-gray-100/80">
                 <div className="max-w-7xl mx-auto">
-                    <div className="text-center mb-12">
-                        <button className="inline-flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-full mb-6 font-black text-xs uppercase tracking-wider shadow-lg">
+                    <div className="text-center mb-8 space-y-2">
+                        <button className="inline-flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-full mb-0 font-black text-xs uppercase tracking-wider shadow-lg">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                             {t('home.cities.badge')}
                         </button>
-                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">{t('home.cities.title')}</h2>
-                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">{t('home.cities.subtitle')}</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.cities.title')}</h2>
+                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-snug md:leading-relaxed">{t('home.cities.subtitle')}</p>
                     </div>
 
                     <div className="flex flex-col gap-4">
@@ -844,7 +844,6 @@ const Home: React.FC<HomeProps> = ({
                                     key={index}
                                     onClick={() => {
                                         onSelectCity(city.name);
-                                        onNavigate(ViewEnum.USED_CARS);
                                     }}
                                     className="group inline-flex items-center gap-3 px-4 md:px-5 py-3 rounded-full bg-white border border-gray-200 shadow-sm hover:border-purple-500 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
                                 >
@@ -872,8 +871,8 @@ const Home: React.FC<HomeProps> = ({
             </div>
 
             {/* Why Choose Us */}
-            <div className="py-14 px-4 bg-gradient-to-r from-slate-50 via-white to-slate-50 border-t border-b border-gray-100">
-                <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="py-10 md:py-12 px-4 bg-gradient-to-r from-slate-50 via-white to-slate-50 border-t border-gray-100">
+                <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-3 md:gap-4">
                     {whyChooseItems.map((item, idx) => (
                         <div key={idx} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex gap-3 items-start hover:shadow-lg transition-shadow">
                             <div className="text-2xl">{item.icon}</div>
@@ -887,11 +886,11 @@ const Home: React.FC<HomeProps> = ({
             </div>
 
             {/* Testimonials / Logos */}
-            <div className="py-14 px-4 bg-white">
+            <div className="py-10 md:py-12 px-4 bg-white border-t border-gray-100/80">
                 <div className="max-w-6xl mx-auto">
-                    <div className="text-center mb-10">
+                    <div className="text-center mb-6 space-y-2">
                         <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.testimonials.title')}</h2>
-                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto">{t('home.testimonials.subtitle')}</p>
+                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-snug md:leading-normal">{t('home.testimonials.subtitle')}</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {testimonialItems.map((item, idx) => (
@@ -913,21 +912,21 @@ const Home: React.FC<HomeProps> = ({
             </div>
 
             {/* Vehicle Categories Section - Premium Style */}
-            <div className="py-16 md:py-20 px-4 bg-white">
+            <div className="py-10 md:py-14 px-4 bg-gray-50/60 border-t border-gray-100/80">
                 <div className="max-w-7xl mx-auto">
-                    <div className="text-center mb-12">
-                        <button className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-500 text-white px-6 py-2.5 rounded-full mb-6 font-black text-xs uppercase tracking-wider shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+                    <div className="text-center mb-8 space-y-2">
+                        <button className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-500 text-white px-6 py-2.5 rounded-full mb-0 font-black text-xs uppercase tracking-wider shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
                             </svg>
                             {t('home.categories.badge')}
                         </button>
-                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">{t('home.categories.title')}</h2>
-                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">{t('home.categories.subtitle')}</p>
+                        <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.categories.title')}</h2>
+                        <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-snug md:leading-relaxed">{t('home.categories.subtitle')}</p>
                     </div>
 
-                        <div className="flex flex-wrap justify-center gap-3 md:gap-4">
-                            {categoriesWithCounts.map((category, index) => (
+                    <div className="flex flex-wrap justify-center gap-3 md:gap-4">
+                        {categoriesWithCounts.map((category, index) => (
                             <button
                                 key={index}
                                 type="button"
@@ -954,13 +953,13 @@ const Home: React.FC<HomeProps> = ({
             </div>
 
             {/* Sell Car Steps Section - as per provided design */}
-            <div className="py-16 md:py-20 px-4 bg-white">
+            <div className="py-10 md:py-14 px-4 bg-white border-t border-gray-100/80">
                 <div className="max-w-6xl mx-auto text-center">
-                    <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-12 tracking-tight">{t('home.sell.title')}</h2>
+                    <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-8 md:mb-10 tracking-tight">{t('home.sell.title')}</h2>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-12 mb-12">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10 mb-8">
                         {sellSteps.map((item, idx) => (
-                            <div key={idx} className="flex flex-col items-center text-center gap-4">
+                            <div key={idx} className="flex flex-col items-center text-center gap-3">
                                 <div className="relative">
                                     <div className={`h-40 w-40 rounded-full bg-gradient-to-br ${item.accent} opacity-90 blur-2xl absolute inset-0`} />
                                     <div className="relative h-40 w-40 rounded-full bg-gradient-to-br from-white to-gray-100 border border-gray-200 shadow-md flex items-center justify-center text-5xl">
@@ -968,7 +967,7 @@ const Home: React.FC<HomeProps> = ({
                                     </div>
                                 </div>
                                 <h3 className="text-lg font-black text-gray-900">{item.title}</h3>
-                                <p className="text-sm text-gray-600 leading-relaxed max-w-xs">{item.desc}</p>
+                                <p className="text-sm text-gray-600 leading-snug max-w-xs">{item.desc}</p>
                                 <button
                                     onClick={() => onNavigate(ViewEnum.SELL_CAR)}
                                     className="inline-flex items-center gap-1 text-purple-700 font-semibold hover:underline decoration-2 underline-offset-4"
@@ -1007,17 +1006,17 @@ const Home: React.FC<HomeProps> = ({
 
             {/* Trending Now / Popular Dealers - Premium Style */}
             {featuredVehicles.length > 4 && (
-                <div className="py-16 md:py-20 px-4 bg-gradient-to-br from-orange-50 via-yellow-50 to-orange-50">
+                <div className="py-10 md:py-14 px-4 bg-gradient-to-br from-orange-50 via-yellow-50 to-orange-50 border-t border-amber-100/80">
                     <div className="max-w-7xl mx-auto">
-                        <div className="text-center mb-12">
-                            <button className="inline-flex items-center gap-2 bg-orange-500 text-white px-5 py-2.5 rounded-full mb-6 font-black text-xs uppercase tracking-wider shadow-lg">
+                        <div className="text-center mb-8 space-y-2">
+                            <button className="inline-flex items-center gap-2 bg-orange-500 text-white px-5 py-2.5 rounded-full mb-0 font-black text-xs uppercase tracking-wider shadow-lg">
                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                                 </svg>
                                 {t('home.trending.badge')}
                             </button>
-                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4 tracking-tight">{t('home.trending.title')}</h2>
-                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-relaxed mb-8">{t('home.trending.subtitle')}</p>
+                            <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">{t('home.trending.title')}</h2>
+                            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto leading-snug md:leading-relaxed mb-4">{t('home.trending.subtitle')}</p>
                             <button 
                                 onClick={() => onNavigate(ViewEnum.USED_CARS)}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-xl font-bold text-base md:text-lg flex items-center gap-2 mx-auto transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95"
@@ -1034,7 +1033,7 @@ const Home: React.FC<HomeProps> = ({
 
             {/* Car Service Section - Premium Style */}
             <div 
-                className="relative py-20 md:py-28 px-4 text-white overflow-hidden"
+                className="relative py-12 md:py-16 px-4 text-white overflow-hidden border-t border-white/10"
                 style={{
                     background: 'linear-gradient(135deg, #1e3a8a 0%, #6366f1 100%)'
                 }}
@@ -1045,14 +1044,14 @@ const Home: React.FC<HomeProps> = ({
                     <div className="absolute bottom-0 left-0 w-96 h-96 bg-white/5 rounded-full blur-3xl"></div>
                 </div>
                 <div className="relative max-w-5xl mx-auto text-center">
-                    <button className="inline-flex items-center gap-2 bg-purple-500/90 backdrop-blur-sm px-5 py-2.5 rounded-full mb-8 font-black text-xs uppercase tracking-wider shadow-lg">
+                    <button className="inline-flex items-center gap-2 bg-purple-500/90 backdrop-blur-sm px-5 py-2.5 rounded-full mb-4 font-black text-xs uppercase tracking-wider shadow-lg">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                         {t('home.service.badge')}
                     </button>
-                    <h2 className="text-4xl md:text-5xl font-black mb-6 leading-tight">{t('home.service.title')}</h2>
-                    <p className="text-lg md:text-xl text-white/90 mb-12 max-w-3xl mx-auto leading-relaxed">
+                    <h2 className="text-4xl md:text-5xl font-black mb-3 leading-tight">{t('home.service.title')}</h2>
+                    <p className="text-lg md:text-xl text-white/90 mb-8 max-w-3xl mx-auto leading-snug md:leading-relaxed">
                         {t('home.service.subtitle')}
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">

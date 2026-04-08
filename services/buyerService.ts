@@ -1,94 +1,77 @@
 import type { SavedSearch, BuyerActivity, Vehicle } from '../types';
 import { saveBuyerActivityToSupabase, getBuyerActivityFromSupabase } from './buyerActivityService';
 import { saveBuyerActivityWithSync } from './syncService';
+import { vehicleMatchesSearchFilters } from './savedSearchMatch';
+import {
+  saveSearch as engagementSaveSearch,
+  getSavedSearches as engagementGetSavedSearches,
+  deleteSavedSearch as engagementDeleteSavedSearch,
+  updateSavedSearch as engagementUpdateSavedSearch,
+} from './buyerEngagementService';
 
-// Save search
-export const saveSearch = (userId: string, search: Omit<SavedSearch, 'id' | 'createdAt'>): SavedSearch => {
+const LEGACY_SAVED_KEY_PREFIX = 'savedSearches_';
+
+function migrateLegacySavedSearchesIfNeeded(userId: string): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  const legacyKey = `${LEGACY_SAVED_KEY_PREFIX}${userId}`;
+  const raw = localStorage.getItem(legacyKey);
+  if (!raw) return;
   try {
-    const searches = getSavedSearches(userId);
-    const newSearch: SavedSearch = {
-      ...search,
-      id: `search_${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      smsAlerts: false,
-      notificationFrequency: 'instant',
-    };
-    searches.push(newSearch);
-    localStorage.setItem(`savedSearches_${userId}`, JSON.stringify(searches));
-    return newSearch;
-  } catch (error) {
-    console.error('Failed to save search:', error);
-    throw error;
+    const legacy: SavedSearch[] = JSON.parse(raw);
+    if (!Array.isArray(legacy) || legacy.length === 0) {
+      localStorage.removeItem(legacyKey);
+      return;
+    }
+    const existing = engagementGetSavedSearches(userId);
+    const existingIds = new Set(existing.map((s) => s.id));
+    const stored = localStorage.getItem('reride_saved_searches');
+    const all: SavedSearch[] = stored ? JSON.parse(stored) : [];
+    for (const s of legacy) {
+      if (!s?.id || existingIds.has(s.id)) continue;
+      const merged: SavedSearch = { ...s, userId: s.userId || userId };
+      all.push(merged);
+      existingIds.add(s.id);
+    }
+    localStorage.setItem('reride_saved_searches', JSON.stringify(all));
+    localStorage.removeItem(legacyKey);
+  } catch {
+    /* ignore corrupt legacy */
   }
-};
+}
 
-// Get saved searches
+/** Same storage as listings (`reride_saved_searches`); migrates old `savedSearches_<email>` once. */
 export const getSavedSearches = (userId: string): SavedSearch[] => {
-  try {
-    const key = `savedSearches_${userId}`;
-    const searchesJson = localStorage.getItem(key);
-    return searchesJson ? JSON.parse(searchesJson) : [];
-  } catch (error) {
-    console.error('Failed to get saved searches:', error);
-    return [];
-  }
+  migrateLegacySavedSearchesIfNeeded(userId);
+  return engagementGetSavedSearches(userId);
 };
 
-// Delete saved search
+export const saveSearch = (userId: string, search: Omit<SavedSearch, 'id' | 'createdAt'>): SavedSearch => {
+  migrateLegacySavedSearchesIfNeeded(userId);
+  const created = engagementSaveSearch(userId, search.name, search.filters, search.emailAlerts);
+  if (search.smsAlerts !== undefined || search.notificationFrequency !== undefined) {
+    engagementUpdateSavedSearch(created.id, {
+      smsAlerts: search.smsAlerts ?? created.smsAlerts,
+      notificationFrequency: search.notificationFrequency ?? created.notificationFrequency,
+    });
+  }
+  return getSavedSearches(userId).find((s) => s.id === created.id) ?? created;
+};
+
 export const deleteSavedSearch = (userId: string, searchId: string): void => {
-  try {
-    const searches = getSavedSearches(userId);
-    const filtered = searches.filter(s => s.id !== searchId);
-    localStorage.setItem(`savedSearches_${userId}`, JSON.stringify(filtered));
-  } catch (error) {
-    console.error('Failed to delete saved search:', error);
-  }
+  migrateLegacySavedSearchesIfNeeded(userId);
+  if (!engagementGetSavedSearches(userId).some((s) => s.id === searchId)) return;
+  engagementDeleteSavedSearch(searchId);
 };
 
-// Update saved search
 export const updateSavedSearch = (userId: string, searchId: string, updates: Partial<SavedSearch>): void => {
-  try {
-    const searches = getSavedSearches(userId);
-    const updated = searches.map(s => s.id === searchId ? { ...s, ...updates } : s);
-    localStorage.setItem(`savedSearches_${userId}`, JSON.stringify(updated));
-  } catch (error) {
-    console.error('Failed to update saved search:', error);
-  }
+  migrateLegacySavedSearchesIfNeeded(userId);
+  if (!engagementGetSavedSearches(userId).some((s) => s.id === searchId)) return;
+  engagementUpdateSavedSearch(searchId, updates);
 };
 
 // Match vehicles to saved search
 export const matchVehiclesToSearch = (vehicles: Vehicle[], search: SavedSearch): Vehicle[] => {
-  return vehicles.filter(vehicle => {
-    const { filters } = search;
-
-    // Check make
-    if (filters.make && vehicle.make !== filters.make) return false;
-
-    // Check model
-    if (filters.model && vehicle.model !== filters.model) return false;
-
-    // Check price range
-    if (filters.minPrice && vehicle.price < filters.minPrice) return false;
-    if (filters.maxPrice && vehicle.price > filters.maxPrice) return false;
-
-    // Check year range
-    if (filters.minYear && vehicle.year < filters.minYear) return false;
-    if (filters.maxYear && vehicle.year > filters.maxYear) return false;
-
-    // Check category
-    if (filters.category && vehicle.category !== filters.category) return false;
-
-    // Check fuel type
-    if (filters.fuelType && vehicle.fuelType !== filters.fuelType) return false;
-
-    // Check transmission
-    if (filters.transmission && vehicle.transmission !== filters.transmission) return false;
-
-    // Check location (basic city match for now)
-    if (filters.location && vehicle.city !== filters.location) return false;
-
-    return true;
-  });
+  return vehicles.filter((vehicle) => vehicleMatchesSearchFilters(vehicle, search.filters));
 };
 
 // Find new matches for all saved searches

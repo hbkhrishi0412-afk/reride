@@ -75,11 +75,18 @@ async function callGeminiAPI(payload: any): Promise<string> {
 export const parseSearchQuery = async (query: string): Promise<SearchFilters> => {
     const prompt = `Parse the user's vehicle search query and extract structured filter criteria.
     The user's query is: "${query}".
-    - If the user mentions a specific make or model, extract it.
-    - If the user specifies a price range (e.g., "under ₹8 lakhs", "between 1000000 and 1500000"), extract the minPrice and maxPrice.
-    - If the user mentions specific features (e.g., "with a sunroof", "has ADAS"), extract them into the features array.
-    - The 'model' is the specific model of the car.
-    Respond only with JSON matching the provided schema. If a value is not present, omit the key.`;
+    - make / model: brand and model names as commonly written in India.
+    - Price in INR: minPrice / maxPrice (e.g. "under 8 lakh" → maxPrice 800000).
+    - fuelType: e.g. Petrol, Diesel, CNG, Electric, Hybrid — match typical listing spelling.
+    - transmission: e.g. Manual, Automatic — match typical listing spelling.
+    - ownership: use exactly one of: "1" (first owner), "2" (second owner), "3plus" (third or more). Omit if not mentioned.
+    - year: a single model year if the user asks for one specific year.
+    - minYear / maxYear: range such as "2018 or newer" → minYear 2018; "before 2020" → maxYear 2019.
+    - minMileage / maxMileage: odometer in km if mentioned.
+    - category: body style matching Indian listings: hatchback, sedan, suv, muv, luxury, etc. Use lowercase with hyphens if multi-word.
+    - location: Indian state name or common city — as the user wrote it (we match to listings later).
+    - features: optional list if the user asks for equipment (sunroof, ADAS, etc.).
+    Respond only with JSON matching the schema. Omit keys that are unknown.`;
 
     const requestPayload = {
         model: 'gemini-2.5-flash',
@@ -93,10 +100,23 @@ export const parseSearchQuery = async (query: string): Promise<SearchFilters> =>
                     model: { type: SchemaType.STRING, description: "The model of the car, e.g., Nexon, Creta." },
                     minPrice: { type: SchemaType.NUMBER, description: "The minimum price in INR." },
                     maxPrice: { type: SchemaType.NUMBER, description: "The maximum price in INR." },
+                    minYear: { type: SchemaType.NUMBER, description: "Minimum model year inclusive." },
+                    maxYear: { type: SchemaType.NUMBER, description: "Maximum model year inclusive." },
+                    year: { type: SchemaType.NUMBER, description: "Exact model year if a single year is requested." },
+                    minMileage: { type: SchemaType.NUMBER, description: "Minimum odometer km." },
+                    maxMileage: { type: SchemaType.NUMBER, description: "Maximum odometer km." },
+                    fuelType: { type: SchemaType.STRING, description: "Fuel type as in listings." },
+                    transmission: { type: SchemaType.STRING, description: "Transmission as in listings, e.g. Manual or Automatic." },
+                    ownership: {
+                        type: SchemaType.STRING,
+                        description: 'Owner count bucket: exactly "1", "2", or "3plus".',
+                    },
+                    category: { type: SchemaType.STRING, description: "Vehicle body/category hint." },
+                    location: { type: SchemaType.STRING, description: "State or city in India." },
                     features: {
                         type: SchemaType.ARRAY,
                         items: { type: SchemaType.STRING },
-                        description: "An array of requested vehicle features, e.g., Sunroof, ADAS."
+                        description: "Optional requested features."
                     },
                 },
             },

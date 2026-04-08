@@ -299,9 +299,10 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   if (!vehicle) return null;
                   const savings = drop.oldPrice - drop.newPrice;
                   return (
-                    <div
+                    <button
                       key={drop.vehicleId}
-                      className="bg-white dark:bg-brand-gray-800 rounded-lg p-4 mb-2 cursor-pointer hover:shadow-md transition-shadow"
+                      type="button"
+                      className="w-full text-left bg-white dark:bg-brand-gray-800 rounded-lg p-4 mb-2 cursor-pointer hover:shadow-md transition-shadow"
                       onClick={() => onSelectVehicle(vehicle)}
                     >
                       <p className="font-semibold text-reride-text-dark dark:text-reride-text">
@@ -320,7 +321,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           })}
                         </span>
                       </p>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -494,6 +495,23 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                                 })}
                               </span>
                             )}
+                            {search.filters.transmission && (
+                              <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
+                                {t('buyerDashboard.filter.transmission', { value: search.filters.transmission })}
+                              </span>
+                            )}
+                            {search.filters.ownership && (
+                              <span className="text-xs bg-white dark:bg-brand-gray-800 px-2 py-1 rounded">
+                                {t('buyerDashboard.filter.ownership', {
+                                  value:
+                                    search.filters.ownership === '1'
+                                      ? t('listings.mobileFilter.owner1')
+                                      : search.filters.ownership === '2'
+                                        ? t('listings.mobileFilter.owner2')
+                                        : t('listings.mobileFilter.owner3plus'),
+                                })}
+                              </span>
+                            )}
                           </div>
 
                           {/* Email Alerts Toggle */}
@@ -569,9 +587,10 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                             const vehicle = vehicles.find(v => v.id === drop.vehicleId);
                             if (!vehicle) return null;
                             return (
-                              <div
+                              <button
                                 key={drop.vehicleId}
-                                className="bg-white dark:bg-brand-gray-700 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+                                type="button"
+                                className="w-full text-left bg-white dark:bg-brand-gray-700 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
                                 onClick={() => onSelectVehicle(vehicle)}
                               >
                                 <div className="flex items-center gap-4">
@@ -595,7 +614,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                                     </p>
                                   </div>
                                 </div>
-                              </div>
+                              </button>
                             );
                           })}
                         </div>

@@ -5,6 +5,7 @@ import type {
   Vehicle,
   SearchFilters,
 } from '../types';
+import { vehicleMatchesSearchFilters } from './savedSearchMatch';
 
 // ============================================
 // SAVED SEARCHES
@@ -128,22 +129,12 @@ export function updateSavedSearch(searchId: string, updates: Partial<SavedSearch
 
 // Check if vehicles match saved search
 export function matchesSavedSearch(vehicle: Vehicle, search: SavedSearch): boolean {
-  const filters = search.filters;
-  
-  if (filters.make && vehicle.make !== filters.make) return false;
-  if (filters.model && vehicle.model !== filters.model) return false;
-  if (filters.minPrice && vehicle.price < filters.minPrice) return false;
-  if (filters.maxPrice && vehicle.price > filters.maxPrice) return false;
-  if (filters.features && filters.features.length > 0) {
-    if (!filters.features.every(f => vehicle.features.includes(f))) return false;
-  }
-  
-  return true;
+  return vehicleMatchesSearchFilters(vehicle, search.filters);
 }
 
 // Find new matches for saved searches
 export function findNewMatches(vehicles: Vehicle[], search: SavedSearch): Vehicle[] {
-  return vehicles.filter(v => {
+  return vehicles.filter((v) => {
     if (v.status !== 'published') return false;
     return matchesSavedSearch(v, search);
   });

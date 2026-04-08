@@ -1179,8 +1179,8 @@ const AppContent: React.FC = () => {
               allVehicles={vehicles.filter(v => v.status === 'published')}
               onNavigate={navigate}
               onSelectCity={(city) => {
-                setSelectedCity(city);
-                navigate(ViewEnum.USED_CARS);
+                // Pass city in navigate params — navigate(USED_CARS) without params clears the filter in AppProvider.
+                navigate(ViewEnum.USED_CARS, { city });
               }}
             />
           );
@@ -1221,8 +1221,8 @@ const AppContent: React.FC = () => {
             allVehicles={vehicles.filter(v => v.status === 'published')}
             onNavigate={navigate}
             onSelectCity={(city) => {
-              setSelectedCity(city);
-              navigate(ViewEnum.USED_CARS);
+              // Pass city in navigate params — navigate(USED_CARS) without params clears the filter in AppProvider.
+              navigate(ViewEnum.USED_CARS, { city });
             }}
           />
         );
