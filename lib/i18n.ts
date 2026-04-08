@@ -15,7 +15,6 @@ const en = {
   'home.hero.subtitle':
     'Browse thousands of certified used cars. AI-powered recommendations and verified sellers.',
   'nav.usedCars': 'Used Cars',
-  'nav.newCars': 'New Cars',
   'nav.sellCar': 'Sell Car',
   'nav.dealers': 'Dealers',
   'nav.carServices': 'Car Services',
@@ -802,7 +801,6 @@ const hi: Record<string, string> = {
   'home.hero.subtitle':
     'हजारों प्रमाणित प्रयुक्त कारें देखें। AI-सिफारिशें और सत्यापित विक्रेता।',
   'nav.usedCars': 'प्रयुक्त कारें',
-  'nav.newCars': 'नई कारें',
   'nav.sellCar': 'कार बेचें',
   'nav.dealers': 'डीलर',
   'nav.carServices': 'कार सेवाएं',
@@ -1569,7 +1567,6 @@ const te: Record<string, string> = {
   'home.hero.subtitle':
     'వేలాది ధృవీకరించబడిన వాడిన కార్లు. AI సిఫారసులు మరియు ధృవీకరించబడిన విక్రేతలు.',
   'nav.usedCars': 'వాడిన కార్లు',
-  'nav.newCars': 'కొత్త కార్లు',
   'nav.sellCar': 'కారు అమ్మండి',
   'nav.dealers': 'డీలర్లు',
   'nav.carServices': 'కార్ సేవలు',
@@ -2307,7 +2304,6 @@ const ta: Record<string, string> = {
   'home.hero.subtitle':
     'ஆயிரக்கணக்கான சான்றளிக்கப்பட்ட பயன்படுத்தப்பட்ட கார்கள். AI பரிந்துரைகள் மற்றும் சரிபார்க்கப்பட்ட விற்பனையாளர்கள்.',
   'nav.usedCars': 'பயன்படுத்தப்பட்ட கார்கள்',
-  'nav.newCars': 'புதிய கார்கள்',
   'nav.sellCar': 'கார் விற்க',
   'nav.dealers': 'டீலர்கள்',
   'nav.carServices': 'கார் சேவைகள்',

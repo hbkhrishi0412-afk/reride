@@ -196,7 +196,6 @@ const Comparison = React.lazy(() => import('./components/Comparison'));
 const Profile = React.lazy(() => import('./components/Profile'));
 const CustomerInbox = React.lazy(() => import('./components/CustomerInbox'));
 const SellerProfilePage = React.lazy(() => import('./components/SellerProfilePage'));
-const NewCars = React.lazy(() => import('./components/NewCars'));
 const DealerProfiles = React.lazy(() => import('./components/DealerProfiles'));
 const CarServices = React.lazy(() => import('./components/CarServices'));
 const ServiceDetail = React.lazy(() => import('./components/ServiceDetail'));
@@ -212,9 +211,6 @@ const ForgotPassword = React.lazy(() => import('./components/ForgotPassword'));
 const SellCarPage = React.lazy(() => import('./components/SellCarPage'));
 const SellCarAdmin = React.lazy(() => import('./components/SellCarAdmin'));
 const AdminLogin = React.lazy(() => import('./AdminLogin'));
-const NewCarsAdmin = React.lazy(() => import('./components/NewCarsAdmin'));
-const NewCarsAdminLogin = React.lazy(() => import('./NewCarsAdminLogin'));
-
 // Lazy-loaded Mobile view components (only loaded when needed - reduces initial bundle size)
 const MobileDashboard = React.lazy(() => import('./components/MobileDashboard'));
 const MobileVehicleDetail = React.lazy(() => import('./components/MobileVehicleDetail'));
@@ -225,7 +221,6 @@ const MobileWishlist = React.lazy(() => import('./components/MobileWishlist'));
 const MobileComparison = React.lazy(() => import('./components/MobileComparison'));
 const MobileSellerProfilePage = React.lazy(() => import('./components/MobileSellerProfilePage'));
 const MobileSellCarPage = React.lazy(() => import('./components/MobileSellCarPage'));
-const MobileNewCarsPage = React.lazy(() => import('./components/MobileNewCarsPage'));
 const MobilePricingPage = React.lazy(() => import('./components/MobilePricingPage'));
 const MobileSupportPage = React.lazy(() => import('./components/MobileSupportPage'));
 const MobileFAQPage = React.lazy(() => import('./components/MobileFAQPage'));
@@ -1027,7 +1022,6 @@ const AppContent: React.FC = () => {
         ViewEnum.CUSTOMER_LOGIN,
         ViewEnum.SELLER_LOGIN,
         ViewEnum.ADMIN_LOGIN,
-        ViewEnum.NEW_CARS_ADMIN_LOGIN,
       ];
 
       if (loginViews.includes(currentView)) {
@@ -1672,16 +1666,6 @@ const AppContent: React.FC = () => {
           />
         );
       }
-
-      case ViewEnum.NEW_CARS:
-        if (isMobileApp) {
-          return (
-            <MobileNewCarsPage onNavigate={navigate} />
-          );
-        }
-        return (
-          <NewCars />
-        );
 
       case ViewEnum.RENTAL: {
         // Rental vehicles feature not currently used - redirect to used cars page
@@ -3050,41 +3034,6 @@ const AppContent: React.FC = () => {
           </AuthenticationErrorBoundary>
         );
 
-      case ViewEnum.NEW_CARS_ADMIN_LOGIN:
-        return (
-          <AuthenticationErrorBoundary>
-            <Suspense fallback={<LoadingSpinner />}>
-              <NewCarsAdminLogin
-                onLogin={handleLogin}
-                onNavigate={navigate}
-              />
-            </Suspense>
-          </AuthenticationErrorBoundary>
-        );
-
-      case ViewEnum.NEW_CARS_ADMIN_PANEL:
-        return currentUser?.role === 'admin' ? (
-          <Suspense fallback={<LoadingSpinner />}>
-            <NewCarsAdmin
-              currentUser={currentUser}
-              onNavigate={navigate}
-            />
-          </Suspense>
-        ) : (
-          <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-600 mb-4">Access Denied</h2>
-              <p className="text-gray-500 mb-4">Admin login required to manage New Cars.</p>
-              <button 
-                onClick={() => navigate(ViewEnum.NEW_CARS_ADMIN_LOGIN)}
-                className="btn-brand-primary"
-              >
-                New Cars Admin Login
-              </button>
-            </div>
-          </div>
-        );
-
       case ViewEnum.FORGOT_PASSWORD:
         return (
           <AuthenticationErrorBoundary>
@@ -3408,10 +3357,6 @@ const AppContent: React.FC = () => {
         return 'Seller Login';
       case ViewEnum.ADMIN_LOGIN:
         return 'Admin Login';
-      case ViewEnum.NEW_CARS_ADMIN_LOGIN:
-        return 'New Cars Admin Login';
-      case ViewEnum.NEW_CARS_ADMIN_PANEL:
-        return 'New Cars Admin';
       case ViewEnum.FORGOT_PASSWORD:
         return 'Reset Password';
       case ViewEnum.CAR_SERVICES:

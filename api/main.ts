@@ -718,8 +718,6 @@ async function mainHandler(
           TWO_WHEELER: [{ name: "Honda", models: [{ name: "Activa 6G", variants: ["Standard", "DLX"] }] }]
         });
       }
-    } else if (pathname.includes('/new-cars') || pathname.endsWith('/new-cars')) {
-      return await handleNewCars(req, res, handlerOptions);
     } else if (pathname.includes('/system') || pathname.endsWith('/system')) {
       return await handleSystem(req, res, handlerOptions);
     } else if (pathname.includes('/utils') || pathname.endsWith('/utils') || pathname.includes('/test-connection') || pathname.includes('/test-firebase-writes')) {
@@ -5378,74 +5376,6 @@ function getPriceRange(vehicles: VehicleType[]): { min: number; max: number } {
     min: Math.min(...prices),
     max: Math.max(...prices)
   };
-}
-
-// New Cars handler - CRUD for new car catalog
-async function handleNewCars(req: VercelRequest, res: VercelResponse, _options: HandlerOptions) {
-  if (!USE_SUPABASE) {
-    return res.status(503).json({
-      success: false,
-      reason: 'Firebase is not configured. Please set Firebase environment variables.',
-      fallback: true
-    });
-  }
-
-  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE') {
-    const admin = requireAdmin(req, res, 'New cars catalog');
-    if (!admin) {
-      return;
-    }
-  }
-
-  if (req.method === 'GET') {
-    const items = await adminReadAll<Record<string, unknown>>(DB_PATHS.NEW_CARS);
-    // CRITICAL: Spread data first, then set id to preserve string ID from key
-    const itemsArray = Object.entries(items).map(([id, data]) => ({ ...data, id }))
-      .sort((a, b) => {
-        const aTime = (a as Record<string, unknown>).updatedAt ? new Date((a as Record<string, unknown>).updatedAt as string).getTime() : 0;
-        const bTime = (b as Record<string, unknown>).updatedAt ? new Date((b as Record<string, unknown>).updatedAt as string).getTime() : 0;
-        return bTime - aTime;
-      });
-    return res.status(200).json(itemsArray);
-  }
-
-  if (req.method === 'POST') {
-    const payload = req.body;
-    if (!payload || !payload.brand_name || !payload.model_name || !payload.model_year) {
-      return res.status(400).json({ success: false, reason: 'Missing required fields' });
-    }
-    const id = `${payload.brand_name}_${payload.model_name}_${payload.model_year}_${Date.now()}`;
-    const doc = { ...payload, updatedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
-    await adminCreate(DB_PATHS.NEW_CARS, doc, id);
-    return res.status(201).json({ success: true, data: { id, ...doc } });
-  }
-
-  if (req.method === 'PUT') {
-    const { id, _id, ...updateData } = req.body || {};
-    const docId = _id || id;
-    if (!docId) {
-      return res.status(400).json({ success: false, reason: 'Document id is required' });
-    }
-    const existing = await adminRead<Record<string, unknown>>(DB_PATHS.NEW_CARS, String(docId));
-    if (!existing) {
-      return res.status(404).json({ success: false, reason: 'New car document not found' });
-    }
-    await adminUpdate(DB_PATHS.NEW_CARS, String(docId), { ...updateData, updatedAt: new Date().toISOString() });
-    const updated = await adminRead<Record<string, unknown>>(DB_PATHS.NEW_CARS, String(docId));
-    return res.status(200).json({ success: true, data: { id: docId, ...updated } });
-  }
-
-  if (req.method === 'DELETE') {
-    const { id, _id } = req.body || {};
-    const docId = _id || id;
-    if (!docId) {
-      return res.status(400).json({ success: false, reason: 'Document id is required' });
-    }
-    await adminDelete(DB_PATHS.NEW_CARS, String(docId));
-    return res.status(200).json({ success: true });
-  }
-
-  return res.status(405).json({ success: false, reason: 'Method not allowed.' });
 }
 
 // Generate cryptographically random password

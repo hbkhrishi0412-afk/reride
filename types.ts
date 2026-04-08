@@ -335,7 +335,6 @@ export interface Toast {
 export enum View {
   HOME = 'HOME',
   USED_CARS = 'USED_CARS',
-  NEW_CARS = 'NEW_CARS',
   CAR_SERVICES = 'CAR_SERVICES',
   SERVICE_DETAIL = 'SERVICE_DETAIL',
   CAR_SERVICE_LOGIN = 'CAR_SERVICE_LOGIN',
@@ -365,8 +364,6 @@ export enum View {
   CITY_LANDING = 'CITY_LANDING',
   SELL_CAR = 'SELL_CAR',
   SELL_CAR_ADMIN = 'SELL_CAR_ADMIN',
-  NEW_CARS_ADMIN_LOGIN = 'NEW_CARS_ADMIN_LOGIN',
-  NEW_CARS_ADMIN_PANEL = 'NEW_CARS_ADMIN_PANEL',
   /** Full-screen activity feed (grouped notifications, mute) — not Messages. */
   NOTIFICATIONS_CENTER = 'NOTIFICATIONS_CENTER',
 }

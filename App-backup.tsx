@@ -25,7 +25,6 @@ const Comparison = React.lazy(() => import('./components/Comparison'));
 const Profile = React.lazy(() => import('./components/Profile'));
 const CustomerInbox = React.lazy(() => import('./components/CustomerInbox'));
 const SellerProfilePage = React.lazy(() => import('./components/SellerProfilePage'));
-const NewCars = React.lazy(() => import('./components/NewCars'));
 const DealerProfiles = React.lazy(() => import('./components/DealerProfiles'));
 const PricingPage = React.lazy(() => import('./components/PricingPage'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
@@ -1165,8 +1164,6 @@ const AppContent: React.FC = () => {
           onViewSellerProfile={handleViewSellerProfile} 
           userLocation={userLocation} 
         />;
-      case View.NEW_CARS: 
-        return <NewCars />;
       case View.DEALER_PROFILES: 
         return <DealerProfiles 
           sellers={users.filter(u => u.role === 'seller')} 

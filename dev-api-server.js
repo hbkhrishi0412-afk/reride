@@ -795,37 +795,6 @@ app.post('/api/vehicle-data', (req, res) => {
   });
 });
 
-// New Cars CRUD (dev mock)
-let newCarsStore = [];
-
-app.get('/api/new-cars', (req, res) => {
-  res.json(newCarsStore);
-});
-
-app.post('/api/new-cars', (req, res) => {
-  const doc = { _id: Date.now().toString(), ...req.body, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  newCarsStore.unshift(doc);
-  res.status(201).json({ success: true, data: doc });
-});
-
-app.put('/api/new-cars', (req, res) => {
-  const { _id, id, ...patch } = req.body || {};
-  const docId = _id || id;
-  const idx = newCarsStore.findIndex(x => x._id === docId);
-  if (idx === -1) return res.status(404).json({ success: false, reason: 'Not found' });
-  newCarsStore[idx] = { ...newCarsStore[idx], ...patch, updatedAt: new Date().toISOString() };
-  res.json({ success: true, data: newCarsStore[idx] });
-});
-
-app.delete('/api/new-cars', (req, res) => {
-  const { _id, id } = req.body || {};
-  const docId = _id || id;
-  const before = newCarsStore.length;
-  newCarsStore = newCarsStore.filter(x => x._id !== docId);
-  if (newCarsStore.length === before) return res.status(404).json({ success: false, reason: 'Not found' });
-  res.json({ success: true });
-});
-
 // Vehicle Data Management API (Admin Database)
 app.get('/api/vehicle-data-management', (req, res) => {
   console.log('🚗 GET /api/vehicle-data-management - Returning vehicle data from admin database');

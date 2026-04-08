@@ -221,12 +221,6 @@ const Header: React.FC<HeaderProps> = memo(({
                                     }}
                                 />
                                 <button 
-                                    onClick={() => handleNavigate(ViewEnum.NEW_CARS)} 
-                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
-                                >
-                                    {t('nav.newCars')}
-                                </button>
-                                <button 
                                     onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} 
                                     className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
                                 >
@@ -462,7 +456,6 @@ const Header: React.FC<HeaderProps> = memo(({
                             <LanguageSwitcher variant="inline" onSelect={() => setIsMobileMenuOpen(false)} className="!px-0 !py-2 border-b border-gray-100 mb-2" />
                             <button onClick={() => handleNavigate(ViewEnum.USED_CARS)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.buyCar')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.NEW_CARS)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.newCars')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.carServices')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.dealers')}</button>
                             <hr className="border-gray-200"/>
