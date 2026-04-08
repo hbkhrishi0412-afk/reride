@@ -59,9 +59,6 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
                 {t('nav.carServices')}
               </a>
               <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
-                {t('nav.newCars')}
-              </a>
-              <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 {t('footer.dealerNetwork')}
               </a>
             </div>

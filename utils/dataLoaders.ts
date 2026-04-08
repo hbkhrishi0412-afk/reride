@@ -13,11 +13,6 @@ export const loadVehicleData = async () => {
   return module;
 };
 
-export const loadNewCarsData = async () => {
-  const module = await import('../data/newCarsData.js');
-  return module;
-};
-
 // Helper to get PLAN_DETAILS without loading entire constants file
 export const loadPlanDetails = async () => {
   const { loadPlanDetails: loadPlans } = await import('../constants/index.js');

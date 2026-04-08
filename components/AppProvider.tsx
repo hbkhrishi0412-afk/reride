@@ -182,7 +182,7 @@ function pathToView(path: string): View {
   // Exact matches first
   if (normalizedPath === '/' || normalizedPath === '') return View.HOME;
   if (normalizedPath === '/used-cars') return View.USED_CARS;
-  if (normalizedPath === '/new-cars') return View.NEW_CARS;
+  if (normalizedPath === '/new-cars') return View.HOME;
   if (normalizedPath === '/car-services') return View.CAR_SERVICES;
   if (normalizedPath === '/car-services/detail') return View.SERVICE_DETAIL;
   if (normalizedPath === '/car-services/login') return View.CAR_SERVICE_LOGIN;
@@ -196,8 +196,9 @@ function pathToView(path: string): View {
   if (normalizedPath === '/vehicle') return View.DETAIL;
   if (normalizedPath === '/seller/dashboard') return View.SELLER_DASHBOARD;
   if (normalizedPath === '/admin' || normalizedPath === '/admin/login') return View.ADMIN_LOGIN;
-  if (normalizedPath === '/admin/new-cars') return View.NEW_CARS_ADMIN_LOGIN;
-  if (normalizedPath === '/admin/new-cars/manage') return View.NEW_CARS_ADMIN_PANEL;
+  if (normalizedPath === '/admin/new-cars' || normalizedPath === '/admin/new-cars/manage') {
+    return View.ADMIN_PANEL;
+  }
   if (normalizedPath === '/admin/sell-car') return View.SELL_CAR_ADMIN;
   if (normalizedPath === '/login') return View.LOGIN_PORTAL;
   if (normalizedPath === '/compare') return View.COMPARISON;
@@ -1466,10 +1467,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (currentView !== View.ADMIN_LOGIN) {
         setCurrentView(View.ADMIN_LOGIN);
       }
-    } else if (view === View.NEW_CARS_ADMIN_PANEL && currentUser?.role !== 'admin') {
-      if (currentView !== View.NEW_CARS_ADMIN_LOGIN) {
-        setCurrentView(View.NEW_CARS_ADMIN_LOGIN);
-      }
     } else if ((view === View.PROFILE || view === View.INBOX) && !currentUser) {
       if (currentView !== View.LOGIN_PORTAL) {
         setCurrentView(View.LOGIN_PORTAL);
@@ -1491,7 +1488,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const viewPathMap: Record<string, string> = {
         [View.HOME]: '/',
         [View.USED_CARS]: '/used-cars',
-        [View.NEW_CARS]: '/new-cars',
         [View.CAR_SERVICES]: '/car-services',
         [View.SERVICE_DETAIL]: '/car-services/detail',
         [View.CAR_SERVICE_LOGIN]: '/car-services/login',
@@ -1502,8 +1498,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         [View.SELLER_DASHBOARD]: '/seller/dashboard',
         [View.ADMIN_PANEL]: '/admin',
         [View.ADMIN_LOGIN]: '/admin/login',
-        [View.NEW_CARS_ADMIN_LOGIN]: '/admin/new-cars',
-        [View.NEW_CARS_ADMIN_PANEL]: '/admin/new-cars/manage',
         [View.LOGIN_PORTAL]: '/login',
         [View.CUSTOMER_LOGIN]: '/login',
         [View.SELLER_LOGIN]: '/login',

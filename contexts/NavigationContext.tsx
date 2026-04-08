@@ -25,7 +25,6 @@ import { logInfo, logDebug } from '../utils/logger';
 const VIEW_TO_PATH: Record<View, string> = {
   [View.HOME]: '/',
   [View.USED_CARS]: '/used-cars',
-  [View.NEW_CARS]: '/new-cars',
   [View.CAR_SERVICES]: '/car-services',
   [View.SERVICE_DETAIL]: '/car-services/detail',
   [View.CAR_SERVICE_LOGIN]: '/car-services/login',
@@ -55,8 +54,6 @@ const VIEW_TO_PATH: Record<View, string> = {
   [View.CITY_LANDING]: '/city',
   [View.SELL_CAR]: '/sell-car',
   [View.SELL_CAR_ADMIN]: '/admin/sell-car',
-  [View.NEW_CARS_ADMIN_LOGIN]: '/admin/new-cars',
-  [View.NEW_CARS_ADMIN_PANEL]: '/admin/new-cars/manage',
   [View.NOTIFICATIONS_CENTER]: '/notifications',
 };
 

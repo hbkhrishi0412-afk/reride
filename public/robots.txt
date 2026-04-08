@@ -18,7 +18,6 @@ Disallow: /profile
 
 # Allow public listing and landing pages
 Allow: /used-cars
-Allow: /new-cars
 Allow: /rental
 Allow: /vehicle/
 Allow: /seller/

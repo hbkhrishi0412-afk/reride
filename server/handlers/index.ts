@@ -28,7 +28,6 @@ export { handleSellCar } from './sell-car';
 // handlePlans        (~152 lines) → api/handlers/plans.ts
 // handleBusiness     (~33 lines)  → api/handlers/business.ts
 // handleVehicleData  (~194 lines) → api/handlers/vehicle-data.ts
-// handleNewCars      (~64 lines)  → api/handlers/new-cars.ts
 // handleSeed         (~56 lines)  → api/handlers/seed.ts (router only)
 //
 // To extract: copy the function from main.ts into a new handler file,

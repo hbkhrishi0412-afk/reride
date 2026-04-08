@@ -11,7 +11,6 @@ export const DB_PATHS = {
   USERS: 'users',
   VEHICLES: 'vehicles',
   VEHICLE_DATA: 'vehicle_data', // For vehicle brands/models/variants data
-  NEW_CARS: 'new_cars',
   CONVERSATIONS: 'conversations',
   NOTIFICATIONS: 'notifications',
 } as const;

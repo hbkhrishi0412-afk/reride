@@ -250,11 +250,6 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
                   }}
                 />
                 <MenuItem
-                  icon={<NewCarIcon />}
-                  label={t('nav.newCars')}
-                  onClick={() => { onNavigate(ViewEnum.NEW_CARS); setShowMenu(false); }}
-                />
-                <MenuItem
                   icon={<DealerIcon />}
                   label={t('nav.dealers')}
                   onClick={() => { onNavigate(ViewEnum.DEALER_PROFILES); setShowMenu(false); }}
@@ -371,12 +366,6 @@ const CarIcon = () => (
 const SellCarIcon = () => (
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-  </svg>
-);
-
-const NewCarIcon = () => (
-  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
   </svg>
 );
 
