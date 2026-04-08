@@ -1,21 +1,26 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ReRide / Capacitor — R8 rules for release (mapping.txt → Play Console deobfuscation)
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Readable deobfuscated stack traces (upload mapping.txt with each release)
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keepattributes Signature, *Annotation*, InnerClasses, EnclosingMethod, Exceptions
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# WebView JS bridge
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# Capacitor core + Cordova shim
+-keep class com.getcapacitor.** { *; }
+-keep class org.apache.cordova.** { *; }
+
+# Community plugins (adjust if you add/remove plugins)
+-keep class com.getcapacitor.community.** { *; }
+
+# Google Play / Firebase (used when google-services is applied)
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+
+# OkHttp / Conscrypt (common transitive warnings)
+-dontwarn org.conscrypt.**
