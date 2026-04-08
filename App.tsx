@@ -40,7 +40,7 @@ import { resetViewportZoom } from './utils/viewportZoom';
 import { matchesCity } from './utils/cityMapping';
 import { resolveChatCallPhone, resolveChatOtherPartyName } from './utils/chatContact';
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
-import { logWarn, logDebug } from './utils/logger';
+import { logWarn, logDebug, logError, logInfo } from './utils/logger';
 import { authenticatedFetch } from './utils/authenticatedFetch';
 // Firebase removed - using Supabase
 
@@ -163,14 +163,14 @@ const Dashboard = React.lazy(() => {
     // Log the error for debugging in production
     const isProduction = typeof window !== 'undefined' && !window.location.hostname.includes('localhost');
     if (isProduction) {
-      console.error('[Production] Failed to load Dashboard component:', {
+      logError('[Production] Failed to load Dashboard component:', {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         timestamp: new Date().toISOString(),
         url: window.location.href
       });
     } else {
-      console.error('Failed to load Dashboard component:', error);
+      logError('Failed to load Dashboard component:', error);
     }
     // Return a fallback component module instead of throwing
     return {
@@ -275,13 +275,13 @@ const preloadCriticalComponents = () => {
         import('./components/Dashboard').catch((error) => {
           // Log error but don't fail - Dashboard will be loaded on-demand if needed
           if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ Dashboard preload failed (non-critical):', error);
+            logWarn('⚠️ Dashboard preload failed (non-critical):', error);
           }
           return null; // Return null to prevent Promise.all from failing
         }),
         import('./components/Profile').catch((error) => {
           if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ Profile preload failed (non-critical):', error);
+            logWarn('⚠️ Profile preload failed (non-critical):', error);
           }
           return null;
         })
@@ -664,10 +664,10 @@ const AppContent: React.FC = () => {
       addToast('Service request submitted', 'success');
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Failed to submit service request';
-      console.error('Failed to submit service request', error);
+      logError('Failed to submit service request', error);
       addToast(msg, 'error');
     }
-  }, [addToast, currentUser?.email, currentUser?.mobile, currentUser?.name, selectedCity]);
+  }, [addToast, currentUser, selectedCity]);
 
   const [userCoords, setUserCoords] = React.useState<LocationCoordinates | null>(null);
   const [isLocating, setIsLocating] = React.useState(false);
@@ -713,7 +713,7 @@ const AppContent: React.FC = () => {
         addToast(msg, 'error');
       }
     } catch (err) {
-      console.error('Location error', err);
+      logError('Location error', err);
       const msg = 'Location access failed. Please retry and allow permission.';
       setLocationError(msg);
       addToast(msg, 'error');
@@ -827,12 +827,17 @@ const AppContent: React.FC = () => {
           );
 
           if (!cancelled) {
-            setServiceProviderOptions(enriched.filter(p => !!p.id).map(p => ({ id: p.id!, name: p.name, city: p.city, distanceKm: p.distanceKm, serviceCategories: p.serviceCategories })));
+            const withIds = enriched.flatMap((p) =>
+              p.id
+                ? [{ id: p.id, name: p.name, city: p.city, distanceKm: p.distanceKm, serviceCategories: p.serviceCategories }]
+                : [],
+            );
+            setServiceProviderOptions(withIds);
           }
           return;
         }
       } catch (error) {
-        console.warn('Failed to fetch service providers, falling back to users:', error);
+        logWarn('Failed to fetch service providers, falling back to users:', error);
       }
       
       // Fallback to users if API fails
@@ -859,7 +864,14 @@ const AppContent: React.FC = () => {
         })
       );
 
-      if (!cancelled) setServiceProviderOptions(enriched.filter(p => !!p.id).map(p => ({ id: p.id!, name: p.name, city: p.city, distanceKm: p.distanceKm, serviceCategories: p.serviceCategories })));
+      if (!cancelled) {
+        const withIds = enriched.flatMap((p) =>
+          p.id
+            ? [{ id: p.id, name: p.name, city: p.city, distanceKm: p.distanceKm, serviceCategories: p.serviceCategories }]
+            : [],
+        );
+        setServiceProviderOptions(withIds);
+      }
     };
     run();
     return () => {
@@ -892,7 +904,7 @@ const AppContent: React.FC = () => {
         logDebug('Failed to clear active chat from localStorage (non-critical):', error);
       }
     }
-  }, [activeChat?.id, currentUser?.email]);
+  }, [activeChat?.id, currentUser]);
 
   // Restore last active chat if present and belongs to the logged-in user
   // Use a ref to track if we've already attempted restoration to prevent re-opening closed chats
@@ -932,8 +944,10 @@ const AppContent: React.FC = () => {
     } catch {
       hasRestoredChatRef.current = userKey;
     }
-  }, [currentUser?.email, currentUser?.role]); // Only depend on user, not conversations
-  
+    // Intentionally omit conversations/activeChat/setActiveChat — full deps would re-run restore and fight "close chat"
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
+  }, [currentUser?.email, currentUser?.role]);
+
   // Reset restoration flag when user changes
   React.useEffect(() => {
     hasRestoredChatRef.current = null;
@@ -1103,17 +1117,17 @@ const AppContent: React.FC = () => {
         if (storedVehicle) {
           const vehicleToShow = JSON.parse(storedVehicle);
           if (process.env.NODE_ENV === 'development') {
-            console.log('🔧 Recovered vehicle from sessionStorage:', vehicleToShow?.id, vehicleToShow?.make, vehicleToShow?.model);
+            logInfo('🔧 Recovered vehicle from sessionStorage:', vehicleToShow?.id, vehicleToShow?.make, vehicleToShow?.model);
           }
           setSelectedVehicle(vehicleToShow);
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('🔧 Failed to recover vehicle from sessionStorage:', error);
+          logWarn('🔧 Failed to recover vehicle from sessionStorage:', error);
         }
       }
     }
-  }, [currentView, selectedVehicle]);
+  }, [currentView, selectedVehicle, setSelectedVehicle]);
 
   // Handle deep links: open seller profile via ?seller=email
   React.useEffect(() => {
@@ -1124,7 +1138,7 @@ const AppContent: React.FC = () => {
         openSellerProfileByEmail(sellerParam);
       }
     } catch (e) {
-      console.warn('Failed to process deep link params', e);
+      logWarn('Failed to process deep link params', e);
     }
   }, [openSellerProfileByEmail]);
 
@@ -1219,7 +1233,7 @@ const AppContent: React.FC = () => {
           />
         );
 
-      case ViewEnum.USED_CARS:
+      case ViewEnum.USED_CARS: {
         // Filter vehicles for buy/sale (exclude rental vehicles)
         // Filter by status, listingType, and city if explicitly selected (not auto-detected)
         // Only use selectedCity, not userLocation, so users can see all vehicles by default
@@ -1237,7 +1251,7 @@ const AppContent: React.FC = () => {
         
         // Debug logging in development
         if (process.env.NODE_ENV === 'development') {
-          console.log('USED_CARS filter results:', {
+          logInfo('USED_CARS filter results:', {
             totalVehicles: vehicles.length,
             publishedVehicles: vehicles.filter(v => v.status === 'published').length,
             rentalVehicles: vehicles.filter(v => v.listingType === 'rental').length,
@@ -1288,12 +1302,13 @@ const AppContent: React.FC = () => {
             />
           </VehicleListErrorBoundary>
         );
+      }
 
-      case ViewEnum.DETAIL:
+      case ViewEnum.DETAIL: {
         // Enhanced recovery: Check both state and sessionStorage
         if (process.env.NODE_ENV === 'development') {
-          console.log('🎯 App.tsx: Rendering DETAIL view');
-          console.log('🎯 Current selectedVehicle from state:', selectedVehicle?.id, selectedVehicle?.make, selectedVehicle?.model);
+          logInfo('🎯 App.tsx: Rendering DETAIL view');
+          logInfo('🎯 Current selectedVehicle from state:', selectedVehicle?.id, selectedVehicle?.make, selectedVehicle?.model);
         }
         
         let vehicleToDisplay = selectedVehicle;
@@ -1303,25 +1318,25 @@ const AppContent: React.FC = () => {
             if (storedVehicle) {
               vehicleToDisplay = JSON.parse(storedVehicle);
               if (process.env.NODE_ENV === 'development') {
-                console.log('🔧 App.tsx: Recovered vehicle from sessionStorage for rendering:', vehicleToDisplay?.id, vehicleToDisplay?.make, vehicleToDisplay?.model);
+                logInfo('🔧 App.tsx: Recovered vehicle from sessionStorage for rendering:', vehicleToDisplay?.id, vehicleToDisplay?.make, vehicleToDisplay?.model);
               }
               // Update state for future renders
               setSelectedVehicle(vehicleToDisplay);
             } else {
               if (process.env.NODE_ENV === 'development') {
-                console.warn('⚠️ App.tsx: No vehicle in sessionStorage');
+                logWarn('⚠️ App.tsx: No vehicle in sessionStorage');
               }
             }
           } catch (error) {
             if (process.env.NODE_ENV === 'development') {
-              console.error('❌ App.tsx: Failed to recover vehicle from sessionStorage:', error);
+              logError('❌ App.tsx: Failed to recover vehicle from sessionStorage:', error);
             }
           }
         }
         
         if (!vehicleToDisplay) {
           if (process.env.NODE_ENV === 'development') {
-            console.error('❌ App.tsx: No vehicle to display - showing error message');
+            logError('❌ App.tsx: No vehicle to display - showing error message');
           }
           return (
             <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
@@ -1340,7 +1355,7 @@ const AppContent: React.FC = () => {
         }
         
         if (process.env.NODE_ENV === 'development') {
-          console.log('✅ App.tsx: Vehicle found, rendering VehicleDetail component:', vehicleToDisplay.id, vehicleToDisplay.make, vehicleToDisplay.model);
+          logInfo('✅ App.tsx: Vehicle found, rendering VehicleDetail component:', vehicleToDisplay.id, vehicleToDisplay.make, vehicleToDisplay.model);
         }
         
         // Use MobileVehicleDetail for mobile app, VehicleDetail for desktop
@@ -1358,7 +1373,7 @@ const AppContent: React.FC = () => {
               onViewSellerProfile={openSellerProfileByEmail}
               onStartChat={async (vehicle) => {
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
+                  logInfo('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
                 }
                 
                 if (!currentUser) {
@@ -1369,7 +1384,7 @@ const AppContent: React.FC = () => {
                 
                 // CRITICAL FIX: Validate sellerEmail before proceeding
                 if (!vehicle.sellerEmail) {
-                  console.error('❌ Cannot start chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
+                  logError('❌ Cannot start chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
                   addToast('Unable to start chat: Seller information is missing', 'error');
                   return;
                 }
@@ -1386,7 +1401,7 @@ const AppContent: React.FC = () => {
                   
                   // CRITICAL FIX: Ensure sellerId is not empty
                   if (!normalizedSellerId) {
-                    console.error('❌ Cannot create conversation: normalized sellerId is empty', { vehicleId: vehicle.id, sellerEmail: vehicle.sellerEmail });
+                    logError('❌ Cannot create conversation: normalized sellerId is empty', { vehicleId: vehicle.id, sellerEmail: vehicle.sellerEmail });
                     addToast('Unable to start chat: Seller information is invalid', 'error');
                     return;
                   }
@@ -1407,7 +1422,7 @@ const AppContent: React.FC = () => {
                   };
                   
                   if (process.env.NODE_ENV === 'development') {
-                    console.log('🔧 Creating conversation with normalized sellerId:', {
+                    logInfo('🔧 Creating conversation with normalized sellerId:', {
                       original: vehicle.sellerEmail,
                       normalized: normalizedSellerId,
                       vehicleId: vehicle.id,
@@ -1429,7 +1444,7 @@ const AppContent: React.FC = () => {
                       updatedAt: Date.now(),
                     }));
                   } catch (error) {
-                    console.warn('Failed to save activeChat to localStorage:', error);
+                    logWarn('Failed to save activeChat to localStorage:', error);
                   }
                   
                   // Save to Supabase with proper error handling (async, non-blocking)
@@ -1440,30 +1455,29 @@ const AppContent: React.FC = () => {
                     
                     if (!saveResult.success) {
                       // Fallback to sync queue if direct save fails
-                      console.warn('⚠️ Direct save failed, using sync queue:', saveResult.error);
+                      logWarn('⚠️ Direct save failed, using sync queue:', saveResult.error);
                       await saveConversationWithSync(newConversation);
                     } else {
-                      console.log('✅ Conversation saved to Supabase:', newConversation.id);
+                      logInfo('✅ Conversation saved to Supabase:', newConversation.id);
                       // Update with server response if it has different ID
                       if (saveResult.data && saveResult.data.id !== newConversation.id) {
-                        setConversations(prev => prev.map(c => 
-                          c.id === newConversation.id ? saveResult.data! : c
-                        ));
+                        const serverConv = saveResult.data;
+                        setConversations((prev) => prev.map((c) => (c.id === newConversation.id ? serverConv : c)));
                         // Update activeChat with server response
-                        setActiveChat(saveResult.data);
+                        setActiveChat(serverConv);
                         // Update localStorage with new ID
                         try {
                           localStorage.setItem('reRideActiveChat', JSON.stringify({
-                            id: saveResult.data.id,
+                            id: serverConv.id,
                             updatedAt: Date.now(),
                           }));
                         } catch (error) {
-                          console.warn('Failed to update activeChat in localStorage:', error);
+                          logWarn('Failed to update activeChat in localStorage:', error);
                         }
                       }
                     }
                   } catch (error) {
-                    console.error('❌ Failed to save conversation:', error);
+                    logError('❌ Failed to save conversation:', error);
                     // Still continue - conversation is in local state and activeChat is set
                     await saveConversationWithSync(newConversation);
                   }
@@ -1472,7 +1486,7 @@ const AppContent: React.FC = () => {
                   addToast('Chat started with seller', 'success');
                 } else {
                   if (process.env.NODE_ENV === 'development') {
-                    console.log('🔧 Using existing conversation:', conversation.id);
+                    logInfo('🔧 Using existing conversation:', conversation.id);
                   }
                   
                   // CRITICAL FIX: Set activeChat for existing conversation
@@ -1485,14 +1499,14 @@ const AppContent: React.FC = () => {
                       updatedAt: Date.now(),
                     }));
                   } catch (error) {
-                    console.warn('Failed to save activeChat to localStorage:', error);
+                    logWarn('Failed to save activeChat to localStorage:', error);
                   }
                   
                   addToast('Chat started with seller', 'success');
                 }
                 
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('🔧 Setting activeChat:', conversation.id);
+                  logInfo('🔧 Setting activeChat:', conversation.id);
                 }
               }}
               recommendations={recommendations}
@@ -1517,7 +1531,7 @@ const AppContent: React.FC = () => {
             onViewSellerProfile={openSellerProfileByEmail}
             onStartChat={async (vehicle) => {
               if (process.env.NODE_ENV === 'development') {
-                console.log('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
+                logInfo('🔧 Chat with Seller clicked:', { vehicleId: vehicle.id, vehicleName: `${vehicle.year} ${vehicle.make} ${vehicle.model}` });
               }
               
               if (!currentUser) {
@@ -1528,7 +1542,7 @@ const AppContent: React.FC = () => {
               
               // CRITICAL FIX: Validate sellerEmail before proceeding
               if (!vehicle.sellerEmail) {
-                console.error('❌ Cannot start chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
+                logError('❌ Cannot start chat: vehicle.sellerEmail is missing', { vehicleId: vehicle.id });
                 addToast('Unable to start chat: Seller information is missing', 'error');
                 return;
               }
@@ -1545,7 +1559,7 @@ const AppContent: React.FC = () => {
                 
                 // CRITICAL FIX: Ensure sellerId is not empty
                 if (!normalizedSellerId) {
-                  console.error('❌ Cannot create conversation: normalized sellerId is empty', { vehicleId: vehicle.id, sellerEmail: vehicle.sellerEmail });
+                  logError('❌ Cannot create conversation: normalized sellerId is empty', { vehicleId: vehicle.id, sellerEmail: vehicle.sellerEmail });
                   addToast('Unable to start chat: Seller information is invalid', 'error');
                   return;
                 }
@@ -1566,7 +1580,7 @@ const AppContent: React.FC = () => {
                 };
                 
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('🔧 Creating conversation with normalized sellerId:', {
+                  logInfo('🔧 Creating conversation with normalized sellerId:', {
                     original: vehicle.sellerEmail,
                     normalized: normalizedSellerId,
                     vehicleId: vehicle.id,
@@ -1588,7 +1602,7 @@ const AppContent: React.FC = () => {
                     updatedAt: Date.now(),
                   }));
                 } catch (error) {
-                  console.warn('Failed to save activeChat to localStorage:', error);
+                  logWarn('Failed to save activeChat to localStorage:', error);
                 }
                 
                 // Save to Supabase with proper error handling (async, non-blocking)
@@ -1599,30 +1613,29 @@ const AppContent: React.FC = () => {
                   
                   if (!saveResult.success) {
                     // Fallback to sync queue if direct save fails
-                    console.warn('⚠️ Direct save failed, using sync queue:', saveResult.error);
+                    logWarn('⚠️ Direct save failed, using sync queue:', saveResult.error);
                     await saveConversationWithSync(newConversation);
                   } else {
-                    console.log('✅ Conversation saved to Supabase:', newConversation.id);
+                    logInfo('✅ Conversation saved to Supabase:', newConversation.id);
                     // Update with server response if it has different ID
                     if (saveResult.data && saveResult.data.id !== newConversation.id) {
-                      setConversations(prev => prev.map(c => 
-                        c.id === newConversation.id ? saveResult.data! : c
-                      ));
+                      const serverConv = saveResult.data;
+                      setConversations((prev) => prev.map((c) => (c.id === newConversation.id ? serverConv : c)));
                       // Update activeChat with server response
-                      setActiveChat(saveResult.data);
+                      setActiveChat(serverConv);
                       // Update localStorage with new ID
                       try {
                         localStorage.setItem('reRideActiveChat', JSON.stringify({
-                          id: saveResult.data.id,
+                          id: serverConv.id,
                           updatedAt: Date.now(),
                         }));
                       } catch (error) {
-                        console.warn('Failed to update activeChat in localStorage:', error);
+                        logWarn('Failed to update activeChat in localStorage:', error);
                       }
                     }
                   }
                 } catch (error) {
-                  console.error('❌ Failed to save conversation:', error);
+                  logError('❌ Failed to save conversation:', error);
                   // Still continue - conversation is in local state and activeChat is set
                   await saveConversationWithSync(newConversation);
                 }
@@ -1631,7 +1644,7 @@ const AppContent: React.FC = () => {
                 addToast('Chat started with seller', 'success');
               } else {
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('🔧 Using existing conversation:', conversation.id);
+                  logInfo('🔧 Using existing conversation:', conversation.id);
                 }
                 
                 // CRITICAL FIX: Set activeChat for existing conversation
@@ -1644,20 +1657,21 @@ const AppContent: React.FC = () => {
                     updatedAt: Date.now(),
                   }));
                 } catch (error) {
-                  console.warn('Failed to save activeChat to localStorage:', error);
+                  logWarn('Failed to save activeChat to localStorage:', error);
                 }
                 
                 addToast('Chat started with seller', 'success');
               }
               
               if (process.env.NODE_ENV === 'development') {
-                console.log('🔧 Setting activeChat:', conversation.id);
+                logInfo('🔧 Setting activeChat:', conversation.id);
               }
             }}
             recommendations={recommendations}
             onSelectVehicle={selectVehicle}
           />
         );
+      }
 
       case ViewEnum.NEW_CARS:
         if (isMobileApp) {
@@ -1669,7 +1683,7 @@ const AppContent: React.FC = () => {
           <NewCars />
         );
 
-      case ViewEnum.RENTAL:
+      case ViewEnum.RENTAL: {
         // Rental vehicles feature not currently used - redirect to used cars page
         const RentalRedirect: React.FC = () => {
           React.useEffect(() => {
@@ -1684,6 +1698,7 @@ const AppContent: React.FC = () => {
           );
         };
         return <RentalRedirect />;
+      }
 
       case ViewEnum.COMPARISON:
         if (isMobileApp) {
@@ -1762,9 +1777,9 @@ const AppContent: React.FC = () => {
           />
         );
 
-      case ViewEnum.SELLER_DASHBOARD:
+      case ViewEnum.SELLER_DASHBOARD: {
         // CRITICAL: Enhanced validation for seller dashboard access
-        console.log('🔍 Seller Dashboard Access Check:', {
+        logInfo('🔍 Seller Dashboard Access Check:', {
           hasCurrentUser: !!currentUser,
           userEmail: currentUser?.email,
           userRole: currentUser?.role,
@@ -1778,13 +1793,13 @@ const AppContent: React.FC = () => {
         });
         
         if (!currentUser) {
-          console.warn('⚠️ Attempted to render seller dashboard without logged-in user');
+          logWarn('⚠️ Attempted to render seller dashboard without logged-in user');
           navigate(ViewEnum.LOGIN_PORTAL);
           return null;
         }
         
         if (!currentUser.email || !currentUser.role) {
-          console.error('❌ Invalid user object - missing email or role:', { 
+          logError('❌ Invalid user object - missing email or role:', { 
             hasEmail: !!currentUser.email, 
             hasRole: !!currentUser.role,
             userObject: currentUser
@@ -1794,16 +1809,16 @@ const AppContent: React.FC = () => {
         }
         
         if (currentUser.role !== 'seller') {
-          console.warn('⚠️ Attempted to render seller dashboard with role:', currentUser.role, 'Expected: seller');
+          logWarn('⚠️ Attempted to render seller dashboard with role:', currentUser.role, 'Expected: seller');
           navigate(ViewEnum.LOGIN_PORTAL);
           return null;
         }
         
-        console.log('✅ Seller dashboard validation passed, rendering dashboard');
+        logInfo('✅ Seller dashboard validation passed, rendering dashboard');
         
         // Safety check: Ensure vehicleData is defined
         if (!vehicleData) {
-          console.error('❌ vehicleData is undefined, cannot render dashboard');
+          logError('❌ vehicleData is undefined, cannot render dashboard');
           return (
             <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
               <div className="text-center">
@@ -1839,7 +1854,7 @@ const AppContent: React.FC = () => {
                   onNavigate={navigate}
                   onEditVehicle={(vehicle) => {
                     // MobileDashboard handles editing internally
-                    console.log('Edit vehicle:', vehicle);
+                    logInfo('Edit vehicle:', vehicle);
                   }}
                   onDeleteVehicle={async (vehicleId) => {
                     await deleteVehicle(vehicleId);
@@ -1903,7 +1918,7 @@ const AppContent: React.FC = () => {
                         addToast('Failed to feature vehicle. Please try again.', 'error');
                       }
                     } catch (error) {
-                      console.error('❌ Failed to feature vehicle:', error);
+                      logError('❌ Failed to feature vehicle:', error);
                       addToast('Failed to feature vehicle. Please try again.', 'error');
                     }
                   }}
@@ -1955,13 +1970,13 @@ const AppContent: React.FC = () => {
                         const refreshedVehicles = await getVehicles();
                         setVehicles(refreshedVehicles);
                       } catch (refreshError) {
-                        console.warn('Failed to refresh vehicles list after adding vehicle:', refreshError);
+                        logWarn('Failed to refresh vehicles list after adding vehicle:', refreshError);
                         // Continue anyway - we already updated local state
                       }
                       
                       addToast('Vehicle added successfully!', 'success');
                     } catch (error) {
-                      console.error('❌ Failed to add vehicle:', error);
+                      logError('❌ Failed to add vehicle:', error);
                       addToast('Failed to add vehicle. Please try again.', 'error');
                     }
                   }}
@@ -2038,13 +2053,13 @@ const AppContent: React.FC = () => {
                     const refreshedVehicles = await getVehicles();
                     setVehicles(refreshedVehicles);
                   } catch (refreshError) {
-                    console.warn('Failed to refresh vehicles list after adding vehicle:', refreshError);
+                    logWarn('Failed to refresh vehicles list after adding vehicle:', refreshError);
                     // Continue anyway - we already updated local state
                   }
                   
                   addToast('Vehicle added successfully', 'success');
                 } catch (error) {
-                  console.error('❌ Failed to add vehicle:', error);
+                  logError('❌ Failed to add vehicle:', error);
                   addToast('Failed to add vehicle', 'error');
                 }
               }}
@@ -2092,13 +2107,13 @@ const AppContent: React.FC = () => {
                     const refreshedVehicles = await getVehicles();
                     setVehicles(refreshedVehicles);
                   } catch (refreshError) {
-                    console.warn('Failed to refresh vehicles list after adding vehicles:', refreshError);
+                    logWarn('Failed to refresh vehicles list after adding vehicles:', refreshError);
                     // Fallback: update local state with results
                     setVehicles(prev => [...prev, ...results]);
                   }
                   addToast(`${results.length} vehicles added successfully`, 'success');
                 } catch (error) {
-                  console.error('❌ Failed to add vehicles:', error);
+                  logError('❌ Failed to add vehicles:', error);
                   addToast('Failed to add vehicles', 'error');
                 }
               }}
@@ -2204,7 +2219,7 @@ const AppContent: React.FC = () => {
                     addToast('Failed to feature vehicle. Please try again.', 'error');
                   }
                 } catch (error) {
-                  console.error('❌ Failed to feature vehicle:', error);
+                  logError('❌ Failed to feature vehicle:', error);
                   addToast('Failed to feature vehicle. Please try again.', 'error');
                 }
               }}
@@ -2310,7 +2325,7 @@ const AppContent: React.FC = () => {
                     );
                   }
                 } catch (error) {
-                  console.error('❌ Failed to certify vehicle:', error);
+                  logError('❌ Failed to certify vehicle:', error);
                   addToast('Failed to submit certification request. Please try again.', 'error');
                 }
               }}
@@ -2320,13 +2335,13 @@ const AppContent: React.FC = () => {
                   // Find the conversation and message
                   const conversation = conversations.find(c => c && c.id === conversationId);
                   if (!conversation) {
-                    console.warn('⚠️ Conversation not found for test drive response:', conversationId);
+                    logWarn('⚠️ Conversation not found for test drive response:', conversationId);
                     return;
                   }
 
                   const message = conversation.messages?.find(m => m && m.id === messageId);
                   if (!message || message.type !== 'test_drive_request') {
-                    console.warn('⚠️ Test drive message not found:', messageId);
+                    logWarn('⚠️ Test drive message not found:', messageId);
                     return;
                   }
 
@@ -2370,7 +2385,7 @@ const AppContent: React.FC = () => {
                     'success'
                   );
                 } catch (error) {
-                  console.error('❌ Failed to respond to test drive request:', error);
+                  logError('❌ Failed to respond to test drive request:', error);
                   addToast('Failed to respond to test drive request. Please try again.', 'error');
                 }
               }}
@@ -2383,6 +2398,7 @@ const AppContent: React.FC = () => {
             </Suspense>
           </DashboardErrorBoundary>
         );
+      }
 
       case ViewEnum.BUYER_DASHBOARD:
         if (isMobileApp && currentUser?.role === 'customer') {
@@ -2570,7 +2586,7 @@ const AppContent: React.FC = () => {
                     // Success message will be shown by updateUser in AppProvider
                     return true;
                   } catch (updateError) {
-                    console.error('Failed to update password:', updateError);
+                    logError('Failed to update password:', updateError);
                     // Check if it's a specific error from the API
                     const errorMessage = updateError instanceof Error ? updateError.message : 'Unknown error';
                     if (errorMessage.includes('Server error') || errorMessage.includes('500')) {
@@ -2583,7 +2599,7 @@ const AppContent: React.FC = () => {
                     return false;
                   }
                 } catch (error) {
-                  console.error('Failed to update password:', error);
+                  logError('Failed to update password:', error);
                   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                   addToast(`Password update failed: ${errorMessage}`, 'error');
                   return false;
@@ -2645,7 +2661,9 @@ const AppContent: React.FC = () => {
               users={users}
               typingStatus={typingStatus}
               onTypingActivity={(conversationId, isTyping) => toggleTyping(conversationId, isTyping)}
-              onMarkMessagesAsRead={markAsRead}
+              onMarkMessagesAsRead={(conversationId, readerRole) => {
+                void markAsRead(conversationId, { readerRole });
+              }}
               onMarkAllAsRead={markAllVisibleAsRead}
               onSetConversationReadState={(conversationId, isRead) =>
                 setConversationReadState(
@@ -2692,7 +2710,9 @@ const AppContent: React.FC = () => {
               toggleTyping(conversationId, true);
             }}
             onUserStoppedTyping={(conversationId: string) => toggleTyping(conversationId, false)}
-            onMarkMessagesAsRead={markAsRead}
+            onMarkMessagesAsRead={(conversationId, readerRole) => {
+              void markAsRead(conversationId, { readerRole });
+            }}
             onMarkAllAsRead={() => void markAllVisibleAsRead('customer')}
             onSetConversationReadState={(conversationId, isRead) =>
               setConversationReadState(conversationId, 'customer', isRead)
@@ -2787,7 +2807,7 @@ const AppContent: React.FC = () => {
           </div>
         );
 
-      case ViewEnum.DEALER_PROFILES:
+      case ViewEnum.DEALER_PROFILES: {
         // Pass sellers if available, but components will fetch directly from API if not provided
         const sellersFromUsers = users.filter(user => user.role === 'seller');
         if (isMobileApp) {
@@ -2812,6 +2832,7 @@ const AppContent: React.FC = () => {
             onViewProfile={openSellerProfileByEmail}
           />
         );
+      }
 
       case ViewEnum.CAR_SERVICE_LOGIN:
         return (
@@ -2872,7 +2893,7 @@ const AppContent: React.FC = () => {
                     addToast(`Successfully switched to the Free plan!`, 'success');
                     navigate(ViewEnum.SELLER_DASHBOARD);
                   } catch (error) {
-                    console.error('Failed to update plan:', error);
+                    logError('Failed to update plan:', error);
                     addToast('Failed to update plan', 'error');
                   }
                 }
@@ -2886,7 +2907,7 @@ const AppContent: React.FC = () => {
             currentUser={currentUser}
             onSelectPlan={(planId) => {
               // Handle plan selection
-              console.log('Selected plan:', planId);
+              logInfo('Selected plan:', planId);
             }}
           />
         );
@@ -2908,7 +2929,7 @@ const AppContent: React.FC = () => {
                   addToast('Support ticket submitted!', 'success');
                   navigate(ViewEnum.HOME);
                 } catch (error) {
-                  console.error('Support ticket submission failed:', error);
+                  logError('Support ticket submission failed:', error);
                   addToast('Failed to submit support ticket. Please try again.', 'error');
                 }
               }}
@@ -2930,7 +2951,7 @@ const AppContent: React.FC = () => {
                 setSupportTickets(prev => [created, ...(Array.isArray(prev) ? prev : [])]);
                 addToast('Support ticket submitted!', 'success');
               } catch (error) {
-                console.error('Support ticket submission failed:', error);
+                logError('Support ticket submission failed:', error);
                 addToast('Failed to submit support ticket. Please try again.', 'error');
               }
             }}
@@ -3072,7 +3093,7 @@ const AppContent: React.FC = () => {
                 onResetRequest={(email) => {
                   // Handle password reset request
                   if (process.env.NODE_ENV === 'development') {
-                    console.log('Password reset requested for:', email);
+                    logInfo('Password reset requested for:', email);
                   }
                 }}
                 onBack={() => goBack(ViewEnum.LOGIN_PORTAL)}
@@ -3154,7 +3175,7 @@ const AppContent: React.FC = () => {
           <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-600 mb-4">Page Not Found</h2>
-              <p className="text-gray-500 mb-4">The page you're looking for doesn't exist.</p>
+              <p className="text-gray-500 mb-4">The page you&apos;re looking for doesn&apos;t exist.</p>
               <button 
                 onClick={() => navigate(ViewEnum.HOME)}
                 className="btn-brand-primary"
@@ -3165,6 +3186,8 @@ const AppContent: React.FC = () => {
           </div>
         );
     }
+    // Curated list: listing every handler would mirror most of App state and destabilize navigation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentView, selectedVehicle, vehicles, users, currentUser, comparisonList, 
     wishlist, conversations, recommendations, initialSearchQuery, currentCategory,
@@ -3189,7 +3212,7 @@ const AppContent: React.FC = () => {
   const handleNotificationClick = React.useCallback(
     (notification: Notification) => {
       if (process.env.NODE_ENV === 'development') {
-        console.log('Notification clicked:', notification);
+        logInfo('Notification clicked:', notification);
       }
 
       const patchConversationRead = (conversation: Conversation) => {
@@ -3302,7 +3325,7 @@ const AppContent: React.FC = () => {
     try {
       localStorage.setItem('reRideNotifications', JSON.stringify(updated));
     } catch (error) {
-      console.warn('Failed to persist notifications:', error);
+      logWarn('Failed to persist notifications:', error);
     }
   }, []);
 
@@ -3325,11 +3348,11 @@ const AppContent: React.FC = () => {
       const { updateNotificationInMongoDB } = await import('./services/notificationService');
       ids.forEach(id => {
         updateNotificationInMongoDB(id, { isRead: true }).catch(err => {
-          console.warn('Failed to update notification in MongoDB:', err);
+          logWarn('Failed to update notification in MongoDB:', err);
         });
       });
     } catch (error) {
-      console.warn('Failed to import notification service:', error);
+      logWarn('Failed to import notification service:', error);
     }
   }, [notifications, persistNotifications, setNotifications]);
 
@@ -3351,7 +3374,7 @@ const AppContent: React.FC = () => {
     notifications.forEach(notification => {
       if (!notification.isRead) {
         updateNotificationInMongoDB(notification.id, { isRead: true }).catch(err => {
-          console.warn('Failed to update notification in MongoDB:', err);
+          logWarn('Failed to update notification in MongoDB:', err);
         });
       }
     });
@@ -3419,7 +3442,7 @@ const AppContent: React.FC = () => {
   // Render Mobile App Layout
   if (isMobileApp) {
     if (process.env.NODE_ENV === 'development') {
-      console.log('📱 Rendering Mobile App UI for view:', currentView);
+      logInfo('📱 Rendering Mobile App UI for view:', currentView);
     }
     
     // Check if we're on a dashboard view
@@ -3509,19 +3532,19 @@ const AppContent: React.FC = () => {
               onNavigate={navigate}
               onEditVehicle={(vehicle) => {
                 // Handle edit vehicle
-                console.log('Edit vehicle:', vehicle);
+                logInfo('Edit vehicle:', vehicle);
               }}
               onDeleteVehicle={(vehicleId) => {
                 // Handle delete vehicle
-                console.log('Delete vehicle:', vehicleId);
+                logInfo('Delete vehicle:', vehicleId);
               }}
               onMarkAsSold={(vehicleId) => {
                 // Handle mark as sold
-                console.log('Mark as sold:', vehicleId);
+                logInfo('Mark as sold:', vehicleId);
               }}
               onFeatureListing={(vehicleId) => {
                 // Handle feature listing
-                console.log('Feature listing:', vehicleId);
+                logInfo('Feature listing:', vehicleId);
               }}
               onSendMessage={sendMessage}
               onMarkConversationAsRead={markAsRead}
@@ -3541,7 +3564,7 @@ const AppContent: React.FC = () => {
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
               try {
                 if (process.env.NODE_ENV === 'development') {
-                console.log('🚀 Mobile Add Vehicle called with:', vehicleData);
+                logInfo('🚀 Mobile Add Vehicle called with:', vehicleData);
               }
                 
                 // Set listingExpiresAt based on subscription plan expiry date
@@ -3569,32 +3592,32 @@ const AppContent: React.FC = () => {
                 
                 const newVehicle = await addVehicle(vehicleToAdd);
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('✅ Vehicle added successfully:', newVehicle);
+                  logInfo('✅ Vehicle added successfully:', newVehicle);
                 }
                 
                 // Update local state
                 setVehicles(prev => [...prev, newVehicle]);
                 addToast('Vehicle added successfully!', 'success');
               } catch (error) {
-                console.error('❌ Failed to add vehicle:', error);
+                logError('❌ Failed to add vehicle:', error);
                 addToast('Failed to add vehicle. Please try again.', 'error');
               }
             }}
             onUpdateVehicle={async (vehicleData) => {
               try {
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('🚀 Mobile Update Vehicle called with:', vehicleData);
+                  logInfo('🚀 Mobile Update Vehicle called with:', vehicleData);
                 }
                 
                 // Use the updateVehicle from useApp hook which automatically updates state
                 await updateVehicle(vehicleData.id, vehicleData);
                 
                 if (process.env.NODE_ENV === 'development') {
-                  console.log('✅ Vehicle updated successfully');
+                  logInfo('✅ Vehicle updated successfully');
                 }
                 // Toast is shown by updateVehicle function
               } catch (error) {
-                console.error('❌ Failed to update vehicle:', error);
+                logError('❌ Failed to update vehicle:', error);
                 addToast('Failed to update vehicle. Please try again.', 'error');
               }
             }}
@@ -3608,7 +3631,7 @@ const AppContent: React.FC = () => {
                 }
                 addToast('Profile updated successfully!', 'success');
               } catch (error) {
-                console.error('Failed to update profile:', error);
+                logError('Failed to update profile:', error);
                 addToast('Failed to update profile. Please try again.', 'error');
                 throw error;
               }
@@ -3673,7 +3696,7 @@ const AppContent: React.FC = () => {
                   }}
                   onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                     if (process.env.NODE_ENV === 'development') {
-                      console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                      logInfo('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
                     }
                     onOfferResponse(conversationId, messageId, response, counterPrice);
                     addToast(`Offer ${response}`, 'success');
@@ -3769,7 +3792,7 @@ const AppContent: React.FC = () => {
                         localStorage.removeItem('reRideActiveChat');
                       } catch (e) {
                         if (process.env.NODE_ENV === 'development') {
-                          console.warn('Failed to clear activeChat from localStorage:', e);
+                          logWarn('Failed to clear activeChat from localStorage:', e);
                         }
                       }
                       setActiveChat(null);
@@ -3795,7 +3818,7 @@ const AppContent: React.FC = () => {
                     }}
                     onOfferResponse={(conversationId, messageId, response, counterPrice) => {
                       if (process.env.NODE_ENV === 'development') {
-                        console.log('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
+                        logInfo('🔧 DashboardMessages onOfferResponse called:', { conversationId, messageId, response, counterPrice });
                       }
                       onOfferResponse(conversationId, messageId, response, counterPrice);
                       addToast(`Offer ${response}`, 'success');

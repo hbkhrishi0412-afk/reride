@@ -1,25 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { getOptimizedImageUrl, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
-
-// Detect format support once
-let formatSupport: { webp: boolean; avif: boolean } | null = null;
-const detectFormatSupport = (): { webp: boolean; avif: boolean } => {
-  if (typeof window === 'undefined') {
-    return { webp: false, avif: false };
-  }
-  if (formatSupport) return formatSupport;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  const ctx = canvas.getContext('2d');
-  
-  formatSupport = {
-    webp: ctx ? canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0 : false,
-    avif: ctx ? canvas.toDataURL('image/avif').indexOf('data:image/avif') === 0 : false
-  };
-  return formatSupport;
-};
+import { logError, logInfo, logWarn } from '../utils/logger';
 
 interface LazyImageProps {
   src: string;
@@ -53,16 +34,11 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInView, setIsInView] = useState(eager); // Load immediately if eager
   const [hasError, setHasError] = useState(false);
-  const [formatSupportState, setFormatSupportState] = useState<{ webp: boolean; avif: boolean } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
-    // Detect format support on mount
-    const support = detectFormatSupport();
-    setFormatSupportState(support);
-    
     // Skip lazy loading for eager images (critical LCP images)
     if (eager) {
       setIsInView(true);
@@ -100,9 +76,7 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
       }
     } catch (error) {
       // Fallback if IntersectionObserver fails
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('IntersectionObserver not supported, loading image immediately');
-      }
+      logWarn('IntersectionObserver not supported, loading image immediately');
       setIsInView(true);
     }
 
@@ -111,7 +85,7 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
         observerRef.current.disconnect();
       }
     };
-  }, []);
+  }, [eager]);
 
   // Ensure src is valid before optimizing
   const validSrc = src && src.trim() !== '' ? src : (placeholder || VEHICLE_IMAGE_PLACEHOLDER_DATA_URI);
@@ -147,35 +121,35 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
                   .getPublicUrl(path);
                 
                 if (data?.publicUrl && data.publicUrl !== src) {
-                  console.log('✅ LazyImage: Converted storage path to URL:', { original: src, path, url: data.publicUrl });
+                  logInfo('✅ LazyImage: Converted storage path to URL:', { original: src, path, url: data.publicUrl });
                   target.src = data.publicUrl;
                   return; // Don't set error if we can convert it
                 }
               }
               
               // If all attempts failed, log for debugging
-              console.warn('⚠️ LazyImage: Could not convert storage path:', {
+              logWarn('⚠️ LazyImage: Could not convert storage path:', {
                 original: src,
                 attemptedPaths: pathAttempts,
-                error: 'No valid public URL generated'
+                error: 'No valid public URL generated',
               });
               setHasError(true);
             }).catch((err) => {
-              console.error('❌ LazyImage: Error importing Supabase client:', err);
+              logError('❌ LazyImage: Error importing Supabase client:', err);
               setHasError(true);
             });
             return; // Don't set error immediately, wait for async conversion
           }
         } catch (err) {
-          console.error('❌ LazyImage: Error in handleError:', err);
+          logError('❌ LazyImage: Error in handleError:', err);
           // Fall through to set error
         }
       } else {
         // Log failed image load for debugging
-        console.warn('⚠️ LazyImage: Image failed to load:', {
+        logWarn('⚠️ LazyImage: Image failed to load:', {
           src: target.src,
           originalSrc: src,
-          isPlaceholder: isInlineImagePlaceholder(target.src) || target.src.includes('placeholder.com') || target.src.includes('text=Car')
+          isPlaceholder: isInlineImagePlaceholder(target.src) || target.src.includes('placeholder.com') || target.src.includes('text=Car'),
         });
       }
     }
@@ -206,53 +180,9 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
         </div>
       )}
 
-      {/* Actual Image - optimized with WebP/AVIF support */}
+      {/* Actual Image — URL may be optimized per provider (see getOptimizedImageUrl) */}
       {isInView && !hasError && finalSrc && (() => {
         const optimizedUrl = getOptimizedImageUrl(finalSrc, width, quality);
-        const supports = formatSupportState || detectFormatSupport();
-        const crossOrigin =
-          optimizedUrl.startsWith('http://') || optimizedUrl.startsWith('https://') ? 'anonymous' : undefined;
-        
-        // Use <picture> element for format selection if browser supports it
-        // Otherwise fall back to single img with optimized URL
-        if (supports.avif || supports.webp) {
-          return (
-            <picture>
-              {/* AVIF source for modern browsers */}
-              {supports.avif && (
-                <source
-                  srcSet={optimizedUrl}
-                  type="image/avif"
-                />
-              )}
-              {/* WebP source as fallback */}
-              {supports.webp && !supports.avif && (
-                <source
-                  srcSet={optimizedUrl}
-                  type="image/webp"
-                />
-              )}
-              {/* Fallback img element */}
-              <img
-                ref={imgRef}
-                src={optimizedUrl}
-                alt={alt}
-                className={`w-full h-full transition-opacity duration-300 ${
-                  isLoaded ? 'opacity-100' : 'opacity-0'
-                }`}
-                style={{ objectFit: 'cover' }}
-                loading={eager ? 'eager' : 'lazy'}
-                fetchPriority={fetchPriority}
-                onLoad={handleLoad}
-                onError={handleError}
-                decoding="async"
-                crossOrigin={crossOrigin}
-              />
-            </picture>
-          );
-        }
-        
-        // Fallback for browsers without format support
         return (
           <img
             ref={imgRef}
@@ -267,7 +197,6 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
             onLoad={handleLoad}
             onError={handleError}
             decoding="async"
-            crossOrigin={crossOrigin}
           />
         );
       })()}
@@ -275,8 +204,6 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
       {/* Fallback for browsers without Intersection Observer or immediate load */}
       {(typeof window === 'undefined' || !window.IntersectionObserver) && !hasError && finalSrc && (() => {
         const fbUrl = getOptimizedImageUrl(finalSrc, width, quality);
-        const fbCross =
-          fbUrl.startsWith('http://') || fbUrl.startsWith('https://') ? 'anonymous' : undefined;
         return (
         <img
           src={fbUrl}
@@ -287,7 +214,6 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
           fetchPriority={fetchPriority}
           onLoad={handleLoad}
           onError={handleError}
-          crossOrigin={fbCross}
         />
         );
       })()}
