@@ -184,7 +184,7 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
           name,
           email,
           mobile: phone,
-          role: 'seller',
+          role: 'service_provider',
           location: city,
           status: 'active',
           authProvider: 'email',
@@ -195,7 +195,7 @@ export async function handleServiceProviderRegister(req: VercelRequest, res: Ver
         await supabaseUserService.update(email, {
           name,
           mobile: phone,
-          role: 'seller',
+          role: 'service_provider',
           location: city,
           status: 'active',
           authProvider: 'email',

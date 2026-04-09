@@ -42,7 +42,7 @@ test.describe('Service provider workflow', () => {
     });
     await assertOk(outsiderCreateResp, 'outsider create');
 
-    // Customer submits a request targeted to providerUid.
+    // Customer submits an open request broadcast to all providers (no candidate restriction).
     const createRequestResp = await request.post(`${apiBase}/service-requests`, {
       data: {
         title: 'Essential Service booking',
@@ -54,7 +54,7 @@ test.describe('Service provider workflow', () => {
         city: 'Mock City',
         addressLine: '221B Test Street',
         pincode: '560001',
-        candidateProviderIds: [providerUid],
+        candidateProviderIds: [],
         providerId: null,
         status: 'open',
         scheduledAt: 'slot-1',
@@ -65,28 +65,21 @@ test.describe('Service provider workflow', () => {
     const created = await createRequestResp.json();
     expect(created.status).toBe('open');
     expect(created.providerId).toBeNull();
-    expect(created.candidateProviderIds).toContain(providerUid);
 
-    // Assigned provider can see it in open pool.
+    // Any provider in the open pool can see the broadcast request.
     const providerOpenResp = await request.get(`${apiBase}/service-requests?scope=open&uid=${providerUid}`);
     await assertOk(providerOpenResp, 'provider open requests fetch');
     const providerOpen = await providerOpenResp.json();
     const openForProvider = providerOpen.find((r: any) => r.id === created.id);
     expect(openForProvider).toBeTruthy();
 
-    // Outsider should neither see nor claim that request.
     const outsiderOpenResp = await request.get(`${apiBase}/service-requests?scope=open&uid=${outsiderUid}`);
     await assertOk(outsiderOpenResp, 'outsider open requests fetch');
     const outsiderOpen = await outsiderOpenResp.json();
     const openForOutsider = outsiderOpen.find((r: any) => r.id === created.id);
-    expect(openForOutsider).toBeFalsy();
+    expect(openForOutsider).toBeTruthy();
 
-    const outsiderClaimResp = await request.patch(`${apiBase}/service-requests?uid=${outsiderUid}`, {
-      data: { id: created.id, action: 'claim' },
-    });
-    expect(outsiderClaimResp.status()).toBe(403);
-
-    // Assigned provider claims and progresses request lifecycle.
+    // First claim wins; second provider gets a conflict.
     const claimResp = await request.patch(`${apiBase}/service-requests?uid=${providerUid}`, {
       data: { id: created.id, action: 'claim' },
     });
@@ -94,6 +87,11 @@ test.describe('Service provider workflow', () => {
     const claimed = await claimResp.json();
     expect(claimed.status).toBe('accepted');
     expect(claimed.providerId).toBe(providerUid);
+
+    const outsiderClaimResp = await request.patch(`${apiBase}/service-requests?uid=${outsiderUid}`, {
+      data: { id: created.id, action: 'claim' },
+    });
+    expect(outsiderClaimResp.status()).toBe(409);
 
     const inProgressResp = await request.patch(`${apiBase}/service-requests?uid=${providerUid}`, {
       data: { id: created.id, status: 'in_progress' },
@@ -117,6 +115,67 @@ test.describe('Service provider workflow', () => {
     const finalRecord = mine.find((r: any) => r.id === created.id);
     expect(finalRecord).toBeTruthy();
     expect(finalRecord.status).toBe('completed');
+  });
+
+  test('open pool respects candidateProviderIds', async ({ request }, testInfo) => {
+    const apiBase = 'http://127.0.0.1:3001/api';
+    const runId = `${Date.now()}-cand-${testInfo.project.name.replace(/\s+/g, '-').toLowerCase()}`;
+    const providerUid = `sp-cand-${runId}`;
+    const outsiderUid = `sp-cand-out-${runId}`;
+
+    await request.post(`${apiBase}/service-providers?uid=${providerUid}`, {
+      data: {
+        name: 'Invited Provider',
+        email: `invited-${runId}@test.local`,
+        phone: '9111111111',
+        city: 'Cand City',
+        workshops: [],
+        skills: [],
+        availability: 'weekdays',
+      },
+    });
+    await request.post(`${apiBase}/service-providers?uid=${outsiderUid}`, {
+      data: {
+        name: 'Other Provider',
+        email: `other-${runId}@test.local`,
+        phone: '9222222222',
+        city: 'Cand City',
+        workshops: [],
+        skills: [],
+        availability: 'weekdays',
+      },
+    });
+
+    const createResp = await request.post(`${apiBase}/service-requests`, {
+      data: {
+        title: 'Invite-only job',
+        serviceType: 'General',
+        customerName: 'C',
+        customerPhone: '7333333333',
+        customerEmail: `c-${runId}@test.local`,
+        city: 'Cand City',
+        candidateProviderIds: [providerUid],
+        providerId: null,
+        status: 'open',
+      },
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const created = await createResp.json();
+
+    const invitedOpen = await (
+      await request.get(`${apiBase}/service-requests?scope=open&uid=${providerUid}`)
+    ).json();
+    expect(invitedOpen.some((r: { id: string }) => r.id === created.id)).toBeTruthy();
+
+    const outsiderOpen = await (
+      await request.get(`${apiBase}/service-requests?scope=open&uid=${outsiderUid}`)
+    ).json();
+    expect(outsiderOpen.some((r: { id: string }) => r.id === created.id)).toBeFalsy();
+
+    const outsiderClaim = await request.patch(`${apiBase}/service-requests?uid=${outsiderUid}`, {
+      data: { id: created.id, action: 'claim' },
+    });
+    expect(outsiderClaim.status()).toBe(403);
   });
 });
 

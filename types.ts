@@ -188,7 +188,7 @@ export interface User {
   email: string;
   password?: string; // Optional for API responses, required for registration/login
   mobile: string;
-  role: 'seller' | 'customer' | 'admin';
+  role: 'seller' | 'customer' | 'admin' | 'service_provider';
   location: string;
   address?: string; // Full address (street, city, state, etc.)
   /** Indian postal PIN (6 digits) — used with address for map pin and area grouping */

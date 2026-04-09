@@ -109,9 +109,10 @@ function normalizeUser(user: UserType | null | undefined): NormalizedUser | null
     return null;
   }
   
-  // Ensure role is present (critical for seller dashboard access)
-  let role: 'customer' | 'seller' | 'admin' = user.role;
-  if (!role || typeof role !== 'string' || !['customer', 'seller', 'admin'].includes(role)) {
+  // Ensure role is present (critical for seller / service provider dashboard access)
+  const validRoles = ['customer', 'seller', 'admin', 'service_provider'] as const;
+  let role: (typeof validRoles)[number] = user.role as (typeof validRoles)[number];
+  if (!role || typeof role !== 'string' || !validRoles.includes(role as (typeof validRoles)[number])) {
     logWarn('⚠️ User object missing or invalid role field:', user.email, 'role:', role);
     role = 'customer';
   }
@@ -1321,9 +1322,10 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         });
         const fallbackId = user.id || normalizedEmail.replace(/[.#$[\]]/g, '_');
         const fallbackEmail = (user.email && String(user.email).trim()) || normalizedEmail;
-        const fallbackRole = (user.role && ['customer', 'seller', 'admin'].includes(user.role))
-          ? user.role as 'customer' | 'seller' | 'admin'
-          : 'customer';
+        const fallbackRole =
+          user.role && ['customer', 'seller', 'admin', 'service_provider'].includes(user.role)
+            ? (user.role as 'customer' | 'seller' | 'admin' | 'service_provider')
+            : 'customer';
         normalizedUser = {
           id: fallbackId,
           email: fallbackEmail.toLowerCase().trim(),
@@ -1867,7 +1869,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             name,
             email: normalizedEmail,
             mobile: provider.phone || '0000000000',
-            role: 'seller',
+            role: 'service_provider',
             location: provider.city || 'Pending setup',
             status: 'active',
             authProvider: 'google',
@@ -1878,6 +1880,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
           await supabaseUserService.update(normalizedEmail, {
             name,
             mobile: existingUser.mobile || provider.phone || undefined,
+            role: 'service_provider',
             authProvider: 'google',
             firebaseUid: supabaseUserRecord.id,
           });

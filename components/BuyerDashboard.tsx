@@ -679,7 +679,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                     </div>
                   }
                 >
-                  <ServiceCart isLoggedIn embedTrackOnly />
+                  <ServiceCart isLoggedIn embedTrackOnly customerUserId={currentUser?.id ?? null} />
                 </Suspense>
               </div>
             )}

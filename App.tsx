@@ -96,9 +96,14 @@ interface ServiceRequestPayload {
   };
   note?: string;
   slotId?: string;
+  /** YYYY-MM-DD from service cart date picker. */
+  scheduledDate?: string;
+  /** Time window label, e.g. "10:00 - 12:00". */
+  slotTimeLabel?: string;
   addressId?: string;
   couponCode?: string;
   total?: number;
+  services?: Array<{ id: string; name: string; quantity?: number; price?: number }>;
 }
 
 interface ProviderResponse {
@@ -607,7 +612,7 @@ const AppContent: React.FC = () => {
     try {
       if (!currentUser) {
         addToast('Please log in to submit a service request.', 'error');
-        return;
+        throw new Error('Please log in to submit a service request.');
       }
 
       const firstItem = payload.items?.[0];
@@ -636,16 +641,11 @@ const AppContent: React.FC = () => {
       const allServiceTypes = payload.serviceTypes && payload.serviceTypes.length > 0
         ? payload.serviceTypes.join(', ')
         : serviceName;
-      const candidateProviderIds =
-        payload.candidateProviderIds && payload.candidateProviderIds.length > 0
-          ? payload.candidateProviderIds
-          : payload.providerId
-            ? [payload.providerId]
-            : [];
-
+      const structuredCar =
+        payload.carDetails && typeof payload.carDetails === 'object' ? payload.carDetails : null;
       const body = {
-        title: payload.note || `${allServiceTypes} request`,
-        serviceType: allServiceTypes, // Include all selected service types
+        title: payload.note?.trim() ? payload.note!.trim() : `${allServiceTypes} request`,
+        serviceType: allServiceTypes,
         customerName: payload.customerName || currentUser?.name || '',
         customerPhone: payload.customerPhone || currentUser?.mobile || '',
         customerEmail: currentUser?.email || '',
@@ -653,13 +653,22 @@ const AppContent: React.FC = () => {
         city,
         addressLine: payload.address?.line1 || '',
         pincode: payload.address?.pincode || '',
-        carDetails: vehicleDesc,
-        status: 'open',
-        scheduledAt: payload.slotId || '',
+        carDetails: structuredCar ?? vehicleDesc,
+        status: 'open' as const,
+        scheduledAt:
+          payload.scheduledDate && payload.slotTimeLabel
+            ? `${payload.scheduledDate} • ${payload.slotTimeLabel}`
+            : payload.slotId || '',
         notes: payload.note || '',
         providerId: null,
-        candidateProviderIds,
+        candidateProviderIds: payload.candidateProviderIds ?? [],
         services,
+        addressId: payload.addressId,
+        slotId: payload.slotId,
+        scheduledDate: payload.scheduledDate,
+        slotTimeLabel: payload.slotTimeLabel,
+        total: payload.total,
+        couponCode: payload.couponCode,
       };
       const resp = await authenticatedFetch('/api/service-requests', {
         method: 'POST',
@@ -680,6 +689,7 @@ const AppContent: React.FC = () => {
       const msg = error instanceof Error ? error.message : 'Failed to submit service request';
       logError('Failed to submit service request', error);
       addToast(msg, 'error');
+      throw error instanceof Error ? error : new Error(msg);
     }
   }, [addToast, currentUser, selectedCity]);
 
@@ -2867,6 +2877,7 @@ const AppContent: React.FC = () => {
         return (
           <ServiceCart
             isLoggedIn={!!currentUser}
+            customerUserId={currentUser?.id ?? null}
             onLogin={() => navigate(ViewEnum.LOGIN_PORTAL)}
             onSubmitRequest={handleServiceRequestSubmit}
             serviceProviders={serviceProviderOptions}

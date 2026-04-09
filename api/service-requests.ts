@@ -3,6 +3,7 @@ import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { authenticateRequest } from './auth.js';
 import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
+import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import type { ServiceRequestPayload } from '../services/supabase-service-request-service.js';
 import { applyCors } from '../lib/api-route-cors.js';
 
@@ -15,6 +16,19 @@ type ActorInfo = {
   id: string;
   role: string;
 };
+
+function isServiceProviderRole(role: string): boolean {
+  const r = String(role || '').toLowerCase().replace(/-/g, '_');
+  return r === 'service_provider' || r === 'provider';
+}
+
+/** Empty or missing list = any provider may see/claim; otherwise only listed provider IDs. */
+function providerMatchesCandidateList(candidateProviderIds: unknown, providerId: string): boolean {
+  if (!Array.isArray(candidateProviderIds) || candidateProviderIds.length === 0) {
+    return true;
+  }
+  return candidateProviderIds.some((id) => String(id) === String(providerId));
+}
 
 async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo> {
   const authHeader = req.headers.authorization;
@@ -39,13 +53,37 @@ async function resolveServiceRequestActor(req: VercelRequest): Promise<ActorInfo
         // Keep JWT-derived role if user lookup fails
       }
     }
+
+    // Profiles were historically synced with role "seller"; treat service_providers row as source of truth.
+    if (resolvedRole !== 'admin' && !isServiceProviderRole(String(resolvedRole))) {
+      try {
+        const sp = await supabaseServiceProviderService.findById(decoded.uid);
+        if (sp) {
+          resolvedRole = 'service_provider';
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
     return { id: decoded.uid, role: String(resolvedRole) };
   } catch {
     const legacy = authenticateRequest(req);
     if (!legacy.isValid || !legacy.user?.userId) {
       throw new Error(legacy.error || 'Authentication required');
     }
-    return { id: legacy.user.userId, role: legacy.user.role || 'customer' };
+    let resolvedRole = legacy.user.role || 'customer';
+    if (resolvedRole !== 'admin' && !isServiceProviderRole(String(resolvedRole))) {
+      try {
+        const sp = await supabaseServiceProviderService.findById(legacy.user.userId);
+        if (sp) {
+          resolvedRole = 'service_provider';
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return { id: legacy.user.userId, role: String(resolvedRole) };
   }
 }
 
@@ -61,6 +99,9 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
 
     if (req.method === 'GET') {
       if (scope === 'open') {
+        if (!isAdmin && !isServiceProviderRole(actor.role)) {
+          return res.status(403).json({ error: 'Service provider access required for open request pool' });
+        }
         const records = await supabaseServiceRequestService.findByStatus('open');
         const cityFilter = (req.query.city as string) || '';
         const serviceTypeFilter = (req.query.serviceType as string) || '';
@@ -68,9 +109,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           const cityMatches = cityFilter ? item.city?.toLowerCase() === cityFilter.toLowerCase() : true;
           const serviceMatches = serviceTypeFilter ? item.serviceType === serviceTypeFilter : true;
           const candidateOk =
-            !item.candidateProviderIds ||
-            item.candidateProviderIds.length === 0 ||
-            item.candidateProviderIds.includes(actorId);
+            isAdmin || providerMatchesCandidateList(item.candidateProviderIds, actorId);
           return cityMatches && serviceMatches && candidateOk;
         });
         return res.status(200).json(filtered);
@@ -115,7 +154,14 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         status: (body.status as ServiceRequestPayload['status']) || 'open',
         scheduledAt: body.scheduledAt || '',
         notes: body.notes || '',
-        carDetails: body.carDetails || '',
+        carDetails: body.carDetails ?? '',
+        services: Array.isArray(body.services) ? body.services : undefined,
+        addressId: typeof body.addressId === 'string' ? body.addressId : undefined,
+        slotId: typeof body.slotId === 'string' ? body.slotId : undefined,
+        scheduledDate: typeof body.scheduledDate === 'string' ? body.scheduledDate : undefined,
+        slotTimeLabel: typeof body.slotTimeLabel === 'string' ? body.slotTimeLabel : undefined,
+        total: typeof body.total === 'number' ? body.total : undefined,
+        couponCode: typeof body.couponCode === 'string' ? body.couponCode : undefined,
       };
 
       const created = await supabaseServiceRequestService.create(payload);
@@ -125,7 +171,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
     if (req.method === 'PATCH') {
       const { id, action, ...updates } = req.body as Partial<ServiceRequestPayload> & {
         id?: string;
-        action?: 'claim';
+        action?: 'claim' | 'cancel';
       };
       if (!id) {
         return res.status(400).json({ error: 'Missing request id' });
@@ -135,16 +181,47 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         return res.status(404).json({ error: 'Request not found' });
       }
 
+      const isCustomerOwner = existing.customerId === actorId;
+      const customerWantsCancel =
+        action === 'cancel' || (isCustomerOwner && updates.status === 'cancelled');
+
+      if (customerWantsCancel) {
+        if (!isCustomerOwner) {
+          return res.status(403).json({ error: 'Not allowed to cancel this request' });
+        }
+        if (existing.status === 'cancelled') {
+          return res.status(409).json({ error: 'Request already cancelled' });
+        }
+        if (existing.status === 'completed') {
+          return res.status(409).json({ error: 'Request already completed' });
+        }
+        if (existing.status === 'in_progress') {
+          return res.status(409).json({ error: 'Cannot cancel while service is in progress' });
+        }
+        if (existing.status !== 'open' && existing.status !== 'accepted') {
+          return res.status(409).json({ error: 'Request cannot be cancelled' });
+        }
+        const cancelledAt = new Date().toISOString();
+        await supabaseServiceRequestService.update(id, {
+          status: 'cancelled',
+          cancelledAt,
+        });
+        const updatedCancel = await supabaseServiceRequestService.findById(id);
+        return res.status(200).json(updatedCancel || existing);
+      }
+
       if (action === 'claim') {
+        if (!isAdmin && !isServiceProviderRole(actor.role)) {
+          return res.status(403).json({ error: 'Only service providers can claim requests' });
+        }
+        if (
+          !isAdmin &&
+          !providerMatchesCandidateList(existing.candidateProviderIds, actorId)
+        ) {
+          return res.status(403).json({ error: 'This request is not assigned to your workshop' });
+        }
         if (existing.status !== 'open' || existing.providerId) {
           return res.status(409).json({ error: 'Request already claimed' });
-        }
-        const candidateOk =
-          !existing.candidateProviderIds ||
-          existing.candidateProviderIds.length === 0 ||
-          existing.candidateProviderIds.includes(actorId);
-        if (!candidateOk) {
-          return res.status(403).json({ error: 'Not allowed to claim this request' });
         }
         await supabaseServiceRequestService.update(id, {
           providerId: actorId,
