@@ -54,18 +54,15 @@ function wrapError(error: unknown, fallbackMessage: string): string {
  * URL Configuration → Redirect URLs (e.g. `https://www.reride.co.in/**`,
  * `https://appassets.androidplatform.net/**`, `http://localhost:5173/**`,
  * `com.reride.app://oauth-callback` (Android Custom Tab / PKCE return).
+ *
+ * Always use the current page origin (not `VITE_APP_URL`): PKCE state is stored per origin,
+ * and the dev server may run on a different port than any configured canonical URL.
  */
 export function getOAuthRedirectUrl(): string | undefined {
   if (typeof window === 'undefined') return undefined;
   const native = getNativeOAuthRedirectUrl();
   if (native) return native;
-  const fallbackOrigin =
-    (import.meta as ImportMeta).env?.VITE_APP_URL?.trim() || 'https://www.reride.co.in';
-  const currentOrigin = window.location.origin;
-  const isLocalOrigin =
-    currentOrigin.includes('localhost') || currentOrigin.includes('127.0.0.1');
-  const origin = isLocalOrigin ? fallbackOrigin : currentOrigin;
-  const { pathname, search } = window.location;
+  const { origin, pathname, search } = window.location;
   return `${origin}${pathname}${search || ''}`;
 }
 

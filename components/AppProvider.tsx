@@ -1013,17 +1013,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         let role = sessionStorage.getItem('reride_last_role') as 'customer' | 'seller' | null;
         const meta = session.user.user_metadata as Record<string, unknown> | undefined;
+        const prov = (session.user.app_metadata as Record<string, unknown> | undefined)?.provider;
+        const isGoogleProvider = prov === 'google';
+
         if (!role || !['customer', 'seller'].includes(role)) {
           const mr = meta?.role;
-          role =
-            typeof mr === 'string' && ['customer', 'seller'].includes(mr)
-              ? (mr as 'customer' | 'seller')
-              : 'customer';
+          if (typeof mr === 'string' && ['customer', 'seller'].includes(mr)) {
+            role = mr as 'customer' | 'seller';
+          } else if (isGoogleProvider) {
+            // Do not default new Google sessions to customer — user must pick on login screen.
+            try {
+              sessionStorage.setItem('reride_oauth_pick_role', '1');
+            } catch {
+              /* ignore */
+            }
+            return;
+          } else {
+            role = 'customer';
+          }
         }
 
-        const prov = (session.user.app_metadata as Record<string, unknown> | undefined)?.provider;
         const authProvider: 'google' | 'phone' | 'email' =
-          prov === 'google' ? 'google' : session.user.phone ? 'phone' : 'email';
+          isGoogleProvider ? 'google' : session.user.phone ? 'phone' : 'email';
 
         const result = await syncWithBackend(
           session.user as unknown as Record<string, unknown>,

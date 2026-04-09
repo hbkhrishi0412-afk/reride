@@ -468,6 +468,17 @@ const en = {
   'auth.getStarted': 'Get started with ReRide',
   'auth.getStartedToday': 'Get started with ReRide today',
   'auth.accountType': 'Account Type',
+  'auth.selectAccountTypePlaceholder': 'Select how you use ReRide',
+  'auth.error.selectAccountType': 'Please choose your account type first.',
+  'auth.googleRequiresCustomerOrSeller':
+    'Choose Customer or Seller above before signing in with Google.',
+  'auth.serviceProviderGoogleHint':
+    'Google sign-in is for buyers and sellers. Service providers use email sign-in on the service provider page.',
+  'auth.goToServiceProviderLogin': 'Go to service provider sign-in',
+  'auth.oauthPickRoleTitle': 'Choose account type',
+  'auth.oauthPickRoleBody':
+    'You signed in with Google. Select how you use ReRide to finish signing in.',
+  'auth.oauthPickRoleSignOut': 'Cancel and sign out',
   'auth.iWantTo': 'I want to',
   'auth.roleRegister.customer': 'Buy vehicles',
   'auth.roleRegister.seller': 'Sell vehicles',
@@ -1295,6 +1306,17 @@ const hi: Record<string, string> = {
   'auth.getStarted': 'ReRide के साथ शुरू करें',
   'auth.getStartedToday': 'आज ही ReRide के साथ शुरू करें',
   'auth.accountType': 'खाता प्रकार',
+  'auth.selectAccountTypePlaceholder': 'चुनें कि आप ReRide का उपयोग कैसे करते हैं',
+  'auth.error.selectAccountType': 'कृपया पहले अपना खाता प्रकार चुनें।',
+  'auth.googleRequiresCustomerOrSeller':
+    'Google से साइन इन से पहले ऊपर ग्राहक या विक्रेता चुनें।',
+  'auth.serviceProviderGoogleHint':
+    'Google साइन-इन खरीदारों और विक्रेताओं के लिए है। सेवा प्रदाता सेवा प्रदाता पृष्ठ पर ईमेल से साइन इन करते हैं।',
+  'auth.goToServiceProviderLogin': 'सेवा प्रदाता साइन-इन पर जाएं',
+  'auth.oauthPickRoleTitle': 'खाता प्रकार चुनें',
+  'auth.oauthPickRoleBody':
+    'आपने Google से साइन इन किया है। साइन इन पूरा करने के लिए चुनें कि आप ReRide का उपयोग कैसे करते हैं।',
+  'auth.oauthPickRoleSignOut': 'रद्द करें और साइन आउट करें',
   'auth.iWantTo': 'मैं चाहता/चाहती हूँ',
   'auth.roleRegister.customer': 'वाहन खरीदें',
   'auth.roleRegister.seller': 'वाहन बेचें',
@@ -1945,6 +1967,17 @@ const te: Record<string, string> = {
   'auth.getStarted': 'ReRide తో ప్రారంభించండి',
   'auth.getStartedToday': 'ఈరోజే ReRide తో ప్రారంభించండి',
   'auth.accountType': 'ఖాతా రకం',
+  'auth.selectAccountTypePlaceholder': 'మీరు ReRide ను ఎలా ఉపయోగిస్తారో ఎంచుకోండి',
+  'auth.error.selectAccountType': 'దయచేసి ముందుగా మీ ఖాతా రకాన్ని ఎంచుకోండి.',
+  'auth.googleRequiresCustomerOrSeller':
+    'Google తో సైన్ ఇన్ చేయడానికి ముందు పైన కస్టమర్ లేదా విక్రేతను ఎంచుకోండి.',
+  'auth.serviceProviderGoogleHint':
+    'Google సైన్-ఇన్ కొనుగోలుదారులు మరియు విక్రేతల కోసం. సేవా ప్రదాతలు సేవా ప్రదాత పేజీలో ఇమెయిల్ తో సైన్ ఇన్ చేస్తారు.',
+  'auth.goToServiceProviderLogin': 'సేవా ప్రదాత సైన్-ఇన్ కు వెళ్లండి',
+  'auth.oauthPickRoleTitle': 'ఖాతా రకాన్ని ఎంచుకోండి',
+  'auth.oauthPickRoleBody':
+    'మీరు Google తో సైన్ ఇన్ అయ్యారు. సైన్ ఇన్ పూర్తి చేయడానికి మీరు ReRide ను ఎలా ఉపయోగిస్తారో ఎంచుకోండి.',
+  'auth.oauthPickRoleSignOut': 'రద్దు చేసి సైన్ అవుట్',
   'auth.iWantTo': 'నేను కావాలనుకుంటున్నాను',
   'auth.roleRegister.customer': 'వాహనాలు కొనండి',
   'auth.roleRegister.seller': 'వాహనాలు అమ్మండి',
@@ -2726,6 +2759,17 @@ const ta: Record<string, string> = {
   'auth.getStarted': 'ReRide உடன் தொடங்குங்கள்',
   'auth.getStartedToday': 'இன்றே ReRide உடன் தொடங்குங்கள்',
   'auth.accountType': 'கணக்கு வகை',
+  'auth.selectAccountTypePlaceholder': 'ReRide ஐ எப்படி பயன்படுத்துகிறீர்கள் என்பதைத் தேர்ந்தெடுக்கவும்',
+  'auth.error.selectAccountType': 'முதலில் உங்கள் கணக்கு வகையைத் தேர்ந்தெடுக்கவும்.',
+  'auth.googleRequiresCustomerOrSeller':
+    'Google உடன் உள்நுழைய முன் மேலே வாடிக்கையாளர் அல்லது விற்பனையாளரைத் தேர்ந்தெடுக்கவும்.',
+  'auth.serviceProviderGoogleHint':
+    'Google உள்நுழைவு வாங்குபவர்கள் மற்றும் விற்பனையாளர்களுக்கு. சேவை வழங்குநர்கள் சேவை வழங்குநர் பக்கத்தில் மின்னஞ்சல் மூலம் உள்நுழைகிறார்கள்.',
+  'auth.goToServiceProviderLogin': 'சேவை வழங்குநர் உள்நுழைவுக்குச் செல்லவும்',
+  'auth.oauthPickRoleTitle': 'கணக்கு வகையைத் தேர்ந்தெடுக்கவும்',
+  'auth.oauthPickRoleBody':
+    'நீங்கள் Google உடன் உள்நுழைந்துள்ளீர்கள். உள்நுழைவை முடிக்க ReRide ஐ எப்படி பயன்படுத்துகிறீர்கள் என்பதைத் தேர்ந்தெடுக்கவும்.',
+  'auth.oauthPickRoleSignOut': 'ரத்துசெய்து வெளியேறு',
   'auth.iWantTo': 'நான் விரும்புகிறேன்',
   'auth.roleRegister.customer': 'வாகனங்கள் வாங்க',
   'auth.roleRegister.seller': 'வாகனங்கள் விற்க',

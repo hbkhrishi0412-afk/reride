@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, User } from '../types';
 import { login, register } from '../services/userService';
-import { signInWithGoogle } from '../services/authService';
+import { signInWithGoogle, syncWithBackend } from '../services/authService';
+import { getSupabaseClient } from '../lib/supabase.js';
 import OTPLogin from './OTPLogin';
 import PasswordInput from './PasswordInput';
 import Logo from './Logo';
@@ -32,8 +33,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 }) => {
   const { t, i18n } = useTranslation();
   const { isMobileApp } = useIsMobileApp();
-  const initialRole: UserRole = (forcedRole ?? (allowedRoles[0] as UserRole));
-  const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
+  const initialRole: UserRole | null =
+    forcedRole ?? (allowedRoles.length === 1 ? (allowedRoles[0] as UserRole) : null);
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(initialRole);
+  const [showGoogleRolePicker, setShowGoogleRolePicker] = useState(false);
+  const [oauthPickLoading, setOauthPickLoading] = useState(false);
   const [mode, setMode] = useState<AuthMode>('login');
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
@@ -100,7 +104,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   };
 
   useEffect(() => {
-    const rememberedEmail = localStorage.getItem(`remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`);
+    if (!selectedRole) {
+      setEmail('');
+      setRememberMe(false);
+      return;
+    }
+    const rememberedEmail = localStorage.getItem(
+      `remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`,
+    );
     if (rememberedEmail) {
       setEmail(rememberedEmail);
       setRememberMe(true);
@@ -109,6 +120,18 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       setRememberMe(false);
     }
   }, [selectedRole]);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('reride_oauth_pick_role') === '1') {
+        setShowGoogleRolePicker(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const canUseGoogleOrOtp = selectedRole === 'customer' || selectedRole === 'seller';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -154,12 +177,66 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     }
   }, [mode]);
 
+  const completeGoogleRolePick = async (role: 'customer' | 'seller') => {
+    setOauthPickLoading(true);
+    setError('');
+    try {
+      try {
+        sessionStorage.removeItem('reride_oauth_pick_role');
+      } catch {
+        /* ignore */
+      }
+      const supabase = getSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setError(t('auth.error.googleSignInFailed'));
+        await supabase.auth.signOut();
+        setShowGoogleRolePicker(false);
+        return;
+      }
+      const result = await syncWithBackend(
+        session.user as unknown as Record<string, unknown>,
+        role,
+        'google',
+      );
+      if (result.success && result.user) {
+        setShowGoogleRolePicker(false);
+        onLogin(result.user);
+      } else {
+        setError(result.reason || t('auth.error.googleSignInFailed'));
+      }
+    } catch {
+      setError(t('auth.error.googleSignInFailed'));
+    } finally {
+      setOauthPickLoading(false);
+    }
+  };
+
+  const cancelGoogleRolePick = async () => {
+    try {
+      sessionStorage.removeItem('reride_oauth_pick_role');
+    } catch {
+      /* ignore */
+    }
+    setShowGoogleRolePicker(false);
+    try {
+      await getSupabaseClient().auth.signOut();
+    } catch {
+      /* ignore */
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
+      if (!selectedRole) {
+        throw new Error(t('auth.error.selectAccountType'));
+      }
       let result: { success: boolean, user?: User, reason?: string, detectedRole?: string };
 
       if (mode === 'login') {
@@ -232,6 +309,12 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     setIsLoading(true);
 
     try {
+      if (!selectedRole) {
+        throw new Error(t('auth.error.selectAccountType'));
+      }
+      if (selectedRole === 'service_provider') {
+        throw new Error(t('auth.serviceProviderGoogleHint'));
+      }
       // Google sign-in is only available for customer and seller roles
       if (selectedRole === 'admin') {
         throw new Error(t('auth.error.googleNotAdmin'));
@@ -250,7 +333,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (result.success && redirectUrl) {
         try {
-          sessionStorage.setItem('reride_oauth_role', selectedRole);
+          sessionStorage.setItem('reride_oauth_role', selectedRole as 'customer' | 'seller');
         } catch {
           /* ignore */
         }
@@ -260,7 +343,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (result.success && !redirectUrl) {
         try {
-          sessionStorage.setItem('reride_oauth_role', selectedRole);
+          sessionStorage.setItem('reride_oauth_role', selectedRole as 'customer' | 'seller');
         } catch {
           /* ignore */
         }
@@ -284,10 +367,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   };
 
   const handleRoleChange = (role: UserRole) => {
-    if (role === 'service_provider') {
-      onNavigate(View.CAR_SERVICE_LOGIN);
-      return;
-    }
     if (forcedRole) return;
     setSelectedRole(role);
     setError('');
@@ -302,6 +381,50 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   };
 
   const isLogin = mode === 'login';
+
+  const googleRolePickerOverlay =
+    showGoogleRolePicker ? (
+      <div
+        className="fixed inset-0 z-[2200] flex items-center justify-center bg-black/50 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="oauth-pick-role-title"
+      >
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100">
+          <h3 id="oauth-pick-role-title" className="text-lg font-bold text-gray-900">
+            {t('auth.oauthPickRoleTitle')}
+          </h3>
+          <p className="text-sm text-gray-600">{t('auth.oauthPickRoleBody')}</p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              disabled={oauthPickLoading}
+              onClick={() => void completeGoogleRolePick('customer')}
+              className="flex-1 py-3 px-4 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+            >
+              {roleConfig.customer.title}
+            </button>
+            <button
+              type="button"
+              disabled={oauthPickLoading}
+              onClick={() => void completeGoogleRolePick('seller')}
+              className="flex-1 py-3 px-4 rounded-xl bg-green-600 text-white font-semibold hover:bg-green-700 disabled:opacity-50"
+            >
+              {roleConfig.seller.title}
+            </button>
+          </div>
+          <button
+            type="button"
+            disabled={oauthPickLoading}
+            onClick={() => void cancelGoogleRolePick()}
+            className="w-full py-2 text-sm text-gray-600 hover:text-gray-900"
+          >
+            {t('auth.oauthPickRoleSignOut')}
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   // Premium form input styling with glassmorphism and depth
   const formInputClass = "w-full px-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 bg-white/80 backdrop-blur-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:bg-white focus:shadow-lg transition-all duration-300 text-sm font-medium";
   const mobileFormInputClass = "w-full px-4 py-3.5 text-sm bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:bg-white focus:shadow-lg transition-all duration-300 font-medium";
@@ -312,50 +435,112 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     // OTP login is only available for customer and seller roles
     if (selectedRole === 'admin') {
       return (
-        <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">{t('auth.otpNotAvailableTitle')}</h2>
-            <p className="text-gray-600 mb-6">{t('auth.otpNotAvailableBody')}</p>
-            <button
-              onClick={() => setMode('login')}
-              className="w-full px-4 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
-            >
-              {t('auth.backToLogin')}
-            </button>
+        <>
+          {googleRolePickerOverlay}
+          <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">{t('auth.otpNotAvailableTitle')}</h2>
+              <p className="text-gray-600 mb-6">{t('auth.otpNotAvailableBody')}</p>
+              <button
+                onClick={() => setMode('login')}
+                className="w-full px-4 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
+              >
+                {t('auth.backToLogin')}
+              </button>
+            </div>
           </div>
-        </div>
+        </>
+      );
+    }
+
+    if (!selectedRole) {
+      return (
+        <>
+          {googleRolePickerOverlay}
+          <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('auth.error.selectAccountType')}</h2>
+              <p className="text-gray-600 mb-6 text-sm">{t('auth.googleRequiresCustomerOrSeller')}</p>
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="w-full px-4 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
+              >
+                {t('auth.backToLogin')}
+              </button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    if (selectedRole === 'service_provider') {
+      return (
+        <>
+          {googleRolePickerOverlay}
+          <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
+            <div className="text-center space-y-4">
+              <p className="text-gray-700 text-sm">{t('auth.serviceProviderGoogleHint')}</p>
+              <button
+                type="button"
+                onClick={() => onNavigate(View.CAR_SERVICE_LOGIN)}
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700"
+              >
+                {t('auth.goToServiceProviderLogin')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                className="w-full px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+              >
+                {t('auth.backToLogin')}
+              </button>
+            </div>
+          </div>
+        </>
       );
     }
 
     if (isMobileApp) {
       return (
-        <div className="w-full min-h-screen flex items-center justify-center p-6" style={{
-          background: 'linear-gradient(180deg, #6366F1 0%, #8B5CF6 40%, #A855F7 70%, #EC4899 100%)'
-        }}>
-          <div className="w-full max-w-md">
-            <OTPLogin 
-              onLogin={onLogin} 
-              role={selectedRole as 'customer' | 'seller'} 
-              onCancel={() => setMode('login')} 
-            />
+        <>
+          {googleRolePickerOverlay}
+          <div
+            className="w-full min-h-screen flex items-center justify-center p-6"
+            style={{
+              background: 'linear-gradient(180deg, #6366F1 0%, #8B5CF6 40%, #A855F7 70%, #EC4899 100%)',
+            }}
+          >
+            <div className="w-full max-w-md">
+              <OTPLogin
+                onLogin={onLogin}
+                role={selectedRole as 'customer' | 'seller'}
+                onCancel={() => setMode('login')}
+              />
+            </div>
           </div>
-        </div>
+        </>
       );
     }
     return (
-      <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
-        <OTPLogin 
-          onLogin={onLogin} 
-          role={selectedRole as 'customer' | 'seller'} 
-          onCancel={() => setMode('login')} 
-        />
-      </div>
+      <>
+        {googleRolePickerOverlay}
+        <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
+          <OTPLogin
+            onLogin={onLogin}
+            role={selectedRole as 'customer' | 'seller'}
+            onCancel={() => setMode('login')}
+          />
+        </div>
+      </>
     );
   }
 
   // Mobile App UI - Premium Design
   if (isMobileApp) {
     return (
+      <>
+        {googleRolePickerOverlay}
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-8 px-4"
         style={{
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
@@ -404,11 +589,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   <select
                     id="mobile-account-type"
                     name="account-type"
-                    value={selectedRole}
+                    value={selectedRole ?? ''}
                     onChange={(e) => handleRoleChange(e.target.value as UserRole)}
                     className={mobileFormInputClass}
                     required
                   >
+                    <option value="" disabled>
+                      {t('auth.selectAccountTypePlaceholder')}
+                    </option>
                     {allowedRoles.map((role) => {
                       const displayText = isLogin
                         ? roleConfig[role].title
@@ -420,6 +608,18 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                       );
                     })}
                   </select>
+                </div>
+              )}
+              {selectedRole === 'service_provider' && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50/90 p-3 text-sm text-blue-900 space-y-2">
+                  <p>{t('auth.serviceProviderGoogleHint')}</p>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(View.CAR_SERVICE_LOGIN)}
+                    className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700"
+                  >
+                    {t('auth.goToServiceProviderLogin')}
+                  </button>
                 </div>
               )}
               {!isLogin && (
@@ -577,7 +777,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={isLoading}
+                disabled={isLoading || !canUseGoogleOrOtp}
+                title={!canUseGoogleOrOtp ? t('auth.googleRequiresCustomerOrSeller') : undefined}
                 className="group w-full inline-flex justify-center items-center py-3 px-4 border-2 border-gray-200 rounded-xl bg-white/80 backdrop-blur-sm text-sm font-semibold text-gray-700 hover:bg-white hover:border-gray-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-300 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
               >
                 <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
@@ -592,7 +793,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={() => setMode('otp')}
-                disabled={isLoading}
+                disabled={isLoading || !canUseGoogleOrOtp}
+                title={!canUseGoogleOrOtp ? t('auth.googleRequiresCustomerOrSeller') : undefined}
                 className="group w-full inline-flex justify-center items-center py-3 px-4 border-2 border-gray-200 rounded-xl bg-white/80 backdrop-blur-sm text-sm font-semibold text-gray-700 hover:bg-white hover:border-gray-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-300 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
               >
                 <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -630,11 +832,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           </div>
         </div>
       </div>
+      </>
     );
   }
 
   // Desktop UI - Premium Design
   return (
+    <>
+      {googleRolePickerOverlay}
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-12 px-4 sm:px-6 lg:px-8"
       style={{
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
@@ -685,11 +890,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 <select
                   id="account-type"
                   name="account-type"
-                  value={selectedRole}
+                  value={selectedRole ?? ''}
                   onChange={(e) => handleRoleChange(e.target.value as UserRole)}
                   className={selectInputClass}
                   required
                 >
+                  <option value="" disabled>
+                    {t('auth.selectAccountTypePlaceholder')}
+                  </option>
                   {allowedRoles.map((role) => {
                     const displayText = isLogin
                       ? roleConfig[role].title
@@ -701,6 +909,18 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     );
                   })}
                 </select>
+              </div>
+            )}
+            {selectedRole === 'service_provider' && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50/90 p-3 text-sm text-blue-900 space-y-2">
+                <p>{t('auth.serviceProviderGoogleHint')}</p>
+                <button
+                  type="button"
+                  onClick={() => onNavigate(View.CAR_SERVICE_LOGIN)}
+                  className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700"
+                >
+                  {t('auth.goToServiceProviderLogin')}
+                </button>
               </div>
             )}
             {!isLogin && (
@@ -850,7 +1070,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={isLoading}
+                disabled={isLoading || !canUseGoogleOrOtp}
+                title={!canUseGoogleOrOtp ? t('auth.googleRequiresCustomerOrSeller') : undefined}
                 className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -865,7 +1086,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={() => setMode('otp')}
-                disabled={isLoading}
+                disabled={isLoading || !canUseGoogleOrOtp}
+                title={!canUseGoogleOrOtp ? t('auth.googleRequiresCustomerOrSeller') : undefined}
                 className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -903,6 +1125,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         </div>
       </div>
     </div>
+    </>
   );
 };
 
