@@ -131,7 +131,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     }
   }, []);
 
-  const canUseGoogleOrOtp = selectedRole === 'customer' || selectedRole === 'seller';
+  const canUseGoogle =
+    selectedRole === 'customer' ||
+    selectedRole === 'seller' ||
+    selectedRole === 'service_provider';
+  const canUseOtp = selectedRole === 'customer' || selectedRole === 'seller';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -312,10 +316,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       if (!selectedRole) {
         throw new Error(t('auth.error.selectAccountType'));
       }
-      if (selectedRole === 'service_provider') {
-        throw new Error(t('auth.serviceProviderGoogleHint'));
-      }
-      // Google sign-in is only available for customer and seller roles
+      // Google sign-in is not available for admin
       if (selectedRole === 'admin') {
         throw new Error(t('auth.error.googleNotAdmin'));
       }
@@ -333,7 +334,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (result.success && redirectUrl) {
         try {
-          sessionStorage.setItem('reride_oauth_role', selectedRole as 'customer' | 'seller');
+          sessionStorage.setItem('reride_oauth_role', selectedRole);
         } catch {
           /* ignore */
         }
@@ -343,7 +344,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (result.success && !redirectUrl) {
         try {
-          sessionStorage.setItem('reride_oauth_role', selectedRole as 'customer' | 'seller');
+          sessionStorage.setItem('reride_oauth_role', selectedRole);
         } catch {
           /* ignore */
         }
@@ -479,19 +480,13 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         <>
           {googleRolePickerOverlay}
           <div className="w-full max-w-md space-y-8 bg-white p-10 rounded-xl shadow-soft-xl">
-            <div className="text-center space-y-4">
-              <p className="text-gray-700 text-sm">{t('auth.serviceProviderGoogleHint')}</p>
-              <button
-                type="button"
-                onClick={() => onNavigate(View.CAR_SERVICE_LOGIN)}
-                className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700"
-              >
-                {t('auth.goToServiceProviderLogin')}
-              </button>
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('auth.otpNotAvailableServiceProviderTitle')}</h2>
+              <p className="text-gray-600 mb-6 text-sm">{t('auth.otpNotAvailableServiceProviderBody')}</p>
               <button
                 type="button"
                 onClick={() => setMode('login')}
-                className="w-full px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+                className="w-full px-4 py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
               >
                 {t('auth.backToLogin')}
               </button>
@@ -608,18 +603,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                       );
                     })}
                   </select>
-                </div>
-              )}
-              {selectedRole === 'service_provider' && (
-                <div className="rounded-xl border border-blue-100 bg-blue-50/90 p-3 text-sm text-blue-900 space-y-2">
-                  <p>{t('auth.serviceProviderGoogleHint')}</p>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate(View.CAR_SERVICE_LOGIN)}
-                    className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700"
-                  >
-                    {t('auth.goToServiceProviderLogin')}
-                  </button>
                 </div>
               )}
               {!isLogin && (
@@ -777,8 +760,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={isLoading || !canUseGoogleOrOtp}
-                title={!canUseGoogleOrOtp ? t('auth.googleRequiresCustomerOrSeller') : undefined}
+                disabled={isLoading || !canUseGoogle}
+                title={!canUseGoogle ? t('auth.googleRequiresCustomerOrSeller') : undefined}
                 className="group w-full inline-flex justify-center items-center py-3 px-4 border-2 border-gray-200 rounded-xl bg-white/80 backdrop-blur-sm text-sm font-semibold text-gray-700 hover:bg-white hover:border-gray-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-300 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
               >
                 <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
@@ -793,8 +776,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={() => setMode('otp')}
-                disabled={isLoading || !canUseGoogleOrOtp}
-                title={!canUseGoogleOrOtp ? t('auth.googleRequiresCustomerOrSeller') : undefined}
+                disabled={isLoading || !canUseOtp}
+                title={!canUseOtp ? t('auth.otpRequiresCustomerOrSeller') : undefined}
                 className="group w-full inline-flex justify-center items-center py-3 px-4 border-2 border-gray-200 rounded-xl bg-white/80 backdrop-blur-sm text-sm font-semibold text-gray-700 hover:bg-white hover:border-gray-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-300 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
               >
                 <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -909,18 +892,6 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     );
                   })}
                 </select>
-              </div>
-            )}
-            {selectedRole === 'service_provider' && (
-              <div className="rounded-xl border border-blue-100 bg-blue-50/90 p-3 text-sm text-blue-900 space-y-2">
-                <p>{t('auth.serviceProviderGoogleHint')}</p>
-                <button
-                  type="button"
-                  onClick={() => onNavigate(View.CAR_SERVICE_LOGIN)}
-                  className="w-full py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700"
-                >
-                  {t('auth.goToServiceProviderLogin')}
-                </button>
               </div>
             )}
             {!isLogin && (
@@ -1070,8 +1041,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={isLoading || !canUseGoogleOrOtp}
-                title={!canUseGoogleOrOtp ? t('auth.googleRequiresCustomerOrSeller') : undefined}
+                disabled={isLoading || !canUseGoogle}
+                title={!canUseGoogle ? t('auth.googleRequiresCustomerOrSeller') : undefined}
                 className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -1086,8 +1057,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={() => setMode('otp')}
-                disabled={isLoading || !canUseGoogleOrOtp}
-                title={!canUseGoogleOrOtp ? t('auth.googleRequiresCustomerOrSeller') : undefined}
+                disabled={isLoading || !canUseOtp}
+                title={!canUseOtp ? t('auth.otpRequiresCustomerOrSeller') : undefined}
                 className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
               >
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -38,7 +38,7 @@ import { isCapacitorNative } from '../utils/apiConfig';
 import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 import { getEffectiveMuteKeys, isStoryMuted } from '../utils/notificationMute';
 import { getSupabaseClient } from '../lib/supabase';
-import { syncWithBackend } from '../services/supabase-auth-service';
+import { syncServiceProviderOAuth, syncWithBackend } from '../services/supabase-auth-service';
 import type { Session } from '@supabase/supabase-js';
 
 /** PostgREST realtime filter value: quote emails so `@` and special chars parse correctly. */
@@ -947,6 +947,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const pendingRole = sessionStorage.getItem('reride_oauth_role') as
         | 'customer'
         | 'seller'
+        | 'service_provider'
         | null;
       if (!pendingRole || !session?.user || googleOAuthSyncDoneRef.current || cancelled) {
         return;
@@ -955,6 +956,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sessionStorage.removeItem('reride_oauth_role');
 
       try {
+        if (pendingRole === 'service_provider') {
+          const result = await syncServiceProviderOAuth(
+            session.user as unknown as Record<string, unknown>,
+          );
+          if (result.success && result.provider) {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('reride:service-provider-oauth', { detail: result.provider }),
+              );
+            } catch {
+              /* ignore */
+            }
+          } else {
+            googleOAuthSyncDoneRef.current = false;
+            addToast(result.reason || t('toast.googleSignInFailed'), 'error');
+            await supabase.auth.signOut();
+          }
+          return;
+        }
+
         const result = await syncWithBackend(
           session.user as unknown as Record<string, unknown>,
           pendingRole,

@@ -7,6 +7,7 @@
 
 import {
   signInWithGoogle as supabaseGoogleSignIn,
+  syncServiceProviderOAuth as supabaseSyncServiceProviderOAuth,
   syncWithBackend as supabaseSyncWithBackend,
 } from './supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase.js';
@@ -272,3 +273,5 @@ export const syncWithBackend = async (
 ): Promise<{ success: boolean; user?: User; reason?: string }> => {
   return supabaseSyncWithBackend(supabaseUser, role, authProvider);
 };
+
+export const syncServiceProviderOAuth = supabaseSyncServiceProviderOAuth;
