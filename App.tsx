@@ -441,6 +441,25 @@ const AppContent: React.FC = () => {
   const [serviceProvider, setServiceProvider] = React.useState<ServiceProvider | null>(null);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = React.useState(false);
 
+  React.useEffect(() => {
+    const onServiceProviderGoogleOAuth = (e: Event) => {
+      const detail = (e as CustomEvent<Record<string, unknown>>).detail;
+      if (!detail || typeof detail !== 'object') return;
+      const name = typeof detail.name === 'string' ? detail.name : 'Provider';
+      const city = typeof detail.city === 'string' ? detail.city : '';
+      setServiceProvider({
+        ...(detail as unknown as ServiceProvider),
+        name,
+        city: city || 'Pending setup',
+      });
+      navigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+      addToast(`Welcome, ${name}!`, 'success');
+    };
+    window.addEventListener('reride:service-provider-oauth', onServiceProviderGoogleOAuth as EventListener);
+    return () =>
+      window.removeEventListener('reride:service-provider-oauth', onServiceProviderGoogleOAuth as EventListener);
+  }, [navigate, addToast]);
+
   // Helper function to properly close chat and clear localStorage
   const handleCloseChat = React.useCallback(() => {
     // Clear localStorage first to prevent auto-restore

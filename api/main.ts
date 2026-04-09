@@ -1070,7 +1070,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       logWarn('⚠️ POST /api/users: Missing or invalid action field', { body: req.body });
       return res.status(400).json({ 
         success: false, 
-        reason: 'Invalid action. Please provide a valid action: login, register, oauth-login, or refresh-token.' 
+        reason: 'Invalid action. Please provide a valid action: login, register, oauth-login, oauth-service-provider, or refresh-token.' 
       });
     }
 
@@ -1762,6 +1762,137 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       });
     }
 
+    // GOOGLE (OR SUPABASE) OAUTH — SERVICE PROVIDER PROFILE
+    if (action === 'oauth-service-provider') {
+      let supabaseUserRecord: { id: string; email?: string | null; phone?: string | null };
+      try {
+        const verified = await verifySupabaseToken(req.headers.authorization);
+        supabaseUserRecord = {
+          id: verified.uid,
+          email: verified.user?.email ?? null,
+          phone: verified.user?.phone ?? null,
+        };
+      } catch {
+        return res.status(401).json({
+          success: false,
+          reason: 'Valid Supabase session required. Sign in again, then retry.',
+        });
+      }
+
+      const bodyUid = String(req.body.firebaseUid ?? req.body.uid ?? '').trim();
+      if (!bodyUid || bodyUid !== supabaseUserRecord.id) {
+        return res.status(403).json({
+          success: false,
+          reason: 'Session does not match this account.',
+        });
+      }
+
+      const tokenEmail = (supabaseUserRecord.email || '').toLowerCase().trim();
+      const bodyEmail = String(req.body.email || '').toLowerCase().trim();
+      const derivedPhoneEmail =
+        !tokenEmail && supabaseUserRecord.phone
+          ? `${String(supabaseUserRecord.phone).replace(/\D/g, '')}@phone.reride.co.in`.toLowerCase()
+          : '';
+
+      if (tokenEmail && bodyEmail && tokenEmail !== bodyEmail) {
+        return res.status(403).json({
+          success: false,
+          reason: 'Email does not match signed-in account.',
+        });
+      }
+      if (derivedPhoneEmail && bodyEmail && derivedPhoneEmail !== bodyEmail) {
+        return res.status(403).json({
+          success: false,
+          reason: 'Account identity does not match signed-in session.',
+        });
+      }
+
+      const normalizedEmail = tokenEmail || derivedPhoneEmail || bodyEmail;
+      if (!normalizedEmail) {
+        return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
+      }
+
+      const rawName = String(req.body.name || '').trim();
+      const name =
+        rawName ||
+        (normalizedEmail.includes('@') ? normalizedEmail.split('@')[0] : normalizedEmail) ||
+        'Service provider';
+
+      let provider = await supabaseServiceProviderService.findById(supabaseUserRecord.id);
+      if (!provider) {
+        const byEmail = await supabaseServiceProviderService.findByEmail(normalizedEmail);
+        if (byEmail && byEmail.id !== supabaseUserRecord.id) {
+          return res.status(409).json({
+            success: false,
+            reason:
+              'This email is already linked to another service provider account. Sign in the way you registered, or contact support.',
+          });
+        }
+        provider = byEmail;
+      }
+
+      if (!provider) {
+        try {
+          await supabaseServiceProviderService.create({
+            id: supabaseUserRecord.id,
+            name,
+            email: normalizedEmail,
+            phone: '0000000000',
+            city: 'Pending setup',
+            workshops: [],
+            skills: [],
+            availability: 'weekdays',
+          });
+        } catch (createErr) {
+          logError('❌ oauth-service-provider create failed:', createErr);
+          return res.status(500).json({
+            success: false,
+            reason: 'Could not create service provider profile. Please try again or contact support.',
+          });
+        }
+        provider = await supabaseServiceProviderService.findById(supabaseUserRecord.id);
+      }
+
+      if (!provider) {
+        return res.status(500).json({
+          success: false,
+          reason: 'Service provider profile could not be loaded after sign-in.',
+        });
+      }
+
+      try {
+        const existingUser = await supabaseUserService.findByEmail(normalizedEmail);
+        if (!existingUser) {
+          await supabaseUserService.create({
+            name,
+            email: normalizedEmail,
+            mobile: provider.phone || '0000000000',
+            role: 'seller',
+            location: provider.city || 'Pending setup',
+            status: 'active',
+            authProvider: 'google',
+            firebaseUid: supabaseUserRecord.id,
+            createdAt: new Date().toISOString(),
+          });
+        } else {
+          await supabaseUserService.update(normalizedEmail, {
+            name,
+            mobile: existingUser.mobile || provider.phone || undefined,
+            authProvider: 'google',
+            firebaseUid: supabaseUserRecord.id,
+          });
+        }
+      } catch (userSyncErr) {
+        logWarn('⚠️ Service provider users table sync failed (non-fatal):', userSyncErr);
+      }
+
+      const out = { ...provider, uid: provider.id };
+      return res.status(200).json({
+        success: true,
+        provider: out,
+      });
+    }
+
     // TOKEN REFRESH
     if (action === 'refresh-token') {
       const { refreshToken } = req.body;
@@ -2212,7 +2343,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
     logWarn('⚠️ POST /api/users: Invalid action received', { action, bodyKeys: Object.keys(req.body || {}) });
     return res.status(400).json({ 
       success: false, 
-      reason: `Invalid action: "${action}". Please use one of: login, register, oauth-login, or refresh-token.` 
+      reason: `Invalid action: "${action}". Please use one of: login, register, oauth-login, oauth-service-provider, or refresh-token.` 
     });
   }
 

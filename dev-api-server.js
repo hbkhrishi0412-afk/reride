@@ -1287,8 +1287,77 @@ app.post('/api/users', (req, res) => {
       refreshToken: 'mock-refresh-token'
     });
   }
+
+  if (action === 'oauth-service-provider') {
+    const { firebaseUid, email, name } = req.body;
+    const payload = getSupabaseJwtPayload(req.headers.authorization);
+    const session = sessionFromJwtPayload(payload);
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        reason: 'Valid Supabase session required. Sign in again, then retry.',
+      });
+    }
+
+    const bodyUid = String(firebaseUid ?? req.body.uid ?? '').trim();
+    if (!bodyUid || bodyUid !== session.id) {
+      return res.status(403).json({
+        success: false,
+        reason: 'Session does not match this account.',
+      });
+    }
+
+    const tokenEmail = session.email || '';
+    const bodyEmail = String(email || '').toLowerCase().trim();
+    const derivedPhoneEmail =
+      !tokenEmail && session.phone
+        ? `${String(session.phone).replace(/\D/g, '')}@phone.reride.co.in`.toLowerCase()
+        : '';
+
+    if (tokenEmail && bodyEmail && tokenEmail !== bodyEmail) {
+      return res.status(403).json({
+        success: false,
+        reason: 'Email does not match signed-in account.',
+      });
+    }
+    if (derivedPhoneEmail && bodyEmail && derivedPhoneEmail !== bodyEmail) {
+      return res.status(403).json({
+        success: false,
+        reason: 'Account identity does not match signed-in session.',
+      });
+    }
+
+    const normalizedEmail = (tokenEmail || derivedPhoneEmail || bodyEmail || '').toLowerCase().trim();
+    if (!normalizedEmail) {
+      return res.status(400).json({ success: false, reason: 'OAuth data incomplete.' });
+    }
+
+    const displayName =
+      String(name || '').trim() ||
+      (normalizedEmail.includes('@') ? normalizedEmail.split('@')[0] : normalizedEmail) ||
+      'Service provider';
+
+    let rec = mockServiceProviders[session.id];
+    if (!rec) {
+      mockServiceProviders[session.id] = {
+        name: displayName,
+        email: normalizedEmail,
+        phone: '0000000000',
+        city: 'Pending setup',
+        workshops: [],
+        skills: [],
+        availability: 'weekdays',
+      };
+      rec = mockServiceProviders[session.id];
+    }
+
+    return res.status(200).json({
+      success: true,
+      provider: { uid: session.id, id: session.id, ...rec },
+    });
+  }
   
-  res.status(400).json({ success: false, reason: 'Invalid action. Use action: login, register, or oauth-login' });
+  res.status(400).json({ success: false, reason: 'Invalid action. Use action: login, register, oauth-login, or oauth-service-provider' });
 });
 
 // --- Service Providers (dev mock) ---

@@ -471,7 +471,12 @@ const en = {
   'auth.selectAccountTypePlaceholder': 'Select how you use ReRide',
   'auth.error.selectAccountType': 'Please choose your account type first.',
   'auth.googleRequiresCustomerOrSeller':
-    'Choose Customer or Seller above before signing in with Google.',
+    'Choose your account type above before signing in with Google.',
+  'auth.otpRequiresCustomerOrSeller':
+    'Phone OTP is available for customers and sellers only. Service providers can use Google or email/password.',
+  'auth.otpNotAvailableServiceProviderTitle': 'Phone OTP not available',
+  'auth.otpNotAvailableServiceProviderBody':
+    'Service providers can sign in with Google or email and password on this page. Phone OTP is only for customers and sellers.',
   'auth.serviceProviderGoogleHint':
     'Google sign-in is for buyers and sellers. Service providers use email sign-in on the service provider page.',
   'auth.goToServiceProviderLogin': 'Go to service provider sign-in',
@@ -1309,7 +1314,12 @@ const hi: Record<string, string> = {
   'auth.selectAccountTypePlaceholder': 'चुनें कि आप ReRide का उपयोग कैसे करते हैं',
   'auth.error.selectAccountType': 'कृपया पहले अपना खाता प्रकार चुनें।',
   'auth.googleRequiresCustomerOrSeller':
-    'Google से साइन इन से पहले ऊपर ग्राहक या विक्रेता चुनें।',
+    'Google से साइन इन से पहले ऊपर अपना खाता प्रकार चुनें।',
+  'auth.otpRequiresCustomerOrSeller':
+    'फोन OTP केवल ग्राहकों और विक्रेताओं के लिए। सेवा प्रदाता Google या ईमेल/पासवर्ड का उपयोग कर सकते हैं।',
+  'auth.otpNotAvailableServiceProviderTitle': 'फोन OTP उपलब्ध नहीं',
+  'auth.otpNotAvailableServiceProviderBody':
+    'सेवा प्रदाता इस पृष्ठ पर Google या ईमेल व पासवर्ड से साइन इन कर सकते हैं। फोन OTP केवल ग्राहकों और विक्रेताओं के लिए है।',
   'auth.serviceProviderGoogleHint':
     'Google साइन-इन खरीदारों और विक्रेताओं के लिए है। सेवा प्रदाता सेवा प्रदाता पृष्ठ पर ईमेल से साइन इन करते हैं।',
   'auth.goToServiceProviderLogin': 'सेवा प्रदाता साइन-इन पर जाएं',
@@ -1970,7 +1980,12 @@ const te: Record<string, string> = {
   'auth.selectAccountTypePlaceholder': 'మీరు ReRide ను ఎలా ఉపయోగిస్తారో ఎంచుకోండి',
   'auth.error.selectAccountType': 'దయచేసి ముందుగా మీ ఖాతా రకాన్ని ఎంచుకోండి.',
   'auth.googleRequiresCustomerOrSeller':
-    'Google తో సైన్ ఇన్ చేయడానికి ముందు పైన కస్టమర్ లేదా విక్రేతను ఎంచుకోండి.',
+    'Google తో సైన్ ఇన్ చేయడానికి ముందు పైన మీ ఖాతా రకాన్ని ఎంచుకోండి.',
+  'auth.otpRequiresCustomerOrSeller':
+    'ఫోన్ OTP కస్టమర్లు మరియు విక్రేతలకు మాత్రమే. సేవా ప్రదాతలు Google లేదా ఇమెయిల్/పాస్‌వర్డ్ ఉపయోగించవచ్చు.',
+  'auth.otpNotAvailableServiceProviderTitle': 'ఫోన్ OTP అందుబాటులో లేదు',
+  'auth.otpNotAvailableServiceProviderBody':
+    'సేవా ప్రదాతలు ఈ పేజీలో Google లేదా ఇమెయిల్ మరియు పాస్‌వర్డ్ తో సైన్ ఇన్ చేయవచ్చు. ఫోన్ OTP కస్టమర్లు మరియు విక్రేతలకు మాత్రమే.',
   'auth.serviceProviderGoogleHint':
     'Google సైన్-ఇన్ కొనుగోలుదారులు మరియు విక్రేతల కోసం. సేవా ప్రదాతలు సేవా ప్రదాత పేజీలో ఇమెయిల్ తో సైన్ ఇన్ చేస్తారు.',
   'auth.goToServiceProviderLogin': 'సేవా ప్రదాత సైన్-ఇన్ కు వెళ్లండి',
@@ -2762,7 +2777,12 @@ const ta: Record<string, string> = {
   'auth.selectAccountTypePlaceholder': 'ReRide ஐ எப்படி பயன்படுத்துகிறீர்கள் என்பதைத் தேர்ந்தெடுக்கவும்',
   'auth.error.selectAccountType': 'முதலில் உங்கள் கணக்கு வகையைத் தேர்ந்தெடுக்கவும்.',
   'auth.googleRequiresCustomerOrSeller':
-    'Google உடன் உள்நுழைய முன் மேலே வாடிக்கையாளர் அல்லது விற்பனையாளரைத் தேர்ந்தெடுக்கவும்.',
+    'Google உடன் உள்நுழைய முன் மேலே உங்கள் கணக்கு வகையைத் தேர்ந்தெடுக்கவும்.',
+  'auth.otpRequiresCustomerOrSeller':
+    'தொலைபேசி OTP வாடிக்கையாளர்கள் மற்றும் விற்பனையாளர்களுக்கு மட்டும். சேவை வழங்குநர்கள் Google அல்லது மின்னஞ்சல்/கடவுச்சொல்லைப் பயன்படுத்தலாம்.',
+  'auth.otpNotAvailableServiceProviderTitle': 'தொலைபேசி OTP இல்லை',
+  'auth.otpNotAvailableServiceProviderBody':
+    'சேவை வழங்குநர்கள் இந்தப் பக்கத்தில் Google அல்லது மின்னஞ்சல் மற்றும் கடவுச்சொல்லுடன் உள்நுழையலாம். தொலைபேசி OTP வாடிக்கையாளர்கள் மற்றும் விற்பனையாளர்களுக்கு மட்டும்.',
   'auth.serviceProviderGoogleHint':
     'Google உள்நுழைவு வாங்குபவர்கள் மற்றும் விற்பனையாளர்களுக்கு. சேவை வழங்குநர்கள் சேவை வழங்குநர் பக்கத்தில் மின்னஞ்சல் மூலம் உள்நுழைகிறார்கள்.',
   'auth.goToServiceProviderLogin': 'சேவை வழங்குநர் உள்நுழைவுக்குச் செல்லவும்',

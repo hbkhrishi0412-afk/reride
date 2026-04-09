@@ -389,6 +389,65 @@ export const verifyOTP = async (
  * After authenticating with Supabase, sync the user with the ReRide backend
  * to create/retrieve the full application user profile.
  */
+export type ServiceProviderOAuthPayload = Record<string, unknown> & {
+  id?: string;
+  uid?: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+  city?: string;
+};
+
+/**
+ * After Google (or other Supabase) sign-in as a service provider: ensure `service_providers`
+ * row exists and return profile for the car-services dashboard.
+ */
+export const syncServiceProviderOAuth = async (
+  supabaseUser: Record<string, unknown>,
+): Promise<{ success: boolean; provider?: ServiceProviderOAuthPayload; reason?: string }> => {
+  try {
+    const metadata = (supabaseUser.user_metadata ?? {}) as Record<string, unknown>;
+
+    const response = await authenticatedFetch('/api/main', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'oauth-service-provider',
+        firebaseUid: supabaseUser.id,
+        email: supabaseUser.email,
+        name:
+          (metadata.name as string) ||
+          ((supabaseUser.email as string) ?? '').split('@')[0] ||
+          'Service provider',
+      }),
+    });
+    const parsed = await handleApiResponse<{
+      success?: boolean;
+      provider?: ServiceProviderOAuthPayload;
+      reason?: string;
+      error?: string;
+    }>(response);
+    if (!parsed.success) {
+      if (response.status === 429) {
+        return { success: false, reason: 'Too many requests. Please wait a moment and try again.' };
+      }
+      if (response.status === 503) {
+        return { success: false, reason: 'Service temporarily unavailable. Please try again later.' };
+      }
+      return {
+        success: false,
+        reason: parsed.reason || parsed.error || 'Failed to complete service provider sign-in',
+      };
+    }
+    const body = parsed.data;
+    if (!body?.provider) {
+      return { success: false, reason: 'Service provider profile missing from server response.' };
+    }
+    return { success: true, provider: body.provider };
+  } catch {
+    return { success: false, reason: 'Failed to sync service provider profile' };
+  }
+};
+
 export const syncWithBackend = async (
   supabaseUser: Record<string, unknown>,
   role: 'customer' | 'seller',
