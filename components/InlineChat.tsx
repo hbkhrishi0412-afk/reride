@@ -235,7 +235,7 @@ export const InlineChat: React.FC<InlineChatProps> = memo(({
   const otherUserRole = currentUserRole === 'customer' ? 'seller' : 'customer';
 
   return (
-    <div className={`bg-white rounded-lg shadow-md border border-gray-200 flex flex-col ${className}`} style={{ height: height }}>
+    <div className={`bg-white rounded-lg shadow-md border border-gray-200 flex flex-col ${className}`} style={{ height }}>
       {/* Header */}
       <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
         <div className="flex-grow min-w-0">

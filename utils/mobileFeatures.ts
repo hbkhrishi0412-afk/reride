@@ -503,8 +503,8 @@ export async function shareVehicle(vehicle: {
   
   return shareContent({
     title: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
-    text: text,
-    url: url
+    text,
+    url
   });
 }
 

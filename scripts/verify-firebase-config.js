@@ -21,7 +21,7 @@ const requiredEnvVars = [
 
 function checkEnvFile() {
   const envFiles = ['.env.local', '.env', '.env.production'];
-  let envContent = {};
+  const envContent = {};
 
   for (const envFile of envFiles) {
     const envPath = join(__dirname, '..', envFile);

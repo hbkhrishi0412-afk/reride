@@ -152,7 +152,7 @@ const ImportUsersModal: React.FC<ImportUsersModalProps> = ({ onClose, onImportUs
                     const now = new Date().toISOString();
                     const newUser: Omit<User, 'id' | 'firebaseUid'> = {
                         name: row.name.trim(),
-                        email: email,
+                        email,
                         mobile: row.mobile.trim(),
                         role: role as 'customer' | 'seller' | 'admin',
         location: row.location?.trim() || 'Mumbai',

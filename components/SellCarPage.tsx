@@ -339,7 +339,7 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
       kilometers: carDetails.kilometers,
       fuelType: carDetails.fuelType,
       transmission: selectedTransmission,
-      customerContact: customerContact
+      customerContact
     };
 
     try {

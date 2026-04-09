@@ -72,7 +72,7 @@ export function useSupabaseRealtime({
           {
             event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
             schema: 'public',
-            table: table,
+            table,
             ...(filter ? { filter } : {}),
           },
           (payload) => {

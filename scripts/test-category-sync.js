@@ -59,7 +59,7 @@ function makeRequest(url, options = {}) {
           resolve({
             status: res.statusCode,
             headers: res.headers,
-            data: data
+            data
           });
         }
       });

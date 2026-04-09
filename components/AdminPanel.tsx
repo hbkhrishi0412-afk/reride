@@ -2759,7 +2759,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
         const filteredUsers = useMemo(() => {
             // First filter by role - only show sellers
-            let sellerUsers = users.filter(user => user.role === 'seller');
+            const sellerUsers = users.filter(user => user.role === 'seller');
             
             // Then filter by plan type if not 'all'
             if (planFilter === 'all') return sellerUsers;
