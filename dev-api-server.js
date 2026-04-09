@@ -83,6 +83,26 @@ function sessionFromJwtPayload(payload) {
 
 // Enable CORS for all routes
 app.use(cors());
+// Supabase Send SMS Hook — raw JSON body required for Standard Webhooks signature (see api/send-sms-hook.ts)
+app.post(
+  '/api/send-sms-hook',
+  express.raw({ type: 'application/json', limit: '512kb' }),
+  async (req, res) => {
+    try {
+      const { respondToSendSmsHook } = await import('./server/sendSmsHook.ts');
+      const raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body ?? '');
+      await respondToSendSmsHook(raw, req.headers, res);
+    } catch (e) {
+      console.error('send-sms-hook error:', e);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: { http_code: 500, message: 'Internal error processing SMS hook' },
+        });
+      }
+    }
+  }
+);
+// send-sms-hook must stay before express.json() so the body is not parsed as JSON
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -3048,6 +3068,7 @@ server.listen(PORT, () => {
   console.log(`   - PUT  /api/vehicle-data-management - Update vehicle data in admin database`);
   console.log(`   - DELETE /api/vehicle-data-management - Delete vehicle data from admin database`);
   console.log(`   - GET  /api/users - Get all users`);
+  console.log(`   - POST /api/send-sms-hook - Supabase Auth Send SMS hook (Standard Webhooks + Karix/MessageBot)`);
   console.log(`   - POST /api/users - Login/Register/OAuth (action: login|register|oauth-login)`);
   console.log(`   - PUT  /api/users - Update user`);
   console.log(`   - DELETE /api/users - Delete user`);

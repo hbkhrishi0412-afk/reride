@@ -2,7 +2,7 @@
  * Persists the admin "vehicle dropdown" JSON (makes/models/variants) in Supabase.
  * This is separate from the `vehicles` listing table used for marketplace ads.
  */
-import { getSupabaseAdminClient } from '../lib/supabase.js';
+import { getSupabaseAdminClient } from './supabase.js';
 
 export const VEHICLE_CATALOG_CONFIG_KEY = 'vehicle_data';
 

@@ -2,12 +2,13 @@
 
 ## Current Configuration ✅
 
-**Serverless Function Count: 9/10** (Maximum: 10)
+**Serverless Function Count: 10/10** (Maximum: 10)
 
 Vercel counts **every** `.ts`/`.js` file under `api/` as one serverless function (not just files with a default export).
 
 ### Files in api/ (each = 1 function)
-- `api/main.ts` - Main API handler; all `/api/*` requests are rewritten here
+- `api/main.ts` - Main API handler; most `/api/*` requests are rewritten here
+- `api/send-sms-hook.ts` - Supabase Auth **Send SMS** hook (raw body + Standard Webhooks verify); `bodyParser: false`
 - `api/auth.ts` - Authentication utilities
 - `api/chat.js` - Chat handler (imported by main.ts)
 - `api/chat-websocket.js` - WebSocket utilities
@@ -17,28 +18,27 @@ Vercel counts **every** `.ts`/`.js` file under `api/` as one serverless function
 - `api/service-requests.ts` - Service requests (imported by main.ts)
 - `api/services.ts` - Services handler (imported by main.ts)
 
+Shared modules **not** counted as separate functions: `lib/vehicleCatalogSupabase.ts`, `lib/api-route-cors.ts`, `server/sendSmsHook.ts`, `server/handlers/*`.
+
 ### Not in api/ (not counted by Vercel)
 - `server/handlers/*` - Handler modules (admin, system, content, sell-car, shared, index); imported by main.ts when needed
 
 ## Routing Configuration
 
-All API routes are handled through `api/main.ts` via the Vercel rewrite rule in `vercel.json`:
+`vercel.json` routes `/api/send-sms-hook` to its own function (required for raw body / webhook signature). All other `/api/*` traffic goes to `api/main.ts`:
 
 ```json
 {
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/main.ts"
-    }
+    { "source": "/api/send-sms-hook", "destination": "/api/send-sms-hook.ts" },
+    { "source": "/api/(.*)", "destination": "/api/main.ts" }
   ]
 }
 ```
 
 This means:
-- ✅ All `/api/*` requests are routed to `api/main.ts`
-- ✅ `main.ts` then routes to appropriate handlers (in api/ or server/handlers/)
-- ✅ 9 files in api/ = 9 serverless functions (under the 10 limit)
+- ✅ `/api/send-sms-hook` → `api/send-sms-hook.ts` (Supabase SMS hook)
+- ✅ Other `/api/*` → `api/main.ts` and internal handlers
 
 ## Verification
 
@@ -66,7 +66,7 @@ When adding new API routes:
 
 2. **Option 2**: Add a new file under `api/`
    - **Warning**: Every file in api/ = 1 serverless function
-   - **CRITICAL**: Current count: 9/10 — only 1 slot remaining. Prefer adding logic in `api/main.ts` or `server/handlers/`.
+   - **CRITICAL**: Current count: **10/10** — at the limit. Consolidate or move code out of `api/` before adding another file.
    - **DO NOT EXCEED 10 FUNCTIONS** — Always run `npm run verify:functions` before adding files under api/
 
 ## Safeguards
@@ -80,9 +80,8 @@ To prevent exceeding the 10-function limit, several safeguards are in place:
 
 ## Best Practices
 
-- ✅ Keep routing in `api/main.ts`; put handler logic in `server/handlers/` (not in api/) to avoid increasing the count
+- ✅ Keep routing in `api/main.ts`; put handler logic in `server/handlers/` or `lib/` (not in api/) to avoid increasing the count
 - ✅ Use named exports for handler functions
 - ✅ Always run `npm run verify:functions` before adding new files under api/
 - ❌ Avoid adding new files under api/ unless necessary (each file = 1 function)
 - ❌ Never exceed 10 serverless functions
-

@@ -4,7 +4,7 @@ import { authenticateRequest } from './auth.js';
 import { supabaseServiceRequestService } from '../services/supabase-service-request-service.js';
 import { supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceRequestPayload } from '../services/supabase-service-request-service.js';
-import { applyCors } from './_cors.js';
+import { applyCors } from '../lib/api-route-cors.js';
 
 /**
  * Customers and providers authenticate with either a Supabase session JWT or the legacy
