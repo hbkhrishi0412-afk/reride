@@ -57,9 +57,21 @@ async function main() {
     const { readFile } = await import('fs/promises');
     const vercelConfig = await readFile(join(__dirname, '..', 'vercel.json'), 'utf-8');
     const config = JSON.parse(vercelConfig);
-    if (config.rewrites && config.rewrites.some(r => r.source === '/api/(.*)' && r.destination === '/api/main.ts')) {
-      console.log('✅ vercel.json rewrite rule configured correctly');
-      console.log('   All /api/* routes are routed to api/main.ts\n');
+    const hasMainRewrite = config.rewrites?.some(
+      (r) => r.source === '/api/(.*)' && r.destination === '/api/main.ts'
+    );
+    const hasSmsHook = config.rewrites?.some(
+      (r) =>
+        r.source === '/api/send-sms-hook' &&
+        String(r.destination || '').includes('send-sms-hook')
+    );
+    if (hasMainRewrite) {
+      console.log('✅ vercel.json: /api/* → api/main.ts');
+      if (hasSmsHook) {
+        console.log('✅ vercel.json: /api/send-sms-hook → dedicated function (raw body for Supabase SMS hook)\n');
+      } else {
+        console.log('⚠️  Optional: add /api/send-sms-hook rewrite if using Supabase Send SMS hook\n');
+      }
     }
   } catch (error) {
     console.warn('⚠️  Could not read vercel.json');

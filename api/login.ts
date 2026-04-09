@@ -1,7 +1,7 @@
 // api/login.ts - Supabase JWT Token Verification Endpoint
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
-import { applyCors } from './_cors.js';
+import { applyCors } from '../lib/api-route-cors.js';
 
 export async function handleLogin(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;

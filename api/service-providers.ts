@@ -4,7 +4,7 @@ import { getSupabaseAdminClient } from '../lib/supabase.js';
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { emailToKey, supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
-import { applyCors } from './_cors.js';
+import { applyCors } from '../lib/api-route-cors.js';
 
 function parseStringList(value: unknown): string[] {
   if (Array.isArray(value)) {

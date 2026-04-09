@@ -10,7 +10,7 @@ import { supabaseConversationService } from '../services/supabase-conversation-s
 import { supabaseServiceProviderService } from '../services/supabase-service-provider-service.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
-import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from './vehicleCatalogSupabase.js';
+import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from '../lib/vehicleCatalogSupabase.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
   adminRead, 
@@ -406,7 +406,7 @@ async function mainHandler(
       
       // Priority: originalPath > invokePath > req.url
       // req.url might be /api/main after rewrite, so we prefer the headers
-      let requestUrl = originalPath || invokePath || req.url || '';
+      const requestUrl = originalPath || invokePath || req.url || '';
       
       // If we don't have a path from headers and req.url is /api/main, 
       // we need to check if there's a way to get the original path
@@ -972,7 +972,7 @@ function getEffectivePathnameForErrorFallback(req: VercelRequest): string {
   try {
     const originalPath = req.headers['x-vercel-original-path'] as string;
     const invokePath = req.headers['x-invoke-path'] as string;
-    let requestUrl = originalPath || invokePath || req.url || '';
+    const requestUrl = originalPath || invokePath || req.url || '';
     if (requestUrl.startsWith('http://') || requestUrl.startsWith('https://')) {
       pathname = new URL(requestUrl).pathname;
     } else if (requestUrl.startsWith('/')) {
@@ -1539,7 +1539,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             logError('❌ Full error details:', {
               message: errorMessage,
               stack: error instanceof Error ? error.stack : undefined,
-              error: error
+              error
             });
           }
           
@@ -1679,8 +1679,8 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         const userData: Omit<UserType, 'id'> = {
           email: normalizedEmail,
           name: sanitizedData.name,
-          mobile: mobile,
-          location: location,
+          mobile,
+          location,
           role: sanitizedData.role,
           // REMOVED: firebaseUid - not used in Supabase
           authProvider: sanitizedData.authProvider,
@@ -1789,7 +1789,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
         return res.status(200).json({ 
           success: true, 
           accessToken: newAccessToken,
-          refreshToken: refreshToken // Keep the same refresh token (or implement rotation)
+          refreshToken // Keep the same refresh token (or implement rotation)
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -3667,8 +3667,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
           vehicles = await vehicleService.findByStatus('published', {
             orderBy: 'created_at',
             orderDirection: 'desc',
-            limit: limit,
-            offset: offset
+            limit,
+            offset
           });
           
           // Get total count from cache if available, otherwise use COUNT query (much faster)
@@ -3774,8 +3774,8 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       
       // PERFORMANCE: Skip expensive seller expiry checks for fast initial loads
       // These checks can be done in background or on-demand
-      let sellerMap = new Map<string, UserType>();
-      let vehicleUpdates: Array<{ id: number; updates: Partial<VehicleType> }> = [];
+      const sellerMap = new Map<string, UserType>();
+      const vehicleUpdates: Array<{ id: number; updates: Partial<VehicleType> }> = [];
       
       if (!skipExpiryCheck) {
         // Only do expiry checks if explicitly requested (not for initial fast load)
@@ -3979,7 +3979,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       }
       
       // Normalize sellerEmail to lowercase for consistent filtering
-      let normalizedVehicles = finalVehicles.map(v => ({
+      const normalizedVehicles = finalVehicles.map(v => ({
         ...v,
         sellerEmail: v.sellerEmail?.toLowerCase().trim() || v.sellerEmail
       }));
@@ -4374,7 +4374,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             return res.status(403).json({
               success: false,
               reason: 'Your current plan does not include featured listings. Upgrade to unlock featured credits.',
-              remainingCredits: remainingCredits
+              remainingCredits
             });
           }
 
@@ -4382,7 +4382,7 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             return res.status(403).json({
               success: false,
               reason: 'You have no featured credits remaining. Upgrade your plan or wait until your credits refresh.',
-              remainingCredits: remainingCredits
+              remainingCredits
             });
           }
 
@@ -6302,7 +6302,7 @@ async function handleGetSupportTickets(
     
     return res.status(200).json({
       success: true,
-      tickets: tickets,
+      tickets,
       count: tickets.length
     });
   } catch (error) {
@@ -6546,7 +6546,7 @@ async function handleSellCar(req: VercelRequest, res: VercelResponse, _options: 
         const pageNum = parseInt(String(page), 10) || 1;
         const limitNum = parseInt(String(limit), 10) || 10;
         
-        let allSubmissions = await adminReadAll<Record<string, unknown>>(submissionsPath);
+        const allSubmissions = await adminReadAll<Record<string, unknown>>(submissionsPath);
         // CRITICAL: Spread data first, then set id to preserve string ID from key
         let submissions = Object.entries(allSubmissions).map(([id, data]) => ({ ...data, id }));
         
@@ -7222,7 +7222,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
                 targetId: String(conversationId),
               },
             };
-            let inserted = await supabase
+            const inserted = await supabase
               .from('notifications')
               .insert({ ...record, id: notificationId })
               .select('id')
@@ -7289,7 +7289,7 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
             updated_at: new Date().toISOString(),
             metadata: { conversationId: String(conversationId), targetType: 'conversation', targetId: String(conversationId) },
           };
-          let inserted = await supabase.from('notifications').insert({ ...record, id: notificationId }).select('id').single();
+          const inserted = await supabase.from('notifications').insert({ ...record, id: notificationId }).select('id').single();
           if (inserted.error) {
             const retry = await supabase.from('notifications').insert(record).select('id').single();
             if (retry.error) console.warn('⚠️ API: Failed to create message notification (non-fatal):', retry.error.message);
