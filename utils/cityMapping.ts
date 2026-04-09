@@ -20,13 +20,20 @@ export const CITY_MAPPING: Record<string, string[]> = {
   'Hyderabad': ['Hyderabad'],
 };
 
+/** First segment before comma — header location may be stored as "City, State". */
+export function primaryLocationLabel(value: string): string {
+  return (value || '').split(',')[0].trim();
+}
+
 /**
  * Get all possible city names for a given display name
  * @param displayName - The display name (e.g., "Delhi NCR")
  * @returns Array of actual city names that should match
  */
 export function getCityNamesForDisplay(displayName: string): string[] {
-  return CITY_MAPPING[displayName] || [displayName];
+  const primary = primaryLocationLabel(displayName);
+  if (!primary) return [];
+  return CITY_MAPPING[primary] || CITY_MAPPING[displayName] || [primary];
 }
 
 /**
@@ -40,7 +47,7 @@ export function matchesCity(vehicleCity: string | undefined, displayCity: string
   if (!vehicleCity) return false; // Vehicle has no city
 
   // Normalize both strings for comparison. Many vehicle cities include state codes
-  // like "Hyderabad, TS" – strip anything after the comma.
+  // like "Hyderabad, TS" – strip anything after the comma. Header may use "City, State".
   const normalize = (city: string) => city.split(',')[0].trim().toLowerCase();
   const normalizedVehicleCity = normalize(vehicleCity);
   const normalizedDisplayCity = normalize(displayCity);
@@ -61,12 +68,14 @@ export function matchesCity(vehicleCity: string | undefined, displayCity: string
  * Useful for showing the correct display name when a vehicle city is known
  */
 export function getDisplayNameForCity(cityName: string): string {
+  const primary = primaryLocationLabel(cityName);
+  const lookUp = primary || cityName;
   for (const [displayName, actualNames] of Object.entries(CITY_MAPPING)) {
-    if (actualNames.some(name => name.toLowerCase() === cityName.toLowerCase())) {
+    if (actualNames.some(name => name.toLowerCase() === lookUp.toLowerCase())) {
       return displayName;
     }
   }
-  return cityName; // Return as-is if no mapping found
+  return lookUp || cityName;
 }
 
 /**

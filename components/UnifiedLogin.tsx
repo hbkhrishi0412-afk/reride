@@ -383,6 +383,85 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
   const isLogin = mode === 'login';
 
+  const accountTypeButtonGroup = (layout: 'mobile' | 'desktop') => {
+    if (hideRolePicker || forcedRole || allowedRoles.length <= 1) return null;
+    // Same 2-col grid on mobile and desktop: login card is max-w-md, so a single-column
+    // stack wastes space on desktop; three columns was too tight. Odd last role spans 2.
+    const isMobileLayout = layout === 'mobile';
+    const containerClass =
+      'grid grid-cols-2 gap-2 [grid-template-columns:repeat(2,minmax(0,1fr))]';
+    const roleBtnBase =
+      'flex w-full min-w-0 items-center border-2 text-left font-semibold transition-all duration-200 active:scale-[0.98]';
+    const roleBtnSizing = isMobileLayout
+      ? 'gap-2 rounded-xl px-2.5 py-2 text-[13px] leading-tight min-h-[48px] h-auto'
+      : 'gap-2.5 rounded-xl px-3 py-3 text-sm min-h-[44px] h-auto';
+    const roleBtnIcon = 'text-lg leading-none shrink-0';
+    const roleBtnSelected = isMobileLayout
+      ? 'border-orange-500 bg-orange-50 text-gray-900 ring-2 ring-orange-400/60 shadow-sm'
+      : 'border-orange-500 bg-orange-50 text-gray-900 shadow-md ring-2 ring-orange-500/30';
+    const roleBtnIdle =
+      'border-gray-200 bg-white/80 text-gray-700 hover:border-orange-300 hover:bg-white';
+
+    const mobileIconWrap = (selected: boolean) =>
+      `flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg leading-none ${
+        selected ? 'bg-orange-100 ring-2 ring-orange-200/80' : 'bg-gray-100'
+      }`;
+
+    return (
+      <fieldset className={`border-0 p-0 m-0 min-w-0 ${isMobileLayout ? 'space-y-1.5' : 'space-y-2'}`}>
+        <legend className="block text-sm font-semibold text-gray-700 mb-1.5 w-full">
+          {isLogin ? t('auth.accountType') : t('auth.iWantTo')} <span className="text-orange-600">*</span>
+        </legend>
+        <div className={containerClass} role="presentation">
+          {allowedRoles.map((role, index) => {
+            const rc = roleConfig[role];
+            const label = isLogin ? rc.title : registerRoleLabel(role);
+            const selected = selectedRole === role;
+            const oddLast =
+              allowedRoles.length % 2 === 1 && index === allowedRoles.length - 1;
+            const oddLastColSpan = oddLast ? 'col-span-2' : '';
+            return (
+              <button
+                key={role}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => handleRoleChange(role)}
+                className={`${roleBtnBase} ${roleBtnSizing} ${selected ? roleBtnSelected : roleBtnIdle} ${oddLastColSpan}`}
+              >
+                <span
+                  className={isMobileLayout ? mobileIconWrap(selected) : roleBtnIcon}
+                  aria-hidden
+                >
+                  {rc.icon}
+                </span>
+                <span className="min-w-0 flex-1 text-left leading-snug break-words">
+                  {label}
+                </span>
+                {isMobileLayout && selected && (
+                  <svg
+                    className="h-4 w-4 shrink-0 text-orange-600 sm:h-5 sm:w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {!selectedRole && (
+          <p className="text-xs text-gray-500 mt-0.5">{t('auth.selectAccountTypePlaceholder')}</p>
+        )}
+      </fieldset>
+    );
+  };
+
   const googleRolePickerOverlay =
     showGoogleRolePicker ? (
       <div
@@ -428,8 +507,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
   // Premium form input styling with glassmorphism and depth
   const formInputClass = "w-full px-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 bg-white/80 backdrop-blur-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:bg-white focus:shadow-lg transition-all duration-300 text-sm font-medium";
-  const mobileFormInputClass = "w-full px-4 py-3.5 text-sm bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:bg-white focus:shadow-lg transition-all duration-300 font-medium";
-  const selectInputClass = "w-full px-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 bg-white/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:bg-white focus:shadow-lg transition-all duration-300 text-sm cursor-pointer font-medium";
+  const mobileFormInputClass =
+    'w-full px-3.5 py-3 text-sm bg-white border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 focus:shadow-sm transition-all duration-200 font-medium';
 
   // Handle OTP mode
   if (mode === 'otp') {
@@ -536,7 +615,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     return (
       <>
         {googleRolePickerOverlay}
-      <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-8 px-4"
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-5 px-3 sm:py-8 sm:px-4"
         style={{
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
           backgroundSize: '400% 400%',
@@ -549,16 +628,16 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         </div>
 
         <div className="w-full max-w-md relative z-10">
-          <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-6"
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100/80 p-5 sm:p-6 sm:rounded-3xl sm:border-white/20 sm:bg-white/95 sm:backdrop-blur-xl"
             style={{
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+              boxShadow: '0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04)'
             }}>
             {/* Logo and Title - Premium Design */}
-            <div className="text-center mb-6">
-              <div className="flex justify-center mb-4">
+            <div className="text-center mb-4">
+              <div className="flex justify-center mb-3">
                 <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-purple-600 rounded-xl blur-md opacity-50"></div>
-                  <div className="relative bg-white/90 backdrop-blur-sm p-3 rounded-xl shadow-lg">
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-purple-600 rounded-xl blur-md opacity-40"></div>
+                  <div className="relative bg-white p-2.5 rounded-xl shadow-md border border-gray-100">
                     <Logo 
                       className="scale-100" 
                       showText={true}
@@ -567,48 +646,19 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   </div>
                 </div>
               </div>
-              <h1 className="text-2xl font-extrabold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-1">
+              <h1 className="text-xl font-bold text-gray-900 mb-0.5 tracking-tight">
                 {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
               </h1>
-              <p className="mt-1 text-sm font-medium text-gray-600">
+              <p className="text-xs sm:text-sm font-medium text-gray-600">
                 {isLogin ? t('auth.signInContinue') : t('auth.getStarted')}
               </p>
             </div>
-            <form className="space-y-4" onSubmit={handleSubmit}>
-              {/* Role Selection Dropdown - Show during both login and registration */}
-              {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
-                <div>
-                  <label htmlFor="mobile-account-type" className="block text-sm font-semibold text-gray-700 mb-2">
-                    {isLogin ? t('auth.accountType') : t('auth.iWantTo')} <span className="text-orange-600">*</span>
-                  </label>
-                  <select
-                    id="mobile-account-type"
-                    name="account-type"
-                    value={selectedRole ?? ''}
-                    onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                    className={mobileFormInputClass}
-                    required
-                  >
-                    <option value="" disabled>
-                      {t('auth.selectAccountTypePlaceholder')}
-                    </option>
-                    {allowedRoles.map((role) => {
-                      const displayText = isLogin
-                        ? roleConfig[role].title
-                        : registerRoleLabel(role);
-                      return (
-                        <option key={role} value={role}>
-                          {displayText}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
+            <form className="space-y-3 sm:space-y-4" onSubmit={handleSubmit}>
+              {accountTypeButtonGroup('mobile')}
               {!isLogin && (
                 <>
                   <div>
-                    <label htmlFor="mobile-name" className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label htmlFor="mobile-name" className="block text-sm font-semibold text-gray-700 mb-1.5">
                       {t('auth.fullName')} <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -623,7 +673,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                     />
                   </div>
                   <div>
-                    <label htmlFor="mobile-tel" className="block text-sm font-semibold text-gray-700 mb-2">
+                    <label htmlFor="mobile-tel" className="block text-sm font-semibold text-gray-700 mb-1.5">
                       {t('auth.mobileNumber')} <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -640,7 +690,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 </>
               )}
               <div>
-                <label htmlFor="mobile-email" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="mobile-email" className="block text-sm font-semibold text-gray-700 mb-1.5">
                   {t('auth.emailAddress')} <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -655,7 +705,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 />
               </div>
               <div>
-                <label htmlFor="mobile-password" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="mobile-password" className="block text-sm font-semibold text-gray-700 mb-1.5">
                   {t('auth.password')} <span className="text-red-500">*</span>
                 </label>
                 <PasswordInput
@@ -717,11 +767,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative w-full flex justify-center py-4 px-6 border border-transparent rounded-xl text-sm font-bold text-white overflow-hidden transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
+              className="group relative w-full flex justify-center py-3.5 px-5 border border-transparent rounded-xl text-sm font-bold text-white overflow-hidden transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
               style={{
                 background: 'linear-gradient(135deg, #FF6B35 0%, #F7931E 50%, #FF6B35 100%)',
                 backgroundSize: '200% 200%',
-                boxShadow: '0 10px 25px rgba(255, 107, 53, 0.4)'
+                boxShadow: '0 8px 20px rgba(255, 107, 53, 0.35)'
               }}
             >
               <span className="relative z-10 flex items-center">
@@ -746,25 +796,25 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           </form>
 
           {/* Social Login */}
-          <div className="mt-6">
+          <div className="mt-5 sm:mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-200"></div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white/95 backdrop-blur-sm text-gray-500 font-medium">{t('auth.orContinueWith')}</span>
+              <div className="relative flex justify-center text-xs sm:text-sm">
+                <span className="px-3 bg-white text-gray-500 font-medium sm:bg-white/95 sm:backdrop-blur-sm sm:px-4">{t('auth.orContinueWith')}</span>
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-2 gap-2.5 sm:mt-6 sm:gap-3">
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading || !canUseGoogle}
                 title={!canUseGoogle ? t('auth.googleRequiresCustomerOrSeller') : undefined}
-                className="group w-full inline-flex justify-center items-center py-3 px-4 border-2 border-gray-200 rounded-xl bg-white/80 backdrop-blur-sm text-sm font-semibold text-gray-700 hover:bg-white hover:border-gray-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-300 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
+                className="group w-full inline-flex justify-center items-center py-2.5 px-3 border border-gray-200 rounded-xl bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-500 transition-all duration-200 disabled:opacity-50 active:scale-[0.98] sm:py-3 sm:px-4 sm:border-2 sm:text-sm sm:bg-white/80 sm:backdrop-blur-sm"
               >
-                <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 mr-1.5 shrink-0 sm:w-5 sm:h-5 sm:mr-2 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                   <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -778,9 +828,9 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 onClick={() => setMode('otp')}
                 disabled={isLoading || !canUseOtp}
                 title={!canUseOtp ? t('auth.otpRequiresCustomerOrSeller') : undefined}
-                className="group w-full inline-flex justify-center items-center py-3 px-4 border-2 border-gray-200 rounded-xl bg-white/80 backdrop-blur-sm text-sm font-semibold text-gray-700 hover:bg-white hover:border-gray-300 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all duration-300 disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]"
+                className="group w-full inline-flex justify-center items-center py-2.5 px-3 border border-gray-200 rounded-xl bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-500 transition-all duration-200 disabled:opacity-50 active:scale-[0.98] sm:py-3 sm:px-4 sm:border-2 sm:text-sm sm:bg-white/80 sm:backdrop-blur-sm"
               >
-                <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 mr-1.5 shrink-0 sm:w-5 sm:h-5 sm:mr-2 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
                 {t('auth.phoneOtp')}
@@ -789,8 +839,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           </div>
 
           {/* Toggle between Login and Register */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
+          <div className="mt-5 text-center sm:mt-6">
+            <p className="text-xs text-gray-600 sm:text-sm">
               {isLogin ? t('auth.noAccount') : t('auth.haveAccount')}
               <button
                 type="button"
@@ -803,11 +853,11 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           </div>
 
           {/* Guest Access */}
-          <div className="mt-4 text-center">
+          <div className="mt-3 text-center sm:mt-4">
             <button
               type="button"
               onClick={() => onNavigate(View.USED_CARS)}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              className="text-xs text-gray-500 hover:text-gray-700 sm:text-sm"
             >
               {t('auth.continueGuest')}
             </button>
@@ -864,36 +914,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
-            {/* Role Selection Dropdown - Show during both login and registration */}
-            {!hideRolePicker && !forcedRole && allowedRoles.length > 1 && (
-              <div>
-                <label htmlFor="account-type" className="block text-sm font-semibold text-gray-700 mb-2">
-                  {isLogin ? t('auth.accountType') : t('auth.iWantTo')} <span className="text-orange-600">*</span>
-                </label>
-                <select
-                  id="account-type"
-                  name="account-type"
-                  value={selectedRole ?? ''}
-                  onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-                  className={selectInputClass}
-                  required
-                >
-                  <option value="" disabled>
-                    {t('auth.selectAccountTypePlaceholder')}
-                  </option>
-                  {allowedRoles.map((role) => {
-                    const displayText = isLogin
-                      ? roleConfig[role].title
-                      : registerRoleLabel(role);
-                    return (
-                      <option key={role} value={role}>
-                        {displayText}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            )}
+            {accountTypeButtonGroup('desktop')}
             {!isLogin && (
               <>
                 <div>

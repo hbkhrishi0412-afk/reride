@@ -442,7 +442,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                   <div className="text-sm text-gray-600 py-6 text-center">{t('buyerDashboard.trackRequests.loading')}</div>
                 }
               >
-                <ServiceCart isLoggedIn embedTrackOnly />
+                <ServiceCart isLoggedIn embedTrackOnly customerUserId={currentUser?.id ?? null} />
               </Suspense>
             </div>
           </div>

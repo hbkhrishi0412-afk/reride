@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getSession } from '../services/supabase-auth-service';
 
 type ServiceCategory = 'Essential Service' | 'Deep Detailing' | 'Care Plus';
@@ -16,7 +16,9 @@ interface Provider {
   serviceCategories?: ServiceCategory[];
 }
 
-type RequestStatus = 'open' | 'accepted' | 'in_progress' | 'completed';
+type RequestStatus = 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+
+type ServiceLineItem = { id: string; name: string; quantity?: number; price?: number };
 
 interface ServiceRequest {
   id: string;
@@ -34,9 +36,46 @@ interface ServiceRequest {
   scheduledAt?: string;
   notes?: string;
   carDetails?: string;
+  /** Line items from customer cart (when provided by API). */
+  services?: ServiceLineItem[];
   createdAt?: string;
   updatedAt?: string;
   claimedAt?: string;
+}
+
+function ServiceRequestPackages({ services }: { services?: ServiceLineItem[] }) {
+  const lines = (services ?? []).filter(
+    (s): s is ServiceLineItem =>
+      !!s &&
+      typeof s === 'object' &&
+      (typeof s.name === 'string' || typeof s.id === 'string'),
+  );
+  if (lines.length === 0) return null;
+  return (
+    <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+      <p className="text-xs font-semibold text-indigo-800 uppercase tracking-wide mb-2">Packages</p>
+      <ul className="space-y-1.5">
+        {lines.map((line) => {
+          const label = line.name?.trim() || line.id;
+          const qty = line.quantity != null && line.quantity > 0 ? line.quantity : 1;
+          const price =
+            line.price != null && Number.isFinite(line.price) && line.price > 0 ? line.price : null;
+          return (
+            <li
+              key={`${line.id}-${label}`}
+              className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 text-sm text-gray-800"
+            >
+              <span className="font-medium text-gray-900">{label}</span>
+              <span className="text-gray-600 tabular-nums shrink-0">
+                ×{qty}
+                {price != null ? ` · ₹${price.toLocaleString('en-IN')}` : ''}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 interface CarServiceDashboardProps {
@@ -48,6 +87,7 @@ const statusOptions: { value: RequestStatus; label: string }[] = [
   { value: 'accepted', label: 'Accepted' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
 ];
 
 const serviceOptions = [
@@ -134,7 +174,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   const sortedRequests = useMemo(
     () =>
       [...requests].sort((a, b) => {
-        const order = ['accepted', 'in_progress', 'completed'] as RequestStatus[];
+        const order = ['accepted', 'in_progress', 'completed', 'cancelled'] as RequestStatus[];
         const aIndex = order.indexOf(a.status);
         const bIndex = order.indexOf(b.status);
         return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
@@ -175,6 +215,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     if (status === 'open') return `${base} bg-gradient-to-r from-amber-50 to-amber-100 text-amber-800 border-amber-300`;
     if (status === 'accepted') return `${base} bg-gradient-to-r from-blue-50 to-blue-100 text-blue-800 border-blue-300`;
     if (status === 'in_progress') return `${base} bg-gradient-to-r from-indigo-50 to-indigo-100 text-indigo-800 border-indigo-300`;
+    if (status === 'cancelled') return `${base} bg-gradient-to-r from-red-50 to-red-100 text-red-800 border-red-300`;
     return `${base} bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-800 border-emerald-300`;
   };
 
@@ -208,6 +249,10 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         id: `sample-${Date.now()}-1`,
         title: 'Oil change & filter',
         serviceType: 'General',
+        services: [
+          { id: 'pkg-oil', name: 'Standard oil change', quantity: 1, price: 2499 },
+          { id: 'pkg-filter', name: 'Air filter replacement', quantity: 1, price: 450 },
+        ],
         customerName: 'Demo User',
         customerPhone: '9999999999',
         vehicle: 'Honda City',
@@ -221,6 +266,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         id: `sample-${Date.now()}-2`,
         title: 'Brake inspection',
         serviceType: 'Brakes & Suspension',
+        services: [{ id: 'pkg-brake', name: 'Brake inspection', quantity: 1 }],
         customerName: 'Alex Rider',
         customerPhone: '8888888888',
         vehicle: 'Hyundai i20',
@@ -413,6 +459,23 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     fetchRequests();
     fetchOpenRequests();
   };
+
+  const handleRefreshRef = useRef(handleRefresh);
+  handleRefreshRef.current = handleRefresh;
+
+  useEffect(() => {
+    if (!provider) return;
+    const tick = () => handleRefreshRef.current();
+    const interval = window.setInterval(tick, 5000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [provider]);
 
   const claimRequest = async (id: string) => {
     setClaimingId(id);
@@ -1698,6 +1761,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                           </span>
                         )}
                       </div>
+                      <ServiceRequestPackages services={req.services} />
                       <div className="space-y-1.5">
                         {req.customerName && (
                           <p className="text-sm text-gray-700 flex items-center gap-2">
@@ -1793,7 +1857,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   <p className="text-sm text-gray-600 mt-1">Manage jobs you have claimed.</p>
             </div>
             <div className="flex gap-2 flex-wrap">
-              {(['all', 'accepted', 'in_progress', 'completed'] as const).map((status) => (
+              {(['all', 'accepted', 'in_progress', 'completed', 'cancelled'] as const).map((status) => (
                 <button
                   key={status}
                   type="button"
@@ -1887,6 +1951,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                           </span>
                         )}
                       </div>
+                      <ServiceRequestPackages services={req.services} />
                       <div className="space-y-1.5">
                         {req.customerName && (
                           <p className="text-sm text-gray-700 flex items-center gap-2">

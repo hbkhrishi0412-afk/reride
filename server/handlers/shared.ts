@@ -107,8 +107,9 @@ export function normalizeUser(user: UserType | null | undefined): NormalizedUser
   }
   if (!id) return null;
 
-  let role: 'customer' | 'seller' | 'admin' = user.role;
-  if (!role || !['customer', 'seller', 'admin'].includes(role)) {
+  const validRoles = ['customer', 'seller', 'admin', 'service_provider'] as const;
+  let role: (typeof validRoles)[number] = user.role as (typeof validRoles)[number];
+  if (!role || !validRoles.includes(role)) {
     role = 'customer';
   }
 

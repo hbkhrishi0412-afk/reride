@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-// Removed blocking import - will lazy load location data when needed
-import { getDisplayNameForCity } from '../utils/cityMapping';
+import { getDisplayNameForCity, primaryLocationLabel } from '../utils/cityMapping';
+import { INDIAN_STATES, CITIES_BY_STATE } from '../constants/location.js';
 
 interface LocationModalProps {
     isOpen: boolean;
@@ -11,6 +11,16 @@ interface LocationModalProps {
 }
 
 type LocationOption = 'detect' | 'all' | 'district' | 'city';
+
+function formatCityAndState(
+    cityCanonical: string,
+    stateCode: string,
+    states: Array<{ name: string; code: string }>
+): string {
+    const displayCity = getDisplayNameForCity(cityCanonical);
+    const stateName = states.find((s) => s.code === stateCode)?.name;
+    return stateName ? `${displayCity}, ${stateName}` : displayCity;
+}
 
 const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentLocation, onLocationChange, addToast }) => {
     const [selectedOption, setSelectedOption] = useState<LocationOption>('detect');
@@ -25,34 +35,8 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         userEditedRef.current = true;
     };
 
-    // Lazy load location data
-    const [indianStates, setIndianStates] = useState<Array<{name: string, code: string}>>([]);
-    const [citiesByState, setCitiesByState] = useState<Record<string, string[]>>({});
-
-    // Load location data when component mounts
-    useEffect(() => {
-        const loadLocationData = async () => {
-            try {
-                const { loadLocationData } = await import('../utils/dataLoaders');
-                const { INDIAN_STATES, CITIES_BY_STATE } = await loadLocationData();
-
-                if (Array.isArray(INDIAN_STATES) && INDIAN_STATES.length > 0) {
-                    setIndianStates(INDIAN_STATES);
-                } else {
-                    console.warn('Location data loader returned empty states list. Falling back to static data.');
-                }
-
-                if (CITIES_BY_STATE && Object.keys(CITIES_BY_STATE).length > 0) {
-                    setCitiesByState(CITIES_BY_STATE);
-                } else {
-                    console.warn('Location data loader returned empty cities list. Falling back to static data.');
-                }
-            } catch (error) {
-                console.error('Failed to load location data:', error);
-            }
-        };
-        loadLocationData();
-    }, []);
+    const indianStates = INDIAN_STATES;
+    const citiesByState = CITIES_BY_STATE;
 
     useEffect(() => {
         const body = document.body;
@@ -86,6 +70,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         if (userEditedRef.current) return;
 
         const loc = currentLocation.trim();
+        const locPrimary = primaryLocationLabel(loc);
         if (!loc) {
             setSelectedOption('detect');
             setSelectedDistrict('');
@@ -110,7 +95,15 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
             return;
         }
 
-        const cityHit = allCities.find((c) => c.city.toLowerCase() === loc.toLowerCase());
+        const locLower = loc.toLowerCase();
+        const primaryLower = locPrimary.toLowerCase();
+
+        const cityHit = allCities.find(
+            (c) =>
+                c.city.toLowerCase() === locLower ||
+                c.city.toLowerCase() === primaryLower ||
+                formatCityAndState(c.city, c.stateCode, indianStates).toLowerCase() === locLower
+        );
         if (cityHit) {
             setSelectedOption('city');
             setSelectedCity(cityHit.city);
@@ -120,7 +113,8 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         }
 
         for (const row of allCities) {
-            if (getDisplayNameForCity(row.city).toLowerCase() === loc.toLowerCase()) {
+            const disp = getDisplayNameForCity(row.city).toLowerCase();
+            if (disp === locLower || disp === primaryLower) {
                 setSelectedOption('city');
                 setSelectedCity(row.city);
                 setSelectedDistrict(row.stateCode);
@@ -130,21 +124,26 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         }
 
         setSelectedOption('city');
-        setSelectedCity(loc);
+        setSelectedCity(locPrimary);
         setSelectedDistrict('');
         setSearchTerm('');
     }, [isOpen, currentLocation, indianStates, allCities]);
 
-    // Filter cities based on search term (includes cities from states whose name matches)
+    // Filter cities: match canonical name, display alias (e.g. Bangalore ↔ Bengaluru), or state name
     const filteredCities = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
         if (!term) {
             if (selectedOption === 'district' && selectedDistrict) {
-                return citiesByState[selectedDistrict]?.map(city => ({ city, stateCode: selectedDistrict })) || [];
+                return citiesByState[selectedDistrict]?.map((city) => ({ city, stateCode: selectedDistrict })) || [];
             }
             return [];
         }
-        const fromCities = allCities.filter(({ city }) => city.toLowerCase().includes(term));
+        const cityMatchesSearch = (city: string) => {
+            const c = city.toLowerCase();
+            const disp = getDisplayNameForCity(city).toLowerCase();
+            return c.includes(term) || disp.includes(term);
+        };
+        const fromCities = allCities.filter(({ city }) => cityMatchesSearch(city));
         const fromStates: Array<{ city: string; stateCode: string }> = [];
         for (const s of indianStates) {
             if (s.name.toLowerCase().includes(term)) {
@@ -162,15 +161,23 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                 merged.push(x);
             }
         }
-        return merged.slice(0, 80);
+        const rank = (row: { city: string; stateCode: string }) => {
+            const c = row.city.toLowerCase();
+            const d = getDisplayNameForCity(row.city).toLowerCase();
+            if (c === term || d === term) return 0;
+            if (c.startsWith(term) || d.startsWith(term)) return 1;
+            if (c.includes(term) || d.includes(term)) return 2;
+            return 3;
+        };
+        merged.sort((a, b) => rank(a) - rank(b));
+        return merged.slice(0, 200);
     }, [searchTerm, allCities, selectedDistrict, selectedOption, citiesByState, indianStates]);
 
-    // Get popular districts (major states)
-    const popularDistricts = useMemo(() => {
-        return indianStates
-            .filter(state => ['MH', 'DL', 'KA', 'TN', 'GJ', 'UP', 'WB', 'RJ'].includes(state.code))
-            .map(state => ({ code: state.code, name: state.name }));
-    }, [indianStates]);
+    // All states & UTs (A–Z) for pan-India browsing; search still narrows cities quickly
+    const browseStates = useMemo(
+        () => [...indianStates].sort((a, b) => a.name.localeCompare(b.name)),
+        [indianStates],
+    );
 
     // Get cities for selected district
     const districtCities = useMemo(() => {
@@ -224,8 +231,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     }
                     
                     const finalLocation = matchedCity || detectedCity || 'Mumbai';
-                    const displayLocation = getDisplayNameForCity(finalLocation);
-                    
+                    const row = allCities.find(
+                        (c) => c.city.toLowerCase() === (matchedCity || finalLocation).toLowerCase()
+                    );
+                    const displayLocation = row
+                        ? formatCityAndState(row.city, row.stateCode, indianStates)
+                        : getDisplayNameForCity(finalLocation);
+
                     onLocationChange(displayLocation);
                     addToast(`Location detected: ${displayLocation}`, 'success');
                     setIsDetecting(false);
@@ -233,9 +245,13 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                     
                 } catch (error) {
                     console.error('Reverse geocoding error:', error);
-                    const nearestCity = getDisplayNameForCity(findNearestCity(latitude, longitude));
-                    onLocationChange(nearestCity);
-                    addToast(`Location detected: ${nearestCity}`, 'success');
+                    const nearest = findNearestCity(latitude, longitude);
+                    const row = allCities.find((c) => c.city.toLowerCase() === nearest.toLowerCase());
+                    const nearestLabel = row
+                        ? formatCityAndState(row.city, row.stateCode, indianStates)
+                        : getDisplayNameForCity(nearest);
+                    onLocationChange(nearestLabel);
+                    addToast(`Location detected: ${nearestLabel}`, 'success');
                     setIsDetecting(false);
                     onClose();
                 }
@@ -325,19 +341,43 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
 
         if (selectedOption === 'city') {
             let city = selectedCity;
+            let stateCode = selectedDistrict;
             const term = searchTerm.trim();
             if (!city && term) {
-                const exact = allCities.filter(({ city: c }) => c.toLowerCase() === term.toLowerCase());
-                if (exact.length === 1) city = exact[0].city;
-                else {
-                    const starts = allCities.filter(({ city: c }) => c.toLowerCase().startsWith(term.toLowerCase()));
-                    if (starts.length === 1) city = starts[0].city;
+                const tl = term.toLowerCase();
+                const exact = allCities.filter(({ city: c }) => c.toLowerCase() === tl);
+                if (exact.length === 1) {
+                    city = exact[0].city;
+                    stateCode = exact[0].stateCode;
+                } else {
+                    const byDisplay = allCities.filter(
+                        ({ city: c }) => getDisplayNameForCity(c).toLowerCase() === tl
+                    );
+                    if (byDisplay.length === 1) {
+                        city = byDisplay[0].city;
+                        stateCode = byDisplay[0].stateCode;
+                    } else {
+                        const starts = allCities.filter(({ city: c }) => c.toLowerCase().startsWith(tl));
+                        if (starts.length === 1) {
+                            city = starts[0].city;
+                            stateCode = starts[0].stateCode;
+                        } else {
+                            const dispStarts = allCities.filter(({ city: c }) =>
+                                getDisplayNameForCity(c).toLowerCase().startsWith(tl)
+                            );
+                            if (dispStarts.length === 1) {
+                                city = dispStarts[0].city;
+                                stateCode = dispStarts[0].stateCode;
+                            }
+                        }
+                    }
                 }
             }
             if (city) {
-                const displayName = getDisplayNameForCity(city);
-                onLocationChange(displayName);
-                addToast(`Location set to ${displayName}`, 'success');
+                const sc = stateCode || allCities.find((c) => c.city === city)?.stateCode;
+                const label = sc ? formatCityAndState(city, sc, indianStates) : getDisplayNameForCity(city);
+                onLocationChange(label);
+                addToast(`Location set to ${label}`, 'success');
                 onClose();
                 return;
             }
@@ -346,10 +386,11 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
         addToast('Please select a city from the list or choose a state / All of India', 'info');
     };
 
-    const handleCitySelect = (cityName: string) => {
+    const handleCitySelect = (cityName: string, stateCode: string) => {
         markUserEdited();
         setSelectedOption('city');
         setSelectedCity(cityName);
+        setSelectedDistrict(stateCode);
         setSearchTerm('');
     };
 
@@ -480,7 +521,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         </label>
 
                         {/* District Options */}
-                        {popularDistricts.map((district) => (
+                        {browseStates.map((district) => (
                             <div key={district.code}>
                                 <label className="flex items-center gap-3 p-3 rounded-md hover:bg-gray-50 cursor-pointer">
                                     <input
@@ -509,6 +550,7 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                                     markUserEdited();
                                                     setSelectedOption('city');
                                                     setSelectedCity(city);
+                                                    setSelectedDistrict(district.code);
                                                 }}
                                             >
                                                 <input
@@ -519,10 +561,14 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                                                         markUserEdited();
                                                         setSelectedOption('city');
                                                         setSelectedCity(city);
+                                                        setSelectedDistrict(district.code);
                                                     }}
                                                     className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                                                 />
-                                                <span className="text-sm text-gray-700">{city}</span>
+                                                <span className="text-sm text-gray-700">
+                                                    {getDisplayNameForCity(city)}
+                                                    <span className="text-gray-500"> — {district.name}</span>
+                                                </span>
                                             </label>
                                         ))}
                                     </div>
@@ -533,22 +579,26 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, currentL
                         {/* Search Results / City List */}
                         {searchTerm && filteredCities.length > 0 && (
                             <div className="mt-2 space-y-1">
-                                {filteredCities.map(({ city, stateCode }) => (
-                                    <label
-                                        key={`${city}-${stateCode}`}
-                                        className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
-                                        onClick={() => handleCitySelect(city)}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="location-city"
-                                            checked={selectedOption === 'city' && selectedCity === city}
-                                            onChange={() => handleCitySelect(city)}
-                                            className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <span className="text-sm text-gray-700">{city}</span>
-                                    </label>
-                                ))}
+                                {filteredCities.map(({ city, stateCode }) => {
+                                    const stateName = indianStates.find((s) => s.code === stateCode)?.name || stateCode;
+                                    const line = `${getDisplayNameForCity(city)} — ${stateName}`;
+                                    return (
+                                        <label
+                                            key={`${city}-${stateCode}`}
+                                            className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                                            onClick={() => handleCitySelect(city, stateCode)}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="location-city"
+                                                checked={selectedOption === 'city' && selectedCity === city}
+                                                onChange={() => handleCitySelect(city, stateCode)}
+                                                className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <span className="text-sm text-gray-700">{line}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         )}
 

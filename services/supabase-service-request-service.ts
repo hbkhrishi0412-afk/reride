@@ -3,6 +3,8 @@ import { getSupabaseClient, getSupabaseAdminClient } from '../lib/supabase.js';
 // Detect if we're in a server context (serverless function)
 const isServerSide = typeof window === 'undefined';
 
+export type ServiceLineItem = { id: string; name: string; quantity?: number; price?: number };
+
 export interface ServiceRequestPayload extends Record<string, unknown> {
   providerId?: string | null;
   customerId?: string;
@@ -19,7 +21,15 @@ export interface ServiceRequestPayload extends Record<string, unknown> {
   status?: 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
   scheduledAt?: string;
   notes?: string;
-  carDetails?: string;
+  /** Human-readable line or structured cart snapshot (stored in metadata JSON). */
+  carDetails?: string | Record<string, unknown>;
+  services?: ServiceLineItem[];
+  addressId?: string;
+  slotId?: string;
+  scheduledDate?: string;
+  slotTimeLabel?: string;
+  total?: number;
+  couponCode?: string;
   createdAt?: string;
   updatedAt?: string;
   claimedAt?: string;
@@ -28,13 +38,27 @@ export interface ServiceRequestPayload extends Record<string, unknown> {
   cancelledAt?: string;
 }
 
+function formatCarDetailsDisplay(raw: unknown): string {
+  if (raw == null || raw === '') return '';
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'object' && raw !== null) {
+    const o = raw as Record<string, string | undefined>;
+    const line = [o.make, o.model].filter(Boolean).join(' ').trim();
+    const extra = [o.year, o.fuel, o.reg, o.city].filter(Boolean).join(' • ');
+    if (line && extra) return `${line} • ${extra}`;
+    if (line) return line;
+    if (extra) return extra;
+  }
+  return '';
+}
+
 // Helper to convert Supabase row to ServiceRequestPayload
 function supabaseRowToServiceRequest(row: any): ServiceRequestPayload {
   const metadata = row.metadata || {};
   return {
     id: row.id,
     providerId: row.provider_id || null,
-    customerId: metadata.customerId || '',
+    customerId: metadata.customerId || row.user_id || '',
     title: metadata.title || row.service_type || '',
     serviceType: row.service_type || metadata.serviceType || 'General',
     customerName: metadata.customerName || '',
@@ -47,7 +71,14 @@ function supabaseRowToServiceRequest(row: any): ServiceRequestPayload {
     status: (row.status || metadata.status || 'open') as ServiceRequestPayload['status'],
     scheduledAt: metadata.scheduledAt || '',
     notes: metadata.notes || '',
-    carDetails: metadata.carDetails || '',
+    carDetails: formatCarDetailsDisplay(metadata.carDetails),
+    services: Array.isArray(metadata.services) ? metadata.services : undefined,
+    addressId: typeof metadata.addressId === 'string' ? metadata.addressId : undefined,
+    slotId: typeof metadata.slotId === 'string' ? metadata.slotId : undefined,
+    scheduledDate: typeof metadata.scheduledDate === 'string' ? metadata.scheduledDate : undefined,
+    slotTimeLabel: typeof metadata.slotTimeLabel === 'string' ? metadata.slotTimeLabel : undefined,
+    total: typeof metadata.total === 'number' ? metadata.total : undefined,
+    couponCode: typeof metadata.couponCode === 'string' ? metadata.couponCode : undefined,
     candidateProviderIds: metadata.candidateProviderIds || [],
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString(),
@@ -67,6 +98,9 @@ function serviceRequestToSupabaseRow(request: Partial<ServiceRequestPayload>): a
     service_type: request.serviceType || 'General',
     status: request.status || 'open',
   };
+  if (request.customerId !== undefined && request.customerId !== null && String(request.customerId).trim() !== '') {
+    directFields.user_id = request.customerId;
+  }
 
   // All other fields go into metadata
   const metadata: any = {
@@ -82,6 +116,13 @@ function serviceRequestToSupabaseRow(request: Partial<ServiceRequestPayload>): a
     scheduledAt: request.scheduledAt,
     notes: request.notes,
     carDetails: request.carDetails,
+    services: request.services,
+    addressId: request.addressId,
+    slotId: request.slotId,
+    scheduledDate: request.scheduledDate,
+    slotTimeLabel: request.slotTimeLabel,
+    total: request.total,
+    couponCode: request.couponCode,
     candidateProviderIds: request.candidateProviderIds,
     claimedAt: request.claimedAt,
     startedAt: request.startedAt,
@@ -199,16 +240,23 @@ export const supabaseServiceRequestService = {
   async findByCustomerId(customerId: string): Promise<(ServiceRequestPayload & { id: string })[]> {
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
 
-    const { data, error } = await supabase
-      .from('service_requests')
-      .select('*')
-      .contains('metadata', { customerId });
+    const [{ data: byUserId, error: errUser }, { data: byMeta, error: errMeta }] = await Promise.all([
+      supabase.from('service_requests').select('*').eq('user_id', customerId),
+      supabase.from('service_requests').select('*').contains('metadata', { customerId }),
+    ]);
 
-    if (error) {
-      throw new Error(`Failed to fetch service requests by customer: ${error.message}`);
+    const merged = new Map<string, any>();
+    if (!errUser && byUserId) {
+      for (const row of byUserId) merged.set(row.id, row);
+    }
+    if (!errMeta && byMeta) {
+      for (const row of byMeta) merged.set(row.id, row);
+    }
+    if (merged.size === 0 && errUser && errMeta) {
+      throw new Error(`Failed to fetch service requests by customer: ${errUser.message || errMeta.message}`);
     }
 
-    return (data || []).map(supabaseRowToServiceRequest) as (ServiceRequestPayload & { id: string })[];
+    return Array.from(merged.values()).map(supabaseRowToServiceRequest) as (ServiceRequestPayload & { id: string })[];
   },
 
   // Update service request

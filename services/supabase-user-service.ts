@@ -25,7 +25,7 @@ function supabaseRowToUser(row: any): User {
     mobile: row.mobile || '',
     // Password hash is required server-side for email login; never send it to the browser
     ...(isServerSide ? { password: row.password || undefined } : {}),
-    role: (row.role || 'customer') as 'customer' | 'seller' | 'admin',
+    role: (row.role || 'customer') as 'customer' | 'seller' | 'admin' | 'service_provider',
     status: (row.status || 'active') as 'active' | 'inactive',
     avatarUrl: row.avatar_url || undefined,
     isVerified: row.is_verified || false,

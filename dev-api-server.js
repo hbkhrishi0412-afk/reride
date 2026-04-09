@@ -1545,7 +1545,7 @@ app.post('/api/service-providers/register', async (req, res) => {
       email,
       name,
       mobile: phone,
-      role: 'seller',
+      role: 'service_provider',
       status: 'active',
       auth_provider: 'email',
       location: city,
@@ -1590,7 +1590,7 @@ app.post('/api/service-providers', (req, res) => {
       email: payload.email,
       name: payload.name,
       mobile: payload.phone,
-      role: 'seller',
+      role: 'service_provider',
       status: 'active',
       isVerified: false,
       subscriptionPlan: 'free',
@@ -1711,7 +1711,9 @@ app.get('/api/service-requests', (req, res) => {
     const filtered = open.filter(r => {
       const cityMatches = cityFilter ? (r.city || '').toLowerCase() === cityFilter : true;
       const serviceMatches = serviceTypeFilter ? r.serviceType === serviceTypeFilter : true;
-      const candidateOk = !r.candidateProviderIds || r.candidateProviderIds.length === 0 || r.candidateProviderIds.includes(providerId);
+      const cands = r.candidateProviderIds;
+      const candidateOk =
+        !Array.isArray(cands) || cands.length === 0 || cands.includes(providerId);
       return cityMatches && serviceMatches && candidateOk;
     });
     return res.json(filtered);
@@ -1719,6 +1721,11 @@ app.get('/api/service-requests', (req, res) => {
 
   if (scope === 'all') {
     return res.json(mockServiceRequests);
+  }
+
+  if (scope === 'customer') {
+    const uid = getDevUid(req);
+    return res.json(mockServiceRequests.filter(r => r.customerId === uid));
   }
 
   const records = mockServiceRequests.filter(r => r.providerId === providerId);
@@ -1741,15 +1748,24 @@ app.post('/api/service-requests', (req, res) => {
     scheduledAt = '',
     notes = '',
     carDetails = '',
-    providerId = null
+    providerId = null,
+    services,
+    addressId,
+    slotId,
+    scheduledDate,
+    slotTimeLabel,
+    total,
+    couponCode,
   } = req.body || {};
   if (!title) {
     return res.status(400).json({ error: 'Missing required field: title' });
   }
   const id = `req-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+  const customerId = req.body?.customerId || getDevUid(req);
   const record = {
     id,
     providerId,
+    customerId,
     candidateProviderIds,
     title,
     serviceType,
@@ -1764,15 +1780,22 @@ app.post('/api/service-requests', (req, res) => {
     scheduledAt,
     notes,
     carDetails,
+    services,
+    addressId,
+    slotId,
+    scheduledDate,
+    slotTimeLabel,
+    total,
+    couponCode,
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
   mockServiceRequests.push(record);
   return res.status(201).json(record);
 });
 
 app.patch('/api/service-requests', (req, res) => {
-  const providerId = getDevUid(req);
+  const uid = getDevUid(req);
   const { id, action, ...updates } = req.body || {};
   if (!id) return res.status(400).json({ error: 'Missing request id' });
   const idx = mockServiceRequests.findIndex(r => r.id === id);
@@ -1780,19 +1803,46 @@ app.patch('/api/service-requests', (req, res) => {
 
   const existing = mockServiceRequests[idx];
 
-  if (action === 'claim') {
-    if (existing.status !== 'open' || existing.providerId) {
-      return res.status(409).json({ error: 'Request already claimed' });
+  const customerWantsCancel =
+    action === 'cancel' || (existing.customerId === uid && updates.status === 'cancelled');
+  if (customerWantsCancel) {
+    if (existing.customerId !== uid) {
+      return res.status(403).json({ error: 'Not allowed to cancel this request' });
     }
-    const candidateOk = !existing.candidateProviderIds || existing.candidateProviderIds.length === 0 || existing.candidateProviderIds.includes(providerId);
-    if (!candidateOk) {
-      return res.status(403).json({ error: 'Not allowed to claim this request' });
+    if (existing.status === 'cancelled') {
+      return res.status(409).json({ error: 'Request already cancelled' });
     }
-    mockServiceRequests[idx] = { ...existing, providerId, status: 'accepted', claimedAt: new Date().toISOString() };
+    if (existing.status === 'completed') {
+      return res.status(409).json({ error: 'Request already completed' });
+    }
+    if (existing.status === 'in_progress') {
+      return res.status(409).json({ error: 'Cannot cancel while service is in progress' });
+    }
+    if (existing.status !== 'open' && existing.status !== 'accepted') {
+      return res.status(409).json({ error: 'Request cannot be cancelled' });
+    }
+    mockServiceRequests[idx] = {
+      ...existing,
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
     return res.json(mockServiceRequests[idx]);
   }
 
-  if (existing.providerId !== providerId) {
+  if (action === 'claim') {
+    const cands = existing.candidateProviderIds;
+    if (Array.isArray(cands) && cands.length > 0 && !cands.includes(uid)) {
+      return res.status(403).json({ error: 'This request is not assigned to your workshop' });
+    }
+    if (existing.status !== 'open' || existing.providerId) {
+      return res.status(409).json({ error: 'Request already claimed' });
+    }
+    mockServiceRequests[idx] = { ...existing, providerId: uid, status: 'accepted', claimedAt: new Date().toISOString() };
+    return res.json(mockServiceRequests[idx]);
+  }
+
+  if (existing.providerId !== uid) {
     return res.status(403).json({ error: 'Not allowed to update this request' });
   }
 

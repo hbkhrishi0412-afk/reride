@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
+import { getSupabaseClient } from '../lib/supabase';
 
 type ServicePackage = {
     id: string;
@@ -75,6 +76,10 @@ type Props = {
         addressId: string;
         address?: Address;
         slotId: string;
+        /** Local calendar date for the visit (YYYY-MM-DD). */
+        scheduledDate: string;
+        /** Time window label only, e.g. "10:00 - 12:00". */
+        slotTimeLabel: string;
         couponCode?: string;
         providerId: string;
         total: number;
@@ -94,6 +99,8 @@ type Props = {
     embedTrackOnly?: boolean;
     /** Initial tab when the component mounts (defaults to booking). */
     initialTab?: 'book' | 'track';
+    /** Supabase auth user id — enables realtime sync of request status when the table is in Realtime publication. */
+    customerUserId?: string | null;
 };
 
 const mockServicePackages: ServicePackage[] = [
@@ -107,11 +114,38 @@ const mockAddresses: Address[] = [
     { id: 'addr-2', label: 'Office', line1: '100 Market Street', city: 'London', state: 'LDN', pincode: 'SW1A1AA' },
 ];
 
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const formatLocalYmd = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+const tomorrowLocalYmd = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return formatLocalYmd(d);
+};
+
+const resolveStoredBookingDate = (raw: string | undefined) => {
+    const today = formatLocalYmd(new Date());
+    if (!raw || !YMD_RE.test(raw)) return tomorrowLocalYmd();
+    if (raw < today) return today;
+    return raw;
+};
+
 const mockSlots: TimeSlot[] = [
-    { id: 'slot-1', label: 'Tomorrow 10:00 - 12:00' },
-    { id: 'slot-2', label: 'Tomorrow 12:00 - 14:00' },
-    { id: 'slot-3', label: 'Tomorrow 14:00 - 16:00' },
+    { id: 'slot-0', label: '08:00 - 10:00' },
+    { id: 'slot-1', label: '10:00 - 12:00' },
+    { id: 'slot-2', label: '12:00 - 14:00' },
+    { id: 'slot-3', label: '14:00 - 16:00' },
+    { id: 'slot-4', label: '16:00 - 18:00' },
 ];
+
+const defaultSlotIdForList = (slots: TimeSlot[]) =>
+    slots.find(s => s.id === 'slot-1')?.id ?? slots[0]?.id ?? '';
 
 const mockProviders: ServiceProvider[] = [
     { id: 'sp-1', name: 'City Auto Care', city: 'London', distanceKm: 4.2 },
@@ -171,16 +205,21 @@ const ServiceCart: React.FC<Props> = ({
     locationError,
     embedTrackOnly = false,
     initialTab = 'book',
+    customerUserId = null,
 }) => {
     const [activeTab, setActiveTab] = useState<'book' | 'track'>(initialTab);
     const [customerRequests, setCustomerRequests] = useState<CustomerServiceRequest[]>([]);
     const [providerNameById, setProviderNameById] = useState<Record<string, string>>({});
     const [requestsLoading, setRequestsLoading] = useState(false);
     const [requestsError, setRequestsError] = useState<string | null>(null);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
     const [items, setItems] = useState<CartItem[]>([]);
     const [addresses, setAddresses] = useState<Address[]>(initialAddresses);
     const [selectedAddress, setSelectedAddress] = useState(addresses[0]?.id || '');
-    const [selectedSlot, setSelectedSlot] = useState(timeSlots[0]?.id || '');
+    const [selectedBookingDate, setSelectedBookingDate] = useState(() => tomorrowLocalYmd());
+    const [scheduleError, setScheduleError] = useState('');
+    const [selectedSlot, setSelectedSlot] = useState(() => defaultSlotIdForList(timeSlots));
+    const minBookingDateYmd = formatLocalYmd(new Date());
     const [selectedCoupon, setSelectedCoupon] = useState<string | undefined>();
     const [selectedProviders, setSelectedProviders] = useState<string[]>(serviceProviders[0]?.id ? [serviceProviders[0].id] : []);
     const [providerServices, setProviderServices] = useState<Record<string, ServiceProvider['services']>>({});
@@ -309,6 +348,41 @@ const ServiceCart: React.FC<Props> = ({
         }
     };
 
+    const loadCustomerRequestsRef = useRef(loadCustomerRequests);
+    loadCustomerRequestsRef.current = loadCustomerRequests;
+
+    const cancelCustomerRequest = async (requestId: string) => {
+        if (!window.confirm('Cancel this service request? Providers will no longer see it as active.')) {
+            return;
+        }
+        try {
+            setCancellingId(requestId);
+            setRequestsError(null);
+            const resp = await authenticatedFetch('/api/service-requests', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: requestId, action: 'cancel' }),
+            });
+            if (!resp.ok) {
+                let message = `Could not cancel (${resp.status})`;
+                try {
+                    const errBody = await resp.json();
+                    if (errBody?.error && typeof errBody.error === 'string') {
+                        message = errBody.error;
+                    }
+                } catch {
+                    /* ignore */
+                }
+                throw new Error(message);
+            }
+            await loadCustomerRequests();
+        } catch (error) {
+            setRequestsError(error instanceof Error ? error.message : 'Failed to cancel request');
+        } finally {
+            setCancellingId(null);
+        }
+    };
+
     useEffect(() => {
         if (activeTab !== 'track') return;
         loadCustomerRequests();
@@ -317,10 +391,44 @@ const ServiceCart: React.FC<Props> = ({
     useEffect(() => {
         if (activeTab !== 'track' || !isLoggedIn) return;
         const timer = setInterval(() => {
-            loadCustomerRequests();
-        }, 15000);
+            loadCustomerRequestsRef.current();
+        }, 5000);
         return () => clearInterval(timer);
     }, [activeTab, isLoggedIn]);
+
+    useEffect(() => {
+        if (activeTab !== 'track' || !isLoggedIn) return;
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') {
+                loadCustomerRequestsRef.current();
+            }
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
+    }, [activeTab, isLoggedIn]);
+
+    useEffect(() => {
+        if (activeTab !== 'track' || !isLoggedIn || !customerUserId) return;
+        const sb = getSupabaseClient();
+        const channel = sb
+            .channel(`service_requests_customer_${customerUserId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'service_requests',
+                    filter: `user_id=eq.${customerUserId}`,
+                },
+                () => {
+                    void loadCustomerRequestsRef.current();
+                }
+            )
+            .subscribe();
+        return () => {
+            void sb.removeChannel(channel);
+        };
+    }, [activeTab, isLoggedIn, customerUserId]);
 
     useEffect(() => {
         const loadProvidersForNames = async () => {
@@ -353,10 +461,20 @@ const ServiceCart: React.FC<Props> = ({
     // Persist cart state
     useEffect(() => {
         try {
-            const payload = { items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses };
+            const payload = {
+                items,
+                selectedAddress,
+                selectedBookingDate,
+                selectedSlot,
+                selectedCoupon,
+                selectedProviders,
+                note,
+                carDetails,
+                addresses,
+            };
             localStorage.setItem(CART_KEY, JSON.stringify(payload));
         } catch { /* storage unavailable */ }
-    }, [items, selectedAddress, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses]);
+    }, [items, selectedAddress, selectedBookingDate, selectedSlot, selectedCoupon, selectedProviders, note, carDetails, addresses]);
 
     // Load persisted cart (but skip if prefill is present - prefill takes priority)
     useEffect(() => {
@@ -373,7 +491,12 @@ const ServiceCart: React.FC<Props> = ({
                 }
                 // Don't set items - let prefill handle it
                 setSelectedAddress(parsed.selectedAddress || addresses[0]?.id || '');
-                setSelectedSlot(parsed.selectedSlot || timeSlots[0]?.id || '');
+                setSelectedBookingDate(resolveStoredBookingDate(parsed.selectedBookingDate));
+                setSelectedSlot(
+                    parsed.selectedSlot && timeSlots.some(s => s.id === parsed.selectedSlot)
+                        ? parsed.selectedSlot
+                        : defaultSlotIdForList(timeSlots),
+                );
                 setSelectedCoupon(parsed.selectedCoupon);
                 setSelectedProviders(parsed.selectedProviders || (serviceProviders[0]?.id ? [serviceProviders[0].id] : []));
                 setNote(parsed.note || '');
@@ -398,7 +521,12 @@ const ServiceCart: React.FC<Props> = ({
             }
             setItems(parsed.items || []);
             setSelectedAddress(parsed.selectedAddress || addresses[0]?.id || '');
-            setSelectedSlot(parsed.selectedSlot || timeSlots[0]?.id || '');
+            setSelectedBookingDate(resolveStoredBookingDate(parsed.selectedBookingDate));
+            setSelectedSlot(
+                parsed.selectedSlot && timeSlots.some(s => s.id === parsed.selectedSlot)
+                    ? parsed.selectedSlot
+                    : defaultSlotIdForList(timeSlots),
+            );
             setSelectedCoupon(parsed.selectedCoupon);
             setSelectedProviders(parsed.selectedProviders || (serviceProviders[0]?.id ? [serviceProviders[0].id] : []));
             setNote(parsed.note || '');
@@ -665,6 +793,12 @@ const ServiceCart: React.FC<Props> = ({
             return;
         }
         if (!selectedAddress || !selectedSlot || items.length === 0) return;
+        const todayYmd = formatLocalYmd(new Date());
+        if (!selectedBookingDate || !YMD_RE.test(selectedBookingDate) || selectedBookingDate < todayYmd) {
+            setScheduleError('Please choose a valid date (today or later).');
+            return;
+        }
+        setScheduleError('');
         if (!carDetails) {
             setCarFormError('Please add your car details before checkout.');
             setCarFormOpen(true);
@@ -693,11 +827,14 @@ const ServiceCart: React.FC<Props> = ({
             };
         });
         
+        const slotMeta = timeSlots.find(s => s.id === selectedSlot);
         const payload = {
             items,
             addressId: selectedAddress,
             address: addresses.find(a => a.id === selectedAddress),
             slotId: selectedSlot,
+            scheduledDate: selectedBookingDate,
+            slotTimeLabel: slotMeta?.label || selectedSlot,
             couponCode: selectedCoupon,
             providerId: primaryProviderId,
             candidateProviderIds: providersToNotify, // Include all providers to notify
@@ -768,9 +905,21 @@ const ServiceCart: React.FC<Props> = ({
                                             {req.city || 'City not provided'} {req.scheduledAt ? `• Slot: ${req.scheduledAt}` : ''}
                                         </div>
                                     </div>
-                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${REQUEST_STATUS_STYLES[req.status] || REQUEST_STATUS_STYLES.open}`}>
-                                        {req.status.replace('_', ' ')}
-                                    </span>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {(req.status === 'open' || req.status === 'accepted') && (
+                                            <button
+                                                type="button"
+                                                onClick={() => cancelCustomerRequest(req.id)}
+                                                disabled={cancellingId === req.id || requestsLoading}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60"
+                                            >
+                                                {cancellingId === req.id ? 'Cancelling…' : 'Cancel request'}
+                                            </button>
+                                        )}
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${REQUEST_STATUS_STYLES[req.status] || REQUEST_STATUS_STYLES.open}`}>
+                                            {req.status.replace('_', ' ')}
+                                        </span>
+                                    </div>
                                 </div>
                                 {req.providerId && (
                                     <div className="mt-2 text-xs text-blue-700 dark:text-blue-400">
@@ -820,6 +969,11 @@ const ServiceCart: React.FC<Props> = ({
                                         <div>Accepted: {req.claimedAt || '-'}</div>
                                         <div>In progress: {req.startedAt || '-'}</div>
                                         <div>Completed: {req.completedAt || '-'}</div>
+                                        {req.status === 'cancelled' && (
+                                            <div className="sm:col-span-2 text-red-600 dark:text-red-400 font-medium">
+                                                Cancelled: {req.cancelledAt || '-'}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 {req.notes && (
@@ -1169,11 +1323,33 @@ const ServiceCart: React.FC<Props> = ({
                         {/* Slot Selection Section */}
                         <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
                             <h2 className="text-xl font-black text-gray-900 dark:text-white mb-4">Slot Selection</h2>
+                            <div className="mb-5">
+                                <label htmlFor="service-booking-date" className="text-sm font-bold text-gray-900 dark:text-white mb-2 block">
+                                    Date
+                                </label>
+                                <input
+                                    id="service-booking-date"
+                                    type="date"
+                                    min={minBookingDateYmd}
+                                    value={selectedBookingDate}
+                                    onChange={e => {
+                                        setSelectedBookingDate(e.target.value);
+                                        setScheduleError('');
+                                    }}
+                                    className="w-full max-w-xs border-2 border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [color-scheme:light] dark:[color-scheme:dark]"
+                                />
+                                {scheduleError ? (
+                                    <p className="mt-2 text-sm text-red-600 dark:text-red-400">{scheduleError}</p>
+                                ) : null}
+                            </div>
                             <div className="flex flex-wrap gap-3 mb-6">
                                 {timeSlots.map(slot => (
                                     <button
                                         key={slot.id}
-                                        onClick={() => setSelectedSlot(slot.id)}
+                                        onClick={() => {
+                                            setSelectedSlot(slot.id);
+                                            setScheduleError('');
+                                        }}
                                         className={`px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
                                             selectedSlot === slot.id 
                                                 ? 'border-blue-600 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' 
