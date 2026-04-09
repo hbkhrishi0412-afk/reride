@@ -278,7 +278,7 @@ const SupportChatWidget: React.FC<SupportChatWidgetProps> = memo(({
           message: messageText,
           userId: currentUser?.email || sessionId,
           userName: currentUser?.name || 'Guest',
-          sessionId: sessionId
+          sessionId
         }),
       });
 

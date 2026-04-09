@@ -194,7 +194,7 @@ async function cacheFirstStrategy(request, cacheName) {
       const modifiedResponse = new Response(responseToCache.body, {
         status: responseToCache.status,
         statusText: responseToCache.statusText,
-        headers: headers
+        headers
       });
       
       cache.put(request, modifiedResponse.clone());
@@ -240,7 +240,7 @@ async function networkFirstStrategy(request, cacheName) {
     const modifiedResponse = new Response(responseToCache.body, {
       status: networkResponse.status,
       statusText: networkResponse.statusText,
-      headers: headers
+      headers
     });
     
     cache.put(request, modifiedResponse.clone());

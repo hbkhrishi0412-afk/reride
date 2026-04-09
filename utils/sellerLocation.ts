@@ -53,7 +53,7 @@ function extractCityHint(location: string | undefined): string {
 }
 
 async function resolveCityCoordsFromLocation(location: string | undefined): Promise<CompanyLocation | null> {
-  let city = extractCityHint(location);
+  const city = extractCityHint(location);
   const cityVariations: Record<string, string> = {
     delhi: 'New Delhi',
     bangalore: 'Bengaluru',

@@ -555,7 +555,7 @@ async function migrateVehicles(dryRun = false) {
           year: sanitized.year || null,
           price: sanitized.price || 0,
           mileage: sanitized.mileage || null,
-          images: images,
+          images,
           features: sanitized.features || [],
           description: sanitized.description || null,
           seller_email: sanitized.sellerEmail || null,
@@ -759,7 +759,7 @@ async function migrateNotifications(dryRun = false) {
           id: notificationId,
           user_id: sanitized.userId || sanitized.user_id || null,
           type: sanitized.type || 'general',
-          title: title,
+          title,
           message: sanitized.message || sanitized.body || '',
           read: sanitized.read || sanitized.isRead || false,
           created_at: sanitized.createdAt || sanitized.created_at || new Date().toISOString(),
@@ -1231,7 +1231,7 @@ async function main() {
     const migrationStartTime = Date.now();
     
     // Run migrations
-    let results = {};
+    const results = {};
     
     if (STORAGE_ONLY) {
       // Only migrate storage files

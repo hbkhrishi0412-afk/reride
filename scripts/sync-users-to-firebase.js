@@ -201,7 +201,7 @@ async function syncUsersToFirebase() {
     }
 
     // Statistics
-    let stats = {
+    const stats = {
       total: users.length,
       created: 0,
       updated: 0,

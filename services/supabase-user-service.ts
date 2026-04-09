@@ -468,7 +468,7 @@ export const supabaseUserService = {
     let existingUser: any = null;
     let userIdentifier: { field: 'id' | 'email'; value: string } = { field: 'id', value: emailKey };
     
-    let { data, error: fetchError } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('users')
       .select('id, metadata')
       .eq('id', emailKey)

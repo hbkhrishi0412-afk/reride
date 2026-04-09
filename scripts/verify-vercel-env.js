@@ -40,7 +40,7 @@ console.log('='.repeat(60));
 console.log('📋 Required Environment Variables Checklist\n');
 
 let allPresent = true;
-let missingVars = [];
+const missingVars = [];
 
 // Check client-side Firebase variables
 console.log('🌐 Client-Side Firebase Variables (VITE_ prefix):');
