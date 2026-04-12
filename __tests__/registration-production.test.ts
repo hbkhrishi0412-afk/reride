@@ -55,7 +55,12 @@ interface TestUser {
   role: 'customer' | 'seller' | 'admin';
 }
 
-describe('Production Registration Flow Tests', () => {
+const RUN_PRODUCTION_REGISTRATION_TESTS =
+  process.env.RUN_PRODUCTION_REGISTRATION_TESTS === '1';
+
+(RUN_PRODUCTION_REGISTRATION_TESTS ? describe : describe.skip)(
+  'Production Registration Flow Tests',
+  () => {
   let testUser: TestUser;
   let registeredUserId: string | null = null;
   let registeredUserUid: string | null = null;

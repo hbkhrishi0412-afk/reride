@@ -1,10 +1,16 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import ErrorBoundary from '../components/ErrorBoundary';
-import * as environmentUtils from '../utils/environment';
 
-// Mock the environment utility
-jest.mock('../utils/environment');
+const mockIsDevelopmentEnvironment = jest.fn(() => false);
+
+jest.mock('../utils/environment', () => ({
+  ...jest.requireActual<typeof import('../utils/environment')>('../utils/environment'),
+  isDevelopmentEnvironment: mockIsDevelopmentEnvironment,
+}));
+
+// Load after jest.mock so ErrorBoundary binds to the mocked environment module.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ErrorBoundary = require('../components/ErrorBoundary').default as typeof import('../components/ErrorBoundary').default;
 
 // Component that throws an error
 const ThrowError: React.FC<{ shouldThrow?: boolean }> = ({ shouldThrow = false }) => {
@@ -24,7 +30,6 @@ describe('ErrorBoundary', () => {
   const mockReload = jest.fn();
 
   beforeAll(() => {
-    // Mock window.location.reload
     Object.defineProperty(window, 'location', {
       configurable: true,
       value: { ...originalLocation, reload: mockReload },
@@ -38,16 +43,18 @@ describe('ErrorBoundary', () => {
     });
   });
 
+  let consoleErrorSpy: jest.SpyInstance;
+
   beforeEach(() => {
-    // Suppress console.error for cleaner test output
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-    jest.clearAllMocks();
-    // Default to production mode
-    (environmentUtils.isDevelopmentEnvironment as jest.Mock).mockReturnValue(false);
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockIsDevelopmentEnvironment.mockReturnValue(false);
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    consoleErrorSpy.mockRestore();
+    mockIsDevelopmentEnvironment.mockReset();
+    mockIsDevelopmentEnvironment.mockImplementation(() => false);
   });
 
   it('should render children when there is no error', () => {
@@ -80,7 +87,7 @@ describe('ErrorBoundary', () => {
   });
 
   it('should show error details in development mode', () => {
-    (environmentUtils.isDevelopmentEnvironment as jest.Mock).mockReturnValue(true);
+    mockIsDevelopmentEnvironment.mockReturnValue(true);
 
     render(
       <ErrorBoundary>
@@ -88,12 +95,12 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
     
-    expect(screen.getByText('Error Details (Development)')).toBeInTheDocument();
-    expect(screen.getByText(/Test error/)).toBeInTheDocument();
+    expect(screen.getByText('Error Details', { selector: 'summary' })).toBeInTheDocument();
+    expect(screen.getByTestId('error-message')).toHaveTextContent('Test error');
   });
 
   it('should not show error details in production mode', () => {
-    (environmentUtils.isDevelopmentEnvironment as jest.Mock).mockReturnValue(false);
+    mockIsDevelopmentEnvironment.mockReturnValue(false);
 
     render(
       <ErrorBoundary>
@@ -101,7 +108,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
     
-    expect(screen.queryByText('Error Details (Development)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Error Details', { selector: 'summary' })).not.toBeInTheDocument();
   });
 
   it('should handle refresh page button click', () => {
@@ -116,29 +123,19 @@ describe('ErrorBoundary', () => {
   });
 
   it('should handle try again button click', () => {
-    // Create a component that stops throwing after one attempt (simulating recovery)
-    let hasThrown = false;
-    const RecoverableComponent = () => {
-      if (!hasThrown) {
-        hasThrown = true;
-        throw new Error('Recoverable error');
-      }
-      return <div>Recovered</div>;
+    const AlwaysFails: React.FC = () => {
+      throw new Error('Persistent error');
     };
 
-    const { rerender } = render(
+    render(
       <ErrorBoundary>
-        <RecoverableComponent />
-      </ErrorBoundary>
+        <AlwaysFails />
+      </ErrorBoundary>,
     );
 
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
-    
     fireEvent.click(screen.getByText('Try Again'));
-    
-    // Note: In a real React app, this state reset triggers re-render.
-    // In JSDOM/Testing Library, checking exact re-render behavior of internal state can be tricky.
-    // We verify the interaction doesn't crash and button exists.
-    expect(screen.getByText('Try Again')).toBeInTheDocument(); 
+    // Retry re-renders the child; it throws again and the boundary shows the fallback again.
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
   });
 });

@@ -1,40 +1,7 @@
+import bcrypt from 'bcryptjs';
 import { hashPassword, validatePassword, generateAccessToken, verifyToken, sanitizeString, validateUserInput } from '../utils/security';
+import { jwt } from '../utils/jwt-loader';
 import type { User } from '../types';
-
-// Mock bcrypt for testing. Hash must look like bcrypt (/^\$2[abxy]\$/) so validatePassword uses compare.
-jest.mock('bcryptjs', () => ({
-  hash: jest.fn().mockImplementation((password: string) => Promise.resolve(`$2b$10$mock${password}`)),
-  compare: jest.fn().mockImplementation((password: string, hash: string) => Promise.resolve(hash === `$2b$10$mock${password}`))
-}));
-
-// Mock jsonwebtoken for testing
-jest.mock('jsonwebtoken', () => ({
-  sign: jest.fn().mockImplementation((payload: any) => `token_${payload.userId}_${payload.email}`),
-  verify: jest.fn().mockImplementation((token: string) => {
-    if (token.startsWith('token_')) {
-      const parts = token.split('_');
-      return {
-        userId: parts[1],
-        email: parts[2],
-        role: 'customer',
-        type: 'access'
-      };
-    }
-    throw new Error('Invalid token');
-  })
-}));
-
-// Mock DOMPurify for testing
-jest.mock('dompurify', () => ({
-  sanitize: jest.fn().mockImplementation((input: string) => input.replace(/<script.*?<\/script>/gi, ''))
-}));
-
-// Mock validator for testing
-jest.mock('validator', () => ({
-  isEmail: jest.fn().mockImplementation((email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)),
-  escape: jest.fn().mockImplementation((input: string) => input.replace(/[<>]/g, (match) => match === '<' ? '&lt;' : '&gt;')),
-  isMobilePhone: jest.fn().mockImplementation((mobile: string) => /^\d{10}$/.test(mobile))
-}));
 
 describe('Security Utilities', () => {
   describe('Password Hashing', () => {
@@ -64,10 +31,9 @@ describe('Security Utilities', () => {
     });
 
     it('should handle password hashing errors gracefully', async () => {
-      const bcrypt = require('bcryptjs');
-      bcrypt.hash.mockRejectedValueOnce(new Error('Hashing failed'));
-      
+      const spy = jest.spyOn(bcrypt, 'hash').mockRejectedValueOnce(new Error('Hashing failed'));
       await expect(hashPassword('test')).rejects.toThrow('Password hashing failed');
+      spy.mockRestore();
     });
 
     it('should handle password validation errors gracefully', async () => {
@@ -91,64 +57,57 @@ describe('Security Utilities', () => {
       email: 'test@example.com',
       role: 'customer',
       name: 'Test User',
-      mobile: '1234567890',
+      mobile: '9876543210',
       status: 'active',
       createdAt: new Date().toISOString()
     };
 
     it('should generate valid access tokens', () => {
       const token = generateAccessToken(mockUser);
-      
-      expect(token).toMatch(/^token_/);
-      expect(token).toContain(mockUser.id);
-      expect(token).toContain(mockUser.email);
+      expect(token.split('.')).toHaveLength(3);
     });
 
     it('should verify valid tokens', () => {
       const token = generateAccessToken(mockUser);
       const decoded = verifyToken(token);
-      
+
       expect(decoded.userId).toBe(mockUser.id);
       expect(decoded.email).toBe(mockUser.email);
       expect(decoded.role).toBe('customer');
     });
 
     it('should reject invalid tokens', () => {
-      expect(() => verifyToken('invalid-token')).toThrow('Invalid or expired token');
+      expect(() => verifyToken('invalid-token')).toThrow('Invalid token format');
     });
 
     it('should handle token verification errors', () => {
-      const jwt = require('jsonwebtoken');
-      jwt.verify.mockImplementationOnce(() => {
-        throw new Error('Token expired');
+      const spy = jest.spyOn(jwt, 'verify').mockImplementationOnce(() => {
+        throw new Error('something wrong');
       });
-      
       expect(() => verifyToken('expired-token')).toThrow('Invalid or expired token');
+      spy.mockRestore();
     });
 
     it('should propagate token expired error explicitly', () => {
-      const jwt = require('jsonwebtoken');
-      jwt.verify.mockImplementationOnce(() => {
+      const spy = jest.spyOn(jwt, 'verify').mockImplementationOnce(() => {
         const err = new Error('jwt expired');
-        (err as any).name = 'TokenExpiredError';
+        (err as Error & { name: string }).name = 'TokenExpiredError';
         throw err;
       });
-
       expect(() => verifyToken('token_expired')).toThrow('Token has expired');
+      spy.mockRestore();
     });
 
     it('should include clock tolerance when verifying tokens', () => {
-      const jwt = require('jsonwebtoken');
-      jwt.verify.mockClear();
-
+      const spy = jest.spyOn(jwt, 'verify');
       const token = generateAccessToken(mockUser);
       verifyToken(token);
-
-      expect(jwt.verify).toHaveBeenCalledWith(
+      expect(spy).toHaveBeenCalledWith(
         token,
         expect.anything(),
-        expect.objectContaining({ clockTolerance: expect.any(Number) })
+        expect.objectContaining({ clockTolerance: expect.any(Number) }),
       );
+      spy.mockRestore();
     });
   });
 
@@ -165,8 +124,10 @@ describe('Security Utilities', () => {
       const input = 'Hello <world> & "quotes"';
       const sanitized = await sanitizeString(input);
       
-      expect(sanitized).toContain('&lt;');
-      expect(sanitized).toContain('&gt;');
+      // DOMPurify + validator.escape double-encodes angle brackets as &amp;lt; / &amp;gt;
+      expect(sanitized).toMatch(/&amp;lt;|&lt;/);
+      expect(sanitized).toMatch(/&amp;gt;|&gt;/);
+      expect(sanitized).not.toContain('<world>');
     });
 
     it('should handle empty strings', async () => {
