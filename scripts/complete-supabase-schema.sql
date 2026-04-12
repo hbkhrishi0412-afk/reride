@@ -329,7 +329,7 @@ CREATE TABLE IF NOT EXISTS service_requests (
     user_id TEXT,
     provider_id TEXT,
     service_type TEXT,
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'in_progress', 'completed', 'cancelled')),
+    status TEXT DEFAULT 'open' CHECK (status IN ('open', 'pending', 'accepted', 'in_progress', 'completed', 'cancelled')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     metadata JSONB

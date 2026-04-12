@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Vehicle } from '../types';
-import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
-import LazyImage from './LazyImage';
+import { getFirstValidImage, VEHICLE_IMAGE_PLACEHOLDER_DATA_URI, isInlineImagePlaceholder } from '../utils/imageUtils';
+import { showVerifiedListingBadge } from '../utils/listingTrust';
 
 interface MobileVehicleCardProps {
   vehicle: Vehicle;
@@ -190,13 +190,20 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
       }}
     >
       {/* Image Section */}
-      <div className="relative w-full" style={{ aspectRatio: '16/10' }}>
-        <LazyImage
+      <div className="relative w-full overflow-hidden bg-gray-100" style={{ aspectRatio: '16/10' }}>
+        {/* Native img matches MobileVehicleDetail — LazyImage + getOptimizedImageUrl can break Android WebView (AVIF/WebP, IO). */}
+        <img
           src={imageSrc}
           alt={`${vehicle.make} ${vehicle.model}`}
-          className="w-full h-full object-cover"
-          width={800}
-          quality={85}
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+          onError={(e) => {
+            const el = e.currentTarget;
+            if (!isInlineImagePlaceholder(el.src)) {
+              el.src = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
+            }
+          }}
         />
         
         {/* Badges Overlay */}
@@ -206,7 +213,7 @@ export const MobileVehicleCard: React.FC<MobileVehicleCardProps> = React.memo(({
               {t('vehicle.card.featured')}
             </span>
           )}
-          {vehicle.certificationStatus === 'certified' && (
+          {showVerifiedListingBadge(vehicle) && (
             <span className="bg-green-500 text-white px-2 py-1 rounded text-xs font-bold">
               {t('common.verified')}
             </span>

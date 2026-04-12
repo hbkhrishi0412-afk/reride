@@ -357,6 +357,9 @@ export enum View {
   SELLER_PROFILE = 'SELLER_PROFILE',
   PRICING = 'PRICING',
   SUPPORT = 'SUPPORT',
+  ABOUT_US = 'ABOUT_US',
+  /** Safety tips, fraud awareness, meeting sellers securely */
+  SAFETY_CENTER = 'SAFETY_CENTER',
   FAQ = 'FAQ',
   PRIVACY_POLICY = 'PRIVACY_POLICY',
   TERMS_OF_SERVICE = 'TERMS_OF_SERVICE',
@@ -854,7 +857,7 @@ export const isUser = (obj: any): obj is User => {
     typeof obj.name === 'string' &&
     (obj.password === undefined || typeof obj.password === 'string') &&
     (obj.mobile === undefined || typeof obj.mobile === 'string') &&
-    ['customer', 'seller', 'admin'].includes(obj.role);
+    ['customer', 'seller', 'admin', 'service_provider'].includes(obj.role);
 };
 
 export const isConversation = (obj: any): obj is Conversation => {

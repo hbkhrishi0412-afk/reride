@@ -49,26 +49,29 @@ export const MobileLayout: React.FC<MobileLayoutProps> = React.memo(({
   const shouldRenderHeader = showHeader || showMenu;
   const headerRowPx = showHeader ? 56 : 0;
   const brandBarInnerPx = 48;
-  const bottomNavHeight = showBottomNav ? 70 : 0; // Updated to match refined premium nav height
 
   // Memoize computed styles to prevent recalculation
   const mainStyles = useMemo(() => {
     const safeAreaTop = 'env(safe-area-inset-top, 0px)';
     const safeAreaBottom = 'env(safe-area-inset-bottom, 0px)';
     const topChrome = `calc(${safeAreaTop} + ${brandBarInnerPx}px + ${headerRowPx}px)`;
+    /** Must match MobileBottomNav: 56px tab row + safe-area below the row */
+    const bottomNavReserve = showBottomNav
+      ? 'calc(56px + env(safe-area-inset-bottom, 0px))'
+      : '0px';
 
     return {
-      height: `calc(100vh - ${safeAreaTop} - ${brandBarInnerPx}px - ${headerRowPx}px - ${bottomNavHeight}px)`,
+      height: `calc(100vh - ${safeAreaTop} - ${brandBarInnerPx}px - ${headerRowPx}px - ${bottomNavReserve})`,
       marginTop: topChrome,
-      marginBottom: `${bottomNavHeight}px`,
+      marginBottom: bottomNavReserve,
       paddingTop: 0,
-      paddingBottom: safeAreaBottom,
+      paddingBottom: showBottomNav ? '0px' : safeAreaBottom,
       paddingLeft: 'env(safe-area-inset-left, 0px)',
       paddingRight: 'env(safe-area-inset-right, 0px)',
       WebkitOverflowScrolling: 'touch' as const,
       overscrollBehavior: 'contain' as const,
     };
-  }, [brandBarInnerPx, headerRowPx, bottomNavHeight]);
+  }, [brandBarInnerPx, headerRowPx, showBottomNav]);
 
   // Check if this is the Home or Login view to allow gradient background
   const shouldShowGradient = useMemo(() => {

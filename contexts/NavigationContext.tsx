@@ -47,6 +47,7 @@ const VIEW_TO_PATH: Record<View, string> = {
   [View.SELLER_PROFILE]: '/seller',
   [View.PRICING]: '/pricing',
   [View.SUPPORT]: '/support',
+  [View.ABOUT_US]: '/about-us',
   [View.FAQ]: '/faq',
   [View.PRIVACY_POLICY]: '/privacy-policy',
   [View.TERMS_OF_SERVICE]: '/terms-of-service',

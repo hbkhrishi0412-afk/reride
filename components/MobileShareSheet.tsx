@@ -2,6 +2,7 @@ import React from 'react';
 import { MobileFilterSheet } from './MobileFilterSheet';
 import { useShare } from '../hooks/useMobileFeatures';
 import type { Vehicle } from '../types';
+import { buildVehicleShareMessage, buildWhatsAppShareUrl } from '../utils/whatsappShare.js';
 
 interface MobileShareSheetProps {
   url: string;
@@ -92,7 +93,18 @@ export const MobileShareSheet: React.FC<MobileShareSheetProps> = ({
         </svg>
       ),
       onClick: () => {
-        window.open(`https://wa.me/?text=${encodeURIComponent(`${title} - ${url}`)}`, '_blank');
+        const text = vehicle
+          ? buildVehicleShareMessage(
+              {
+                make: vehicle.make,
+                model: vehicle.model,
+                year: vehicle.year,
+                price: vehicle.price,
+              },
+              url,
+            )
+          : `${title} - ${url}`;
+        window.open(buildWhatsAppShareUrl(text), '_blank');
         onClose();
       }
     },

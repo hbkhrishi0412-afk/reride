@@ -61,6 +61,7 @@
     "@capacitor-community/media": "^9.1.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/browser": "^8.0.2",
+    "@capawesome/capacitor-google-sign-in": "^0.1.2",
     "@emotion/is-prop-valid": "^1.4.0",
     "@google/generative-ai": "^0.21.0",
     "@sentry/react": "^10.43.0",

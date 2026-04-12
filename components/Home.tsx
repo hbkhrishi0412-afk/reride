@@ -11,6 +11,7 @@ import {
     HOME_DISCOVERY_CATEGORIES,
     HOME_DISCOVERY_CITY_ORDER,
 } from '../constants/homeDiscovery';
+import { showVerifiedListingBadge } from '../utils/listingTrust';
 
 interface HomeProps {
     onSearch: (query: string) => void;
@@ -653,6 +654,16 @@ const Home: React.FC<HomeProps> = ({
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                                 </svg>
                                             </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setQuickViewVehicle(vehicle);
+                                                }}
+                                                className="absolute bottom-4 left-4 z-[1] rounded-xl bg-white/95 px-3 py-2 text-xs font-black text-blue-700 shadow-lg backdrop-blur-sm hover:bg-white"
+                                            >
+                                                {t('home.quickView')}
+                                            </button>
                                             <div className="absolute bottom-4 right-4 bg-gray-900/90 backdrop-blur-sm text-white px-4 py-2 rounded-xl shadow-lg">
                                                 <span className="font-black text-base">₹{(vehicle.price / 100000).toFixed(2)}L</span>
                                             </div>
@@ -760,9 +771,26 @@ const Home: React.FC<HomeProps> = ({
                                             quality={85}
                                             eager={index === 0}
                                         />
-                                        <div className="absolute top-3 left-3 bg-orange-500 text-white px-3 py-1 rounded-full text-xs font-black shadow-md">
-                                            {t('common.newBadge')}
+                                        <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+                                            <span className="bg-orange-500 text-white px-3 py-1 rounded-full text-xs font-black shadow-md">
+                                                {t('common.newBadge')}
+                                            </span>
+                                            {showVerifiedListingBadge(vehicle) && (
+                                                <span className="bg-green-600 text-white px-2.5 py-1 rounded-full text-[10px] font-black shadow-md">
+                                                    {t('common.verified')}
+                                                </span>
+                                            )}
                                         </div>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setQuickViewVehicle(vehicle);
+                                            }}
+                                            className="absolute bottom-3 left-3 z-[1] rounded-lg bg-white/95 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 shadow-md backdrop-blur-sm"
+                                        >
+                                            {t('home.quickView')}
+                                        </button>
                                         <div className="absolute bottom-3 right-3 bg-gray-900/90 text-white px-3 py-1.5 rounded-xl shadow-lg">
                                             <span className="font-black text-sm">₹{(vehicle.price / 100000).toFixed(2)}L</span>
                                         </div>

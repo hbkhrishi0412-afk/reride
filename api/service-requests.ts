@@ -171,7 +171,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
     if (req.method === 'PATCH') {
       const { id, action, ...updates } = req.body as Partial<ServiceRequestPayload> & {
         id?: string;
-        action?: 'claim' | 'cancel';
+        action?: 'claim' | 'cancel' | 'submit_review';
       };
       if (!id) {
         return res.status(400).json({ error: 'Missing request id' });
@@ -208,6 +208,39 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
         });
         const updatedCancel = await supabaseServiceRequestService.findById(id);
         return res.status(200).json(updatedCancel || existing);
+      }
+
+      if (action === 'submit_review') {
+        if (!isCustomerOwner) {
+          return res.status(403).json({ error: 'Only the customer can submit a review' });
+        }
+        if (existing.status !== 'completed') {
+          return res.status(409).json({ error: 'You can only review completed services' });
+        }
+        if (!existing.providerId) {
+          return res.status(409).json({ error: 'No provider assigned to this request' });
+        }
+        const current = await supabaseServiceRequestService.findById(id);
+        if (current?.customerReview?.submittedAt) {
+          return res.status(409).json({ error: 'You have already submitted a review for this service' });
+        }
+        const body = req.body as { stars?: unknown; comment?: unknown };
+        const rawStars = Number(body.stars);
+        const stars = Math.round(rawStars);
+        if (!Number.isFinite(stars) || stars < 1 || stars > 5) {
+          return res.status(400).json({ error: 'Invalid rating: provide stars between 1 and 5' });
+        }
+        const comment = String(body.comment || '').trim().slice(0, 2000);
+        await supabaseServiceRequestService.update(id, {
+          customerReview: {
+            stars,
+            ...(comment ? { comment } : {}),
+            submittedAt: new Date().toISOString(),
+          },
+        });
+        await supabaseServiceProviderService.recalculateAverageRating(String(existing.providerId));
+        const updatedReview = await supabaseServiceRequestService.findById(id);
+        return res.status(200).json(updatedReview || existing);
       }
 
       if (action === 'claim') {

@@ -178,13 +178,29 @@ export const saveBuyerActivity = async (activity: BuyerActivity): Promise<void> 
   }
 };
 
+export const RERIDE_PRICE_DROP_EVENT = 'reride-price-drop';
+
+export type ReridePriceDropDetail = {
+  userId: string;
+  vehicleId: number;
+  oldPrice: number;
+  newPrice: number;
+};
+
 // Track price drops (async: load activity, update, then save)
-export const trackPriceDrop = async (userId: string, vehicleId: number, _oldPrice: number, _newPrice: number): Promise<void> => {
+export const trackPriceDrop = async (userId: string, vehicleId: number, oldPrice: number, newPrice: number): Promise<void> => {
   try {
     const activity = await getBuyerActivity(userId);
     if (!activity.notifications.priceDrops.includes(vehicleId)) {
       activity.notifications.priceDrops.push(vehicleId);
       await saveBuyerActivity(activity);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent<ReridePriceDropDetail>(RERIDE_PRICE_DROP_EVENT, {
+            detail: { userId, vehicleId, oldPrice, newPrice },
+          }),
+        );
+      }
     }
   } catch (error) {
     console.error('Failed to track price drop:', error);

@@ -6,7 +6,9 @@ import { matchesCity } from '../utils/cityMapping';
 import { FALLBACK_VEHICLES } from '../constants/fallback';
 import MobileVehicleCard from './MobileVehicleCard';
 import LazyImage from './LazyImage';
+import QuickViewModal from './QuickViewModal';
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
+import { showVerifiedListingBadge } from '../utils/listingTrust';
 import {
   HOME_DESKTOP_CITY_STYLE,
   HOME_DISCOVERY_CATEGORIES,
@@ -56,6 +58,7 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 }) => {
   const { t } = useTranslation();
   const { data: storefrontAgg } = useStorefrontAggregates();
+  const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -457,13 +460,28 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                     {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent"></div>
                     
-                    {/* Verified Badge - Premium Style */}
+                    {showVerifiedListingBadge(vehicle) && (
                     <div className="absolute top-3 left-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
                       {t('common.verified')}
                     </div>
+                    )}
+                    <button
+                      type="button"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onPointerUp={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuickViewVehicle(vehicle);
+                      }}
+                      className="absolute bottom-3 left-3 z-[1] rounded-lg bg-white/95 px-3 py-2 text-xs font-bold text-blue-700 shadow-lg backdrop-blur-md"
+                    >
+                      {t('home.quickView')}
+                    </button>
                     
                     {/* Wishlist Button - Premium Style */}
                     <button
@@ -787,6 +805,16 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
           {t('nav.sellCar')}
         </button>
       </div>
+
+      <QuickViewModal
+        vehicle={quickViewVehicle}
+        onClose={() => setQuickViewVehicle(null)}
+        onSelectVehicle={onSelectVehicle}
+        onToggleCompare={onToggleCompare}
+        onToggleWishlist={onToggleWishlist}
+        comparisonList={comparisonList}
+        wishlist={wishlist}
+      />
     </div>
   );
 });

@@ -214,9 +214,11 @@ function pathToView(path: string): View {
   if (normalizedPath === '/seller') return View.SELLER_PROFILE;
   if (normalizedPath === '/pricing') return View.PRICING;
   if (normalizedPath === '/support') return View.SUPPORT;
+  if (normalizedPath === '/about-us') return View.ABOUT_US;
   if (normalizedPath === '/faq') return View.FAQ;
   if (normalizedPath === '/privacy-policy') return View.PRIVACY_POLICY;
   if (normalizedPath === '/terms-of-service') return View.TERMS_OF_SERVICE;
+  if (normalizedPath === '/safety-center' || normalizedPath === '/safety') return View.SAFETY_CENTER;
   if (normalizedPath === '/customer/dashboard' || normalizedPath === '/buyer/dashboard') return View.BUYER_DASHBOARD;
   if (normalizedPath.startsWith('/city/')) {
     // Path like /city/mumbai
@@ -331,7 +333,7 @@ interface AppContextType {
   setVehicleData: (data: VehicleData) => void;
   setFaqItems: (items: FAQItem[]) => void;
   setSupportTickets: React.Dispatch<React.SetStateAction<SupportTicket[]>>;
-  setNotifications: (notifications: Notification[]) => void;
+  setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
   setRatings: (ratings: { [key: string]: number[] }) => void;
   setSellerRatings: (ratings: { [key: string]: number[] } | ((prev: { [key: string]: number[] }) => { [key: string]: number[] })) => void;
 
@@ -1012,6 +1014,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [handleLogin, addToast, t]);
 
+  useEffect(() => {
+    const onNativeOAuthFailed = (e: Event) => {
+      const msg = (e as CustomEvent<{ message?: string }>).detail?.message;
+      addToast(msg || t('toast.googleSignInFailed'), 'error');
+    };
+    window.addEventListener('reride:native-oauth-failed', onNativeOAuthFailed);
+    return () => window.removeEventListener('reride:native-oauth-failed', onNativeOAuthFailed);
+  }, [addToast, t]);
+
   // Supabase session exists (e.g. after app update / storage mismatch) but ReRide user not in memory — resync profile
   useEffect(() => {
     if (currentUser) return;
@@ -1540,9 +1551,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         [View.INBOX]: '/inbox',
         [View.PRICING]: '/pricing',
         [View.SUPPORT]: '/support',
+        [View.ABOUT_US]: '/about-us',
         [View.FAQ]: '/faq',
         [View.PRIVACY_POLICY]: '/privacy-policy',
         [View.TERMS_OF_SERVICE]: '/terms-of-service',
+        [View.SAFETY_CENTER]: '/safety-center',
         [View.BUYER_DASHBOARD]: '/customer/dashboard',
         [View.SELL_CAR]: '/sell-car',
         [View.SELL_CAR_ADMIN]: '/admin/sell-car',

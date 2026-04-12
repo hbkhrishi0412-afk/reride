@@ -92,6 +92,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
     setIsLoading(true);
 
     try {
+      try {
+        sessionStorage.setItem('reride_oauth_role', 'seller');
+      } catch {
+        /* ignore */
+      }
+
       const result = await signInWithGoogle();
       const redirectUrl =
         result.user &&
@@ -101,26 +107,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
           ? (result.user as { redirectUrl: string }).redirectUrl
           : null;
 
-      if (result.success && redirectUrl) {
+      if (!result.success) {
         try {
-          sessionStorage.setItem('reride_oauth_role', 'seller');
+          sessionStorage.removeItem('reride_oauth_role');
         } catch {
           /* ignore */
         }
+        throw new Error(result.reason || 'Failed to sign in with Google');
+      }
+
+      if (redirectUrl) {
         window.location.assign(redirectUrl);
         return;
       }
 
-      if (result.success && !redirectUrl) {
-        try {
-          sessionStorage.setItem('reride_oauth_role', 'seller');
-        } catch {
-          /* ignore */
-        }
-        return;
-      }
-
-      throw new Error(result.reason || 'Failed to sign in with Google');
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
     } finally {

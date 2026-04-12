@@ -30,6 +30,8 @@ interface ImportMetaEnv {
   readonly VITE_GA_MEASUREMENT_ID?: string
   /** When `messagebot`, phone OTP uses MessageBot SMS + server JWT (see .env.example). Omit or other value = Supabase SMS. */
   readonly VITE_OTP_SMS_PROVIDER?: string
+  /** Google OAuth Web client ID for native Android/iOS sign-in (see .env.example). */
+  readonly VITE_GOOGLE_WEB_CLIENT_ID?: string
   readonly MODE: string
   readonly DEV: boolean
   readonly PROD: boolean

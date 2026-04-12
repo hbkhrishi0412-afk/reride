@@ -1,4 +1,11 @@
 import React from 'react';
+import {
+  legalEntityName,
+  grievanceEmail,
+  registeredAddressIndia,
+  privacyEmail,
+  supportEmail,
+} from '../constants/legalContact';
 
 const PrivacyPolicyPage: React.FC = () => {
   return (
@@ -184,14 +191,56 @@ const PrivacyPolicyPage: React.FC = () => {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-2xl font-bold text-reride-text-dark mb-4">11. Contact Us</h2>
+            <h2 className="text-2xl font-bold text-reride-text-dark mb-4">11. Grievance Officer &amp; India (DPDP)</h2>
+            <p className="text-gray-700 leading-relaxed mb-4">
+              If you are located in India and have concerns about how we process your personal data under the Digital Personal
+              Data Protection Act, 2023 (DPDP Act) or applicable consumer laws, you may contact our Grievance Officer:
+            </p>
+            <div className="bg-gray-50 p-6 rounded-lg mb-4">
+              <p className="text-gray-700 mb-2">
+                <strong>Legal entity:</strong> {legalEntityName}
+              </p>
+              <p className="text-gray-700 mb-2">
+                <strong>Grievance Officer:</strong> Data Protection Officer, {legalEntityName}
+              </p>
+              <p className="text-gray-700 mb-2">
+                <strong>Email:</strong>{' '}
+                <a href={`mailto:${grievanceEmail}`} className="text-blue-600 hover:underline">
+                  {grievanceEmail}
+                </a>
+              </p>
+              <p className="text-gray-700 mb-2"><strong>Response time:</strong> We aim to acknowledge complaints within 7 business days.</p>
+              <p className="text-gray-700">
+                <strong>Registered address (India):</strong> {registeredAddressIndia}
+              </p>
+            </div>
+            <p className="text-gray-700 leading-relaxed text-sm">
+              You may also raise privacy-related requests (access, correction, deletion where applicable) using the same email.
+              Nothing in this section limits your rights under applicable law.
+            </p>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold text-reride-text-dark mb-4">12. Contact Us</h2>
             <p className="text-gray-700 leading-relaxed mb-4">
               If you have any questions about this Privacy Policy, please contact us:
             </p>
             <div className="bg-gray-50 p-6 rounded-lg">
-              <p className="text-gray-700 mb-2"><strong>Email:</strong> privacy@ReRide.com</p>
-              <p className="text-gray-700 mb-2"><strong>Support:</strong> support@ReRide.com</p>
-              <p className="text-gray-700"><strong>Address:</strong> ReRide, India</p>
+              <p className="text-gray-700 mb-2">
+                <strong>Privacy:</strong>{' '}
+                <a href={`mailto:${privacyEmail}`} className="text-blue-600 hover:underline">
+                  {privacyEmail}
+                </a>
+              </p>
+              <p className="text-gray-700 mb-2">
+                <strong>Support:</strong>{' '}
+                <a href={`mailto:${supportEmail}`} className="text-blue-600 hover:underline">
+                  {supportEmail}
+                </a>
+              </p>
+              <p className="text-gray-700">
+                <strong>Address:</strong> {registeredAddressIndia}
+              </p>
             </div>
           </section>
         </div>

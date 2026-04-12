@@ -14,6 +14,8 @@ export interface ServiceProviderPayload extends Record<string, unknown> {
   skills?: string[];
   availability?: string;
   serviceCategories?: string[];
+  /** Aggregated from customer reviews (1–5), optional */
+  rating?: number | null;
 }
 
 // Helper to convert Supabase row to ServiceProviderPayload
@@ -31,6 +33,12 @@ function supabaseRowToServiceProvider(row: any): ServiceProviderPayload {
     skills: Array.isArray(row.services) ? row.services : (metadata.skills || []),
     availability: metadata.availability || 'weekdays',
     serviceCategories: metadata.serviceCategories || [],
+    rating: (() => {
+      const r = row.rating;
+      if (r == null || r === '') return null;
+      const n = typeof r === 'number' ? r : Number(r);
+      return Number.isFinite(n) ? n : null;
+    })(),
   };
 }
 
@@ -206,6 +214,41 @@ export const supabaseServiceProviderService = {
 
     if (error) {
       throw new Error(`Failed to delete service provider: ${error.message}`);
+    }
+  },
+
+  /** Recompute `rating` on service_providers from completed jobs with customerReview.stars (1–5). */
+  async recalculateAverageRating(providerId: string): Promise<void> {
+    const supabase = getSupabaseAdminClient();
+    const { data: rows, error } = await supabase
+      .from('service_requests')
+      .select('metadata')
+      .eq('provider_id', providerId)
+      .eq('status', 'completed');
+
+    if (error) {
+      throw new Error(`Failed to aggregate service reviews: ${error.message}`);
+    }
+
+    const ratings: number[] = [];
+    for (const row of rows || []) {
+      const m = (row as { metadata?: { customerReview?: { stars?: unknown } } }).metadata;
+      const s = m?.customerReview?.stars;
+      const n = typeof s === 'number' ? s : Number(s);
+      if (Number.isFinite(n) && n >= 1 && n <= 5) {
+        ratings.push(n);
+      }
+    }
+
+    const avg =
+      ratings.length > 0
+        ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
+        : null;
+
+    const { error: upErr } = await supabase.from('service_providers').update({ rating: avg }).eq('id', providerId);
+
+    if (upErr) {
+      throw new Error(`Failed to update provider rating: ${upErr.message}`);
     }
   },
 };
