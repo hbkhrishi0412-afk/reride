@@ -1150,6 +1150,11 @@ app.post('/api/users', (req, res) => {
       refreshToken: 'mock-refresh-token'
     });
   }
+
+  if (action === 'save-push-token') {
+    console.log('📲 mock save-push-token', String(req.body?.token || '').slice(0, 24) + '…');
+    return res.json({ success: true });
+  }
   
   if (action === 'register') {
     const { email, password, name, mobile, role } = req.body;
@@ -2417,26 +2422,30 @@ app.get('/api/payments', (req, res) => {
   });
 });
 
-app.post('/api/payments', (req, res) => {
+app.post('/api/payments', async (req, res) => {
   const { action } = req.query;
   
   if (action === 'create') {
-    const { sellerEmail, amount, plan, packageId } = req.body;
+    const { sellerEmail, amount, plan, planId, packageId, paymentProof, paymentMethod, transactionId } = req.body;
+    const planVal = plan || planId;
     
-    if (!sellerEmail || !amount || !plan) {
+    if (!sellerEmail || !amount || !planVal) {
       return res.status(400).json({ 
         success: false, 
-        reason: 'Seller email, amount, and plan are required' 
+        reason: 'Seller email, amount, and plan (or planId) are required' 
       });
     }
     
     const paymentRequest = {
       id: Date.now().toString(), // Store as string for consistency with API responses
       sellerEmail,
-      amount,
-      planId: plan, // Use planId to match PaymentRequest interface
-      plan: plan, // Keep plan for backward compatibility
+      amount: Number(amount),
+      planId: planVal,
+      plan: planVal,
       packageId,
+      paymentProof,
+      paymentMethod,
+      transactionId,
       status: 'pending',
       requestedAt: new Date().toISOString(),
       createdAt: new Date().toISOString()
@@ -2455,6 +2464,83 @@ app.post('/api/payments', (req, res) => {
       paymentRequest,
       message: 'Payment request created successfully'
     });
+  }
+
+  if (action === 'create-razorpay-order') {
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keyId || !keySecret) {
+      return res.status(503).json({
+        success: false,
+        reason: 'Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env for local Razorpay testing.',
+      });
+    }
+    const { amountPaise, planId, sellerEmail } = req.body;
+    if (amountPaise == null || !planId || !sellerEmail) {
+      return res.status(400).json({ success: false, reason: 'amountPaise, planId, and sellerEmail are required' });
+    }
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+    return fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: Math.round(Number(amountPaise)),
+        currency: 'INR',
+        receipt: `reride_${Date.now()}`,
+        notes: { planId: String(planId), sellerEmail: String(sellerEmail) },
+      }),
+    })
+      .then(async (rzRes) => {
+        const rzJson = await rzRes.json().catch(() => ({}));
+        if (!rzRes.ok) {
+          return res.status(502).json({
+            success: false,
+            reason: rzJson.description || rzJson.error?.description || 'Razorpay order failed',
+          });
+        }
+        return res.json({
+          success: true,
+          orderId: rzJson.id,
+          amount: rzJson.amount,
+          currency: rzJson.currency,
+          keyId,
+        });
+      })
+      .catch((e) =>
+        res.status(500).json({ success: false, reason: e instanceof Error ? e.message : 'Order error' })
+      );
+  }
+
+  if (action === 'confirm-razorpay-payment') {
+    const crypto = await import('crypto');
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret) {
+      return res.status(503).json({ success: false, reason: 'RAZORPAY_KEY_SECRET not set' });
+    }
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, sellerEmail, amount } = req.body;
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !planId || !sellerEmail) {
+      return res.status(400).json({ success: false, reason: 'Missing Razorpay confirmation fields' });
+    }
+    const expected = crypto.createHmac('sha256', keySecret).update(`${razorpay_order_id}|${razorpay_payment_id}`).digest('hex');
+    if (expected !== razorpay_signature) {
+      return res.status(400).json({ success: false, reason: 'Invalid payment signature' });
+    }
+    const now = new Date().toISOString();
+    const paymentRequest = {
+      id: `payment_rzp_${Date.now()}`,
+      sellerEmail: String(sellerEmail),
+      amount: Number(amount) || 0,
+      planId: String(planId),
+      plan: String(planId),
+      status: 'approved',
+      paymentMethod: 'razorpay',
+      transactionId: String(razorpay_payment_id),
+      razorpayOrderId: String(razorpay_order_id),
+      requestedAt: now,
+      createdAt: now,
+    };
+    mockPaymentRequests.push(paymentRequest);
+    return res.status(201).json({ success: true, paymentRequest });
   }
   
   if (action === 'approve') {

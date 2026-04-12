@@ -136,6 +136,8 @@ const en = {
   'auth.forgotSent':
     'If an account with your email exists, password reset instructions have been sent. Please check your inbox.',
   'auth.sendResetLink': 'Send Reset Link',
+  'auth.sending': 'Sending…',
+  'auth.forgotError': 'Could not send reset email. Check the address and try again.',
   'dashboard.activeListings': 'Active Listings ({{count}})',
   'dashboard.soldListings': 'Sold Vehicles ({{count}})',
   'dashboard.noActiveListings': 'No active listings found.',
@@ -1000,6 +1002,8 @@ const hi: Record<string, string> = {
   'auth.forgotSent':
     'यदि इस ईमेल से खाता मौजूद है, तो रीसेट निर्देश भेज दिए गए हैं। इनबॉक्स देखें।',
   'auth.sendResetLink': 'रीसेट लिंक भेजें',
+  'auth.sending': 'भेजा जा रहा है…',
+  'auth.forgotError': 'रीसेट ईमेल नहीं भेजा जा सका। पता जाँचें और पुनः प्रयास करें।',
   'dashboard.activeListings': 'सक्रिय लिस्टिंग ({{count}})',
   'dashboard.soldListings': 'बिके वाहन ({{count}})',
   'dashboard.noActiveListings': 'कोई सक्रिय लिस्टिंग नहीं मिली।',
@@ -1828,6 +1832,8 @@ const te: Record<string, string> = {
   'auth.forgotSent':
     'ఈ ఇమెయిల్‌తో ఖాతా ఉంటే, రీసెట్ సూచనలు పంపబడ్డాయి. ఇన్‌బాక్స్ చూడండి.',
   'auth.sendResetLink': 'రీసెట్ లింక్ పంపు',
+  'auth.sending': 'పంపుతోంది…',
+  'auth.forgotError': 'రీసెట్ ఇమెయిల్ పంపలేకపోయాము. చిరునామా తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.',
   'dashboard.activeListings': 'సక్రియ లిస్టింగ్‌లు ({{count}})',
   'dashboard.soldListings': 'అమ్మబడిన వాహనాలు ({{count}})',
   'dashboard.noActiveListings': 'సక్రియ లిస్టింగ్‌లు లేవు.',
@@ -2631,6 +2637,8 @@ const ta: Record<string, string> = {
   'auth.forgotSent':
     'இந்த மின்னஞ்சலுடன் கணக்கு இருந்தால், மீட்டமைப்பு வழிமுறைகள் அனுப்பப்பட்டன. இன்பாக்ஸ் பார்க்கவும்.',
   'auth.sendResetLink': 'மீட்டமைப்பு இணைப்பை அனுப்பு',
+  'auth.sending': 'அனுப்புகிறது…',
+  'auth.forgotError': 'மீட்டமைப்பு மின்னஞ்சலை அனுப்ப முடியவில்லை. முகவரியைச் சரிபார்த்து மீண்டும் முயலவும்.',
   'dashboard.activeListings': 'செயலில் உள்ள பட்டியல்கள் ({{count}})',
   'dashboard.soldListings': 'விற்கப்பட்ட வாகனங்கள் ({{count}})',
   'dashboard.noActiveListings': 'செயலில் பட்டியல்கள் இல்லை.',

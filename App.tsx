@@ -19,12 +19,15 @@ import ToastContainer from './components/ToastContainer';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import useIsMobileApp from './hooks/useIsMobileApp';
 import { isCapacitorNativeApp } from './utils/isCapacitorNative';
+import { setCapacitorAndroidBackHandler } from './utils/capacitorAndroidBack';
 import ShareTargetHandler from './components/ShareTargetHandler';
 import OfflineIndicator from './components/OfflineIndicator';
 // Layout/utility components that are always needed - keep as eager imports
 import MobileLayout from './components/MobileLayout';
 import MobileSearch from './components/MobileSearch';
 import MobilePushNotificationManager from './components/MobilePushNotificationManager';
+import NativePushRegistration from './components/NativePushRegistration';
+import AppRatingPrompt from './components/AppRatingPrompt';
 import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates } from './types';
 import { countUnreadMessageThreads } from './utils/unreadCounts';
 import {
@@ -437,6 +440,20 @@ const AppContent: React.FC = () => {
       window.removeEventListener('sw-update-available', handleServiceWorkerUpdate as EventListener);
     };
   }, [addToast]);
+
+  useEffect(() => {
+    if (!isCapacitorNativeApp()) return;
+    setCapacitorAndroidBackHandler(() => {
+      if (currentView === ViewEnum.HOME) {
+        void import('@capacitor/app').then(({ App }) => {
+          void App.exitApp();
+        });
+        return;
+      }
+      goBack(ViewEnum.HOME);
+    });
+    return () => setCapacitorAndroidBackHandler(null);
+  }, [goBack, currentView]);
   
   // Preload critical components after initial render
   React.useEffect(() => {
@@ -2629,6 +2646,7 @@ const AppContent: React.FC = () => {
                 return false;
               }}
               onBack={() => goBack(ViewEnum.HOME)}
+              onLogout={handleLogout}
               addToast={addToast}
             />
           );
@@ -2953,44 +2971,50 @@ const AppContent: React.FC = () => {
           />
         );
 
-      case ViewEnum.PRICING:
+      case ViewEnum.PRICING: {
+        const applySellerPlan = async (planId: SubscriptionPlan) => {
+          if (!currentUser || currentUser.role !== 'seller') {
+            addToast('Sign in as a seller to change plans.', 'info');
+            return;
+          }
+          const updatedUser = { ...currentUser, subscriptionPlan: planId };
+          try {
+            const userService = await import('./services/userService');
+            const savedUser = await userService.updateUser(updatedUser);
+            setUsers((prev) => prev.map((u) => (u.email === currentUser.email ? savedUser : u)));
+            setCurrentUser(savedUser);
+            const userJson = JSON.stringify(savedUser);
+            sessionStorage.setItem('currentUser', userJson);
+            localStorage.setItem('reRideCurrentUser', userJson);
+            addToast(
+              planId === 'free' ? 'Successfully switched to the Free plan!' : 'Plan updated successfully!',
+              'success',
+            );
+            navigate(ViewEnum.SELLER_DASHBOARD);
+          } catch (error) {
+            logError('Failed to update plan:', error);
+            addToast('Failed to update plan', 'error');
+          }
+        };
+
         if (isMobileApp) {
           return (
             <MobilePricingPage
               currentUser={currentUser}
-              onSelectPlan={async (planId) => {
-                if (!currentUser || currentUser.role !== 'seller') return;
-                if (planId === 'free') {
-                  const updatedUser = { ...currentUser, subscriptionPlan: planId };
-                  try {
-                    const userService = await import('./services/userService');
-                    const savedUser = await userService.updateUser(updatedUser);
-                    setUsers(prev => prev.map(u => u.email === currentUser.email ? savedUser : u));
-                    setCurrentUser(savedUser);
-                    const userJson = JSON.stringify(savedUser);
-                    sessionStorage.setItem('currentUser', userJson);
-                    localStorage.setItem('reRideCurrentUser', userJson);
-                    addToast(`Successfully switched to the Free plan!`, 'success');
-                    navigate(ViewEnum.SELLER_DASHBOARD);
-                  } catch (error) {
-                    logError('Failed to update plan:', error);
-                    addToast('Failed to update plan', 'error');
-                  }
-                }
-              }}
+              addToast={addToast}
+              onSelectPlan={applySellerPlan}
               onNavigate={navigate}
             />
           );
         }
         return (
-          <PricingPage 
+          <PricingPage
             currentUser={currentUser}
-            onSelectPlan={(planId) => {
-              // Handle plan selection
-              logInfo('Selected plan:', planId);
-            }}
+            addToast={addToast}
+            onSelectPlan={applySellerPlan}
           />
         );
+      }
 
       case ViewEnum.ABOUT_US:
         return <AboutUsPage onNavigate={navigate} />;
@@ -3144,14 +3168,13 @@ const AppContent: React.FC = () => {
         return (
           <AuthenticationErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
-              <ForgotPassword 
-                onResetRequest={(email) => {
-                  // Handle password reset request
+              <ForgotPassword
+                onBack={() => goBack(ViewEnum.LOGIN_PORTAL)}
+                onResetSent={(email) => {
                   if (process.env.NODE_ENV === 'development') {
-                    logInfo('Password reset requested for:', email);
+                    logInfo('Password reset email requested for:', email);
                   }
                 }}
-                onBack={() => goBack(ViewEnum.LOGIN_PORTAL)}
               />
             </Suspense>
           </AuthenticationErrorBoundary>
@@ -3917,6 +3940,8 @@ const AppContent: React.FC = () => {
     return (
       <>
         <SEO {...seoMeta} />
+        <NativePushRegistration userEmail={currentUser?.email} />
+        <AppRatingPrompt />
         {/* Mobile Feature Managers */}
         <MobilePushNotificationManager
           notifications={notifications}
@@ -4024,6 +4049,8 @@ const AppContent: React.FC = () => {
   return (
     <>
       <SEO {...seoMeta} />
+      <NativePushRegistration userEmail={currentUser?.email} />
+      <AppRatingPrompt />
       {/* Mobile Feature Managers (also work on desktop) */}
       <MobilePushNotificationManager
         notifications={notifications}

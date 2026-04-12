@@ -1,21 +1,38 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { resetPassword } from '../services/supabase-auth-service';
 
 interface ForgotPasswordProps {
-  onResetRequest: (email: string) => void;
   onBack: () => void;
+  /** Optional hook after Supabase accepts the reset email request */
+  onResetSent?: (email: string) => void;
 }
 
-const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onResetRequest, onBack }) => {
+const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onResetSent }) => {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
-    onResetRequest(email);
-    setSubmitted(true);
+    if (!email.trim()) return;
+    setError(null);
+    setIsLoading(true);
+    try {
+      const result = await resetPassword(email.trim());
+      if (!result.success) {
+        setError(result.reason || t('auth.forgotError'));
+        return;
+      }
+      setSubmitted(true);
+      onResetSent?.(email.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('auth.forgotError'));
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-200-300 dark:border-gray-200-300 placeholder-brand-gray-500 text-reride-text-dark dark:text-brand-gray-200 bg-white focus:outline-none focus:z-10 sm:text-sm";
@@ -38,6 +55,11 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onResetRequest, onBack 
           </div>
       ) : (
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            {error && (
+              <div className="rounded-md bg-red-50 text-red-800 text-sm px-3 py-2" role="alert">
+                {error}
+              </div>
+            )}
             <div className="rounded-md shadow-sm">
               <div>
                 <label htmlFor="email-address" className="sr-only">{t('auth.emailAddress')}</label>
@@ -51,6 +73,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onResetRequest, onBack 
                   placeholder={t('auth.placeholder.email')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -58,9 +81,10 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onResetRequest, onBack 
             <div>
               <button
                 type="submit"
-                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white btn-brand-primary focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors"
+                disabled={isLoading}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white btn-brand-primary focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors disabled:opacity-60"
               >
-                {t('auth.sendResetLink')}
+                {isLoading ? t('auth.sending') : t('auth.sendResetLink')}
               </button>
             </div>
           </form>

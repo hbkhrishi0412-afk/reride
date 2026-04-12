@@ -11,6 +11,7 @@ import { VehicleOfferBanner } from './VehicleOfferBanner';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { telHrefFromRawPhone, phoneDisplayCompact } from '../utils/numberUtils';
+import { MobileVehicleTrustStrip } from './MobileVehicleTrustStrip';
 
 interface MobileVehicleDetailProps {
   vehicle: Vehicle;
@@ -401,6 +402,8 @@ export const MobileVehicleDetail: React.FC<MobileVehicleDetailProps> = ({
             </p>
           </div>
         </div>
+
+        <MobileVehicleTrustStrip />
 
         {/* Additional Details Section */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">

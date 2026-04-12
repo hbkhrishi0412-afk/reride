@@ -172,13 +172,10 @@ void (async () => {
   }
 })();
 
-// Service worker registration is disabled — PWA plugin is not active.
-// To re-enable, configure vite-plugin-pwa in vite.config.ts and uncomment below.
-// if ('serviceWorker' in navigator) {
-//   window.addEventListener('load', () => {
-//     navigator.serviceWorker.register('/sw.js', { scope: '/' });
-//   });
-// }
+// Web production builds register the service worker via `pwaRegister.ts` (skipped for Capacitor).
+if (import.meta.env.PROD && !__RERIDE_CAPACITOR__) {
+  import('./pwaRegister');
+}
 
 if (typeof window !== 'undefined') {
   window.addEventListener('load', () => {

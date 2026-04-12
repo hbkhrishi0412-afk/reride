@@ -190,6 +190,29 @@ export interface CameraOptions {
  * Capture photo from camera or select from library
  */
 export async function capturePhoto(options: CameraOptions = {}): Promise<string | null> {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (Capacitor.isNativePlatform()) {
+      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const photo = await Camera.getPhoto({
+        quality: Math.round((options.quality ?? 0.85) * 100),
+        allowEditing: options.allowEdit ?? false,
+        resultType: CameraResultType.Base64,
+        source:
+          options.sourceType === 'library'
+            ? CameraSource.Photos
+            : CameraSource.Camera,
+      });
+      const base64 = photo.base64String;
+      if (base64) {
+        const mime = photo.format === 'jpeg' ? 'image/jpeg' : 'image/png';
+        return `data:${mime};base64,${base64}`;
+      }
+    }
+  } catch (e) {
+    console.warn('[ReRide] Native camera unavailable, using file picker:', e);
+  }
+
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';

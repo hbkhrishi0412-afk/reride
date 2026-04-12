@@ -1,14 +1,20 @@
 /**
  * Cookie consent banner for GDPR/DPDP compliance.
  * Uses react-cookie-consent. Stores preference in cookie.
+ * Hidden in Capacitor native shell (not a browser; cookies / gtag differ from web).
  */
 
 import React from 'react';
 import { CookieConsent } from 'react-cookie-consent';
 import { useTranslation } from 'react-i18next';
+import { isCapacitorNativeApp } from '../utils/isCapacitorNative';
 
 export default function CookieConsentBanner() {
   const { t } = useTranslation();
+
+  if (isCapacitorNativeApp()) {
+    return null;
+  }
 
   return (
     <CookieConsent

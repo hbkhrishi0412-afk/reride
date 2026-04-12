@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHmac } from 'crypto';
 import { PLAN_DETAILS } from '../constants/plans.js';
 import type { User as UserType, Vehicle as VehicleType, VerificationStatus } from '../types.js';
 import { VehicleCategory } from '../vehicle-category.js';
@@ -1971,6 +1971,44 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         logError('request-data-deletion error:', msg);
+        return res.status(500).json({ success: false, reason: msg });
+      }
+    }
+
+    // Native app push token (FCM / APNs via Capacitor) — requires `push_device_tokens` table (see scripts/add-push-device-tokens.sql).
+    if (action === 'save-push-token') {
+      const auth = authenticateRequest(req);
+      if (!auth.isValid || !auth.user?.email) {
+        return res.status(401).json({ success: false, reason: 'Authentication required.' });
+      }
+      const token = (req.body as { token?: string })?.token;
+      const platform = (req.body as { platform?: string })?.platform;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ success: false, reason: 'token is required' });
+      }
+      try {
+        const supabase = getSupabaseAdminClient();
+        const user_email = auth.user.email.toLowerCase().trim();
+        const { error } = await supabase.from('push_device_tokens').upsert(
+          {
+            user_email,
+            token: token.trim(),
+            platform: platform ? String(platform) : null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_email' },
+        );
+        if (error) {
+          logWarn('save-push-token:', error.message);
+          return res.status(503).json({
+            success: false,
+            reason:
+              'Push token storage is not available. Create table push_device_tokens (see scripts/add-push-device-tokens.sql).',
+          });
+        }
+        return res.status(200).json({ success: true });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error';
         return res.status(500).json({ success: false, reason: msg });
       }
     }
@@ -6842,7 +6880,7 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
     if (!USE_SUPABASE) {
       return res.status(503).json({
         success: false,
-        reason: 'Firebase is not configured. Please set Firebase environment variables.'
+        reason: 'Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
       });
     }
 
@@ -6860,12 +6898,20 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           return;
         }
 
-        const { sellerEmail, amount, plan, packageId } = req.body;
-        
-        if (!sellerEmail || !amount || !plan) {
+        const body = (req.body || {}) as Record<string, unknown>;
+        const sellerEmail = body.sellerEmail;
+        const amount = body.amount;
+        const planRaw = body.plan ?? body.planId;
+        const packageId = body.packageId;
+        const paymentProof = body.paymentProof;
+        const paymentMethod = body.paymentMethod;
+        const transactionId = body.transactionId;
+        const plan = planRaw as string;
+
+        if (!sellerEmail || amount == null || !plan) {
           return res.status(400).json({ 
             success: false, 
-            reason: 'Seller email, amount, and plan are required' 
+            reason: 'Seller email, amount, and plan (or planId) are required' 
           });
         }
 
@@ -6878,16 +6924,23 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           });
         }
 
-        // Persist payment request in Supabase
+        const now = new Date().toISOString();
+        const id = `payment_${Date.now()}`;
+        // Persist payment request in Supabase (planId mirrors client types; plan kept for older rows)
         const paymentRequest = {
-          id: `payment_${Date.now()}`,
+          id,
           sellerEmail,
-          amount,
+          amount: Number(amount),
           plan,
+          planId: plan,
           packageId,
+          paymentProof: paymentProof != null ? String(paymentProof) : undefined,
+          paymentMethod: paymentMethod != null ? String(paymentMethod) : undefined,
+          transactionId: transactionId != null ? String(transactionId) : undefined,
           status: 'pending',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          createdAt: now,
+          requestedAt: now,
+          updatedAt: now
         };
 
         await adminCreate(paymentRequestsPath, paymentRequest, String(paymentRequest.id));
@@ -6903,6 +6956,153 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
           success: false,
           reason: 'Failed to create payment request',
           error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+
+    if (action === 'create-razorpay-order') {
+      if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, reason: 'Method not allowed' });
+      }
+      try {
+        const orderAuth = requireAuth(req, res, 'Create Razorpay order');
+        if (!orderAuth) return;
+
+        const keyId = process.env.RAZORPAY_KEY_ID;
+        const keySecret = process.env.RAZORPAY_KEY_SECRET;
+        if (!keyId || !keySecret) {
+          return res.status(503).json({
+            success: false,
+            reason: 'Online payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on the server.',
+          });
+        }
+
+        const b = (req.body || {}) as Record<string, unknown>;
+        const amountPaise = b.amountPaise;
+        const planId = b.planId;
+        const sellerEmail = b.sellerEmail;
+        if (amountPaise == null || !planId || !sellerEmail) {
+          return res.status(400).json({
+            success: false,
+            reason: 'amountPaise, planId, and sellerEmail are required',
+          });
+        }
+
+        const authedEmail = orderAuth.user?.email ? orderAuth.user.email.toLowerCase().trim() : '';
+        const normSeller = String(sellerEmail).toLowerCase().trim();
+        if (orderAuth.user?.role !== 'admin' && authedEmail !== normSeller) {
+          return res.status(403).json({ success: false, reason: 'You can only create orders for your own account.' });
+        }
+
+        const orderBody = JSON.stringify({
+          amount: Math.round(Number(amountPaise)),
+          currency: 'INR',
+          receipt: `reride_${Date.now()}`,
+          notes: { planId: String(planId), sellerEmail: String(sellerEmail) },
+        });
+
+        const rzRes = await fetch('https://api.razorpay.com/v1/orders', {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+            'Content-Type': 'application/json',
+          },
+          body: orderBody,
+        });
+        const rzJson = (await rzRes.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!rzRes.ok) {
+          const msg =
+            (rzJson.description as string) ||
+            (rzJson.error as { description?: string } | undefined)?.description ||
+            'Razorpay order failed';
+          return res.status(502).json({ success: false, reason: msg });
+        }
+
+        return res.status(200).json({
+          success: true,
+          orderId: rzJson.id,
+          amount: rzJson.amount,
+          currency: rzJson.currency,
+          keyId,
+        });
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          reason: error instanceof Error ? error.message : 'Failed to create Razorpay order',
+        });
+      }
+    }
+
+    if (action === 'confirm-razorpay-payment') {
+      if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, reason: 'Method not allowed' });
+      }
+      try {
+        const confirmAuth = requireAuth(req, res, 'Confirm Razorpay payment');
+        if (!confirmAuth) return;
+
+        const keySecret = process.env.RAZORPAY_KEY_SECRET;
+        if (!keySecret) {
+          return res.status(503).json({ success: false, reason: 'Online payments are not configured.' });
+        }
+
+        const b = (req.body || {}) as Record<string, unknown>;
+        const razorpay_order_id = b.razorpay_order_id;
+        const razorpay_payment_id = b.razorpay_payment_id;
+        const razorpay_signature = b.razorpay_signature;
+        const planId = b.planId;
+        const sellerEmail = b.sellerEmail;
+        const amount = b.amount;
+
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !planId || !sellerEmail) {
+          return res.status(400).json({
+            success: false,
+            reason: 'razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, and sellerEmail are required',
+          });
+        }
+
+        const authedEmail = confirmAuth.user?.email ? confirmAuth.user.email.toLowerCase().trim() : '';
+        const normSeller = String(sellerEmail).toLowerCase().trim();
+        if (confirmAuth.user?.role !== 'admin' && authedEmail !== normSeller) {
+          return res.status(403).json({ success: false, reason: 'Forbidden' });
+        }
+
+        const sigPayload = `${String(razorpay_order_id)}|${String(razorpay_payment_id)}`;
+        const expectedSig = createHmac('sha256', keySecret).update(sigPayload).digest('hex');
+        if (expectedSig !== String(razorpay_signature)) {
+          return res.status(400).json({ success: false, reason: 'Invalid payment signature' });
+        }
+
+        const now = new Date().toISOString();
+        const id = `payment_rzp_${Date.now()}`;
+        const planStr = String(planId);
+        const paymentRequest = {
+          id,
+          sellerEmail: String(sellerEmail),
+          amount: Number(amount) || 0,
+          plan: planStr,
+          planId: planStr,
+          status: 'approved',
+          paymentMethod: 'razorpay',
+          transactionId: String(razorpay_payment_id),
+          razorpayOrderId: String(razorpay_order_id),
+          createdAt: now,
+          requestedAt: now,
+          updatedAt: now,
+          reviewedAt: now,
+          notes: 'Verified via Razorpay',
+        };
+
+        await adminCreate(paymentRequestsPath, paymentRequest, String(id));
+
+        return res.status(201).json({
+          success: true,
+          paymentRequest,
+        });
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          reason: error instanceof Error ? error.message : 'Failed to confirm payment',
         });
       }
     }
@@ -7104,14 +7304,14 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
     if (!action) {
       return res.status(400).json({ 
         success: false, 
-        reason: 'Action parameter is required. Valid actions: create, status, approve, reject' 
+        reason: 'Action parameter is required. Valid actions: create, create-razorpay-order, confirm-razorpay-payment, status, approve, reject' 
       });
     }
 
     // If action doesn't match any known action, return 400 instead of 500
     return res.status(400).json({ 
       success: false, 
-      reason: `Invalid payment action: ${action}. Valid actions: create, status, approve, reject` 
+      reason: `Invalid payment action: ${action}. Valid actions: create, create-razorpay-order, confirm-razorpay-payment, status, approve, reject` 
     });
   } catch (error) {
     console.error('Payments Handler Error:', error);

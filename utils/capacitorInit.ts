@@ -5,9 +5,11 @@
 import { ensureRerideWebCanonicalHost, restoreOAuthRoleFromUrl, patchFetchForCapacitor } from './apiConfig';
 import { warmUpNativeGoogleSignIn } from './nativeGoogleSignIn';
 import { initNativeGoogleOAuthReturnHandler } from './oauthMobile';
+import { initCapacitorAndroidBack } from './capacitorAndroidBack';
 
 ensureRerideWebCanonicalHost();
 restoreOAuthRoleFromUrl();
 patchFetchForCapacitor();
 initNativeGoogleOAuthReturnHandler();
 warmUpNativeGoogleSignIn();
+initCapacitorAndroidBack();

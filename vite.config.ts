@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // Capacitor WebView needs a relative base so `./assets/...` resolves next to
 // index.html. Vite dev and normal web deploys need `/` so the entry script,
@@ -16,7 +17,47 @@ export default defineConfig(({ mode }) => {
 
   return {
   base: capacitor ? './' : '/',
-  plugins: [react()],
+  define: {
+    __RERIDE_CAPACITOR__: JSON.stringify(!!capacitor),
+  },
+  plugins: [
+    react(),
+    VitePWA({
+      disable: capacitor,
+      registerType: 'autoUpdate',
+      injectRegister: null,
+      workbox: {
+        maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webp,webmanifest}'],
+        navigateFallback: capacitor ? undefined : '/index.html',
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*\.(?:png|jpg|jpeg|svg|gif|webp)$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'reride-images',
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 7 },
+            },
+          },
+        ],
+      },
+      manifest: {
+        name: 'ReRide',
+        short_name: 'ReRide',
+        description: 'Buy and sell quality used vehicles',
+        theme_color: '#FF6B35',
+        background_color: '#ffffff',
+        display: 'standalone',
+        scope: '/',
+        start_url: '/',
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+        ],
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
   // Default bind is loopback-only — Android Emulator cannot reach that via 10.0.2.2.
   // Use http://10.0.2.2:<port> in the emulator browser; use your PC's LAN IP on a physical device.
   server: {
