@@ -4,6 +4,7 @@ import PasswordInput from './PasswordInput';
 import { isTokenLikelyValid, refreshAuthToken } from '../utils/authenticatedFetch.js';
 import { saveQrCodePngFromUrl } from '../utils/saveQrCodeImage';
 import { getPublicWebOriginForShareLinks } from '../utils/apiConfig';
+import { downloadProfileExport, requestAccountDataAnonymization } from '../services/accountPrivacyService';
 
 interface MobileProfileProps {
   currentUser: User;
@@ -595,6 +596,50 @@ export const MobileProfile: React.FC<MobileProfileProps> = ({
             </button>
           </div>
         )}
+      </div>
+
+      {/* Data & privacy (mobile parity with desktop Profile) */}
+      <div className="px-4 py-2">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Data &amp; privacy</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Download a copy of your profile or request anonymization of your account data (DPDP-style).
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                downloadProfileExport(currentUser);
+                addToast?.('Profile export downloaded', 'success');
+              }}
+              className="w-full py-2.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-800 border border-gray-200"
+            >
+              Download my data (JSON)
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    'Anonymize your account? You will be signed out and will need to register again to use ReRide.',
+                  )
+                ) {
+                  return;
+                }
+                const r = await requestAccountDataAnonymization();
+                if (r.success) {
+                  addToast?.(r.message || 'Your data has been anonymized.', 'success');
+                  onLogout?.();
+                } else {
+                  addToast?.(r.reason || 'Request failed', 'error');
+                }
+              }}
+              className="w-full py-2.5 rounded-lg text-sm font-medium text-red-700 bg-red-50 border border-red-200"
+            >
+              Request data deletion
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Logout Section */}

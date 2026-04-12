@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '../types.js';
 import { View as ViewEnum } from '../types.js';
+import { triggerSelectionHaptic } from '../utils/haptics';
 
 interface MobileBottomNavProps {
   currentView: ViewEnum;
@@ -136,6 +137,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                   : currentView === item.view;
 
             const handleClick = () => {
+              void triggerSelectionHaptic();
               if (item.id === 'menu' && onToggleMenu) {
                 onToggleMenu();
                 return;

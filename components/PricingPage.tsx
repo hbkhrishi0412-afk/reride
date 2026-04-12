@@ -9,9 +9,10 @@ import CarValuation from './CarValuation';
 interface PricingPageProps {
     currentUser: User | null;
     onSelectPlan: (planId: SubscriptionPlan) => void;
+    addToast?: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
-const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan }) => {
+const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan, addToast }) => {
     const [plans, setPlans] = useState<PlanDetails[]>([]);
     const currentPlanId = currentUser?.subscriptionPlan;
     const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -126,6 +127,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ currentUser, onSelectPlan }) 
                 amount={selectedAmount}
                 sellerEmail={currentUser?.email || ''}
                 onSuccess={handlePaymentSuccess}
+                onNotify={(msg, type) => addToast?.(msg, type)}
             />
         </div>
     );
