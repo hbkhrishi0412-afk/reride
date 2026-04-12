@@ -448,8 +448,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const lastVehicleSelectRef = useRef<{ id: number; t: number }>({ id: -1, t: 0 });
   /** Prevents double handleLogin when both getSession + onAuthStateChange run after Google OAuth */
   const googleOAuthSyncDoneRef = useRef(false);
-  /** One-shot: restore ReRide profile from persisted Supabase Auth session (mobile cold start / cleared app user cache) */
-  const supabaseSessionRestoreCheckedRef = useRef(false);
+  /** While tryFinishGoogleOAuth is calling syncWithBackend — blocks duplicate session-restore sync */
+  const oauthGoogleProfileSyncInFlightUidRef = useRef<string | null>(null);
+  /** Mutex for session-restore sync (auth events can fire in bursts) */
+  const profileRestoreFromSupabaseInFlightRef = useRef(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [vehiclesCatalogReady, setVehiclesCatalogReady] = useState<boolean>(false);
@@ -542,6 +544,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return null;
   });
+  const currentUserRef = useRef<User | null>(null);
+  currentUserRef.current = currentUser;
   const [comparisonList, setComparisonList] = useState<number[]>([]);
   const [ratings, setRatings] = useState<{ [key: string]: number[] }>({});
   const [sellerRatings, setSellerRatings] = useState<{ [key: string]: number[] }>({});
@@ -801,7 +805,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sessionStorage.removeItem('reride_oauth_role');
       sessionStorage.removeItem('reride_last_role');
       googleOAuthSyncDoneRef.current = false;
-      supabaseSessionRestoreCheckedRef.current = false;
+      oauthGoogleProfileSyncInFlightUidRef.current = null;
       localStorage.removeItem('reRideCurrentUser');
       localStorage.removeItem('reRideAccessToken');
       localStorage.removeItem('reRideRefreshToken');
@@ -826,7 +830,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sessionStorage.removeItem('reride_oauth_role');
       sessionStorage.removeItem('reride_last_role');
       googleOAuthSyncDoneRef.current = false;
-      supabaseSessionRestoreCheckedRef.current = false;
+      oauthGoogleProfileSyncInFlightUidRef.current = null;
       localStorage.removeItem('reRideCurrentUser');
       setCurrentView(View.HOME);
       setActiveChat(null);
@@ -946,55 +950,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const supabase = getSupabaseClient();
 
     const tryFinishGoogleOAuth = async (session: Session | null) => {
-      const pendingRole = sessionStorage.getItem('reride_oauth_role') as
+      let pendingRole = sessionStorage.getItem('reride_oauth_role') as
         | 'customer'
         | 'seller'
         | 'service_provider'
         | null;
+      if (!pendingRole) {
+        try {
+          pendingRole = localStorage.getItem('reride_oauth_role') as typeof pendingRole;
+        } catch { /* ignore */ }
+      }
       if (!pendingRole || !session?.user || googleOAuthSyncDoneRef.current || cancelled) {
         return;
       }
       googleOAuthSyncDoneRef.current = true;
-      sessionStorage.removeItem('reride_oauth_role');
-
+      oauthGoogleProfileSyncInFlightUidRef.current = session.user.id;
       try {
-        if (pendingRole === 'service_provider') {
-          const result = await syncServiceProviderOAuth(
-            session.user as unknown as Record<string, unknown>,
-          );
-          if (result.success && result.provider) {
-            try {
-              window.dispatchEvent(
-                new CustomEvent('reride:service-provider-oauth', { detail: result.provider }),
-              );
-            } catch {
-              /* ignore */
+        try {
+          sessionStorage.removeItem('reride_oauth_role');
+          localStorage.removeItem('reride_oauth_role');
+        } catch {
+          /* ignore */
+        }
+
+        try {
+          if (pendingRole === 'service_provider') {
+            const result = await syncServiceProviderOAuth(
+              session.user as unknown as Record<string, unknown>,
+            );
+            if (result.success && result.provider) {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent('reride:service-provider-oauth', { detail: result.provider }),
+                );
+              } catch {
+                /* ignore */
+              }
+            } else {
+              googleOAuthSyncDoneRef.current = false;
+              addToast(result.reason || t('toast.googleSignInFailed'), 'error');
+              await supabase.auth.signOut();
             }
+            return;
+          }
+
+          const result = await syncWithBackend(
+            session.user as unknown as Record<string, unknown>,
+            pendingRole,
+            'google',
+          );
+          if (result.success && result.user) {
+            handleLogin(result.user);
           } else {
             googleOAuthSyncDoneRef.current = false;
             addToast(result.reason || t('toast.googleSignInFailed'), 'error');
             await supabase.auth.signOut();
           }
-          return;
-        }
-
-        const result = await syncWithBackend(
-          session.user as unknown as Record<string, unknown>,
-          pendingRole,
-          'google',
-        );
-        if (result.success && result.user) {
-          handleLogin(result.user);
-        } else {
+        } catch (e) {
           googleOAuthSyncDoneRef.current = false;
-          addToast(result.reason || t('toast.googleSignInFailed'), 'error');
+          logError('Google OAuth backend sync failed:', e);
+          addToast(t('toast.googleSignInFailed'), 'error');
           await supabase.auth.signOut();
         }
-      } catch (e) {
-        googleOAuthSyncDoneRef.current = false;
-        logError('Google OAuth backend sync failed:', e);
-        addToast(t('toast.googleSignInFailed'), 'error');
-        await supabase.auth.signOut();
+      } finally {
+        oauthGoogleProfileSyncInFlightUidRef.current = null;
       }
     };
 
@@ -1023,26 +1042,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => window.removeEventListener('reride:native-oauth-failed', onNativeOAuthFailed);
   }, [addToast, t]);
 
-  // Supabase session exists (e.g. after app update / storage mismatch) but ReRide user not in memory — resync profile
+  // Supabase session exists but ReRide profile not in memory — resync (cold start, or PKCE finished after first paint).
+  // Subscribes to auth changes so we retry when the session appears (previous one-shot ref blocked this forever).
   useEffect(() => {
     if (currentUser) return;
-    if (supabaseSessionRestoreCheckedRef.current) return;
-    try {
-      if (sessionStorage.getItem('reride_oauth_role')) return;
-    } catch {
-      /* ignore */
-    }
 
-    supabaseSessionRestoreCheckedRef.current = true;
+    const supabase = getSupabaseClient();
+    let cancelled = false;
 
-    void (async () => {
+    const restoreFromSupabaseSession = async (session: Session | null) => {
+      if (cancelled || currentUserRef.current) return;
+      if (!session?.user?.email) return;
+
+      const uid = session.user.id;
+      if (oauthGoogleProfileSyncInFlightUidRef.current === uid) return;
+
       try {
-        const supabase = getSupabaseClient();
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session?.user?.email) return;
+        if (sessionStorage.getItem('reride_oauth_role') || localStorage.getItem('reride_oauth_role')) {
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
 
+      if (profileRestoreFromSupabaseInFlightRef.current) return;
+      profileRestoreFromSupabaseInFlightRef.current = true;
+      try {
         let role = sessionStorage.getItem('reride_last_role') as 'customer' | 'seller' | null;
         const meta = session.user.user_metadata as Record<string, unknown> | undefined;
         const prov = (session.user.app_metadata as Record<string, unknown> | undefined)?.provider;
@@ -1052,14 +1077,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const mr = meta?.role;
           if (typeof mr === 'string' && ['customer', 'seller'].includes(mr)) {
             role = mr as 'customer' | 'seller';
-          } else if (isGoogleProvider) {
-            // Do not default new Google sessions to customer — user must pick on login screen.
-            try {
-              sessionStorage.setItem('reride_oauth_pick_role', '1');
-            } catch {
-              /* ignore */
-            }
-            return;
           } else {
             role = 'customer';
           }
@@ -1078,8 +1095,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } catch (e) {
         logDebug('Supabase session restore skipped:', e);
+      } finally {
+        profileRestoreFromSupabaseInFlightRef.current = false;
       }
-    })();
+    };
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      void restoreFromSupabaseSession(session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void restoreFromSupabaseSession(session);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, [currentUser, handleLogin]);
 
   const handleRegister = useCallback((user: User) => {

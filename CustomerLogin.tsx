@@ -74,6 +74,7 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
     try {
       try {
         sessionStorage.setItem('reride_oauth_role', 'customer');
+        localStorage.setItem('reride_oauth_role', 'customer');
       } catch {
         /* ignore */
       }
@@ -90,6 +91,7 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
       if (!result.success) {
         try {
           sessionStorage.removeItem('reride_oauth_role');
+          localStorage.removeItem('reride_oauth_role');
         } catch {
           /* ignore */
         }

@@ -10,6 +10,8 @@ const config: CapacitorConfig = {
     androidScheme: 'https'
   },
   plugins: {
+    // Native Google: @capawesome/capacitor-google-sign-in + VITE_GOOGLE_WEB_CLIENT_ID at Vite build time.
+    // Supabase: signInWithIdToken. GCP: Web client (this ID) + Android client (package + SHA-1) in same project.
     SplashScreen: {
       launchShowDuration: 500,
       backgroundColor: "#FFFFFF",

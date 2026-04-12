@@ -47,6 +47,60 @@ export function normalizeRerideApiHostToWww(urlOrOrigin: string): string {
 }
 
 /**
+ * Prefer `www` for normal browsing. Do NOT redirect when the URL is a Supabase OAuth
+ * return (`?code=` / `?error=`) on apex — PKCE verifier lives on that origin; bouncing
+ * to www would break session exchange.
+ */
+export function ensureRerideWebCanonicalHost(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const h = window.location.hostname.toLowerCase();
+    if (h !== 'reride.co.in') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('code') || params.has('error')) {
+      return;
+    }
+    const { pathname, hash } = window.location;
+    const oauthRole =
+      sessionStorage.getItem('reride_oauth_role') ||
+      localStorage.getItem('reride_oauth_role');
+    if (oauthRole && !params.has('_oa_role')) {
+      params.set('_oa_role', oauthRole);
+    }
+    const qs = params.toString();
+    window.location.replace(
+      `https://www.reride.co.in${pathname}${qs ? '?' + qs : ''}${hash}`,
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * On www: if `_oa_role` was attached by the apex→www redirect, restore it into
+ * sessionStorage + localStorage and strip the param from the URL.
+ */
+export function restoreOAuthRoleFromUrl(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const role = params.get('_oa_role');
+    if (!role) return;
+    const valid = ['customer', 'seller', 'service_provider'];
+    if (valid.includes(role)) {
+      sessionStorage.setItem('reride_oauth_role', role);
+      localStorage.setItem('reride_oauth_role', role);
+    }
+    params.delete('_oa_role');
+    const qs = params.toString();
+    const clean = `${window.location.pathname}${qs ? '?' + qs : ''}${window.location.hash}`;
+    window.history.replaceState(null, '', clean);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * Android emulator cannot reach the dev machine via localhost/127.0.0.1 — use 10.0.2.2.
  * Physical devices still need your LAN IP; this only rewrites when running on Android native.
  */

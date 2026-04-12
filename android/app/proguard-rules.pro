@@ -11,6 +11,9 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
+# Local Capacitor plugin (Google OAuth opens in system browser)
+-keep class com.reride.app.OAuthExternalBrowserPlugin { *; }
+
 # Capacitor core + Cordova shim
 -keep class com.getcapacitor.** { *; }
 -keep class org.apache.cordova.** { *; }

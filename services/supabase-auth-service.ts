@@ -61,11 +61,13 @@ function wrapError(error: unknown, fallbackMessage: string): string {
 /**
  * OAuth return URL (no `#` fragment). Must be listed under Supabase → Authentication →
  * URL Configuration → Redirect URLs (e.g. `https://www.reride.co.in/**`,
- * `https://appassets.androidplatform.net/**`, `http://localhost:5173/**`,
- * `com.reride.app://oauth-callback` (Android Custom Tab / PKCE return).
+ * `https://reride.co.in/**`, `https://appassets.androidplatform.net/**`,
+ * `http://localhost:5173/**`, `com.reride.app://oauth-callback` (Android Custom Tab / PKCE return).
  *
- * Always use the current page origin (not `VITE_APP_URL`): PKCE state is stored per origin,
- * and the dev server may run on a different port than any configured canonical URL.
+ * MUST use the **current document origin** (never force www): Supabase PKCE stores the
+ * code_verifier in localStorage per-origin. If the user is on `https://reride.co.in` but
+ * `redirectTo` is `https://www.reride.co.in`, the callback runs on www without the verifier
+ * and no session is created (user stays "Guest").
  */
 export function getOAuthRedirectUrl(): string | undefined {
   if (typeof window === 'undefined') return undefined;
