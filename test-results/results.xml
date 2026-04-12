@@ -1,8 +1,0 @@
-<testsuites id="" name="" tests="2" failures="0" skipped="0" errors="0" time="40.332584000000004">
-<testsuite name="chat-read-state.spec.ts" timestamp="2026-04-07T16:05:22.104Z" hostname="chromium" tests="2" failures="0" skipped="0" time="29.168" errors="0">
-<testcase name="Chat read state controls › seller sees read/unread controls in dashboard messages" classname="chat-read-state.spec.ts" time="14.201">
-</testcase>
-<testcase name="Chat read state controls › mobile inbox shows list + menu read state actions" classname="chat-read-state.spec.ts" time="14.967">
-</testcase>
-</testsuite>
-</testsuites>

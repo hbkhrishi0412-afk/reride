@@ -1,7 +1,27 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { AppProvider, useApp } from '../components/AppProvider';
 import { View } from '../types';
+
+function renderWithRouter(ui: React.ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
+jest.mock('../hooks/useSupabaseRealtime');
+
+const mockAppGetSupabaseClient = jest.fn(() => ({
+  auth: { getSession: jest.fn().mockResolvedValue({ data: { session: null } }) },
+  removeChannel: jest.fn(),
+  channel: jest.fn(() => ({ on: jest.fn().mockReturnThis(), subscribe: jest.fn() })),
+}));
+
+jest.mock('../lib/supabase', () => ({
+  getSupabaseClient: mockAppGetSupabaseClient,
+}));
+jest.mock('../lib/supabase.js', () => ({
+  getSupabaseClient: mockAppGetSupabaseClient,
+}));
 
 // Mock the services
 jest.mock('../services/ratingService', () => ({
@@ -41,26 +61,25 @@ jest.mock('../services/supportTicketService', () => ({
   saveSupportTickets: jest.fn(),
 }));
 
-// Define mock implementation
-const mockDataServiceImplementation = {
-  getVehicles: jest.fn(() => Promise.resolve([])),
-  getVehicleData: jest.fn(() => Promise.resolve({})),
-  getUsers: jest.fn(() => Promise.resolve([])),
-  syncWhenOnline: jest.fn(() => Promise.resolve()),
-  addVehicle: jest.fn(() => Promise.resolve({ id: 1, make: 'Test', model: 'Car' } as any)),
-  updateVehicle: jest.fn(() => Promise.resolve({ id: 1, make: 'Updated', model: 'Car' } as any)),
-  deleteVehicle: jest.fn(() => Promise.resolve({ success: true } as any)),
-  login: jest.fn(() => Promise.resolve({ success: true, user: { id: 1, email: 'test@test.com' } } as any)),
-  register: jest.fn(() => Promise.resolve({ success: true, user: { id: 1, email: 'test@test.com' } } as any)),
-};
-
-// Mock dataService before importing AppProvider
-jest.mock('../services/dataService', () => ({
-  dataService: mockDataServiceImplementation,
-  getVehicles: () => mockDataServiceImplementation.getVehicles(),
-  getVehicleData: () => mockDataServiceImplementation.getVehicleData(),
-  getUsers: () => mockDataServiceImplementation.getUsers(),
-}));
+jest.mock('../services/dataService', () => {
+  const dataService = {
+    getVehicles: jest.fn(() => Promise.resolve([])),
+    getVehicleData: jest.fn(() => Promise.resolve({})),
+    getUsers: jest.fn(() => Promise.resolve([])),
+    syncWhenOnline: jest.fn(() => Promise.resolve()),
+    addVehicle: jest.fn(() => Promise.resolve({ id: 1, make: 'Test', model: 'Car' })),
+    updateVehicle: jest.fn(() => Promise.resolve({ id: 1, make: 'Updated', model: 'Car' })),
+    deleteVehicle: jest.fn(() => Promise.resolve({ success: true })),
+    login: jest.fn(() => Promise.resolve({ success: true, user: { id: 1, email: 'test@test.com' } })),
+    register: jest.fn(() => Promise.resolve({ success: true, user: { id: 1, email: 'test@test.com' } })),
+  };
+  return {
+    dataService,
+    getVehicles: () => dataService.getVehicles(),
+    getVehicleData: () => dataService.getVehicleData(),
+    getUsers: () => dataService.getUsers(),
+  };
+});
 
 jest.mock('../utils/loadingManager', () => ({
   loadingManager: {
@@ -81,11 +100,12 @@ jest.mock('../components/vehicleData', () => ({
 
 // Test component that uses the AppProvider
 const TestComponent: React.FC = () => {
-  const { addToast, currentView, navigate } = useApp();
+  const { addToast, currentView, navigate, toasts } = useApp();
   
   return (
     <div>
       <div data-testid="current-view">{currentView}</div>
+      <div data-testid="toast-messages">{toasts.map((t) => t.message).join(' | ')}</div>
       <button 
         data-testid="add-toast" 
         onClick={() => addToast('Test message', 'success')}
@@ -113,7 +133,7 @@ describe('AppProvider', () => {
   });
 
   it('should provide initial state correctly', () => {
-    render(
+    renderWithRouter(
       <AppProvider>
         <TestComponent />
       </AppProvider>
@@ -123,7 +143,7 @@ describe('AppProvider', () => {
   });
 
   it('should handle navigation correctly', () => {
-    render(
+    renderWithRouter(
       <AppProvider>
         <TestComponent />
       </AppProvider>
@@ -134,7 +154,7 @@ describe('AppProvider', () => {
   });
 
   it('should handle toast notifications', async () => {
-    render(
+    renderWithRouter(
       <AppProvider>
         <TestComponent />
       </AppProvider>
@@ -143,7 +163,7 @@ describe('AppProvider', () => {
     fireEvent.click(screen.getByTestId('add-toast'));
     
     await waitFor(() => {
-      expect(screen.getByText('Test message')).toBeInTheDocument();
+      expect(screen.getByTestId('toast-messages')).toHaveTextContent('Test message');
     });
   });
 
@@ -174,7 +194,7 @@ describe('AppProvider', () => {
       );
     };
 
-    render(
+    renderWithRouter(
       <AppProvider>
         <LoginTestComponent />
       </AppProvider>

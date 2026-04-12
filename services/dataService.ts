@@ -11,29 +11,21 @@ import { getBrowserAccessTokenForApi } from '../utils/authStorage';
 
 // Unified data service that handles both local and API data consistently
 class DataService {
-  /**
-   * Vite dev / localhost / file: — used only as input to `isDevelopment` getter.
-   * Capacitor WebView uses https://localhost but must still use the production API + Supabase.
-   */
-  private devHostFlag: boolean;
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   /** Coalesce concurrent identical getVehicles() calls (mount + listeners, strict mode, etc.). */
   private vehiclesFetchInflight = new Map<string, Promise<Vehicle[]>>();
 
-  constructor() {
-    this.devHostFlag = this.detectDevelopment();
-  }
-
   /**
    * Never treat the native app as "development" for data: localhost there is the WebView, not a dev server.
    * Otherwise getVehicles() returns getVehiclesLocal() and ignores Supabase (website would show 7, app 0).
+   * Re-evaluates host / env each read so tests and tooling can toggle `import.meta.env` without a stale snapshot.
    */
   private get isDevelopment(): boolean {
     if (typeof window !== 'undefined' && isCapacitorNative()) {
       return false;
     }
-    return this.devHostFlag;
+    return this.detectDevelopment();
   }
 
   /** Full `/api/...` URL: same rules as `resolveApiUrl` (WebView → `https://www.reride.co.in/...`). */
