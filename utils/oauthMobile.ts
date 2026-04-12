@@ -5,6 +5,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { getSupabaseClient } from '../lib/supabase.js';
+import { OAuthExternalBrowser } from './oauthExternalBrowser';
 
 /** Must match Android intent-filter + Supabase Dashboard → Redirect URLs. */
 export const NATIVE_OAUTH_REDIRECT = 'com.reride.app://oauth-callback';
@@ -167,6 +168,14 @@ export async function openGoogleOAuthUrl(oauthUrl: string): Promise<void> {
   if (!oauthUrl) return;
 
   if (Capacitor.isNativePlatform()) {
+    if (Capacitor.getPlatform() === 'android') {
+      try {
+        await OAuthExternalBrowser.openUrl({ url: oauthUrl });
+        return;
+      } catch (e) {
+        console.warn('[ReRide OAuth] System browser open failed; falling back to in-app browser.', e);
+      }
+    }
     const { Browser } = await import('@capacitor/browser');
     await Browser.open({ url: oauthUrl });
     return;

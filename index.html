@@ -2,6 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- OAuth PKCE verifier is stored per-origin. Never redirect apex→www on ?code= or ?error= (would break Google sign-in). -->
+    <script>
+      (function () {
+        try {
+          var h = (location.hostname || '').toLowerCase();
+          if (h !== 'reride.co.in') return;
+          var sp = new URLSearchParams(location.search || '');
+          if (sp.has('code') || sp.has('error')) return;
+          location.replace(
+            'https://www.reride.co.in' + location.pathname + (location.search || '') + (location.hash || ''),
+          );
+        } catch (e) {}
+      })();
+    </script>
     <!-- MUST run before reride-api-fetch-boot.js: apex https://reride.co.in returns 307; CORS preflight cannot follow redirects. -->
     <script>
       (function () {

@@ -34,13 +34,31 @@ export function shouldTryNativeGoogleSignIn(): boolean {
 
 async function ensureGoogleSignInInitialized(clientId: string): Promise<void> {
   if (!initPromise) {
-    const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
-    initPromise = GoogleSignIn.initialize({
-      clientId,
-      scopes: [...GOOGLE_SCOPES],
+    initPromise = (async () => {
+      const { GoogleSignIn } = await import('@capawesome/capacitor-google-sign-in');
+      await GoogleSignIn.initialize({
+        clientId,
+        scopes: [...GOOGLE_SCOPES],
+      });
+    })().catch((err: unknown) => {
+      initPromise = null;
+      throw err;
     });
   }
   await initPromise;
+}
+
+/**
+ * Pre-load Google Sign-In on native (Android/iOS) so the first tap is faster
+ * (typical app behavior: SDK ready before the user opens the login screen).
+ */
+export function warmUpNativeGoogleSignIn(): void {
+  if (!shouldTryNativeGoogleSignIn()) return;
+  const id = getNativeGoogleWebClientId();
+  if (!id) return;
+  void ensureGoogleSignInInitialized(id).catch(() => {
+    /* next sign-in tap will retry initialize */
+  });
 }
 
 function isUserCanceledError(e: unknown): boolean {

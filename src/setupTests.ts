@@ -5,7 +5,11 @@ import { TextDecoder, TextEncoder } from 'util';
 if (typeof globalThis.Response === 'undefined') {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const undici = require('node:undici') as typeof import('node:undici');
+    const undici = require('node:undici') as {
+      Response: typeof Response;
+      Request: typeof Request;
+      Headers: typeof Headers;
+    };
     globalThis.Response = undici.Response as typeof Response;
     globalThis.Request = undici.Request as typeof Request;
     globalThis.Headers = undici.Headers as typeof Headers;

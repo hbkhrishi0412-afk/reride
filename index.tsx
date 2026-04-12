@@ -1,5 +1,6 @@
 import './utils/capacitorInit';
 
+import { completeWebSupabaseOAuthCallbackIfNeeded } from './utils/consumeWebSupabaseOAuthCallback';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, HashRouter } from 'react-router-dom';
@@ -127,39 +128,49 @@ const queryClient = new QueryClient({
 // (paths like /used-cars 404). Hash routes work for the packaged app; web keeps clean URLs.
 const AppRouter = isCapacitorNative() ? HashRouter : BrowserRouter;
 
-try {
-  root.render(
-    <React.StrictMode>
-      <HelmetProvider>
-        <QueryClientProvider client={queryClient}>
-          <AppRouter>
-            <ErrorBoundary>
-              <App />
-            </ErrorBoundary>
-          </AppRouter>
-        </QueryClientProvider>
-      </HelmetProvider>
-    </React.StrictMode>
-  );
-  // Signal to index.html timeout script that React has mounted (clears loading timeout)
+void (async () => {
   if (typeof window !== 'undefined') {
-    (window as any).__RERIDE_MOUNTED__ = true;
-  }
-} catch (mountError) {
-  if (rootElement && typeof window !== 'undefined') {
-    const msg = mountError instanceof Error ? mountError.message : String(mountError);
-    const stack = mountError instanceof Error ? mountError.stack || '' : '';
-    (window as any).__RERIDE_ERRORS__ = (window as any).__RERIDE_ERRORS__ || [];
-    (window as any).__RERIDE_ERRORS__.push('Mount: ' + msg + '\n' + stack);
-    if (typeof (window as any).showLoadError === 'function') {
-      (window as any).showLoadError('React mount failed: ' + msg);
-    } else {
-      rootElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to load ReRide</h1><p style="color:#666;font-size:14px;margin-bottom:24px;line-height:1.6;word-break:break-all;">' + msg + '</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh</button></div></div>';
+    try {
+      await completeWebSupabaseOAuthCallbackIfNeeded();
+    } catch (e) {
+      console.warn('[ReRide] OAuth bootstrap:', e);
     }
-  } else {
-    throw mountError;
   }
-}
+
+  try {
+    root.render(
+      <React.StrictMode>
+        <HelmetProvider>
+          <QueryClientProvider client={queryClient}>
+            <AppRouter>
+              <ErrorBoundary>
+                <App />
+              </ErrorBoundary>
+            </AppRouter>
+          </QueryClientProvider>
+        </HelmetProvider>
+      </React.StrictMode>
+    );
+    // Signal to index.html timeout script that React has mounted (clears loading timeout)
+    if (typeof window !== 'undefined') {
+      (window as any).__RERIDE_MOUNTED__ = true;
+    }
+  } catch (mountError) {
+    if (rootElement && typeof window !== 'undefined') {
+      const msg = mountError instanceof Error ? mountError.message : String(mountError);
+      const stack = mountError instanceof Error ? mountError.stack || '' : '';
+      (window as any).__RERIDE_ERRORS__ = (window as any).__RERIDE_ERRORS__ || [];
+      (window as any).__RERIDE_ERRORS__.push('Mount: ' + msg + '\n' + stack);
+      if (typeof (window as any).showLoadError === 'function') {
+        (window as any).showLoadError('React mount failed: ' + msg);
+      } else {
+        rootElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FFFFFF;padding:20px;"><div style="text-align:center;max-width:600px;"><h1 style="color:#2C2C2C;font-size:24px;font-weight:700;margin-bottom:16px;">Unable to load ReRide</h1><p style="color:#666;font-size:14px;margin-bottom:24px;line-height:1.6;word-break:break-all;">' + msg + '</p><button onclick="window.location.reload()" style="background:#FF6B35;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Refresh</button></div></div>';
+      }
+    } else {
+      throw mountError;
+    }
+  }
+})();
 
 // Service worker registration is disabled — PWA plugin is not active.
 // To re-enable, configure vite-plugin-pwa in vite.config.ts and uncomment below.

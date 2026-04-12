@@ -47,4 +47,24 @@ if (jsFiles.length === 0) {
 }
 
 console.log('✅ Build output verified: dist/index.html and dist/assets/*.js are valid for production.');
+
+const capBuild = process.env.CAPACITOR_BUILD === '1' || process.env.CAPACITOR_BUILD === 'true';
+if (capBuild) {
+  let foundGoogleClient = false;
+  for (const f of jsFiles) {
+    const p = path.join(assetsDir, f);
+    const c = fs.readFileSync(p, 'utf8');
+    if (c.includes('apps.googleusercontent.com')) {
+      foundGoogleClient = true;
+      break;
+    }
+  }
+  if (!foundGoogleClient) {
+    console.warn(
+      '⚠️ CAPACITOR_BUILD: No `apps.googleusercontent.com` string in dist/assets/*.js. ' +
+        'Native Google Sign-In is likely disabled — set VITE_GOOGLE_WEB_CLIENT_ID for production mobile builds.',
+    );
+  }
+}
+
 process.exit(0);

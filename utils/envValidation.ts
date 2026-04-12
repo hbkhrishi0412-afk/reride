@@ -57,6 +57,22 @@ export function validateSupabaseEnv(): ValidationResult {
     warnings.push('VITE_SUPABASE_ANON_KEY appears to be invalid (too short)');
   }
 
+  if (typeof window !== 'undefined') {
+    try {
+      const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+      if (cap?.isNativePlatform?.() === true) {
+        const webClientId = (import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID as string | undefined)?.trim();
+        if (!webClientId) {
+          warnings.push(
+            'VITE_GOOGLE_WEB_CLIENT_ID is not set — Google on this device uses browser OAuth instead of native Sign-In. Set the Web OAuth client ID in your Vite env and rebuild Android/iOS for the recommended flow.',
+          );
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   // Validate server-side variables (warn if missing, but don't error in client-side code)
   if (typeof window === 'undefined') {
     // Server-side validation

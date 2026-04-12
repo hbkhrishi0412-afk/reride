@@ -1,10 +1,10 @@
 // Enhanced Service Worker with Advanced Caching Strategies
-// Version: 2.1.0 — bump cache names when brand icons change so SW serves fresh assets
+// Version: 2.2.0 — bump cache names when brand icons change so SW serves fresh assets
 
-const CACHE_NAME = 'reride-v3';
-const RUNTIME_CACHE = 'reride-runtime-v3';
-const IMAGE_CACHE = 'reride-images-v3';
-const API_CACHE = 'reride-api-v3';
+const CACHE_NAME = 'reride-v4';
+const RUNTIME_CACHE = 'reride-runtime-v4';
+const IMAGE_CACHE = 'reride-images-v4';
+const API_CACHE = 'reride-api-v4';
 
 // Cache duration (in seconds)
 const CACHE_DURATIONS = {
@@ -104,6 +104,18 @@ self.addEventListener('fetch', (event) => {
 
   // Skip chrome-extension and other protocols
   if (!url.protocol.startsWith('http')) {
+    return;
+  }
+
+  // Supabase OAuth return (?code=): always hit network for the document. Serving a cached
+  // SPA shell breaks PKCE on mobile (address bar may still show ?code= but session never applies).
+  if (
+    request.method === 'GET' &&
+    (request.destination === 'document' || (request.headers.get('accept') || '').includes('text/html')) &&
+    url.searchParams.has('code') &&
+    (url.hostname === 'www.reride.co.in' || url.hostname === 'reride.co.in')
+  ) {
+    event.respondWith(fetch(requestToUse));
     return;
   }
 

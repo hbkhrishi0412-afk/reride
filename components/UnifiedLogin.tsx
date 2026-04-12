@@ -323,6 +323,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       try {
         sessionStorage.setItem('reride_oauth_role', selectedRole);
+        localStorage.setItem('reride_oauth_role', selectedRole);
       } catch {
         /* ignore */
       }
@@ -341,6 +342,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
       if (!result.success) {
         try {
           sessionStorage.removeItem('reride_oauth_role');
+          localStorage.removeItem('reride_oauth_role');
         } catch {
           /* ignore */
         }

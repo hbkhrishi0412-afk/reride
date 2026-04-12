@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(OAuthExternalBrowserPlugin.class);
         SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
     }
