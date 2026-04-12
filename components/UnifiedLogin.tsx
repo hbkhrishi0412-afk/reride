@@ -321,6 +321,12 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         throw new Error(t('auth.error.googleNotAdmin'));
       }
 
+      try {
+        sessionStorage.setItem('reride_oauth_role', selectedRole);
+      } catch {
+        /* ignore */
+      }
+
       const result = await signInWithGoogle();
 
       // Supabase OAuth is redirect-based: API returns a URL to Google, not a user object.
@@ -332,26 +338,21 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           ? (result.user as { redirectUrl: string }).redirectUrl
           : null;
 
-      if (result.success && redirectUrl) {
+      if (!result.success) {
         try {
-          sessionStorage.setItem('reride_oauth_role', selectedRole);
+          sessionStorage.removeItem('reride_oauth_role');
         } catch {
           /* ignore */
         }
+        throw new Error(result.reason || t('auth.error.googleFailed'));
+      }
+
+      if (redirectUrl) {
         window.location.assign(redirectUrl);
         return;
       }
 
-      if (result.success && !redirectUrl) {
-        try {
-          sessionStorage.setItem('reride_oauth_role', selectedRole);
-        } catch {
-          /* ignore */
-        }
-        return;
-      }
-
-      throw new Error(result.reason || t('auth.error.googleFailed'));
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : t('auth.error.googleSignInFailed'));
     } finally {

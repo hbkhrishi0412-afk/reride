@@ -36,6 +36,8 @@ export interface ServiceRequestPayload extends Record<string, unknown> {
   startedAt?: string;
   completedAt?: string;
   cancelledAt?: string;
+  /** Customer review after service completed (stored in metadata). */
+  customerReview?: { stars: number; comment?: string; submittedAt: string };
 }
 
 function formatCarDetailsDisplay(raw: unknown): string {
@@ -86,6 +88,12 @@ function supabaseRowToServiceRequest(row: any): ServiceRequestPayload {
     startedAt: metadata.startedAt || undefined,
     completedAt: metadata.completedAt || undefined,
     cancelledAt: metadata.cancelledAt || undefined,
+    customerReview:
+      metadata.customerReview &&
+      typeof metadata.customerReview === 'object' &&
+      typeof (metadata.customerReview as { stars?: unknown }).stars === 'number'
+        ? (metadata.customerReview as ServiceRequestPayload['customerReview'])
+        : undefined,
   };
 }
 
@@ -128,6 +136,7 @@ function serviceRequestToSupabaseRow(request: Partial<ServiceRequestPayload>): a
     startedAt: request.startedAt,
     completedAt: request.completedAt,
     cancelledAt: request.cancelledAt,
+    customerReview: request.customerReview,
   };
 
   // Remove undefined values from metadata

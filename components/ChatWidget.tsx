@@ -105,8 +105,8 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  /** Capacitor: sit above fixed bottom tab bar (~70px) so composer is tappable and visible. */
-  const bottomNavClearancePx = isMobile && isCapacitorNativeApp() ? 76 : 0;
+  /** Capacitor: sit above tab row (56px) + same safe-area as MobileBottomNav (env added in calc). */
+  const bottomTabBarRowPx = isMobile && isCapacitorNativeApp() ? 56 : 0;
   
   // Auto-open chat when conversation starts (even with no messages) or has new messages
   // BUT only if user hasn't manually closed it
@@ -424,7 +424,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
       style={{ 
         position: 'fixed',
         bottom: isMobile
-          ? `calc(20px + ${bottomNavClearancePx}px + env(safe-area-inset-bottom, 0px))`
+          ? `calc(20px + ${bottomTabBarRowPx}px + env(safe-area-inset-bottom, 0px))`
           : '24px',
         right: isMobile ? '20px' : '24px',
         zIndex: FLOATING_Z_INDEX,
@@ -498,16 +498,16 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
       style={{ 
         position: 'fixed',
         bottom: isMobile
-          ? `calc(16px + ${bottomNavClearancePx}px + env(safe-area-inset-bottom, 0px))`
+          ? `calc(16px + ${bottomTabBarRowPx}px + env(safe-area-inset-bottom, 0px))`
           : '20px',
         right: isMobile ? '16px' : '20px',
         width: isMobile ? 'calc(100vw - 32px)' : '360px',
         maxWidth: 'calc(100vw - 32px)',
         height: isMobile
-          ? `calc(100vh - ${80 + bottomNavClearancePx}px - env(safe-area-inset-bottom, 0px))`
+          ? `calc(100vh - ${80 + bottomTabBarRowPx}px - env(safe-area-inset-bottom, 0px))`
           : '460px',
         maxHeight: isMobile
-          ? `calc(100vh - ${80 + bottomNavClearancePx}px - env(safe-area-inset-bottom, 0px))`
+          ? `calc(100vh - ${80 + bottomTabBarRowPx}px - env(safe-area-inset-bottom, 0px))`
           : 'calc(100vh - 80px)',
         zIndex: FLOATING_Z_INDEX,
         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',

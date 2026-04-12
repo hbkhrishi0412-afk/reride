@@ -1,6 +1,10 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState, useRef } from 'react';
 import { authenticatedFetch } from '../utils/authenticatedFetch';
 import { getSupabaseClient } from '../lib/supabase';
+import {
+    buildServiceBookingConfirmationMessage,
+    supportWhatsAppHref,
+} from '../utils/whatsappShare.js';
 
 type ServicePackage = {
     id: string;
@@ -35,6 +39,8 @@ type ServiceProvider = {
     name: string;
     city: string;
     distanceKm?: number;
+    /** Aggregated workshop rating (1–5), when available */
+    rating?: number | null;
     serviceCategories?: string[];
     services?: Array<{
         serviceType: string;
@@ -66,6 +72,7 @@ type CustomerServiceRequest = {
     completedAt?: string;
     cancelledAt?: string;
     notes?: string;
+    customerReview?: { stars: number; comment?: string; submittedAt: string };
 };
 
 type Props = {
@@ -173,6 +180,26 @@ const TRACKING_STEPS = [
     { key: 'completed', label: 'Completed' },
 ] as const;
 
+/** Worst-case ETA across selected line items (parallel jobs at the workshop). */
+function estimateBookingEtaMinutes(
+    providerId: string,
+    items: CartItem[],
+    providerServices: Record<string, ServiceProvider['services']>,
+    availableServicePackages: ServicePackage[],
+): number | undefined {
+    const services = providerServices[providerId] || [];
+    const minutes: number[] = [];
+    for (const item of items) {
+        const svcMeta = availableServicePackages.find((s) => s.id === item.serviceId);
+        const serviceName = svcMeta?.name || item.serviceId;
+        const match = services.find((s) => s.serviceType === serviceName && s.active !== false);
+        const eta = match?.etaMinutes;
+        if (eta != null && Number.isFinite(eta)) minutes.push(eta);
+    }
+    if (minutes.length === 0) return undefined;
+    return Math.max(...minutes);
+}
+
 const getStepState = (req: CustomerServiceRequest, stepKey: (typeof TRACKING_STEPS)[number]['key']) => {
     if (req.status === 'cancelled') {
         return stepKey === 'raised' ? 'done' : 'cancelled';
@@ -213,6 +240,9 @@ const ServiceCart: React.FC<Props> = ({
     const [requestsLoading, setRequestsLoading] = useState(false);
     const [requestsError, setRequestsError] = useState<string | null>(null);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
+    const [postBookingWhatsAppUrl, setPostBookingWhatsAppUrl] = useState<string | null>(null);
+    const [reviewDrafts, setReviewDrafts] = useState<Record<string, { stars: number; comment: string }>>({});
+    const [reviewSubmittingId, setReviewSubmittingId] = useState<string | null>(null);
     const [items, setItems] = useState<CartItem[]>([]);
     const [addresses, setAddresses] = useState<Address[]>(initialAddresses);
     const [selectedAddress, setSelectedAddress] = useState(addresses[0]?.id || '');
@@ -380,6 +410,41 @@ const ServiceCart: React.FC<Props> = ({
             setRequestsError(error instanceof Error ? error.message : 'Failed to cancel request');
         } finally {
             setCancellingId(null);
+        }
+    };
+
+    const submitCustomerReview = async (requestId: string) => {
+        const d = reviewDrafts[requestId] ?? { stars: 5, comment: '' };
+        try {
+            setReviewSubmittingId(requestId);
+            setRequestsError(null);
+            const resp = await authenticatedFetch('/api/service-requests', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: requestId,
+                    action: 'submit_review',
+                    stars: d.stars,
+                    comment: d.comment.trim(),
+                }),
+            });
+            if (!resp.ok) {
+                let message = `Could not submit review (${resp.status})`;
+                try {
+                    const errBody = await resp.json();
+                    if (errBody?.error && typeof errBody.error === 'string') {
+                        message = errBody.error;
+                    }
+                } catch {
+                    /* ignore */
+                }
+                throw new Error(message);
+            }
+            await loadCustomerRequests();
+        } catch (e) {
+            setRequestsError(e instanceof Error ? e.message : 'Failed to submit review');
+        } finally {
+            setReviewSubmittingId(null);
         }
     };
 
@@ -847,6 +912,19 @@ const ServiceCart: React.FC<Props> = ({
         
         try {
             await onSubmitRequest?.(payload);
+            const summary = servicePackages.map((p) => p.name).join(', ');
+            const addr = addresses.find((a) => a.id === selectedAddress);
+            setPostBookingWhatsAppUrl(
+                supportWhatsAppHref(
+                    buildServiceBookingConfirmationMessage({
+                        serviceSummary: summary,
+                        date: selectedBookingDate,
+                        slot: slotMeta?.label || selectedSlot,
+                        city: addr?.city,
+                        addressLine: addr?.line1,
+                    }),
+                ),
+            );
             setActiveTab('track');
             await loadCustomerRequests();
         } catch (error) {
@@ -885,6 +963,28 @@ const ServiceCart: React.FC<Props> = ({
                         Refresh
                     </button>
                 </div>
+                {postBookingWhatsAppUrl && (
+                    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-900/60 dark:bg-emerald-950/40">
+                        <span className="text-gray-800 dark:text-gray-200 font-medium">
+                            Confirm your booking on WhatsApp with ReRide support
+                        </span>
+                        <a
+                            href={postBookingWhatsAppUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700"
+                        >
+                            Open WhatsApp
+                        </a>
+                        <button
+                            type="button"
+                            onClick={() => setPostBookingWhatsAppUrl(null)}
+                            className="text-xs font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                )}
                 {!isLoggedIn && (
                     <div className="text-sm text-gray-600 dark:text-gray-300">Login to see your request progress.</div>
                 )}
@@ -979,6 +1079,70 @@ const ServiceCart: React.FC<Props> = ({
                                 {req.notes && (
                                     <div className="mt-2 text-xs text-gray-600 dark:text-gray-300">
                                         Note: {req.notes}
+                                    </div>
+                                )}
+                                {req.status === 'completed' && req.providerId && !req.customerReview && (
+                                    <div className="mt-3 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30">
+                                        <div className="text-xs font-semibold text-gray-800 dark:text-gray-200 mb-2">
+                                            Rate this workshop
+                                        </div>
+                                        <div className="flex gap-1 mb-2">
+                                            {[1, 2, 3, 4, 5].map((s) => {
+                                                const selected = (reviewDrafts[req.id]?.stars ?? 5) >= s;
+                                                return (
+                                                    <button
+                                                        key={s}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setReviewDrafts((prev) => ({
+                                                                ...prev,
+                                                                [req.id]: {
+                                                                    stars: s,
+                                                                    comment: prev[req.id]?.comment ?? '',
+                                                                },
+                                                            }))
+                                                        }
+                                                        className={`text-lg leading-none px-1 ${
+                                                            selected ? 'text-amber-500' : 'text-gray-300 dark:text-gray-600'
+                                                        }`}
+                                                        aria-label={`${s} stars`}
+                                                    >
+                                                        ★
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <textarea
+                                            value={reviewDrafts[req.id]?.comment ?? ''}
+                                            onChange={(e) =>
+                                                setReviewDrafts((prev) => ({
+                                                    ...prev,
+                                                    [req.id]: {
+                                                        stars: prev[req.id]?.stars ?? 5,
+                                                        comment: e.target.value.slice(0, 500),
+                                                    },
+                                                }))
+                                            }
+                                            placeholder="Optional feedback (max 500 characters)"
+                                            rows={2}
+                                            className="w-full text-xs rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 mb-2"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => void submitCustomerReview(req.id)}
+                                            disabled={reviewSubmittingId === req.id}
+                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                                        >
+                                            {reviewSubmittingId === req.id ? 'Submitting…' : 'Submit review'}
+                                        </button>
+                                    </div>
+                                )}
+                                {req.customerReview && (
+                                    <div className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">
+                                        Your rating: {req.customerReview.stars}/5
+                                        {req.customerReview.comment
+                                            ? ` — “${req.customerReview.comment}”`
+                                            : ''}
                                     </div>
                                 )}
                             </div>
@@ -1631,6 +1795,16 @@ const ServiceCart: React.FC<Props> = ({
                             <div className="space-y-3">
                                 {sortedAvailableProviders.map(p => {
                                     const totals = providerTotals[p.id];
+                                    const etaMin = estimateBookingEtaMinutes(
+                                        p.id,
+                                        items,
+                                        providerServices,
+                                        availableServicePackages,
+                                    );
+                                    const rating =
+                                        p.rating != null && Number.isFinite(Number(p.rating))
+                                            ? Number(p.rating)
+                                            : undefined;
                                     return (
                                         <label key={p.id} className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${
                                             selectedProviders.includes(p.id)
@@ -1649,15 +1823,24 @@ const ServiceCart: React.FC<Props> = ({
                                                 }}
                                             />
                                             <div className="flex-1 space-y-2">
-                                                <div className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
+                                                <div className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
                                                     <span>{p.name}</span>
+                                                    {rating != null && (
+                                                        <span className="text-xs font-bold text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/40 px-2.5 py-0.5 rounded-full">
+                                                            ★ {rating.toFixed(1)}
+                                                        </span>
+                                                    )}
                                                     {totals && totals.total > 0 && (
                                                         <span className="text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 px-3 py-1 rounded-full">
                                                             ₹{totals.total.toLocaleString()}
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="text-sm text-gray-600 dark:text-gray-400">{p.city}{p.distanceKm ? ` • ${p.distanceKm} km away` : ''}</div>
+                                                <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                    {p.city}
+                                                    {p.distanceKm ? ` • ${p.distanceKm} km away` : ''}
+                                                    {etaMin != null ? ` • Est. up to ~${etaMin} min` : ''}
+                                                </div>
                                                 {totals && totals.breakdown.some(b => b.price !== undefined) && (
                                                     <div className="text-xs text-gray-700 dark:text-gray-300 flex flex-wrap gap-2">
                                                         {totals.breakdown.map(b => (

@@ -19,60 +19,25 @@ export const isInlineImagePlaceholder = (url: string | undefined | null): boolea
 const DEFAULT_PLACEHOLDER = VEHICLE_IMAGE_PLACEHOLDER_DATA_URI;
 
 /**
- * Detects browser support for modern image formats
- * @returns Object with format support flags
- */
-const detectFormatSupport = (): { webp: boolean; avif: boolean } => {
-  if (typeof window === 'undefined') {
-    return { webp: false, avif: false };
-  }
-
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  const ctx = canvas.getContext('2d');
-  
-  return {
-    webp: ctx ? canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0 : false,
-    avif: ctx ? canvas.toDataURL('image/avif').indexOf('data:image/avif') === 0 : false
-  };
-};
-
-// Cache format support detection
-let formatSupport: { webp: boolean; avif: boolean } | null = null;
-
-/**
- * Gets the best image format URL based on browser support
- * Enhanced with automatic WebP/AVIF conversion for all image sources
+ * Rewrites image URLs for known CDNs (Cloudinary, ImageKit) and returns safe URLs for storage hosts.
+ * Avoids client-side AVIF/WebP forcing — Android WebViews often mis-report or fail to decode.
  * @param url - The original image URL
  * @param width - Desired width (optional)
  * @param quality - Image quality (1-100, optional)
- * @returns Optimized image URL with format conversion
+ * @returns Optimized image URL where supported
  */
 export const getOptimizedImageUrl = (url: string, width?: number, quality: number = 80): string => {
   if (!url || url.startsWith('data:') || url.startsWith('blob:')) {
     return url;
   }
 
-  // Detect format support once
-  if (!formatSupport) {
-    formatSupport = detectFormatSupport();
-  }
-
-  // Cloudinary optimization with format conversion
+  // Cloudinary optimization — use f_auto only. Canvas-based AVIF/WebP detection often mismatches
+  // Android WebView <img> decode support and breaks list images while detail (raw URL) still works.
   if (url.includes('cloudinary.com')) {
     const parts = url.split('/upload/');
     if (parts.length === 2) {
       const transformations: string[] = [];
-      
-      // Add format conversion (AVIF > WebP > auto)
-      if (formatSupport.avif) {
-        transformations.push('f_avif');
-      } else if (formatSupport.webp) {
-        transformations.push('f_webp');
-      } else {
-        transformations.push('f_auto'); // Cloudinary auto-detects best format
-      }
+      transformations.push('f_auto');
       
       if (width) transformations.push(`w_${width}`);
       if (quality) transformations.push(`q_${quality}`);
@@ -86,20 +51,14 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
     return url;
   }
 
-  // ImageKit optimization with format conversion
+  // ImageKit — resize/quality only; do not force AVIF/WebP (WebView decode issues). Append with & if URL already has ?.
   if (url.includes('ik.imagekit.io')) {
     const params: string[] = [];
-    
-    // Add format conversion
-    if (formatSupport.avif) {
-      params.push('f=avif');
-    } else if (formatSupport.webp) {
-      params.push('f=webp');
-    }
-    
     if (width) params.push(`tr=w-${width}`);
     if (quality) params.push(`q-${quality}`);
-    return params.length > 0 ? `${url}?${params.join('&')}` : url;
+    if (params.length === 0) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}${params.join('&')}`;
   }
 
   // Supabase: on-the-fly transforms use `/storage/v1/render/image/public/...` (Pro+).
@@ -113,20 +72,10 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
     return url;
   }
 
-  // Firebase Storage / Google Cloud Storage
+  // Firebase Storage / Google Cloud Storage — do not append w=/q=; those are not supported, and using
+  // `?` breaks URLs that already have a query string (e.g. ?alt=media&token=...).
   if (url.includes('firebase') || url.includes('googleapis.com') || url.includes('googleusercontent.com')) {
-    const params: string[] = [];
-    
-    // Firebase Storage doesn't support format conversion natively, but we can optimize size
-    if (width) params.push(`w=${width}`);
-    if (quality) params.push(`q=${quality}`);
-    
-    // For Google Cloud Storage, we can use transformations if available
-    if (url.includes('googleapis.com') && params.length > 0) {
-      return `${url}?${params.join('&')}`;
-    }
-    
-    return url; // Return as-is if no transformations available
+    return url;
   }
 
   // Generic image optimization for any HTTP/HTTPS image URL

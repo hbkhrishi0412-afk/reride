@@ -11,6 +11,12 @@ import type { User } from '../types.js';
 import { formatSupabaseError } from '../utils/errorUtils.js';
 import { authenticatedFetch, handleApiResponse } from '../utils/authenticatedFetch';
 import {
+  getNativeGoogleWebClientId,
+  shouldTryNativeGoogleSignIn,
+  signInWithGoogleNative,
+  signOutGoogleNativeIfAvailable,
+} from '../utils/nativeGoogleSignIn';
+import {
   getNativeOAuthRedirectUrl,
   openGoogleOAuthUrl,
   shouldUseNativeGoogleOAuthFlow,
@@ -25,7 +31,10 @@ interface AuthResult<T = unknown> {
 }
 
 interface OAuthSignInResult extends AuthResult {
-  /** Null when OAuth opened in system browser / Custom Tab (Android); session finishes via PKCE deep link. */
+  /**
+   * Null: native id-token sign-in or OAuth opened in Custom Tab (session in app via Supabase).
+   * String: web OAuth URL to navigate to.
+   */
   user?: { redirectUrl: string | null };
 }
 
@@ -100,9 +109,40 @@ function mapGoogleProviderError(message: string): string | undefined {
 export const signInWithGoogle = async (): Promise<OAuthSignInResult> => {
   try {
     const supabase = getSupabaseClient();
-    const redirectTo = getOAuthRedirectUrl();
-
     const useExternalBrowser = shouldUseNativeGoogleOAuthFlow();
+
+    if (useExternalBrowser && shouldTryNativeGoogleSignIn()) {
+      try {
+        const { idToken, accessToken } = await signInWithGoogleNative();
+        const { error } = await supabase.auth.signInWithIdToken({
+          provider: 'google',
+          token: idToken,
+          access_token: accessToken ?? undefined,
+        });
+        if (error) {
+          const mapped = mapGoogleProviderError(error.message || '');
+          return {
+            success: false,
+            reason:
+              mapped ||
+              formatSupabaseError(error.message || 'Failed to sign in with Google'),
+          };
+        }
+        return { success: true, user: { redirectUrl: null } };
+      } catch (nativeErr: unknown) {
+        const name = nativeErr instanceof Error ? nativeErr.name : '';
+        if (name === 'AbortError') {
+          return { success: false, reason: 'Sign in was canceled' };
+        }
+        console.warn(
+          '[ReRide] Native Google Sign-In failed; falling back to browser OAuth. Client ID set:',
+          !!getNativeGoogleWebClientId(),
+          nativeErr,
+        );
+      }
+    }
+
+    const redirectTo = getOAuthRedirectUrl();
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -216,6 +256,7 @@ export const signOut = async (): Promise<AuthResult> => {
     if (error) {
       return { success: false, reason: formatSupabaseError(error.message) };
     }
+    await signOutGoogleNativeIfAvailable();
     return { success: true };
   } catch (error: unknown) {
     return { success: false, reason: wrapError(error, 'Failed to sign out') };

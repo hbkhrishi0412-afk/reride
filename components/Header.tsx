@@ -238,6 +238,18 @@ const Header: React.FC<HeaderProps> = memo(({
                                 >
                                     {t('nav.support')}
                                 </button>
+                                <button 
+                                    onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)} 
+                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
+                                >
+                                    {t('footer.safety')}
+                                </button>
+                                <button 
+                                    onClick={() => handleNavigate(ViewEnum.ABOUT_US)} 
+                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
+                                >
+                                    {t('nav.aboutUs')}
+                                </button>
                             </nav>
 
                             {/* Right Side Actions */}
@@ -458,6 +470,9 @@ const Header: React.FC<HeaderProps> = memo(({
                             <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.carServices')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.dealers')}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.SUPPORT)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.support')}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('footer.safety')}</button>
+                            <button onClick={() => handleNavigate(ViewEnum.ABOUT_US)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.aboutUs')}</button>
                             <hr className="border-gray-200"/>
                             <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.compareCount', { count: compareCount })}</button>
                             <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.wishlistCount', { count: wishlistCount })}</button>

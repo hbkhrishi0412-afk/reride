@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -42,6 +42,8 @@ import { resolveChatCallPhone, resolveChatOtherPartyName } from './utils/chatCon
 import { calculateDistance, getCityCoordinates, getUserLocation } from './services/locationService';
 import { logWarn, logDebug, logError, logInfo } from './utils/logger';
 import { authenticatedFetch } from './utils/authenticatedFetch';
+import { computePageSeoMeta } from './utils/pageSeoMeta.js';
+import { RERIDE_PRICE_DROP_EVENT, type ReridePriceDropDetail } from './services/buyerService';
 // Firebase removed - using Supabase
 
 // PERFORMANCE: Proper typing improves tree-shaking and prevents runtime errors
@@ -54,6 +56,7 @@ interface ServiceProvider {
   state?: string;
   district?: string;
   distanceKm?: number;
+  rating?: number;
   serviceCategories?: string[];
   services?: Array<{
     serviceType: string;
@@ -116,6 +119,7 @@ interface ProviderResponse {
   state?: string;
   district?: string;
   serviceCategories?: string[];
+  rating?: number | string | null;
 }
 
 interface ApiResponse<T = unknown> {
@@ -208,6 +212,7 @@ const CarServiceLogin = React.lazy(() => import('./components/CarServiceLogin'))
 const CarServiceDashboard = React.lazy(() => import('./components/CarServiceDashboard'));
 const PricingPage = React.lazy(() => import('./components/PricingPage'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
+const AboutUsPage = React.lazy(() => import('./components/AboutUsPage'));
 const FAQPage = React.lazy(() => import('./components/FAQPage'));
 const BuyerDashboard = React.lazy(() => import('./components/BuyerDashboard'));
 const CityLandingPage = React.lazy(() => import('./components/CityLandingPage'));
@@ -231,6 +236,7 @@ const MobileSupportPage = React.lazy(() => import('./components/MobileSupportPag
 const MobileFAQPage = React.lazy(() => import('./components/MobileFAQPage'));
 const PrivacyPolicyPage = React.lazy(() => import('./components/PrivacyPolicyPage'));
 const MobilePrivacyPolicyPage = React.lazy(() => import('./components/MobilePrivacyPolicyPage'));
+const SafetyCenterPage = React.lazy(() => import('./components/SafetyCenterPage'));
 const TermsOfServicePage = React.lazy(() => import('./components/TermsOfServicePage'));
 const MobileTermsOfServicePage = React.lazy(() => import('./components/MobileTermsOfServicePage'));
 const MobileBuyerDashboard = React.lazy(() => import('./components/MobileBuyerDashboard'));
@@ -816,7 +822,9 @@ const AppContent: React.FC = () => {
   }, [addToast, currentUser, setNotifications]);
 
   // Derive registered service providers (sellers) for the service cart
-  const [serviceProviderOptions, setServiceProviderOptions] = React.useState<Array<{ id: string; name: string; city: string; distanceKm?: number; serviceCategories?: string[] }>>([]);
+  const [serviceProviderOptions, setServiceProviderOptions] = React.useState<
+    Array<{ id: string; name: string; city: string; distanceKm?: number; serviceCategories?: string[]; rating?: number }>
+  >([]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -828,14 +836,21 @@ const AppContent: React.FC = () => {
         });
         if (providersResp.ok) {
           const providers = await providersResp.json() as ProviderResponse[];
-          const base = providers.map((p): ServiceProvider => ({
-            id: p.id || p.uid || p.email || '',
-            name: p.name || 'Unknown',
-            city: p.city || p.location || 'Unknown',
-            state: p.state,
-            district: p.district,
-            serviceCategories: p.serviceCategories || [],
-          })).filter((p): p is ServiceProvider => !!p.id && !!p.name);
+          const base = providers
+            .map((p): ServiceProvider => {
+              const raw = p.rating;
+              const n = raw != null && raw !== '' ? (typeof raw === 'number' ? raw : Number(raw)) : NaN;
+              return {
+                id: p.id || p.uid || p.email || '',
+                name: p.name || 'Unknown',
+                city: p.city || p.location || 'Unknown',
+                state: p.state,
+                district: p.district,
+                serviceCategories: p.serviceCategories || [],
+                ...(Number.isFinite(n) ? { rating: n } : {}),
+              };
+            })
+            .filter((p): p is ServiceProvider => !!p.id && !!p.name);
           
           const userCity = selectedCity || userLocation || currentUser?.location || '';
           const cityCoords = userCity ? await getCityCoordinates(userCity) : null;
@@ -853,7 +868,16 @@ const AppContent: React.FC = () => {
           if (!cancelled) {
             const withIds = enriched.flatMap((p) =>
               p.id
-                ? [{ id: p.id, name: p.name, city: p.city, distanceKm: p.distanceKm, serviceCategories: p.serviceCategories }]
+                ? [
+                    {
+                      id: p.id,
+                      name: p.name,
+                      city: p.city,
+                      distanceKm: p.distanceKm,
+                      serviceCategories: p.serviceCategories,
+                      ...(p.rating != null && Number.isFinite(p.rating) ? { rating: p.rating } : {}),
+                    },
+                  ]
                 : [],
             );
             setServiceProviderOptions(withIds);
@@ -902,6 +926,48 @@ const AppContent: React.FC = () => {
       cancelled = true;
     };
   }, [users, selectedCity, userLocation, currentUser?.location, userCoords]);
+
+  React.useEffect(() => {
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent<ReridePriceDropDetail>).detail;
+      if (!detail || !currentUser?.email || detail.userId !== currentUser.email) {
+        return;
+      }
+      const v = vehicles.find((x) => x.id === detail.vehicleId);
+      const oldStr = `₹${Number(detail.oldPrice).toLocaleString('en-IN')}`;
+      const newStr = `₹${Number(detail.newPrice).toLocaleString('en-IN')}`;
+      const message = v
+        ? `${v.year} ${v.make} ${v.model}: price dropped from ${oldStr} to ${newStr}.`
+        : `A wishlist vehicle’s price dropped from ${oldStr} to ${newStr}.`;
+
+      const notif: Notification = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        recipientEmail: currentUser.email,
+        title: 'Price drop',
+        message,
+        targetId: detail.vehicleId,
+        vehicleId: detail.vehicleId,
+        targetType: 'price_drop',
+        type: 'price_drop',
+        isRead: false,
+        timestamp: new Date().toISOString(),
+      };
+
+      setNotifications((prev) => {
+        const next = [notif, ...prev];
+        try {
+          localStorage.setItem('reRideNotifications', JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+        return next;
+      });
+      addToast(message, 'info');
+    };
+
+    window.addEventListener(RERIDE_PRICE_DROP_EVENT, handler);
+    return () => window.removeEventListener(RERIDE_PRICE_DROP_EVENT, handler);
+  }, [addToast, currentUser?.email, setNotifications, vehicles]);
 
   // Persist active chat id so the dock can reopen the last thread
   React.useEffect(() => {
@@ -2926,6 +2992,9 @@ const AppContent: React.FC = () => {
           />
         );
 
+      case ViewEnum.ABOUT_US:
+        return <AboutUsPage onNavigate={navigate} />;
+
       case ViewEnum.SUPPORT:
         if (isMobileApp) {
           return (
@@ -3002,6 +3071,13 @@ const AppContent: React.FC = () => {
         }
         return (
           <TermsOfServicePage />
+        );
+
+      case ViewEnum.SAFETY_CENTER:
+        return (
+          <React.Suspense fallback={<LoadingSpinner />}>
+            <SafetyCenterPage onNavigate={navigate} />
+          </React.Suspense>
         );
 
       case ViewEnum.CITY_LANDING:
@@ -3401,8 +3477,12 @@ const AppContent: React.FC = () => {
         return 'Service Cart';
       case ViewEnum.SUPPORT:
         return 'Support';
+      case ViewEnum.ABOUT_US:
+        return 'About';
       case ViewEnum.FAQ:
         return 'FAQ';
+      case ViewEnum.SAFETY_CENTER:
+        return 'Safety';
       case ViewEnum.CITY_LANDING:
         return selectedCity || 'City';
       case ViewEnum.SELLER_PROFILE:
@@ -3413,6 +3493,18 @@ const AppContent: React.FC = () => {
         return 'ReRide';
     }
   }, [currentView, selectedVehicle, selectedCity, publicSellerProfile]);
+
+  const seoMeta = useMemo(
+    () =>
+      computePageSeoMeta({
+        view: currentView,
+        pathname: routerLocation.pathname,
+        selectedVehicle,
+        selectedCity,
+        sellerDisplayName: publicSellerProfile?.name ?? null,
+      }),
+    [currentView, routerLocation.pathname, selectedVehicle, selectedCity, publicSellerProfile?.name],
+  );
 
   // Render Mobile App Layout
   if (isMobileApp) {
@@ -3431,7 +3523,9 @@ const AppContent: React.FC = () => {
       // For admin users, show the full AdminPanel (which is responsive)
       if (currentUser.role === 'admin') {
         return (
-          <AdminPanel 
+          <>
+            <SEO {...seoMeta} />
+            <AdminPanel 
             users={users}
             currentUser={currentUser}
             vehicles={vehicles}
@@ -3470,6 +3564,7 @@ const AppContent: React.FC = () => {
             onDeleteFaq={onDeleteFaq}
             onCertificationApproval={onCertificationApproval}
           />
+          </>
         );
       }
       
@@ -3477,6 +3572,7 @@ const AppContent: React.FC = () => {
       if (currentUser.role === 'seller') {
         return (
           <>
+          <SEO {...seoMeta} />
           <MobileLayout
             showHeader={false}
             showBottomNav={true}
@@ -3692,6 +3788,7 @@ const AppContent: React.FC = () => {
       if (currentUser.role === 'customer' && currentView === ViewEnum.BUYER_DASHBOARD) {
         return (
           <>
+          <SEO {...seoMeta} />
           <MobileLayout
             showHeader={false}
             showBottomNav={true}
@@ -3819,6 +3916,7 @@ const AppContent: React.FC = () => {
       currentView === ViewEnum.DETAIL || currentView === ViewEnum.NOTIFICATIONS_CENTER;
     return (
       <>
+        <SEO {...seoMeta} />
         {/* Mobile Feature Managers */}
         <MobilePushNotificationManager
           notifications={notifications}
@@ -3925,6 +4023,7 @@ const AppContent: React.FC = () => {
   // Render Desktop/Website Layout
   return (
     <>
+      <SEO {...seoMeta} />
       {/* Mobile Feature Managers (also work on desktop) */}
       <MobilePushNotificationManager
         notifications={notifications}
@@ -4057,7 +4156,6 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <AppProvider>
         <I18nDocumentSync />
-        <SEO />
         <AppContent />
         <CookieConsentBanner />
       </AppProvider>

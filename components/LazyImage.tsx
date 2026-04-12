@@ -87,6 +87,12 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
     };
   }, [eager]);
 
+  // New vehicle / URL: clear error and load state (otherwise a prior failed LazyImage stays broken).
+  useEffect(() => {
+    setHasError(false);
+    setIsLoaded(false);
+  }, [src]);
+
   // Ensure src is valid before optimizing
   const validSrc = src && src.trim() !== '' ? src : (placeholder || VEHICLE_IMAGE_PLACEHOLDER_DATA_URI);
   const optimizedSrc = isInView ? getOptimizedImageUrl(validSrc, width, quality) : '';
@@ -180,13 +186,12 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
         </div>
       )}
 
-      {/* Actual Image — URL may be optimized per provider (see getOptimizedImageUrl) */}
+      {/* Actual Image — optimize once (finalSrc already comes from getOptimizedImageUrl on validSrc) */}
       {isInView && !hasError && finalSrc && (() => {
-        const optimizedUrl = getOptimizedImageUrl(finalSrc, width, quality);
         return (
           <img
             ref={imgRef}
-            src={optimizedUrl}
+            src={finalSrc}
             alt={alt}
             className={`w-full h-full transition-opacity duration-300 ${
               isLoaded ? 'opacity-100' : 'opacity-0'
@@ -203,10 +208,9 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
 
       {/* Fallback for browsers without Intersection Observer or immediate load */}
       {(typeof window === 'undefined' || !window.IntersectionObserver) && !hasError && finalSrc && (() => {
-        const fbUrl = getOptimizedImageUrl(finalSrc, width, quality);
         return (
         <img
-          src={fbUrl}
+          src={finalSrc}
           alt={alt}
           className={`w-full h-full`}
           style={{ objectFit: 'cover' }}

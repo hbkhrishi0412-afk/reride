@@ -5,6 +5,8 @@ import StarRating from './StarRating.js';
 import { getFirstValidImage } from '../utils/imageUtils.js';
 import LazyImage from './LazyImage.js';
 import { logInfo, logError } from '../utils/logger.js';
+import { buildVehicleShareMessage, buildWhatsAppShareUrl, getVehicleListingUrl } from '../utils/whatsappShare.js';
+import { showVerifiedListingBadge } from '../utils/listingTrust.js';
 
 interface VehicleCardProps {
   vehicle: Vehicle;
@@ -46,6 +48,21 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onToggleWishlist(vehicle.id);
+  };
+
+  const handleWhatsAppShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = getVehicleListingUrl(vehicle.id, { medium: 'whatsapp', campaign: 'vehicle_card' });
+    const text = buildVehicleShareMessage(
+      {
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        price: vehicle.price,
+      },
+      url,
+    );
+    window.open(buildWhatsAppShareUrl(text), '_blank', 'noopener,noreferrer');
   };
 
   const handleSellerClick = (e: React.MouseEvent) => {
@@ -142,9 +159,24 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
         <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         
         {/* Premium Featured Badge - Top Left */}
+        {(showVerifiedListingBadge(vehicle) || isFeatured) && (
+        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 items-start">
+        {showVerifiedListingBadge(vehicle) && (
+          <div className="flex items-center gap-1.5 rounded-full bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm">
+            <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
+            </svg>
+            {t('common.verified')}
+          </div>
+        )}
+
         {isFeatured && (
           <div 
-            className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm z-10"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm"
             style={{
               background: 'linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%)',
               fontFamily: "'Poppins', sans-serif"
@@ -169,9 +201,22 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             </span>
           </div>
         )}
+        </div>
+        )}
         
         {/* Action Icons - Top Right (Compare & Favorite) */}
         <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+          <button
+            type="button"
+            onClick={handleWhatsAppShare}
+            className="p-2 rounded-full transition-colors flex items-center justify-center bg-emerald-600 hover:bg-emerald-700"
+            style={{ width: '32px', height: '32px' }}
+            aria-label={t('vehicle.share.whatsappAria')}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm4.52 11.95c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.12s-.64.81-.79.97c-.15.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.13-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.42-.14 0-.3 0-.47 0-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.05-.11-.2-.16-.44-.28z" />
+            </svg>
+          </button>
           <button
             type="button"
             onClick={handleCompareClick}
@@ -418,6 +463,16 @@ const VehicleCard: React.FC<VehicleCardProps> = ({
             >
               ₹{vehicle.price.toLocaleString('en-IN')}
             </p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuickView(vehicle);
+              }}
+              className="shrink-0 text-xs font-bold text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+            >
+              {t('home.quickView')}
+            </button>
           </div>
         </div>
       </div>

@@ -49,17 +49,20 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           <div>
             <h3 className="text-white font-bold text-lg mb-4">{t('footer.quickLinks')}</h3>
             <div className="space-y-3">
-              <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
+              <a href="#" onClick={(e) => handleNav(e, View.USED_CARS)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 {t('footer.buyUsedCars')}
               </a>
-              <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
+              <a href="#" onClick={(e) => handleNav(e, View.SELL_CAR)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 {t('footer.sellYourCar')}
               </a>
               <a href="#" onClick={(e) => handleNav(e, View.CAR_SERVICES)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 {t('nav.carServices')}
               </a>
-              <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
+              <a href="#" onClick={(e) => handleNav(e, View.DEALER_PROFILES)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 {t('footer.dealerNetwork')}
+              </a>
+              <a href="#" onClick={(e) => handleNav(e, View.ABOUT_US)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
+                {t('footer.aboutUs')}
               </a>
             </div>
           </div>
@@ -73,6 +76,9 @@ const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </a>
               <a href="#" onClick={(e) => handleNav(e, View.FAQ)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 {t('footer.faq')}
+              </a>
+              <a href="#" onClick={(e) => handleNav(e, View.SAFETY_CENTER)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
+                {t('footer.safety')}
               </a>
               <a href="#" onClick={(e) => handleNav(e, View.PRIVACY_POLICY)} className="block text-gray-300 hover:text-white transition-colors duration-300 hover:translate-x-1 transform">
                 {t('footer.privacy')}

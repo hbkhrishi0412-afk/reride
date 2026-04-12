@@ -7,7 +7,15 @@ interface CarServicesProps {
   onNavigate?: (view: ViewEnum) => void;
 }
 
-type ServiceSlug = 'diagnostics' | 'engine' | 'ac' | 'interior' | 'wheel' | 'periodic';
+type ServiceSlug =
+  | 'diagnostics'
+  | 'engine'
+  | 'ac'
+  | 'interior'
+  | 'wheel'
+  | 'periodic'
+  | 'clutch'
+  | 'denting';
 
 /** Canonical English titles — used for sessionStorage / ServiceDetail lookup */
 const CANONICAL_TITLE: Record<ServiceSlug, string> = {
@@ -17,6 +25,8 @@ const CANONICAL_TITLE: Record<ServiceSlug, string> = {
   interior: 'Interior Deep Cleaning',
   wheel: 'Wheel Alignment & Balancing',
   periodic: 'Periodic Services',
+  clutch: 'Clutch & Suspension',
+  denting: 'Denting & Painting',
 };
 
 const SERVICE_ICONS: Record<string, React.ReactNode> = {
@@ -81,6 +91,26 @@ const SERVICE_ICONS: Record<string, React.ReactNode> = {
       />
     </svg>
   ),
+  'Clutch & Suspension': (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M13 10V3L4 14h7v7l9-11h-7z"
+      />
+    </svg>
+  ),
+  'Denting & Painting': (
+    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+      />
+    </svg>
+  ),
 };
 
 const CATEGORY_ORDER: { slug: ServiceSlug; icon: string }[] = [
@@ -90,9 +120,20 @@ const CATEGORY_ORDER: { slug: ServiceSlug; icon: string }[] = [
   { slug: 'wheel', icon: '⚙️' },
   { slug: 'interior', icon: '🧹' },
   { slug: 'engine', icon: '🔧' },
+  { slug: 'clutch', icon: '⚡' },
+  { slug: 'denting', icon: '🎨' },
 ];
 
-const DETAIL_ORDER: ServiceSlug[] = ['diagnostics', 'engine', 'ac', 'interior', 'wheel', 'periodic'];
+const DETAIL_ORDER: ServiceSlug[] = [
+  'diagnostics',
+  'engine',
+  'ac',
+  'interior',
+  'wheel',
+  'periodic',
+  'clutch',
+  'denting',
+];
 
 const STEP_ORDER = ['pickup', 'service', 'drop'] as const;
 
@@ -231,7 +272,7 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
           <h2 className="text-xl lg:text-3xl font-black text-gray-900 mb-4 lg:mb-8 text-center lg:text-left">
             {t('carServices.chooseService')}
           </h2>
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 lg:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-6">
             {categoryTiles.map((category) => (
               <button
                 key={category.slug}

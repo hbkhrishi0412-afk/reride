@@ -20,6 +20,8 @@ export interface SEOProps {
   currency?: string;
   vehicleName?: string;
   noIndex?: boolean;
+  /** JSON-LD objects (Organization, Product/Vehicle, etc.) */
+  jsonLd?: Record<string, unknown>[];
 }
 
 export default function SEO({
@@ -32,6 +34,7 @@ export default function SEO({
   currency = 'INR',
   vehicleName,
   noIndex = false,
+  jsonLd,
 }: SEOProps) {
   const fullTitle = title ? `${title} | ReRide` : 'ReRide - Buy & Sell Quality Used Vehicles';
   const fullDescription = description || 'Buy and sell quality used vehicles with confidence. AI-powered recommendations and certified inspections.';
@@ -60,6 +63,11 @@ export default function SEO({
       <meta name="twitter:image" content={imageUrl} />
       {vehicleName && <meta name="twitter:label1" content="Vehicle" />}
       {vehicleName && <meta name="twitter:data1" content={vehicleName} />}
+      {jsonLd?.map((schema, idx) => (
+        <script key={idx} type="application/ld+json">
+          {JSON.stringify(schema)}
+        </script>
+      ))}
     </Helmet>
   );
 }

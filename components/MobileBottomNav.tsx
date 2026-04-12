@@ -91,17 +91,18 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
         </svg>
       )
     }
-  ], [t, i18n.language, currentUser, inboxCount, wishlistCount]);
+  ], [t, i18n.language, inboxCount, wishlistCount]);
 
   return (
     <>
-      {/* Ultra Premium Bottom Navigation with Advanced Glassmorphism */}
+      {/* Bottom nav: fixed content row (56px) + safe-area inset below — avoids squashing tabs on notched devices */}
       <nav 
-        className="fixed bottom-0 left-0 right-0 z-40 safe-bottom" 
+        className="fixed bottom-0 left-0 right-0 z-40 box-border" 
         data-testid="mobile-bottom-nav" 
         style={{ 
-          height: '70px', 
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          paddingLeft: 'env(safe-area-inset-left, 0px)',
+          paddingRight: 'env(safe-area-inset-right, 0px)',
           background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.96) 100%)',
           backdropFilter: 'blur(40px) saturate(180%)',
           WebkitBackdropFilter: 'blur(40px) saturate(180%)',
@@ -118,8 +119,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
         />
         
         <div 
-          className="flex items-center justify-around h-full px-2" 
-          style={{ height: 'calc(70px - env(safe-area-inset-bottom, 0px))' }}
+          className="grid h-14 w-full max-w-3xl mx-auto grid-cols-6 items-stretch gap-0 px-0.5 sm:px-2" 
         >
           {navItems.map((item) => {
             const messagesTabActive =
@@ -160,10 +160,9 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 key={item.id}
                 onClick={handleClick}
                 type="button"
-                className="flex flex-col items-center justify-center flex-1 h-full relative group outline-none focus:outline-none focus-visible:outline-none"
+                className="flex min-h-[48px] min-w-0 h-full flex-col items-center justify-center gap-0.5 relative group outline-none focus:outline-none focus-visible:outline-none touch-manipulation"
                 style={{ 
-                  minHeight: '48px',
-                  transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  transition: 'color 0.25s ease, transform 0.2s ease',
                   WebkitTapHighlightColor: 'transparent'
                 }}
                 onTouchStart={(e) => {
@@ -213,14 +212,15 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                   />
                 )}
                 
-                {/* Icon Container with Premium Effects */}
-                <div className="relative mb-1 z-10">
+                {/* Icon — fixed box keeps every tab vertically aligned across devices */}
+                <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center">
                   <div 
-                    className="relative transition-all duration-500 ease-out"
+                    className="relative transition-transform duration-200 ease-out"
                     style={{ 
                       color: item.isSpecial ? (isActive ? '#FF6B35' : '#FF6B35') : (isActive ? '#FF6B35' : '#6B7280'),
-                      transform: isActive ? 'scale(1.2) translateY(-3px)' : 'scale(1)',
-                      filter: isActive ? 'drop-shadow(0 3px 6px rgba(255, 107, 53, 0.4))' : (item.isSpecial ? 'drop-shadow(0 2px 4px rgba(255, 107, 53, 0.3))' : 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1))')
+                      transform: isActive ? 'scale(1.08)' : 'scale(1)',
+                      transformOrigin: 'center center',
+                      filter: isActive ? 'drop-shadow(0 2px 4px rgba(255, 107, 53, 0.35))' : (item.isSpecial ? 'drop-shadow(0 2px 4px rgba(255, 107, 53, 0.3))' : 'drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1))')
                     }}
                   >
                     {item.icon(isActive)}
@@ -258,14 +258,12 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                   )}
                 </div>
                 
-                {/* Label with Premium Typography & Animation */}
                 <span 
-                  className="text-[11px] font-semibold transition-all duration-500 relative z-10"
+                  className="relative z-10 block max-w-full truncate text-center text-[10px] font-semibold leading-none transition-colors duration-200 sm:text-[11px]"
                   style={{ 
                     color: item.isSpecial ? (isActive ? '#D97706' : '#D97706') : (isActive ? '#FF6B35' : '#6B7280'),
                     letterSpacing: '-0.01em',
-                    textShadow: isActive ? '0 1px 3px rgba(255, 107, 53, 0.25)' : 'none',
-                    transform: isActive ? 'translateY(-2px)' : 'translateY(0)',
+                    textShadow: isActive ? '0 1px 2px rgba(255, 107, 53, 0.2)' : 'none',
                     fontWeight: isActive ? 700 : 600,
                     opacity: isActive ? 1 : (item.isSpecial ? 0.9 : 0.85)
                   }}
@@ -276,7 +274,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = React.memo(({
                 {/* Premium Active Indicator - Refined Dot or Line */}
                 {isActive && (
                   <div 
-                    className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2 rounded-full"
+                    className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full"
                     style={{
                       width: item.id === 'buy' ? '24px' : '5px',
                       height: item.id === 'buy' ? '2px' : '5px',

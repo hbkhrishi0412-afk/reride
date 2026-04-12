@@ -28,6 +28,7 @@ const ICONS = {
   PRICE: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v.01" /></svg>,
   SERVICE: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 112 0v1.586a1 1 0 00.293.707l1.414 1.414a1 1 0 00.707.293H17a2 2 0 110 2h-1.586a1 1 0 00-.707.293l-1.414 1.414a1 1 0 00-.293.707V15a2 2 0 11-2 0v-1.586a1 1 0 00-.293-.707l-1.414-1.414a1 1 0 00-.707-.293H7a2 2 0 110-2h1.586a1 1 0 00.707-.293l1.414-1.414A1 1 0 0011 5.586V4z" /></svg>,
   BELL: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
+  SHIELD: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
 };
 
 const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavigate, currentUser, onLogout }) => {
@@ -41,6 +42,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose, onNavi
       { id: 'home', title: 'Go to Home', icon: ICONS.HOME, action: () => { onNavigate(View.HOME); onClose(); }, section: 'Navigation' },
       { id: 'used_cars', title: 'Browse Used Cars', icon: ICONS.SEARCH, action: () => { onNavigate(View.USED_CARS); onClose(); }, section: 'Navigation' },
       { id: 'car_services', title: 'Car Services', icon: ICONS.SERVICE, action: () => { onNavigate(View.CAR_SERVICES); onClose(); }, section: 'Navigation' },
+      { id: 'safety', title: 'Trust & Safety', icon: ICONS.SHIELD, action: () => { onNavigate(View.SAFETY_CENTER); onClose(); }, section: 'Navigation' },
       { id: 'pricing', title: 'View Pricing', icon: ICONS.PRICE, action: () => { onNavigate(View.PRICING); onClose(); }, section: 'Navigation' },
       { id: 'sell_car', title: 'Sell a Car', icon: ICONS.SELL, action: () => { onNavigate(View.SELLER_LOGIN); onClose(); }, section: 'Navigation' },
       // Conditional Navigation

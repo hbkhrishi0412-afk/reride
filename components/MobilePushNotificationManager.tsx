@@ -108,6 +108,9 @@ function getNotificationUrl(notification: Notification): string {
   if (notification.type === 'message') {
     return `/?view=INBOX`;
   }
+  if (notification.targetType === 'price_drop') {
+    return `/?view=WISHLIST`;
+  }
   if (notification.type === 'wishlist' || notification.type === 'price_drop') {
     return `/?view=WISHLIST`;
   }
@@ -120,6 +123,9 @@ function getNotificationView(notification: Notification): string {
   }
   if (notification.type === 'message') {
     return 'INBOX';
+  }
+  if (notification.targetType === 'price_drop') {
+    return 'WISHLIST';
   }
   if (notification.type === 'wishlist' || notification.type === 'price_drop') {
     return 'WISHLIST';

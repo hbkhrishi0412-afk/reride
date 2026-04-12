@@ -14,6 +14,7 @@ import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
 import { logWarn, logDebug } from '../utils/logger';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
+import { buildVehicleShareMessage, buildWhatsAppShareUrl, getVehicleListingUrl } from '../utils/whatsappShare.js';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -41,14 +42,26 @@ const ICONS = {
     link: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" /></svg>,
 };
 
-const SocialShareButtons: React.FC = () => {
+const SocialShareButtons: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
     const { t } = useTranslation();
     const [copyState, setCopyState] = useState<'default' | 'copied' | 'failed'>('default');
 
+    const cleanListingUrl =
+        typeof window !== 'undefined' && vehicle?.id != null
+            ? getVehicleListingUrl(Number(vehicle.id))
+            : typeof window !== 'undefined'
+              ? window.location.href
+              : '';
+    const waListingUrl =
+        typeof window !== 'undefined' && vehicle?.id != null
+            ? getVehicleListingUrl(Number(vehicle.id), { medium: 'whatsapp', campaign: 'vehicle_detail' })
+            : cleanListingUrl;
+
     const handleCopyLink = () => {
         const reset = () => setCopyState('default');
+        const urlToCopy = cleanListingUrl || (typeof window !== 'undefined' ? window.location.href : '');
         if (navigator.clipboard) {
-            navigator.clipboard.writeText(window.location.href).then(() => {
+            navigator.clipboard.writeText(urlToCopy).then(() => {
                 setCopyState('copied');
                 setTimeout(reset, 2000);
             }, () => {
@@ -68,11 +81,36 @@ const SocialShareButtons: React.FC = () => {
               ? t('vehicle.share.failed')
               : t('vehicle.share.copyLink');
 
+    const waUrl =
+        waListingUrl &&
+        buildWhatsAppShareUrl(
+            buildVehicleShareMessage(
+                {
+                    make: vehicle.make,
+                    model: vehicle.model,
+                    year: vehicle.year,
+                    price: vehicle.price,
+                },
+                waListingUrl,
+            ),
+        );
+
     return (
-        <div className="flex-1">
-            <button 
-                onClick={handleCopyLink} 
-                className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold bg-gray-100 text-gray-700 px-3 py-2.5 rounded-lg hover:bg-gray-200 transition-colors"
+        <div className="flex-1 flex gap-2">
+            <a
+                href={waUrl || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold bg-emerald-600 text-white px-3 py-2.5 rounded-lg hover:bg-emerald-700 transition-colors"
+                aria-label={t('vehicle.share.whatsappAria')}
+            >
+                {ICONS.whatsapp}
+                <span>WhatsApp</span>
+            </a>
+            <button
+                type="button"
+                onClick={handleCopyLink}
+                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold bg-gray-100 text-gray-700 px-3 py-2.5 rounded-lg hover:bg-gray-200 transition-colors"
             >
                 {ICONS.link}
                 <span>{copyLabel}</span>
@@ -1099,7 +1137,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                               t('vehicle.detail.compare')
                             )}
                           </button>
-                          <SocialShareButtons />
+                          <SocialShareButtons vehicle={safeVehicle} />
                         </div>
                         </div>
 
