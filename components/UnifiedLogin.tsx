@@ -338,6 +338,8 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             onServiceProviderLogin(sp.provider);
             return;
           }
+          setError(sp.message);
+          return;
         }
 
         // Check if error includes detected role hint
