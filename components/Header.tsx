@@ -60,11 +60,14 @@ const Header: React.FC<HeaderProps> = memo(({
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isServiceProviderMenuOpen, setIsServiceProviderMenuOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+    const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
 
     const notificationsRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
     const serviceProviderMenuRef = useRef<HTMLDivElement>(null);
     const mobileMenuRef = useRef<HTMLDivElement>(null);
+    const moreMenuRef = useRef<HTMLDivElement>(null);
 
     const unreadNotifications = useMemo(() => 
         notifications.filter(n => !n.isRead), [notifications]
@@ -92,11 +95,18 @@ const Header: React.FC<HeaderProps> = memo(({
             if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
                 setIsMobileMenuOpen(false);
             }
+            if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+                setIsMoreMenuOpen(false);
+            }
         };
 
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        if (!isMobileMenuOpen) setIsMobileMoreOpen(false);
+    }, [isMobileMenuOpen]);
 
     const handleNavigate = (view: ViewEnum) => {
         onNavigate(view);
@@ -104,6 +114,8 @@ const Header: React.FC<HeaderProps> = memo(({
         setIsNotificationsOpen(false);
         setIsUserMenuOpen(false);
         setIsServiceProviderMenuOpen(false);
+        setIsMoreMenuOpen(false);
+        setIsMobileMoreOpen(false);
     };
 
     const handleViewAllNotifications = () => {
@@ -232,24 +244,57 @@ const Header: React.FC<HeaderProps> = memo(({
                                 >
                                     {t('nav.dealers')}
                                 </button>
-                                <button 
-                                    onClick={() => handleNavigate(ViewEnum.SUPPORT)} 
-                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
-                                >
-                                    {t('nav.support')}
-                                </button>
-                                <button 
-                                    onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)} 
-                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
-                                >
-                                    {t('footer.safety')}
-                                </button>
-                                <button 
-                                    onClick={() => handleNavigate(ViewEnum.ABOUT_US)} 
-                                    className="px-4 py-2 rounded-xl font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 transition-all duration-300 hover:-translate-y-0.5 text-[15px]"
-                                >
-                                    {t('nav.aboutUs')}
-                                </button>
+                                <div className="relative" ref={moreMenuRef}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsMoreMenuOpen((p) => !p)}
+                                        className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-4 font-semibold text-gray-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 text-[15px]"
+                                        aria-expanded={isMoreMenuOpen}
+                                        aria-haspopup="menu"
+                                    >
+                                        {t('nav.more')}
+                                        <svg
+                                            className={`h-4 w-4 transition-transform duration-200 ${isMoreMenuOpen ? 'rotate-180' : ''}`}
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                            aria-hidden
+                                        >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+                                    {isMoreMenuOpen && (
+                                        <div
+                                            className="absolute left-0 top-full z-20 mt-1 min-w-[200px] rounded-lg border border-gray-100 bg-white py-1 shadow-lg dark:border-gray-200"
+                                            role="menu"
+                                        >
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => handleNavigate(ViewEnum.SUPPORT)}
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600"
+                                            >
+                                                {t('nav.support')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)}
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600"
+                                            >
+                                                {t('footer.safety')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                role="menuitem"
+                                                onClick={() => handleNavigate(ViewEnum.ABOUT_US)}
+                                                className="block w-full px-4 py-2.5 text-left text-[15px] font-semibold text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600"
+                                            >
+                                                {t('nav.aboutUs')}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </nav>
 
                             {/* Right Side Actions */}
@@ -470,9 +515,32 @@ const Header: React.FC<HeaderProps> = memo(({
                             <button onClick={() => handleNavigate(ViewEnum.SELLER_LOGIN)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.sellCar')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.CAR_SERVICES)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.carServices')}</button>
                             <button onClick={() => handleNavigate(ViewEnum.DEALER_PROFILES)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.dealers')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.SUPPORT)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.support')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('footer.safety')}</button>
-                            <button onClick={() => handleNavigate(ViewEnum.ABOUT_US)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.aboutUs')}</button>
+                            <div className="rounded-lg border border-gray-100 overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsMobileMoreOpen((p) => !p)}
+                                    className="flex w-full items-center justify-between text-left font-semibold text-reride-text-dark py-2 px-4 hover:bg-white"
+                                    aria-expanded={isMobileMoreOpen}
+                                >
+                                    {t('nav.more')}
+                                    <svg
+                                        className={`h-5 w-5 shrink-0 transition-transform ${isMobileMoreOpen ? 'rotate-180' : ''}`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                        aria-hidden
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                {isMobileMoreOpen && (
+                                    <div className="border-t border-gray-100 bg-gray-50/80">
+                                        <button onClick={() => handleNavigate(ViewEnum.SUPPORT)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-2 px-6 hover:bg-white">{t('nav.support')}</button>
+                                        <button onClick={() => handleNavigate(ViewEnum.SAFETY_CENTER)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-2 px-6 hover:bg-white">{t('footer.safety')}</button>
+                                        <button onClick={() => handleNavigate(ViewEnum.ABOUT_US)} className="block w-full text-left text-sm font-semibold text-reride-text-dark py-2 px-6 hover:bg-white">{t('nav.aboutUs')}</button>
+                                    </div>
+                                )}
+                            </div>
                             <hr className="border-gray-200"/>
                             <button onClick={() => handleNavigate(ViewEnum.COMPARISON)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.compareCount', { count: compareCount })}</button>
                             <button onClick={() => handleNavigate(ViewEnum.WISHLIST)} className="block w-full text-left font-semibold text-reride-text-dark py-2 px-4 rounded-lg hover:bg-white">{t('nav.wishlistCount', { count: wishlistCount })}</button>
