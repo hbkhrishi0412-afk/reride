@@ -873,8 +873,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     
-    // Ensure role is valid
-    if (!['customer', 'seller', 'admin'].includes(user.role)) {
+    // Ensure role is valid (API / Supabase may return service_provider for provider accounts)
+    if (!['customer', 'seller', 'admin', 'service_provider'].includes(user.role)) {
       logError('❌ Invalid role in handleLogin:', user.role);
       addToast(t('toast.loginInvalidRole'), 'error');
       return;
@@ -885,7 +885,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sessionStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
     try {
-      if (user.role === 'customer' || user.role === 'seller') {
+      if (user.role === 'customer' || user.role === 'seller' || user.role === 'service_provider') {
         sessionStorage.setItem('reride_last_role', user.role);
       }
     } catch {
@@ -917,6 +917,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       logDebug('🔄 Setting seller dashboard view after login');
       postLoginView = View.SELLER_DASHBOARD;
       setCurrentView(View.SELLER_DASHBOARD);
+    } else if (user.role === 'service_provider') {
+      postLoginView = View.CAR_SERVICE_DASHBOARD;
+      setCurrentView(View.CAR_SERVICE_DASHBOARD);
+      try {
+        const loc =
+          typeof user.location === 'string' && user.location.trim() ? user.location.trim() : '';
+        const detail = {
+          id: user.id,
+          name: (user.name && String(user.name).trim()) || 'Service provider',
+          email: user.email,
+          phone: user.mobile || '',
+          city: loc || 'Pending setup',
+        };
+        window.dispatchEvent(new CustomEvent('reride:service-provider-oauth', { detail }));
+      } catch {
+        /* ignore */
+      }
     } else if (user.role === 'customer') {
       postLoginView = View.HOME;
       setCurrentView(View.HOME);
@@ -931,6 +948,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? '/admin'
           : user.role === 'seller'
             ? '/seller/dashboard'
+            : user.role === 'service_provider'
+              ? '/car-services/dashboard'
             : '/';
       routerNavigate(pathByRole, {
         state: {
@@ -1129,7 +1148,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     
     // Ensure role is valid
-    if (!['customer', 'seller', 'admin'].includes(user.role)) {
+    if (!['customer', 'seller', 'admin', 'service_provider'].includes(user.role)) {
       logError('❌ Invalid role in handleRegister:', user.role);
       addToast(t('toast.registerInvalidRole'), 'error');
       return;
@@ -1162,6 +1181,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else if (user.role === 'seller') {
       logDebug('🔄 Setting seller dashboard view after registration');
       setCurrentView(View.SELLER_DASHBOARD);
+    } else if (user.role === 'service_provider') {
+      setCurrentView(View.CAR_SERVICE_DASHBOARD);
+      try {
+        const loc =
+          typeof user.location === 'string' && user.location.trim() ? user.location.trim() : '';
+        window.dispatchEvent(
+          new CustomEvent('reride:service-provider-oauth', {
+            detail: {
+              id: user.id,
+              name: (user.name && String(user.name).trim()) || 'Service provider',
+              email: user.email,
+              phone: user.mobile || '',
+              city: loc || 'Pending setup',
+            },
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
     } else if (user.role === 'customer') {
       // Customers go to HOME (they can access BUYER_DASHBOARD from profile/navigation)
       setCurrentView(View.HOME);
