@@ -9,15 +9,14 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler
 import org.json.JSONObject
 
 /**
- * Opens Google OAuth in Chrome Custom Tabs (see [AndroidOAuthBridge]) so Google does not block WebView
- * (403 disallowed_useragent). PKCE completes via [com.reride.app] deep link → JS
- * [window.__rerideNativeOAuthUrl].
+ * Opens Google OAuth in the **default external browser** (not Custom Tabs). Custom Tabs often keep
+ * `com.reride.app://oauth-callback` inside the tab instead of resuming this activity, so sign-in appears
+ * "stuck" in an in-app browser. PKCE completes via deep link → [window.__rerideNativeOAuthUrl].
  */
 class MainActivity : ComponentActivity() {
     private lateinit var webView: WebView
@@ -82,10 +81,11 @@ private class AndroidOAuthBridge(private val activity: ComponentActivity) {
     fun openChromeTab(url: String) {
         activity.runOnUiThread {
             try {
-                CustomTabsIntent.Builder().build().launchUrl(activity, Uri.parse(url))
-            } catch (_: Exception) {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 activity.startActivity(intent)
+            } catch (_: Exception) {
+                /* ignore */
             }
         }
     }
