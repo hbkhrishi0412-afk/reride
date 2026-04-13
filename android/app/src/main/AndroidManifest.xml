@@ -37,13 +37,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Custom scheme only (no autoVerify). Keep separate from any https App Links intent-filters. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:host="oauth-callback"
-                    android:scheme="com.reride.app" />
+                <data android:scheme="com.reride.app" android:host="oauth-callback" />
+                <data android:scheme="com.reride.app" android:host="oauth-callback" android:pathPrefix="/" />
             </intent-filter>
 
         </activity>

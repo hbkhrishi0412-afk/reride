@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { View, User } from '../types';
 import { login, register } from '../services/userService';
 import { signInWithGoogle, syncWithBackend } from '../services/authService';
+import { signInWithEmail } from '../services/supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase.js';
 import OTPLogin from './OTPLogin';
 import PasswordInput from './PasswordInput';
@@ -14,6 +15,8 @@ interface UnifiedLoginProps {
   onRegister: (user: User) => void;
   onNavigate: (view: View) => void;
   onForgotPassword: () => void;
+  /** Completes car-services dashboard login (Supabase + /api/service-providers); parent sets provider state and navigates. */
+  onServiceProviderLogin?: (provider: Record<string, unknown>) => void;
   allowedRoles?: UserRole[];
   forcedRole?: UserRole;
   hideRolePicker?: boolean;
@@ -22,11 +25,38 @@ interface UnifiedLoginProps {
 type UserRole = 'customer' | 'seller' | 'admin' | 'service_provider';
 type AuthMode = 'login' | 'register' | 'otp';
 
+async function loginServiceProviderWithEmail(
+  email: string,
+  password: string,
+): Promise<{ ok: true; provider: Record<string, unknown> } | { ok: false; message: string }> {
+  const result = await signInWithEmail(email, password);
+  if (!result.success || !result.session) {
+    return { ok: false, message: result.reason || 'Login failed' };
+  }
+  const resp = await fetch('/api/service-providers', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${result.session.access_token}` },
+  });
+  if (resp.status === 404) {
+    return {
+      ok: false,
+      message: 'No service provider profile found for this account. Contact admin.',
+    };
+  }
+  if (!resp.ok) {
+    const data = (await resp.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, message: data.error || 'Failed to load provider profile' };
+  }
+  const provider = (await resp.json()) as Record<string, unknown>;
+  return { ok: true, provider };
+}
+
 const UnifiedLogin: React.FC<UnifiedLoginProps> = ({ 
   onLogin, 
   onRegister, 
   onNavigate, 
   onForgotPassword,
+  onServiceProviderLogin,
   allowedRoles = ['customer', 'seller', 'service_provider'],
   forcedRole,
   hideRolePicker
@@ -245,15 +275,31 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
       if (mode === 'login') {
         if (!email || !password) throw new Error(t('auth.error.emailPasswordRequired'));
-        // Prevent submit for service provider placeholder
         if (selectedRole === 'service_provider') {
-          onNavigate(View.CAR_SERVICE_LOGIN);
+          if (!onServiceProviderLogin) {
+            throw new Error(t('auth.error.failedAuthenticate'));
+          }
+          const sp = await loginServiceProviderWithEmail(email, password);
+          if (!sp.ok) {
+            throw new Error(sp.message);
+          }
+          if (rememberMe) {
+            localStorage.setItem(
+              `remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`,
+              email,
+            );
+          } else {
+            localStorage.removeItem(
+              `remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`,
+            );
+          }
+          onServiceProviderLogin(sp.provider);
           return;
         }
         result = await login({ email, password, role: selectedRole });
       } else {
         if (!name || !mobile || !email || !password) throw new Error(t('auth.error.registerFieldsRequired'));
-        // Prevent register for service provider placeholder
+        // Service provider signup uses extended fields on the car-services page
         if (selectedRole === 'service_provider') {
           onNavigate(View.CAR_SERVICE_LOGIN);
           return;
@@ -273,19 +319,27 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           onRegister(result.user);
         }
       } else {
-        // Check if user is a service provider trying to login through regular form
         const errorMessage = result.reason || t('auth.error.unknown');
-        const isServiceProvider = (result as any).isServiceProvider;
-        
-        if (isServiceProvider) {
-          // Redirect to service provider login page
-          setError(t('auth.error.serviceProviderLogin'));
-          setTimeout(() => {
-            onNavigate(View.CAR_SERVICE_LOGIN);
-          }, 2000);
-          return;
+        if (
+          onServiceProviderLogin &&
+          /service provider login page/i.test(errorMessage) &&
+          email &&
+          password
+        ) {
+          const sp = await loginServiceProviderWithEmail(email, password);
+          if (sp.ok) {
+            setSelectedRole('service_provider');
+            const spKey = `remembered${'service_provider'.charAt(0).toUpperCase() + 'service_provider'.slice(1)}Email`;
+            if (rememberMe) {
+              localStorage.setItem(spKey, email);
+            } else {
+              localStorage.removeItem(spKey);
+            }
+            onServiceProviderLogin(sp.provider);
+            return;
+          }
         }
-        
+
         // Check if error includes detected role hint
         const detectedRole = result.detectedRole;
         if (detectedRole && allowedRoles.includes(detectedRole as UserRole)) {

@@ -3142,6 +3142,22 @@ const AppContent: React.FC = () => {
                 onLogin={handleLogin}
                 onRegister={handleRegister}
                 onNavigate={navigate}
+                onServiceProviderLogin={(provider) => {
+                  const name =
+                    typeof provider.name === 'string' && provider.name.trim()
+                      ? provider.name.trim()
+                      : 'Service provider';
+                  setServiceProvider({
+                    ...(provider as unknown as ServiceProvider),
+                    name,
+                    city:
+                      typeof provider.city === 'string' && provider.city.trim()
+                        ? provider.city.trim()
+                        : 'Pending setup',
+                  });
+                  navigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+                  addToast(`Welcome, ${name}!`, 'success');
+                }}
                 onForgotPassword={() => {
                   setForgotPasswordRole('customer');
                   navigate(ViewEnum.FORGOT_PASSWORD);
