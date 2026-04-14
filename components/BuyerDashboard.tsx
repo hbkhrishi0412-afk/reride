@@ -390,7 +390,6 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           isInWishlist={wishlist.includes(vehicle.id)}
                           isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
                           onViewSellerProfile={onViewSellerProfile}
-                          onQuickView={onSelectVehicle}
                         />
                       ))}
                     </div>
@@ -415,7 +414,6 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           isInWishlist={wishlist.includes(vehicle.id)}
                           isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
                           onViewSellerProfile={onViewSellerProfile}
-                          onQuickView={onSelectVehicle}
                         />
                       ))}
                     </div>
@@ -557,7 +555,6 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         isInWishlist={wishlist.includes(vehicle.id)}
                         isCompareDisabled={comparisonList.length >= 3 && !comparisonList.includes(vehicle.id)}
                         onViewSellerProfile={onViewSellerProfile}
-                        onQuickView={onSelectVehicle}
                       />
                     ))}
                   </div>

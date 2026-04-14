@@ -6,7 +6,6 @@ import { matchesCity } from '../utils/cityMapping';
 import { FALLBACK_VEHICLES } from '../constants/fallback';
 import MobileVehicleCard from './MobileVehicleCard';
 import LazyImage from './LazyImage';
-import QuickViewModal from './QuickViewModal';
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
 import { showVerifiedListingBadge } from '../utils/listingTrust';
 import {
@@ -58,7 +57,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
 }) => {
   const { t } = useTranslation();
   const { data: storefrontAgg } = useStorefrontAggregates();
-  const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const carouselRef = useRef<HTMLDivElement>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -468,21 +466,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
                       {t('common.verified')}
                     </div>
                     )}
-                    <button
-                      type="button"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onPointerUp={(e) => e.stopPropagation()}
-                      onTouchStart={(e) => e.stopPropagation()}
-                      onTouchEnd={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setQuickViewVehicle(vehicle);
-                      }}
-                      className="absolute bottom-3 left-3 z-[1] rounded-lg bg-white/95 px-3 py-2 text-xs font-bold text-blue-700 shadow-lg backdrop-blur-md"
-                    >
-                      {t('home.quickView')}
-                    </button>
-                    
                     {/* Wishlist Button - Premium Style */}
                     <button
                       type="button"
@@ -806,15 +789,6 @@ export const MobileHomePage: React.FC<MobileHomePageProps> = React.memo(({
         </button>
       </div>
 
-      <QuickViewModal
-        vehicle={quickViewVehicle}
-        onClose={() => setQuickViewVehicle(null)}
-        onSelectVehicle={onSelectVehicle}
-        onToggleCompare={onToggleCompare}
-        onToggleWishlist={onToggleWishlist}
-        comparisonList={comparisonList}
-        wishlist={wishlist}
-      />
     </div>
   );
 });

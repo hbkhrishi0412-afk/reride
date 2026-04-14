@@ -1645,7 +1645,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                   <div>
                       <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Live Preview</h3>
                       <div className="pointer-events-none">
-                         <VehicleCard vehicle={previewVehicle} onSelect={() => {}} onToggleCompare={() => {}} isSelectedForCompare={false} onToggleWishlist={() => {}} isInWishlist={false} isCompareDisabled={true} onViewSellerProfile={() => {}} onQuickView={() => {}} />
+                         <VehicleCard vehicle={previewVehicle} onSelect={() => {}} onToggleCompare={() => {}} isSelectedForCompare={false} onToggleWishlist={() => {}} isInWishlist={false} isCompareDisabled={true} onViewSellerProfile={() => {}} />
                       </div>
                       {isSellerListingOfferVisible(previewVehicle) ? (
                         <div className="pointer-events-none mt-4">

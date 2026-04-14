@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -21,6 +23,32 @@ export default defineConfig(({ mode }) => {
     __RERIDE_CAPACITOR__: JSON.stringify(!!capacitor),
   },
   plugins: [
+    {
+      name: 'reride-debug-nav-log',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.method !== 'POST' || req.url !== '/__debug_nav_log') {
+            next()
+            return
+          }
+          let raw = ''
+          req.on('data', (chunk) => {
+            raw += chunk
+          })
+          req.on('end', () => {
+            try {
+              const parsed = JSON.parse(raw || '{}')
+              const line = `${JSON.stringify(parsed)}\n`
+              fs.appendFileSync(path.join(process.cwd(), 'debug-4f3bea.log'), line, 'utf8')
+            } catch {
+              /* ignore */
+            }
+            res.statusCode = 204
+            res.end()
+          })
+        })
+      },
+    },
     react(),
     VitePWA({
       disable: capacitor,

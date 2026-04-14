@@ -10,7 +10,6 @@ import useIsMobileApp from '../hooks/useIsMobileApp.js';
 import type { Vehicle, VehicleCategory, SavedSearch, SearchFilters } from '../types.js';
 import { VehicleCategory as CategoryEnum } from '../types.js';
 import { parseSearchQuery, getSearchSuggestions } from '../services/geminiService.js';
-import QuickViewModal from './QuickViewModal.js';
 import VehicleTile from './VehicleTile.js';
 import VehicleTileSkeleton from './VehicleTileSkeleton.js';
 import { saveSearch as saveBuyerSearch } from '../services/buyerService.js';
@@ -377,7 +376,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   const [stateFilter, setStateFilter] = useState('');
   const [isStateFilterUserSet, setIsStateFilterUserSet] = useState(false); // Track if state filter was explicitly set by user
   const [sortOrder, setSortOrder] = useState('YEAR_DESC');
-  const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<VehicleCategory | 'ALL'>(initialCategory || 'ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [isDesktopFilterVisible, setIsDesktopFilterVisible] = useState(true);
@@ -1819,7 +1817,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             Array.from({ length: 3 }).map((_, index) => <VehicleCardSkeleton key={index} />)
           ) : processedVehicles.length > 0 ? (
             processedVehicles.map(vehicle => (
-              <VehicleCard key={vehicle.id} vehicle={vehicle} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(vehicle.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(vehicle.id)} isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} onQuickView={setQuickViewVehicle} />
+              <VehicleCard key={vehicle.id} vehicle={vehicle} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(vehicle.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(vehicle.id)} isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} />
             ))
           ) : (
             <div className="col-span-full text-center py-16 bg-white rounded-xl shadow-soft-lg">
@@ -1828,7 +1826,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
             </div>
           )}
         </div>
-        <QuickViewModal vehicle={quickViewVehicle} onClose={() => setQuickViewVehicle(null)} onSelectVehicle={onSelectVehicle} onToggleCompare={onToggleCompare} onToggleWishlist={onToggleWishlist} comparisonList={comparisonList} wishlist={wishlist} />
       </div>
     );
   }
@@ -2344,15 +2341,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           t={t}
         />
 
-        <QuickViewModal
-          vehicle={quickViewVehicle}
-          onClose={() => setQuickViewVehicle(null)}
-          onSelectVehicle={onSelectVehicle}
-          onToggleCompare={onToggleCompare}
-          onToggleWishlist={onToggleWishlist}
-          comparisonList={comparisonList}
-          wishlist={wishlist}
-        />
       </div>
     );
   }
@@ -2502,7 +2490,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                       isInWishlist={wishlist.includes(vehicle.id)} 
                       isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4} 
                       onViewSellerProfile={onViewSellerProfile} 
-                      onQuickView={setQuickViewVehicle} 
                     />
                   ) : (
                     <VehicleTile 
@@ -2639,7 +2626,6 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
         </div>
       )}
 
-      <QuickViewModal vehicle={quickViewVehicle} onClose={() => setQuickViewVehicle(null)} onSelectVehicle={onSelectVehicle} onToggleCompare={onToggleCompare} onToggleWishlist={onToggleWishlist} comparisonList={comparisonList} wishlist={wishlist} />
     </div>
     </>
   );

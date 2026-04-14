@@ -255,7 +255,51 @@ function resolveViewFromPathAndState(path: string, routerState: HistoryState | n
   if (pathView === View.NOTIFICATIONS_CENTER) {
     return View.NOTIFICATIONS_CENTER;
   }
+  // HashRouter/WebView: URL can advance to /used-cars (etc.) before history.state updates — stale state.view may still be DETAIL.
+  // Never let that override a non-detail path, or "Back to Listings" syncs back to detail.
+  if (pathView !== View.DETAIL && routerState?.view === View.DETAIL) {
+    return pathView;
+  }
   return routerState?.view ?? pathView;
+}
+
+/** Dev-only: POST NDJSON to Vite middleware → `debug-4f3bea.log` in repo root. */
+function agentNavDebugLog(payload: {
+  hypothesisId: string;
+  message: string;
+  location: string;
+  runId?: string;
+  [key: string]: unknown;
+}) {
+  if (typeof import.meta !== 'undefined' && !import.meta.env.DEV) return;
+  if (typeof window === 'undefined') return;
+  // #region agent log
+  void fetch('/__debug_nav_log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: '4f3bea',
+      timestamp: Date.now(),
+      ...payload,
+    }),
+  }).catch(() => {});
+  // #endregion
+}
+
+/** Last non-detail screen before opening a listing (HashRouter / WebView can lose `location.state`). */
+const RERIDE_DETAIL_ENTRY_SOURCE_KEY = 'rerideDetailEntrySourceView';
+
+function readDetailEntrySourceView(): View | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = sessionStorage.getItem(RERIDE_DETAIL_ENTRY_SOURCE_KEY);
+    if (!raw) return undefined;
+    if (!(Object.values(View) as string[]).includes(raw)) return undefined;
+    const v = raw as View;
+    return v === View.DETAIL ? undefined : v;
+  } catch {
+    return undefined;
+  }
 }
 
 // API response structure for vehicle feature operations
@@ -345,7 +389,7 @@ interface AppContextType {
   handleRegister: (user: User) => void;
   navigate: (
     view: View,
-    params?: { city?: string; sellerEmail?: string; detailVehicle?: Vehicle }
+    params?: { city?: string; sellerEmail?: string; detailVehicle?: Vehicle; unblockPopstateSync?: boolean }
   ) => void;
   goBack: (fallbackView?: View) => void;
   refreshVehicles: () => Promise<void>;
@@ -444,6 +488,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isHandlingPopStateRef = useRef(false);
   /** True after navigate(DETAIL) until the router reports /vehicle/:id (HashRouter/WebView can lag one tick). */
   const expectingVehicleDetailRouteRef = useRef(false);
+  /**
+   * True after we navigate away from DETAIL while the URL can still show /vehicle/:id (HashRouter / WebView lag).
+   * Location sync must not resolve newView=DETAIL from that stale path and call setCurrentView(DETAIL), or "Back" appears broken.
+   */
+  const leavingDetailUrlCatchUpRef = useRef(false);
   /** Featured carousel fires both touchend + synthetic click — avoid double navigate. */
   const lastVehicleSelectRef = useRef<{ id: number; t: number }>({ id: -1, t: 0 });
   /** Prevents double handleLogin when both getSession + onAuthStateChange run after Google OAuth */
@@ -496,8 +545,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
         
-        // Ensure role is a valid value
-        if (!['customer', 'seller', 'admin'].includes(user.role)) {
+        // Ensure role is a valid value (include service_provider — car-services accounts)
+        if (!['customer', 'seller', 'admin', 'service_provider'].includes(user.role)) {
           logWarn('⚠️ Invalid role in user object:', user.role, '- defaulting to customer');
           user.role = 'customer'; // Safe default instead of clearing
           // Save corrected user back
@@ -520,7 +569,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else if (savedSession) {
         // Fallback to sessionStorage if localStorage doesn't have user
         const user = JSON.parse(savedSession);
-        if (user && user.email && user.role && ['customer', 'seller', 'admin'].includes(user.role)) {
+        if (
+          user &&
+          user.email &&
+          user.role &&
+          ['customer', 'seller', 'admin', 'service_provider'].includes(user.role)
+        ) {
           logInfo('🔄 Restoring logged-in user from sessionStorage:', {
             name: user.name,
             email: user.email,
@@ -872,21 +926,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addToast(t('toast.loginInvalidUser'), 'error');
       return;
     }
-    
+
+    const rawRole = user.role;
+    const trimmed = typeof rawRole === 'string' ? rawRole.trim() : '';
+    let normalizedRole: User['role'] | null = null;
+    if (['customer', 'seller', 'admin', 'service_provider'].includes(trimmed)) {
+      normalizedRole = trimmed as User['role'];
+    } else if (trimmed === 'service-provider' || trimmed.toLowerCase() === 'provider') {
+      normalizedRole = 'service_provider';
+    }
+
     // Ensure role is valid (API / Supabase may return service_provider for provider accounts)
-    if (!['customer', 'seller', 'admin', 'service_provider'].includes(user.role)) {
+    if (
+      !normalizedRole ||
+      !['customer', 'seller', 'admin', 'service_provider'].includes(normalizedRole)
+    ) {
       logError('❌ Invalid role in handleLogin:', user.role);
       addToast(t('toast.loginInvalidRole'), 'error');
       return;
     }
-    
+
+    const userForSession: User = { ...user, role: normalizedRole };
+
     // Set user first (this is critical - navigate checks currentUser)
-    setCurrentUser(user);
-    sessionStorage.setItem('currentUser', JSON.stringify(user));
-    localStorage.setItem('reRideCurrentUser', JSON.stringify(user));
+    setCurrentUser(userForSession);
+    sessionStorage.setItem('currentUser', JSON.stringify(userForSession));
+    localStorage.setItem('reRideCurrentUser', JSON.stringify(userForSession));
     try {
-      if (user.role === 'customer' || user.role === 'seller' || user.role === 'service_provider') {
-        sessionStorage.setItem('reride_last_role', user.role);
+      if (
+        userForSession.role === 'customer' ||
+        userForSession.role === 'seller' ||
+        userForSession.role === 'service_provider'
+      ) {
+        sessionStorage.setItem('reride_last_role', userForSession.role);
       }
     } catch {
       /* ignore */
@@ -896,45 +968,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const storedInSession = sessionStorage.getItem('currentUser');
     const storedInLocal = localStorage.getItem('reRideCurrentUser');
     logInfo('✅ User stored after login:', {
-      email: user.email,
-      role: user.role,
+      email: userForSession.email,
+      role: userForSession.role,
       storedInSessionStorage: !!storedInSession,
       storedInLocalStorage: !!storedInLocal,
-      sessionMatches: storedInSession ? JSON.parse(storedInSession).email === user.email : false,
-      localMatches: storedInLocal ? JSON.parse(storedInLocal).email === user.email : false
+      sessionMatches: storedInSession
+        ? JSON.parse(storedInSession).email === userForSession.email
+        : false,
+      localMatches: storedInLocal ? JSON.parse(storedInLocal).email === userForSession.email : false,
     });
-    
-    addToast(t('toast.welcomeBack', { name: user.name }), 'success');
-    
+
+    addToast(t('toast.welcomeBack', { name: userForSession.name }), 'success');
+
     // Navigate based on user role
     // Directly set view since we've already validated the user
     // The navigate function will validate again, but we know the user is valid
     let postLoginView = View.HOME;
-    if (user.role === 'admin') {
+    if (userForSession.role === 'admin') {
       postLoginView = View.ADMIN_PANEL;
       setCurrentView(View.ADMIN_PANEL);
-    } else if (user.role === 'seller') {
+    } else if (userForSession.role === 'seller') {
       logDebug('🔄 Setting seller dashboard view after login');
       postLoginView = View.SELLER_DASHBOARD;
       setCurrentView(View.SELLER_DASHBOARD);
-    } else if (user.role === 'service_provider') {
+    } else if (userForSession.role === 'service_provider') {
       postLoginView = View.CAR_SERVICE_DASHBOARD;
       setCurrentView(View.CAR_SERVICE_DASHBOARD);
       try {
         const loc =
-          typeof user.location === 'string' && user.location.trim() ? user.location.trim() : '';
+          typeof userForSession.location === 'string' && userForSession.location.trim()
+            ? userForSession.location.trim()
+            : '';
         const detail = {
-          id: user.id,
-          name: (user.name && String(user.name).trim()) || 'Service provider',
-          email: user.email,
-          phone: user.mobile || '',
+          id: userForSession.id,
+          name: (userForSession.name && String(userForSession.name).trim()) || 'Service provider',
+          email: userForSession.email,
+          phone: userForSession.mobile || '',
           city: loc || 'Pending setup',
         };
         window.dispatchEvent(new CustomEvent('reride:service-provider-oauth', { detail }));
       } catch {
         /* ignore */
       }
-    } else if (user.role === 'customer') {
+    } else if (userForSession.role === 'customer') {
       postLoginView = View.HOME;
       setCurrentView(View.HOME);
     } else {
@@ -944,11 +1020,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Keep React Router URL in sync; otherwise location sync maps /login → LOGIN_PORTAL and overwrites HOME.
     try {
       const pathByRole =
-        user.role === 'admin'
+        userForSession.role === 'admin'
           ? '/admin'
-          : user.role === 'seller'
+          : userForSession.role === 'seller'
             ? '/seller/dashboard'
-            : user.role === 'service_provider'
+            : userForSession.role === 'service_provider'
               ? '/car-services/dashboard'
             : '/';
       routerNavigate(pathByRole, {
@@ -1087,18 +1163,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (profileRestoreFromSupabaseInFlightRef.current) return;
       profileRestoreFromSupabaseInFlightRef.current = true;
       try {
-        let role = sessionStorage.getItem('reride_last_role') as 'customer' | 'seller' | null;
+        const lastStored = sessionStorage.getItem('reride_last_role');
         const meta = session.user.user_metadata as Record<string, unknown> | undefined;
         const prov = (session.user.app_metadata as Record<string, unknown> | undefined)?.provider;
         const isGoogleProvider = prov === 'google';
 
-        if (!role || !['customer', 'seller'].includes(role)) {
+        let resolved: 'customer' | 'seller' | 'service_provider' | null = null;
+        if (lastStored && ['customer', 'seller', 'service_provider'].includes(lastStored)) {
+          resolved = lastStored as 'customer' | 'seller' | 'service_provider';
+        }
+        if (!resolved) {
           const mr = meta?.role;
-          if (typeof mr === 'string' && ['customer', 'seller'].includes(mr)) {
-            role = mr as 'customer' | 'seller';
-          } else {
-            role = 'customer';
+          if (typeof mr === 'string') {
+            const t = mr.trim();
+            if (['customer', 'seller', 'service_provider'].includes(t)) {
+              resolved = t as 'customer' | 'seller' | 'service_provider';
+            }
           }
+        }
+        if (!resolved) {
+          resolved = 'customer';
+        }
+
+        if (resolved === 'service_provider') {
+          const spResult = await syncServiceProviderOAuth(
+            session.user as unknown as Record<string, unknown>,
+          );
+          if (cancelled || currentUserRef.current) return;
+          if (spResult.success && spResult.provider) {
+            const p = spResult.provider;
+            const emailNorm = String(p.email || session.user.email || '')
+              .toLowerCase()
+              .trim();
+            if (emailNorm) {
+              handleLogin({
+                id: String(p.id ?? p.uid ?? session.user.id),
+                name: String(p.name || 'Service provider'),
+                email: emailNorm,
+                mobile: String(p.phone ?? (session.user.phone as string) ?? ''),
+                role: 'service_provider',
+                location:
+                  typeof p.city === 'string' && p.city.trim()
+                    ? p.city.trim()
+                    : 'Pending setup',
+                status: 'active',
+                createdAt: new Date().toISOString(),
+                authProvider: isGoogleProvider ? 'google' : session.user.phone ? 'phone' : 'email',
+                firebaseUid: session.user.id,
+              });
+            }
+          }
+          return;
         }
 
         const authProvider: 'google' | 'phone' | 'email' =
@@ -1106,7 +1221,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const result = await syncWithBackend(
           session.user as unknown as Record<string, unknown>,
-          role,
+          resolved,
           authProvider,
         );
         if (result.success && result.user) {
@@ -1351,15 +1466,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const navigate = useCallback(
     (
       view: View,
-      params?: { city?: string; sellerEmail?: string; detailVehicle?: Vehicle }
+      params?: { city?: string; sellerEmail?: string; detailVehicle?: Vehicle; unblockPopstateSync?: boolean }
     ) => {
     const detailVehicleParam = params?.detailVehicle;
+    if (params?.unblockPopstateSync) {
+      isHandlingPopStateRef.current = false;
+    }
+    if (view === View.DETAIL) {
+      leavingDetailUrlCatchUpRef.current = false;
+    }
     // Don't navigate during popstate sync unless opening a different vehicle (Similar Vehicles on DETAIL),
     // or opening a public seller profile (must not be blocked — common right after opening a listing on mobile).
     if (isHandlingPopStateRef.current) {
       if (view === View.SELLER_PROFILE) {
         // allow
       } else if (view !== View.DETAIL) {
+        // #region agent log
+        agentNavDebugLog({
+          hypothesisId: 'H2',
+          message: 'navigate blocked: isHandlingPopState non-detail',
+          location: 'AppProvider.tsx:navigate:blockPopstate',
+          view,
+          currentView,
+          unblockPopstateSync: !!params?.unblockPopstateSync,
+        });
+        // #endregion
         logDebug('⏸️ Navigation skipped - handling popstate event');
         return;
       } else {
@@ -1398,7 +1529,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Prevent infinite redirect loops by checking if we're already on the target view
     // EXCEPTION: Allow navigation to DETAIL view even if already on DETAIL (different vehicle)
     // EXCEPTION: Allow SELLER_PROFILE when switching to a different dealer (params.sellerEmail)
-    if (view === currentView && !params?.city && view !== View.DETAIL) {
+    if (view === currentView && !params?.city && view !== View.DETAIL && !params?.unblockPopstateSync) {
       if (view === View.SELLER_PROFILE && params?.sellerEmail) {
         const norm = params.sellerEmail.toLowerCase().trim();
         const cur = publicSellerProfile?.email?.toLowerCase().trim();
@@ -1407,6 +1538,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } else {
         return;
+      }
+    }
+
+    if (
+      view !== View.DETAIL &&
+      view !== View.SELLER_PROFILE &&
+      currentView === View.DETAIL
+    ) {
+      try {
+        sessionStorage.removeItem(RERIDE_DETAIL_ENTRY_SOURCE_KEY);
+      } catch {
+        /* ignore */
       }
     }
 
@@ -1690,6 +1833,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (Number.isFinite(n)) detailSelectedId = n;
         }
       }
+      leavingDetailUrlCatchUpRef.current =
+        currentView === View.DETAIL && view !== View.DETAIL && view !== View.SELLER_PROFILE;
+      // #region agent log
+      agentNavDebugLog({
+        hypothesisId: 'H5',
+        message: 'navigate routerNavigate',
+        location: 'AppProvider.tsx:navigate:routerNavigate',
+        view,
+        fromView: currentView,
+        newPath,
+        leavingDetailCatchUp: leavingDetailUrlCatchUpRef.current,
+        unblockPopstateSync: !!params?.unblockPopstateSync,
+      });
+      // #endregion
       routerNavigate(newPath, {
         state: {
           view,
@@ -1703,18 +1860,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentView, currentUser, previousView, selectedVehicle, publicSellerProfile, updateSelectedCity, setPreviousView, setSelectedVehicle, setPublicSellerProfile, setInitialSearchQuery, setSelectedCategory, setCurrentView, routerNavigate]);
 
-  // Go back using React Router, with fallback to a default view
-  const goBack = useCallback((fallbackView?: View) => {
-    if (previousView && previousView !== currentView) {
-      // Use React Router back navigation
-      routerNavigate(-1);
-    } else if (fallbackView) {
-      navigate(fallbackView);
-    } else {
-      // Ultimate fallback: go to home
-      navigate(View.HOME);
-    }
-  }, [previousView, currentView, navigate]);
+  // Go back to the screen that opened the current view: prefer session snapshot from selectVehicle (reliable on HashRouter),
+  // then router state / in-memory previousView. Avoid routerNavigate(-1): history depth often makes -1 wrong.
+  const goBack = useCallback(
+    (fallbackView?: View) => {
+      // User-initiated back must never be dropped: navigate() returns early while isHandlingPopStateRef is true (location sync).
+      isHandlingPopStateRef.current = false;
+      const routerState = location?.state as HistoryState | null | undefined;
+      const detailEntrySource = currentView === View.DETAIL ? readDetailEntrySourceView() : undefined;
+      let target: View | undefined;
+      if (detailEntrySource) {
+        target = detailEntrySource;
+      } else if (routerState?.previousView && routerState.previousView !== currentView) {
+        target = routerState.previousView;
+      } else if (previousView && previousView !== currentView) {
+        target = previousView;
+      }
+      const backOpts = { unblockPopstateSync: true } as const;
+      // #region agent log
+      agentNavDebugLog({
+        hypothesisId: 'H1',
+        message: 'goBack resolved',
+        location: 'AppProvider.tsx:goBack',
+        runId: 'post-fix',
+        currentView,
+        previousViewMem: previousView,
+        routerPreviousView: routerState?.previousView,
+        detailEntrySource: detailEntrySource ?? null,
+        chosenTarget: target ?? null,
+        fallbackView: fallbackView ?? null,
+        branch: detailEntrySource
+          ? 'sessionEntry'
+          : target
+            ? 'routerOrMem'
+            : fallbackView
+              ? 'fallback'
+              : 'home',
+      });
+      // #endregion
+      if (target) {
+        navigate(target, backOpts);
+      } else if (fallbackView) {
+        navigate(fallbackView, backOpts);
+      } else {
+        navigate(View.HOME, backOpts);
+      }
+    },
+    [location.state, location.key, previousView, currentView, navigate],
+  );
 
   const refreshVehicles = useCallback(async () => {
     const isAdmin = currentUser?.role === 'admin';
@@ -1776,6 +1969,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const path = getAppPathFromRouter(location ?? { pathname: '/' });
     const routerState = location?.state as HistoryState | null;
+    if (!path.includes('/vehicle/')) {
+      leavingDetailUrlCatchUpRef.current = false;
+    }
     let newView: View;
     try {
       newView = resolveViewFromPathAndState(path, routerState);
@@ -1790,6 +1986,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       View.SELLER_LOGIN,
     ]);
     const viewNow = currentViewRef.current;
+
+    if (
+      leavingDetailUrlCatchUpRef.current &&
+      path.includes('/vehicle/') &&
+      newView === View.DETAIL &&
+      viewNow !== View.DETAIL
+    ) {
+      // #region agent log
+      agentNavDebugLog({
+        hypothesisId: 'H3',
+        message: 'locationSync early return leavingDetail catch-up',
+        location: 'AppProvider.tsx:locationSync:leavingDetailGuard',
+        path,
+        newView,
+        viewNow,
+        routerStateView: routerState?.view,
+        pathToViewRaw: pathToView(path),
+      });
+      // #endregion
+      return;
+    }
 
     if (
       currentUser &&
@@ -1868,6 +2085,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Prevent loops: only update if the view actually changed
     if (newView === viewNow) return;
+
+    // #region agent log
+    agentNavDebugLog({
+      hypothesisId: 'H4',
+      message: 'locationSync applying newView',
+      location: 'AppProvider.tsx:locationSync:apply',
+      path,
+      pathToViewOnly: pathToView(path),
+      newView,
+      viewNow,
+      routerStateView: routerState?.view,
+      leavingCatchUp: leavingDetailUrlCatchUpRef.current,
+    });
+    // #endregion
 
     isHandlingPopStateRef.current = true;
 
@@ -5925,6 +6156,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // User-initiated open must never be dropped: location sync sets isHandlingPopStateRef for ~100ms
       // after route changes, and navigate() used to bail out entirely during that window.
       isHandlingPopStateRef.current = false;
+
+      try {
+        if (currentView !== View.DETAIL) {
+          sessionStorage.setItem(RERIDE_DETAIL_ENTRY_SOURCE_KEY, String(currentView));
+        }
+      } catch {
+        /* ignore */
+      }
       
       // Navigate to DETAIL view immediately
       // The navigate function will check sessionStorage first (which we just set and verified),
