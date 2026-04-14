@@ -59,7 +59,6 @@ const VehicleRow = memo<VehicleRowProps>(({ index, style, data }) => {
         isInWishlist={wishlist.includes(vehicle.id)}
         isCompareDisabled={comparisonList.length >= 3 && !comparisonList.includes(vehicle.id)}
         onViewSellerProfile={onViewSellerProfile}
-        onQuickView={() => onSelectVehicle(vehicle)}
       />
     </div>
   );

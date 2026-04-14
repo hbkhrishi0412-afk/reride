@@ -4,7 +4,6 @@ import { VehicleCategory, View as ViewEnum, type Vehicle, type View } from '../t
 import { getFirstValidImage, optimizeImageUrl } from '../utils/imageUtils';
 import { matchesCity } from '../utils/cityMapping';
 import LazyImage from './LazyImage';
-import QuickViewModal from './QuickViewModal';
 import { useStorefrontAggregates } from '../hooks/useStorefrontAggregates';
 import {
     HOME_DESKTOP_CITY_STYLE,
@@ -45,7 +44,6 @@ const Home: React.FC<HomeProps> = ({
 }) => {
     const { t, i18n } = useTranslation();
     const [searchQuery, setSearchQuery] = useState('');
-    const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
     const { data: storefrontAgg } = useStorefrontAggregates();
 
     // Preload the first featured vehicle image (LCP element) for better performance
@@ -654,16 +652,6 @@ const Home: React.FC<HomeProps> = ({
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                                 </svg>
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setQuickViewVehicle(vehicle);
-                                                }}
-                                                className="absolute bottom-4 left-4 z-[1] rounded-xl bg-white/95 px-3 py-2 text-xs font-black text-blue-700 shadow-lg backdrop-blur-sm hover:bg-white"
-                                            >
-                                                {t('home.quickView')}
-                                            </button>
                                             <div className="absolute bottom-4 right-4 bg-gray-900/90 backdrop-blur-sm text-white px-4 py-2 rounded-xl shadow-lg">
                                                 <span className="font-black text-base">₹{(vehicle.price / 100000).toFixed(2)}L</span>
                                             </div>
@@ -781,16 +769,6 @@ const Home: React.FC<HomeProps> = ({
                                                 </span>
                                             )}
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setQuickViewVehicle(vehicle);
-                                            }}
-                                            className="absolute bottom-3 left-3 z-[1] rounded-lg bg-white/95 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 shadow-md backdrop-blur-sm"
-                                        >
-                                            {t('home.quickView')}
-                                        </button>
                                         <div className="absolute bottom-3 right-3 bg-gray-900/90 text-white px-3 py-1.5 rounded-xl shadow-lg">
                                             <span className="font-black text-sm">₹{(vehicle.price / 100000).toFixed(2)}L</span>
                                         </div>
@@ -1114,16 +1092,6 @@ const Home: React.FC<HomeProps> = ({
                 </div>
             </div>
 
-            {/* Quick View Modal */}
-            <QuickViewModal
-                vehicle={quickViewVehicle}
-                onClose={() => setQuickViewVehicle(null)}
-                onSelectVehicle={onSelectVehicle}
-                onToggleCompare={onToggleCompare}
-                onToggleWishlist={onToggleWishlist}
-                comparisonList={comparisonList}
-                wishlist={wishlist}
-            />
         </div>
     );
 };

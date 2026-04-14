@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import type { User, Vehicle } from '../types.js';
 import VehicleCard from './VehicleCard.js';
 import StarRating from './StarRating.js';
-import QuickViewModal from './QuickViewModal.js';
 import BadgeDisplay from './BadgeDisplay.js';
 import TrustBadgeDisplay from './TrustBadgeDisplay.js';
 import VerifiedBadge, { isUserVerified } from './VerifiedBadge.js';
@@ -33,7 +32,6 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
         );
     }
 
-    const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     // NEW: Follow seller feature
     // Restore logged-in user from storage (used to gate owner-only views)
@@ -400,7 +398,6 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                             isInWishlist={wishlist.includes(vehicle.id)} 
                             isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
                             onViewSellerProfile={onViewSellerProfile}
-                            onQuickView={setQuickViewVehicle}
                         />
                     ))
                 ) : vehicles.length > 0 ? (
@@ -431,16 +428,6 @@ const SellerProfilePage: React.FC<SellerProfilePageProps> = ({ seller, vehicles,
                     </div>
                 </div>
             </div>
-            <QuickViewModal
-                vehicle={quickViewVehicle}
-                onClose={() => setQuickViewVehicle(null)}
-                onSelectVehicle={onSelectVehicle}
-                onToggleCompare={guardCompare}
-                onToggleWishlist={guardWishlist}
-                comparisonList={comparisonList}
-                wishlist={wishlist}
-            />
-
             {/* Premium Owner-only Modals */}
             {isOwnerSeller && showFollowers && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">

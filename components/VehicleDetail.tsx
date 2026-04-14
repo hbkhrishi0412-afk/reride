@@ -7,14 +7,13 @@ import StarRating from './StarRating';
 import VehicleCard from './VehicleCard';
 import EMICalculator from './EMICalculator';
 import VerificationBadge from './VerificationBadge';
-import QuickViewModal from './QuickViewModal';
 import { VehicleOfferBanner } from './VehicleOfferBanner';
 import VehicleHistory from './VehicleHistory';
 import { getFollowersCount } from '../services/buyerEngagementService';
 import { useApp } from './AppProvider';
 import { logWarn, logDebug } from '../utils/logger';
 import { scrollAppToTop } from '../utils/scrollAppToTop';
-import { buildVehicleShareMessage, buildWhatsAppShareUrl, getVehicleListingUrl } from '../utils/whatsappShare.js';
+import { getVehicleListingUrl } from '../utils/whatsappShare.js';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -34,14 +33,6 @@ interface VehicleDetailProps {
   updateVehicle?: (id: number, updates: Partial<Vehicle>, options?: { successMessage?: string; skipToast?: boolean }) => Promise<void>;
 }
 
-// SVG icons for social media
-const ICONS = {
-    facebook: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" /></svg>,
-    twitter: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M22.46 6c-.77.35-1.6.58-2.46.67.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98-3.54-.18-6.69-1.87-8.8-4.46-.37.63-.58 1.37-.58 2.15 0 1.49.76 2.81 1.91 3.58-.7-.02-1.36-.21-1.94-.53v.05c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.93.07 4.28 4.28 0 0 0 4 2.98 8.521 8.521 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21c7.34 0 11.35-6.08 11.35-11.35 0-.17 0-.34-.01-.51.78-.57 1.45-1.28 1.99-2.08z" /></svg>,
-    whatsapp: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zM12.04 20.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31c-.82-1.31-1.26-2.83-1.26-4.38 0-4.54 3.69-8.23 8.24-8.23 4.54 0 8.23 3.69 8.23 8.23 0 4.54-3.69 8.23-8.23 8.23zm4.52-6.2c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.15.17-.29.19-.54.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.13-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.42-.14 0-.3 0-.47 0-.17 0-.43.06-.66.31-.22.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.17 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.05-.11-.2-.16-.44-.28z" /></svg>,
-    link: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" /></svg>,
-};
-
 const SocialShareButtons: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
     const { t } = useTranslation();
     const [copyState, setCopyState] = useState<'default' | 'copied' | 'failed'>('default');
@@ -52,10 +43,6 @@ const SocialShareButtons: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
             : typeof window !== 'undefined'
               ? window.location.href
               : '';
-    const waListingUrl =
-        typeof window !== 'undefined' && vehicle?.id != null
-            ? getVehicleListingUrl(Number(vehicle.id), { medium: 'whatsapp', campaign: 'vehicle_detail' })
-            : cleanListingUrl;
 
     const handleCopyLink = () => {
         const reset = () => setCopyState('default');
@@ -81,38 +68,16 @@ const SocialShareButtons: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
               ? t('vehicle.share.failed')
               : t('vehicle.share.copyLink');
 
-    const waUrl =
-        waListingUrl &&
-        buildWhatsAppShareUrl(
-            buildVehicleShareMessage(
-                {
-                    make: vehicle.make,
-                    model: vehicle.model,
-                    year: vehicle.year,
-                    price: vehicle.price,
-                },
-                waListingUrl,
-            ),
-        );
-
     return (
-        <div className="flex-1 flex gap-2">
-            <a
-                href={waUrl || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold bg-emerald-600 text-white px-3 py-2.5 rounded-lg hover:bg-emerald-700 transition-colors"
-                aria-label={t('vehicle.share.whatsappAria')}
-            >
-                {ICONS.whatsapp}
-                <span>WhatsApp</span>
-            </a>
+        <div className="flex-1">
             <button
                 type="button"
                 onClick={handleCopyLink}
-                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold bg-gray-100 text-gray-700 px-3 py-2.5 rounded-lg hover:bg-gray-200 transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold bg-gray-100 text-gray-700 px-3 py-2.5 rounded-lg hover:bg-gray-200 transition-colors"
             >
-                {ICONS.link}
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                    <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
+                </svg>
                 <span>{copyLabel}</span>
             </button>
         </div>
@@ -357,7 +322,6 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
   const [showSellerRatingSuccess, setShowSellerRatingSuccess] = useState(false);
   const [prosAndCons, setProsAndCons] = useState<ProsAndCons | null>(null);
   const [isGeneratingProsCons, setIsGeneratingProsCons] = useState<boolean>(false);
-  const [quickViewVehicle, setQuickViewVehicle] = useState<Vehicle | null>(null);
   const [showEMICalculator, setShowEMICalculator] = useState<boolean>(false);
   const ratingSuccessTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emiCalculatorRef = useRef<HTMLDivElement>(null);
@@ -538,7 +502,7 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
     <>
       <div className="bg-white dark:bg-white animate-fade-in">
           <div className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
-              <button onClick={onBackToHome} className="mb-4 text-gray-600 hover:text-gray-900 font-medium transition-colors flex items-center gap-2">
+              <button type="button" onClick={onBackToHome} className="mb-4 text-gray-600 hover:text-gray-900 font-medium transition-colors flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
@@ -1173,14 +1137,13 @@ export const VehicleDetail: React.FC<VehicleDetailProps> = ({ vehicle, onBack: o
                   </h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                       {filteredRecommendations.map(v => (
-                          <VehicleCard key={v.id} vehicle={v} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(v.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(v.id)} isCompareDisabled={!comparisonList.includes(v.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile} onQuickView={setQuickViewVehicle}/>
+                          <VehicleCard key={v.id} vehicle={v} onSelect={onSelectVehicle} onToggleCompare={onToggleCompare} isSelectedForCompare={comparisonList.includes(v.id)} onToggleWishlist={onToggleWishlist} isInWishlist={wishlist.includes(v.id)} isCompareDisabled={!comparisonList.includes(v.id) && comparisonList.length >= 4} onViewSellerProfile={onViewSellerProfile}/>
                       ))}
                   </div>
               </div>}
 
           </div>
       </div>
-      <QuickViewModal vehicle={quickViewVehicle} onClose={() => setQuickViewVehicle(null)} onSelectVehicle={onSelectVehicle} onToggleCompare={onToggleCompare} onToggleWishlist={onToggleWishlist} comparisonList={comparisonList} wishlist={wishlist} />
     </>
   );
 };

@@ -85,7 +85,6 @@ const CityLandingPage: React.FC<CityLandingPageProps> = ({
             isSelectedForCompare={comparisonList.includes(vehicle.id)}
             isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
             onViewSellerProfile={onViewSellerProfile}
-            onQuickView={(v) => onSelectVehicle(v)}
           />
         ))}
       </div>

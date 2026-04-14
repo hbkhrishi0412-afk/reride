@@ -450,6 +450,10 @@ const AppContent: React.FC = () => {
         });
         return;
       }
+      if (currentView === ViewEnum.DETAIL) {
+        goBack(ViewEnum.USED_CARS);
+        return;
+      }
       goBack(ViewEnum.HOME);
     });
     return () => setCapacitorAndroidBackHandler(null);
@@ -1121,7 +1125,7 @@ const AppContent: React.FC = () => {
         return;
       }
       
-      if (!['customer', 'seller', 'admin'].includes(parsedUser.role)) {
+      if (!['customer', 'seller', 'admin', 'service_provider'].includes(parsedUser.role)) {
         localStorage.removeItem('reRideCurrentUser');
         sessionStorage.removeItem('currentUser');
         return;
@@ -1143,6 +1147,9 @@ const AppContent: React.FC = () => {
             break;
           case 'admin':
             setCurrentView(ViewEnum.ADMIN_PANEL);
+            break;
+          case 'service_provider':
+            setCurrentView(ViewEnum.CAR_SERVICE_DASHBOARD);
             break;
           default:
             setCurrentView(ViewEnum.BUYER_DASHBOARD);
@@ -3979,7 +3986,7 @@ const AppContent: React.FC = () => {
           onBack={() =>
             currentView === ViewEnum.NOTIFICATIONS_CENTER
               ? goBack(ViewEnum.HOME)
-              : navigate(ViewEnum.USED_CARS)
+              : goBack(ViewEnum.USED_CARS)
           }
           currentView={currentView}
           onNavigate={navigate}
