@@ -20,7 +20,8 @@ config({ path: join(__dirname, '..', '.env') });
 
 const TEST = {
   email: 'provider@test.com',
-  password: 'password123',
+  // Avoid compromised/common passwords blocked by Supabase Auth policies.
+  password: 'Provider!Test#2026',
   name: 'Demo Service Provider',
   phone: '+91-98765-00000',
   city: 'Mumbai',
@@ -31,6 +32,18 @@ const TEST = {
 
 function emailToKey(email: string): string {
   return email.toLowerCase().trim().replace(/[.#$[\]]/g, '_');
+}
+
+async function cleanupStaleUserRecord(supabase: SupabaseClient, email: string): Promise<void> {
+  const emailKey = emailToKey(email);
+  const normalizedEmail = email.toLowerCase().trim();
+  const { error } = await supabase
+    .from('users')
+    .delete()
+    .or(`id.eq.${emailKey},email.eq.${normalizedEmail}`);
+  if (error) {
+    throw new Error(`users cleanup: ${error.message}`);
+  }
 }
 
 async function findAuthUserByEmail(
@@ -135,6 +148,10 @@ async function main(): Promise<void> {
     console.log(`Login: ${email} / (existing password or reset in Dashboard)`);
     return;
   }
+
+  // If auth user is missing, stale public.users rows for this email can make
+  // auth trigger insert fail with "Database error creating new user".
+  await cleanupStaleUserRecord(supabase, email);
 
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
