@@ -13,7 +13,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-config({ path: join(__dirname, '..', '.env.local') });
+// Force local file values to override inherited shell/system env vars.
+// This avoids stale placeholder keys in user-level environment settings.
+config({ path: join(__dirname, '..', '.env.local'), override: true });
 config({ path: join(__dirname, '..', '.env') });
 
 const TEST = {
