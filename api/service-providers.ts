@@ -5,6 +5,7 @@ import { supabaseServiceProviderService } from '../services/supabase-service-pro
 import { emailToKey, supabaseUserService } from '../services/supabase-user-service.js';
 import type { ServiceProviderPayload } from '../services/supabase-service-provider-service.js';
 import { applyCors } from '../lib/api-route-cors.js';
+import { sanitizeServiceCategories } from '../constants/serviceProviderCatalog.js';
 
 function parseStringList(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -255,6 +256,17 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
     
     const scope = (req.query.scope as string) || 'mine';
 
+    const resolveProviderForActor = async (): Promise<{ id: string } & ServiceProviderPayload | null> => {
+      if (!uid) return null;
+      const byId = await supabaseServiceProviderService.findById(uid);
+      if (byId) return byId;
+      if (email) {
+        const byEmail = await supabaseServiceProviderService.findByEmail(email);
+        if (byEmail) return byEmail;
+      }
+      return null;
+    };
+
     if (req.method === 'GET') {
       if (scope === 'all') {
         const all = await supabaseServiceProviderService.findAll();
@@ -266,7 +278,7 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
         return res.status(401).json({ error: 'Authentication required to fetch your profile' });
       }
 
-      const provider = await supabaseServiceProviderService.findById(uid);
+      const provider = await resolveProviderForActor();
       if (!provider) {
         return res.status(404).json({ error: 'Service provider profile not found' });
       }
@@ -355,7 +367,7 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
         return res.status(401).json({ error: 'Authentication required to update service provider profile' });
       }
       
-      const existing = await supabaseServiceProviderService.findById(uid);
+      const existing = await resolveProviderForActor();
       if (!existing) {
         return res.status(404).json({ error: 'Service provider profile not found' });
       }
@@ -371,11 +383,17 @@ export async function handleServiceProviders(req: VercelRequest, res: VercelResp
       if (body.city !== undefined) updates.city = body.city;
       if (body.state !== undefined) updates.state = body.state;
       if (body.district !== undefined) updates.district = body.district;
-      if (body.serviceCategories !== undefined) updates.serviceCategories = body.serviceCategories;
+      if (body.serviceCategories !== undefined) {
+        const sanitized = sanitizeServiceCategories(body.serviceCategories);
+        if (Array.isArray(body.serviceCategories) && body.serviceCategories.length > 0 && sanitized.length === 0) {
+          return res.status(400).json({ error: 'Invalid serviceCategories' });
+        }
+        updates.serviceCategories = sanitized;
+      }
 
-      await supabaseServiceProviderService.update(uid, updates);
-      const updated = await supabaseServiceProviderService.findById(uid);
-      return res.status(200).json({ ...(updated || existing), uid: updated?.id || uid });
+      await supabaseServiceProviderService.update(existing.id, updates);
+      const updated = await supabaseServiceProviderService.findById(existing.id);
+      return res.status(200).json({ ...(updated || existing), uid: updated?.id || existing.id });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

@@ -25,6 +25,7 @@ import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { appendFileSync } from 'fs';
+import { isValidServiceType, sanitizeServiceCategories } from './constants/serviceProviderCatalog.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1114,8 +1115,19 @@ let mockServices = [
   }
 ];
 
-// Helper to pick uid from header/query (fallback to a fixed dev uid)
-const getDevUid = (req) => (req.headers['x-dev-uid'] || req.query.uid || 'dev-uid');
+// Helper to pick uid from headers/query (fallback to a fixed dev uid).
+// Accept both legacy x-dev-uid and newer x-mock-provider-id used by dashboard calls.
+const getDevUid = (req) => {
+  const jwtPayload = getSupabaseJwtPayload(req.headers.authorization);
+  const jwtSession = sessionFromJwtPayload(jwtPayload);
+  if (jwtSession?.id) {
+    return jwtSession.id;
+  }
+  const fromDevHeader = req.headers['x-dev-uid'];
+  const fromMockProviderHeader = req.headers['x-mock-provider-id'];
+  const fromQuery = req.query.uid;
+  return fromDevHeader || fromMockProviderHeader || fromQuery || 'dev-uid';
+};
 
 /** Supabase Bearer JWT sub when present; otherwise x-dev-uid / query / dev default (service-requests parity). */
 const getRequestActorId = (req) => {
@@ -1389,9 +1401,24 @@ app.get('/api/service-providers', (req, res) => {
     const list = Object.entries(mockServiceProviders).map(([id, rec]) => ({ id, ...rec }));
     return res.json(list);
   }
-  const provider = mockServiceProviders[uid];
+  let provider = mockServiceProviders[uid];
   if (!provider) {
-    return res.status(404).json({ error: 'Service provider profile not found' });
+    const jwtPayload = getSupabaseJwtPayload(req.headers.authorization);
+    const jwtSession = sessionFromJwtPayload(jwtPayload);
+    provider = {
+      name:
+        (jwtSession?.email && jwtSession.email.includes('@')
+          ? jwtSession.email.split('@')[0]
+          : 'Service Provider'),
+      email: jwtSession?.email || `${uid}@example.com`,
+      phone: jwtSession?.phone || '0000000000',
+      city: 'Pending setup',
+      workshops: [],
+      skills: [],
+      availability: 'weekdays',
+      serviceCategories: [],
+    };
+    mockServiceProviders[uid] = provider;
   }
   return res.json({ uid, ...provider });
 });
@@ -1425,15 +1452,31 @@ app.patch('/api/provider-services', (req, res) => {
   const uid = getDevUid(req);
   const { serviceType, price, description = '', etaMinutes, active = true } = req.body || {};
   if (!serviceType) return res.status(400).json({ error: 'Missing serviceType' });
+  if (!isValidServiceType(serviceType)) return res.status(400).json({ error: 'Invalid serviceType' });
+  const normalizedServiceType = String(serviceType).trim();
   mockProviderServices[uid] = mockProviderServices[uid] || {};
-  mockProviderServices[uid][serviceType] = {
-    serviceType,
+  mockProviderServices[uid][normalizedServiceType] = {
+    serviceType: normalizedServiceType,
     price: price !== undefined ? Number(price) : undefined,
     description,
     etaMinutes: etaMinutes !== undefined ? Number(etaMinutes) : undefined,
     active,
+    updatedAt: new Date().toISOString(),
   };
   const list = Object.entries(mockProviderServices[uid]).map(([st, payload]) => ({ serviceType: st, ...payload }));
+  return res.json(list);
+});
+
+app.delete('/api/provider-services', (req, res) => {
+  const uid = getDevUid(req);
+  const serviceType = String(req.query.serviceType || '').trim();
+  if (!serviceType) return res.status(400).json({ error: 'Missing serviceType' });
+  const mine = mockProviderServices[uid] || {};
+  if (serviceType in mine) {
+    delete mine[serviceType];
+  }
+  mockProviderServices[uid] = mine;
+  const list = Object.entries(mine).map(([st, payload]) => ({ serviceType: st, ...payload }));
   return res.json(list);
 });
 
@@ -1587,9 +1630,24 @@ app.post('/api/service-providers/register', async (req, res) => {
 });
 
 app.post('/api/service-providers', (req, res) => {
-  const { name, email, phone, city, workshops = [], skills = [], availability = 'weekdays' } = req.body || {};
+  const {
+    name,
+    email,
+    phone,
+    city,
+    state,
+    district,
+    workshops = [],
+    skills = [],
+    availability = 'weekdays',
+    serviceCategories = [],
+  } = req.body || {};
   if (!name || !email || !phone || !city) {
     return res.status(400).json({ error: 'Missing required fields: name, email, phone, city' });
+  }
+  const normalizedCategories = sanitizeServiceCategories(serviceCategories);
+  if (Array.isArray(serviceCategories) && serviceCategories.length > 0 && normalizedCategories.length === 0) {
+    return res.status(400).json({ error: 'Invalid serviceCategories' });
   }
   const uid = getDevUid(req) || `provider-${Date.now()}`;
   const payload = {
@@ -1597,9 +1655,12 @@ app.post('/api/service-providers', (req, res) => {
     email: email.toLowerCase(),
     phone,
     city,
+    state,
+    district,
     workshops,
     skills,
     availability,
+    serviceCategories: normalizedCategories,
   };
   mockServiceProviders[uid] = payload;
 
@@ -1702,11 +1763,35 @@ app.delete('/api/services', (req, res) => {
 app.patch('/api/service-providers', (req, res) => {
   const uid = getDevUid(req);
   if (!uid) return res.status(401).json({ error: 'Not authenticated' });
-  
-  const existing = mockServiceProviders[uid];
-  if (!existing) return res.status(404).json({ error: 'Service provider profile not found' });
+  const bodyEmail = String(req.body?.email || '').toLowerCase().trim();
+  const emailMatchedUid = bodyEmail
+    ? Object.keys(mockServiceProviders).find(
+        (id) => String(mockServiceProviders[id]?.email || '').toLowerCase().trim() === bodyEmail
+      )
+    : null;
+  const resolvedUid = emailMatchedUid || uid;
 
-  const { skills, workshops, availability, name, phone, city } = req.body || {};
+  let existing = mockServiceProviders[resolvedUid];
+  if (!existing) {
+    const jwtPayload = getSupabaseJwtPayload(req.headers.authorization);
+    const jwtSession = sessionFromJwtPayload(jwtPayload);
+    existing = {
+      name:
+        (jwtSession?.email && jwtSession.email.includes('@')
+          ? jwtSession.email.split('@')[0]
+          : 'Service Provider'),
+      email: jwtSession?.email || `${uid}@example.com`,
+      phone: jwtSession?.phone || '0000000000',
+      city: 'Pending setup',
+      workshops: [],
+      skills: [],
+      availability: 'weekdays',
+      serviceCategories: [],
+    };
+    mockServiceProviders[resolvedUid] = existing;
+  }
+
+  const { skills, workshops, availability, name, phone, city, state, district, serviceCategories } = req.body || {};
   const updates = { ...existing };
   
   if (skills !== undefined) updates.skills = skills;
@@ -1715,9 +1800,18 @@ app.patch('/api/service-providers', (req, res) => {
   if (name !== undefined) updates.name = name;
   if (phone !== undefined) updates.phone = phone;
   if (city !== undefined) updates.city = city;
+  if (state !== undefined) updates.state = state;
+  if (district !== undefined) updates.district = district;
+  if (serviceCategories !== undefined) {
+    const normalizedCategories = sanitizeServiceCategories(serviceCategories);
+    if (Array.isArray(serviceCategories) && serviceCategories.length > 0 && normalizedCategories.length === 0) {
+      return res.status(400).json({ error: 'Invalid serviceCategories' });
+    }
+    updates.serviceCategories = normalizedCategories;
+  }
 
-  mockServiceProviders[uid] = updates;
-  return res.json({ uid, ...updates });
+  mockServiceProviders[resolvedUid] = updates;
+  return res.json({ uid: resolvedUid, ...updates });
 });
 
 // --- Service Requests (dev mock) ---

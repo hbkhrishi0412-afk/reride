@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyIdTokenFromHeader } from '../server/supabase-auth.js';
 import { getSupabaseAdminClient } from '../lib/supabase.js';
 import { applyCors } from '../lib/api-route-cors.js';
+import { isValidServiceType } from '../constants/serviceProviderCatalog.js';
 
 interface ProviderService {
   serviceType: string;
@@ -9,6 +10,66 @@ interface ProviderService {
   description?: string;
   etaMinutes?: number;
   active?: boolean;
+  updatedAt?: string;
+  includedServices?: IncludedService[];
+}
+
+interface IncludedService {
+  id: string;
+  name: string;
+  price?: number;
+  etaMinutes?: number;
+  active?: boolean;
+}
+
+function normalizeIncludedServices(input: unknown): IncludedService[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((entry, idx) => {
+      const raw = entry as Record<string, unknown>;
+      const id = String(raw.id || '').trim() || `line-${idx + 1}`;
+      const name = String(raw.name || '').trim();
+      if (!name) return null;
+      const priceNum = raw.price != null ? Number(raw.price) : undefined;
+      const etaNum = raw.etaMinutes != null ? Number(raw.etaMinutes) : undefined;
+      return {
+        id,
+        name,
+        price: priceNum != null && Number.isFinite(priceNum) ? priceNum : undefined,
+        etaMinutes: etaNum != null && Number.isFinite(etaNum) ? etaNum : undefined,
+        active: raw.active !== false,
+      };
+    })
+    .filter((entry): entry is IncludedService => Boolean(entry));
+}
+
+function normalizeProviderService(serviceType: string, payload: ProviderService): ProviderService {
+  const includedServices = normalizeIncludedServices(payload.includedServices);
+  const resolvedPrice =
+    payload.price != null && Number.isFinite(payload.price)
+      ? payload.price
+      : includedServices
+          .filter((line) => line.active !== false && line.price != null && Number.isFinite(line.price))
+          .reduce((sum, line) => sum + (line.price || 0), 0) || undefined;
+  return {
+    ...payload,
+    serviceType,
+    price: resolvedPrice,
+    includedServices,
+  };
+}
+
+function toPublicProviderService(serviceType: string, payload: ProviderService) {
+  const normalized = normalizeProviderService(serviceType, payload);
+  return {
+    serviceType,
+    price: normalized.price,
+    description: normalized.description,
+    etaMinutes: normalized.etaMinutes,
+    active: normalized.active,
+    updatedAt: normalized.updatedAt,
+    includedServices: normalized.includedServices,
+  };
 }
 
 // Using Supabase service_providers table with services stored in metadata
@@ -70,10 +131,7 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
         }
         
         const services = (provider.metadata?.services as Record<string, ProviderService>) || {};
-        const list = Object.entries(services).map(([serviceType, payload]) => {
-          const { serviceType: _, ...rest } = payload as any;
-          return { serviceType, ...rest };
-        });
+        const list = Object.entries(services).map(([serviceType, payload]) => toPublicProviderService(serviceType, payload));
         return res.status(200).json(list);
       }
 
@@ -89,11 +147,9 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       const result = allProviders.flatMap((provider) => {
         const services = (provider.metadata?.services as Record<string, ProviderService>) || {};
         return Object.entries(services).map(([serviceType, payload]) => {
-          const { serviceType: _, ...rest } = payload as any;
           return {
             providerId: provider.id,
-            serviceType,
-            ...rest,
+            ...toPublicProviderService(serviceType, payload),
           };
         });
       });
@@ -102,20 +158,15 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
 
     if (req.method === 'POST' || req.method === 'PATCH') {
       if (!uid) return res.status(401).json({ error: 'Not authenticated' });
-      const { serviceType, price, description, etaMinutes, active = true } = req.body as Partial<ProviderService> & {
+      const { serviceType, price, description, etaMinutes, active = true, includedServices } = req.body as Partial<ProviderService> & {
         serviceType?: string;
       };
       if (!serviceType) {
         return res.status(400).json({ error: 'Missing serviceType' });
       }
-      const payload: ProviderService = {
-        serviceType,
-        price: price !== undefined ? Number(price) : undefined,
-        description: description || '',
-        etaMinutes: etaMinutes !== undefined ? Number(etaMinutes) : undefined,
-        active,
-      };
-      
+      if (!isValidServiceType(serviceType)) {
+        return res.status(400).json({ error: 'Invalid serviceType' });
+      }
       const supabase = getSupabaseAdminClient();
       
       // Get existing provider to merge services
@@ -131,6 +182,21 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       
       const currentMetadata = existing?.metadata || {};
       const currentServices = (currentMetadata.services as Record<string, ProviderService>) || {};
+      const existingService = (currentServices[serviceType] || {}) as ProviderService;
+      const parsedIncludedServices =
+        includedServices !== undefined
+          ? normalizeIncludedServices(includedServices)
+          : normalizeIncludedServices(existingService.includedServices);
+      const payload: ProviderService = {
+        ...existingService,
+        serviceType: serviceType.trim(),
+        price: price !== undefined ? Number(price) : existingService.price,
+        description: description !== undefined ? String(description || '') : existingService.description || '',
+        etaMinutes: etaMinutes !== undefined ? Number(etaMinutes) : existingService.etaMinutes,
+        active,
+        updatedAt: new Date().toISOString(),
+        includedServices: parsedIncludedServices,
+      };
       const updatedServices = {
         ...currentServices,
         [serviceType]: payload,
@@ -152,10 +218,51 @@ export async function handleProviderServices(req: VercelRequest, res: VercelResp
       }
       
       // Return updated list
-      const list = Object.entries(updatedServices).map(([st, val]) => {
-        const { serviceType: _, ...rest } = val as any;
-        return { serviceType: st, ...rest };
-      });
+      const list = Object.entries(updatedServices).map(([st, val]) => toPublicProviderService(st, val as ProviderService));
+      return res.status(200).json(list);
+    }
+
+    if (req.method === 'DELETE') {
+      if (!uid) return res.status(401).json({ error: 'Not authenticated' });
+      const serviceType = String((req.query.serviceType as string) || '').trim();
+      if (!serviceType) {
+        return res.status(400).json({ error: 'Missing serviceType' });
+      }
+
+      const supabase = getSupabaseAdminClient();
+      const { data: existing, error: fetchError } = await supabase
+        .from('service_providers')
+        .select('metadata')
+        .eq('id', uid)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw new Error(`Failed to fetch provider: ${fetchError.message}`);
+      }
+
+      const currentMetadata = existing?.metadata || {};
+      const currentServices = (currentMetadata.services as Record<string, ProviderService>) || {};
+      if (!(serviceType in currentServices)) {
+        const list = Object.entries(currentServices).map(([st, val]) => toPublicProviderService(st, val as ProviderService));
+        return res.status(200).json(list);
+      }
+
+      const { [serviceType]: _removed, ...restServices } = currentServices;
+      const { error: updateError } = await supabase
+        .from('service_providers')
+        .update({
+          metadata: {
+            ...currentMetadata,
+            services: restServices,
+          },
+        })
+        .eq('id', uid);
+
+      if (updateError) {
+        throw new Error(`Failed to delete provider service: ${updateError.message}`);
+      }
+
+      const list = Object.entries(restServices).map(([st, val]) => toPublicProviderService(st, val as ProviderService));
       return res.status(200).json(list);
     }
 

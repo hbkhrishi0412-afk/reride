@@ -28,6 +28,8 @@
     "fetch-vehicle-images": "node scripts/fetch-vehicle-images.js",
     "verify-deployment": "node scripts/verify-deployment.js",
     "verify-deployment:local": "node scripts/verify-deployment.js http://localhost:5173",
+    "verify:car-service:prod": "node scripts/verify-car-service-production.js",
+    "verify:car-service:local": "cross-env CAR_SERVICE_BASE_URL=http://localhost:3001 node scripts/verify-car-service-production.js",
     "verify:functions": "node scripts/verify-serverless-functions.js",
     "test-categories": "node scripts/test-category-sync.js",
     "test-categories:local": "node scripts/test-category-sync.js http://localhost:5173",

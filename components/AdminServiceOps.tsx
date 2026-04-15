@@ -48,6 +48,76 @@ type ServiceRequest = {
   carDetails?: string;
 };
 
+type ServiceRequestMetrics = {
+  totals: {
+    total: number;
+    open: number;
+    accepted: number;
+    in_progress: number;
+    completed: number;
+    cancelled: number;
+    unassigned: number;
+    assigned: number;
+  };
+  byCity: Record<string, number>;
+  byServiceType: Record<string, number>;
+  generatedAt: string;
+};
+
+const defaultMetricsTotals: ServiceRequestMetrics['totals'] = {
+  total: 0,
+  open: 0,
+  accepted: 0,
+  in_progress: 0,
+  completed: 0,
+  cancelled: 0,
+  unassigned: 0,
+  assigned: 0,
+};
+
+const toNumber = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const sanitizeRecord = (value: unknown): Record<string, number> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, number>>((acc, [key, count]) => {
+    acc[key] = toNumber(count);
+    return acc;
+  }, {});
+};
+
+const sanitizeMetrics = (value: unknown): ServiceRequestMetrics => {
+  const source = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const totalsSource =
+    source.totals && typeof source.totals === 'object' && !Array.isArray(source.totals)
+      ? (source.totals as Record<string, unknown>)
+      : {};
+
+  return {
+    totals: {
+      total: toNumber(totalsSource.total),
+      open: toNumber(totalsSource.open),
+      accepted: toNumber(totalsSource.accepted),
+      in_progress: toNumber(totalsSource.in_progress),
+      completed: toNumber(totalsSource.completed),
+      cancelled: toNumber(totalsSource.cancelled),
+      unassigned: toNumber(totalsSource.unassigned),
+      assigned: toNumber(totalsSource.assigned),
+    },
+    byCity: sanitizeRecord(source.byCity),
+    byServiceType: sanitizeRecord(source.byServiceType),
+    generatedAt: typeof source.generatedAt === 'string' && source.generatedAt.trim() ? source.generatedAt : '',
+  };
+};
+
 const statusColors: Record<string, string> = {
   open: 'bg-amber-100 text-amber-800 border border-amber-200',
   accepted: 'bg-blue-100 text-blue-800 border border-blue-200',
@@ -105,10 +175,12 @@ const AdminServiceOps: React.FC = () => {
     serviceType: 'all',
     city: '',
     providerId: 'all',
+    unassignedOnly: false,
   });
   const [serviceSearch, setServiceSearch] = useState('');
   const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<ServiceRequestMetrics | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -126,6 +198,11 @@ const AdminServiceOps: React.FC = () => {
       setProviders(Array.isArray(p) ? p : []);
       setServices(Array.isArray(s) ? s : []);
       setRequests(Array.isArray(r) ? r : []);
+      const mResp = await authenticatedFetch('/api/service-requests?scope=metrics');
+      if (mResp.ok) {
+        const m = await mResp.json();
+        setMetrics(sanitizeMetrics(m));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load admin data');
     } finally {
@@ -191,7 +268,8 @@ const AdminServiceOps: React.FC = () => {
         filters.providerId === 'all' ||
         r.providerId === filters.providerId ||
         (r.candidateProviderIds || []).includes(filters.providerId);
-      return statusOk && serviceOk && cityOk && providerOk;
+      const unassignedOk = !filters.unassignedOnly || !r.providerId;
+      return statusOk && serviceOk && cityOk && providerOk && unassignedOk;
     });
   }, [filters, requests]);
 
@@ -223,6 +301,37 @@ const AdminServiceOps: React.FC = () => {
     { key: 'cancelled', label: 'Cancelled' },
   ];
 
+  const activeQuickFilterLabel = useMemo(() => {
+    const parts: string[] = [];
+    if (filters.status !== 'all') parts.push(filters.status.replace('_', ' '));
+    if (filters.unassignedOnly) parts.push('unassigned');
+    if (filters.providerId !== 'all') parts.push('provider scoped');
+    if (parts.length === 0) return '';
+    return `Quick filter: ${parts.join(' + ')}`;
+  }, [filters.providerId, filters.status, filters.unassignedOnly]);
+
+  const topCities = useMemo(
+    () =>
+      Object.entries(metrics?.byCity || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3),
+    [metrics?.byCity],
+  );
+
+  const topServices = useMemo(
+    () =>
+      Object.entries(metrics?.byServiceType || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3),
+    [metrics?.byServiceType],
+  );
+
+  const metricTotals = metrics?.totals ?? defaultMetricsTotals;
+
+  const metricsGeneratedAt = metrics?.generatedAt
+    ? new Date(metrics.generatedAt).toLocaleString()
+    : '-';
+
   const renderRequests = () => (
     <section className="bg-white border border-gray-100 rounded-xl shadow-sm">
       <div className="sticky top-0 z-10 bg-white border-b px-4 py-3 flex flex-wrap gap-2 items-center">
@@ -253,6 +362,18 @@ const AdminServiceOps: React.FC = () => {
           placeholder="City"
           className="px-3 py-2 border rounded-lg text-sm"
         />
+        <label className="inline-flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-gray-700 bg-white">
+          <input
+            type="checkbox"
+            checked={filters.unassignedOnly}
+            onChange={(e) => {
+              setFilters((prev) => ({ ...prev, unassignedOnly: e.target.checked }));
+              setRequestPage(1);
+            }}
+            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          Unassigned only
+        </label>
         <select
           value={filters.providerId}
           onChange={(e) => {
@@ -268,6 +389,21 @@ const AdminServiceOps: React.FC = () => {
             </option>
           ))}
         </select>
+        {activeQuickFilterLabel && (
+          <div className="ml-auto inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
+            <span>{activeQuickFilterLabel}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setFilters((prev) => ({ ...prev, status: 'all', providerId: 'all', unassignedOnly: false }));
+                setRequestPage(1);
+              }}
+              className="rounded-full border border-blue-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Reset
+            </button>
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
@@ -688,6 +824,72 @@ const AdminServiceOps: React.FC = () => {
 
       {error && <div className="text-sm text-red-600">{error}</div>}
       {loading && <div className="text-sm text-gray-700">Loading...</div>}
+      {metrics && (
+        <section className="grid gap-3 md:grid-cols-4">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('requests');
+              setFilters((prev) => ({ ...prev, status: 'all', providerId: 'all', unassignedOnly: false }));
+              setRequestPage(1);
+            }}
+            className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm text-left hover:border-blue-300 transition-colors"
+          >
+            <p className="text-xs uppercase tracking-wide text-gray-500">Total Requests</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">{metricTotals.total}</p>
+            <p className="text-xs text-gray-500">Open {metricTotals.open} · Accepted {metricTotals.accepted}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('requests');
+              setFilters((prev) => ({ ...prev, status: 'in_progress', providerId: 'all', unassignedOnly: false }));
+              setRequestPage(1);
+            }}
+            className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm text-left hover:border-indigo-300 transition-colors"
+          >
+            <p className="text-xs uppercase tracking-wide text-gray-500">Pipeline Health</p>
+            <p className="mt-1 text-sm text-gray-700">
+              In progress <span className="font-semibold text-indigo-700">{metricTotals.in_progress}</span> · Completed{' '}
+              <span className="font-semibold text-emerald-700">{metricTotals.completed}</span>
+            </p>
+            <p className="text-xs text-gray-500">Cancelled {metricTotals.cancelled}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('requests');
+              setFilters((prev) => ({ ...prev, status: 'open', providerId: 'all', unassignedOnly: true }));
+              setRequestPage(1);
+            }}
+            className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm text-left hover:border-amber-300 transition-colors"
+          >
+            <p className="text-xs uppercase tracking-wide text-gray-500">Assignment</p>
+            <p className="mt-1 text-sm text-gray-700">
+              Assigned <span className="font-semibold text-blue-700">{metricTotals.assigned}</span> · Unassigned{' '}
+              <span className="font-semibold text-amber-700">{metricTotals.unassigned}</span>
+            </p>
+            <p className="text-xs text-gray-500">Generated {metricsGeneratedAt}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('requests');
+              setFilters((prev) => ({ ...prev, status: 'open', providerId: 'all', unassignedOnly: false }));
+              setRequestPage(1);
+            }}
+            className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm text-left hover:border-emerald-300 transition-colors"
+          >
+            <p className="text-xs uppercase tracking-wide text-gray-500">Top Demand</p>
+            <p className="mt-1 text-xs text-gray-700">
+              Cities: {topCities.length > 0 ? topCities.map(([k, v]) => `${k} (${v})`).join(', ') : '-'}
+            </p>
+            <p className="text-xs text-gray-700">
+              Services: {topServices.length > 0 ? topServices.map(([k, v]) => `${k} (${v})`).join(', ') : '-'}
+            </p>
+          </button>
+        </section>
+      )}
 
       {activeTab === 'requests' && renderRequests()}
       {activeTab === 'services' && renderServices()}
