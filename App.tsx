@@ -93,6 +93,10 @@ interface ServiceRequestPayload {
   servicePackages?: Array<{
     id: string;
     name: string;
+    serviceType?: string;
+    includedServiceId?: string;
+    quantity?: number;
+    price?: number;
   }>;
   serviceTypes?: string[];
   address?: {
@@ -660,7 +664,7 @@ const AppContent: React.FC = () => {
           id: it.serviceId,
           name: svcMeta?.name || it.serviceId,
           quantity: it.quantity || 1,
-          price: undefined,
+          price: typeof svcMeta?.price === 'number' ? svcMeta.price : undefined,
         };
       });
 

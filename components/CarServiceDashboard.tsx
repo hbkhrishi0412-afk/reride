@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getSession } from '../services/supabase-auth-service';
-
-type ServiceCategory = 'Essential Service' | 'Deep Detailing' | 'Care Plus';
+import { getSupabaseClient } from '../lib/supabase';
+import {
+  CAR_SERVICE_OPTIONS,
+  DEFAULT_SERVICE_TEMPLATE_NAMES,
+  SERVICE_CATEGORIES,
+  SERVICE_CATEGORY_MAP,
+  SERVICE_TEMPLATE_PRESETS,
+  type ServiceCategory,
+} from '../constants/serviceProviderCatalog.js';
 
 interface Provider {
   name: string;
@@ -19,6 +26,16 @@ interface Provider {
 type RequestStatus = 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 
 type ServiceLineItem = { id: string; name: string; quantity?: number; price?: number };
+type IncludedServicePrice = { id: string; name: string; price?: number; etaMinutes?: number; active?: boolean };
+type ProviderServiceRow = {
+  serviceType: string;
+  price?: number;
+  description?: string;
+  etaMinutes?: number;
+  active?: boolean;
+  updatedAt?: string;
+  includedServices?: IncludedServicePrice[];
+};
 
 interface ServiceRequest {
   id: string;
@@ -38,18 +55,29 @@ interface ServiceRequest {
   carDetails?: string;
   /** Line items from customer cart (when provided by API). */
   services?: ServiceLineItem[];
+  total?: number;
   createdAt?: string;
   updatedAt?: string;
   claimedAt?: string;
 }
 
-function ServiceRequestPackages({ services }: { services?: ServiceLineItem[] }) {
+type MatchReason = 'city_match' | 'service_match' | 'new_request';
+
+function ServiceRequestPackages({ services, total }: { services?: ServiceLineItem[]; total?: number }) {
   const lines = (services ?? []).filter(
     (s): s is ServiceLineItem =>
       !!s &&
       typeof s === 'object' &&
       (typeof s.name === 'string' || typeof s.id === 'string'),
   );
+  const computedAmount = lines.reduce((sum, line) => {
+    const qty = line.quantity != null && line.quantity > 0 ? line.quantity : 1;
+    const unitPrice =
+      line.price != null && Number.isFinite(line.price) && line.price > 0 ? line.price : 0;
+    return sum + unitPrice * qty;
+  }, 0);
+  const finalAmount = computedAmount > 0 ? computedAmount : total && total > 0 ? total : null;
+
   if (lines.length === 0) return null;
   return (
     <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
@@ -69,11 +97,17 @@ function ServiceRequestPackages({ services }: { services?: ServiceLineItem[] }) 
               <span className="text-gray-600 tabular-nums shrink-0">
                 ×{qty}
                 {price != null ? ` · ₹${price.toLocaleString('en-IN')}` : ''}
+                {price != null ? ` = ₹${(price * qty).toLocaleString('en-IN')}` : ''}
               </span>
             </li>
           );
         })}
       </ul>
+      <div className="mt-3 border-t border-indigo-200 pt-2 text-right">
+        <span className="text-xs font-semibold text-indigo-700">
+          Amount: {finalAmount != null ? `₹${finalAmount.toLocaleString('en-IN')}` : 'Pending quote'}
+        </span>
+      </div>
     </div>
   );
 }
@@ -90,26 +124,34 @@ const statusOptions: { value: RequestStatus; label: string }[] = [
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
-const serviceOptions = [
-  'General',
-  'Periodic Service',
-  'Engine & Transmission',
-  'AC & Cooling',
-  'Electrical & Battery',
-  'Brakes & Suspension',
-  'Body Work & Paint',
-  'Tyres & Alignment',
-  'Detailing & Cleaning',
-];
+const serviceOptions = CAR_SERVICE_OPTIONS;
 
-// Service category mapping
-const SERVICE_CATEGORY_MAP: Record<ServiceCategory, string[]> = {
-  'Essential Service': ['Periodic Service', 'Engine & Transmission', 'General'],
-  'Deep Detailing': ['Detailing & Cleaning', 'Body Work & Paint'],
-  'Care Plus': ['Brakes & Suspension', 'Tyres & Alignment', 'Electrical & Battery'],
-};
+const parseIncludedServicesText = (raw: string): IncludedServicePrice[] =>
+  raw
+    .split('\n')
+    .map((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      const [nameRaw, priceRaw, etaRaw] = trimmed.split('|').map((part) => part.trim());
+      const name = nameRaw || '';
+      if (!name) return null;
+      const price = priceRaw ? Number(priceRaw) : undefined;
+      const etaMinutes = etaRaw ? Number(etaRaw) : undefined;
+      return {
+        id: `inc-${idx + 1}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+        name,
+        price: price != null && Number.isFinite(price) ? price : undefined,
+        etaMinutes: etaMinutes != null && Number.isFinite(etaMinutes) ? etaMinutes : undefined,
+        active: true,
+      };
+    })
+    .filter((line): line is IncludedServicePrice => Boolean(line));
 
-const SERVICE_CATEGORIES: ServiceCategory[] = ['Essential Service', 'Deep Detailing', 'Care Plus'];
+const formatIncludedServicesText = (items?: IncludedServicePrice[]): string =>
+  (items || [])
+    .filter((item) => item.active !== false)
+    .map((item) => [item.name, item.price != null ? String(item.price) : '', item.etaMinutes != null ? String(item.etaMinutes) : ''].join(' | '))
+    .join('\n');
 
 const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) => {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
@@ -117,18 +159,19 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   const [loading, setLoading] = useState(false);
   const [openLoading, setOpenLoading] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all' | 'due_today' | 'overdue'>('all');
+  const [overviewRange, setOverviewRange] = useState<'today' | '7d' | '30d'>('7d');
   const [openFilters, setOpenFilters] = useState({
-    city:
-      provider?.city?.trim() && provider.city.trim().toLowerCase() !== 'pending setup'
-        ? provider.city.trim()
-        : '',
+    // Default to all cities so providers do not accidentally hide request pool.
+    city: '',
     serviceType: 'all',
+    last24h: false,
   });
-  const [providerServices, setProviderServices] = useState<
-    Array<{ serviceType: string; price?: number; description?: string; etaMinutes?: number; active?: boolean }>
-  >([]);
+  const [lastOpenRefreshAt, setLastOpenRefreshAt] = useState<string | null>(null);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [providerServices, setProviderServices] = useState<ProviderServiceRow[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [savingService, setSavingService] = useState(false);
@@ -137,8 +180,12 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     price: '',
     description: '',
     etaMinutes: '',
+    includedServicesText: '',
     active: true,
   });
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [serviceStatusFilter, setServiceStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [editingServiceType, setEditingServiceType] = useState<string | null>(null);
   const [editingSkills, setEditingSkills] = useState(false);
   const [editingWorkshops, setEditingWorkshops] = useState(false);
   const [editingCategories, setEditingCategories] = useState(false);
@@ -193,10 +240,40 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     [requests]
   );
 
+  const isScheduledToday = (value?: string) => {
+    if (!value) return false;
+    const dt = new Date(value);
+    if (!Number.isFinite(dt.getTime())) return false;
+    const now = new Date();
+    return dt.getDate() === now.getDate() && dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear();
+  };
+
+  const isOverdueRequest = (req: ServiceRequest) => {
+    if (!req.scheduledAt || req.status === 'completed' || req.status === 'cancelled') return false;
+    const scheduledMs = new Date(req.scheduledAt).getTime();
+    return Number.isFinite(scheduledMs) && scheduledMs < Date.now();
+  };
+
   const filteredRequests = useMemo(() => {
     if (statusFilter === 'all') return sortedRequests;
+    if (statusFilter === 'due_today') return sortedRequests.filter((req) => isScheduledToday(req.scheduledAt));
+    if (statusFilter === 'overdue') return sortedRequests.filter((req) => isOverdueRequest(req));
     return sortedRequests.filter((req) => req.status === statusFilter);
   }, [sortedRequests, statusFilter]);
+
+  const myRequestStats = useMemo(() => {
+    const completedToday = requests.filter((req) => req.status === 'completed' && isScheduledToday(req.scheduledAt)).length;
+    const dueToday = requests.filter((req) => isScheduledToday(req.scheduledAt)).length;
+    const overdue = requests.filter((req) => isOverdueRequest(req)).length;
+    return {
+      total: requests.length,
+      accepted: requests.filter((r) => r.status === 'accepted').length,
+      inProgress: requests.filter((r) => r.status === 'in_progress').length,
+      completedToday,
+      dueToday,
+      overdue,
+    };
+  }, [requests]);
 
   const stats = useMemo(
     () => ({
@@ -209,6 +286,222 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     [requests, openRequests]
   );
 
+  const isWithinOverviewRange = (iso?: string) => {
+    if (!iso) return false;
+    const ts = new Date(iso).getTime();
+    if (!Number.isFinite(ts)) return false;
+    const now = Date.now();
+    if (overviewRange === 'today') {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      return ts >= start.getTime() && ts <= now;
+    }
+    const days = overviewRange === '7d' ? 7 : 30;
+    return now - ts <= days * 24 * 60 * 60 * 1000;
+  };
+
+  const overviewRequests = useMemo(
+    () => requests.filter((r) => isWithinOverviewRange(r.createdAt || r.updatedAt)),
+    [overviewRange, requests],
+  );
+
+  const overviewOpenRequests = useMemo(
+    () => openRequests.filter((r) => isWithinOverviewRange(r.createdAt || r.updatedAt)),
+    [openRequests, overviewRange],
+  );
+
+  const overviewStats = useMemo(
+    () => ({
+      total: overviewRequests.length,
+      open: overviewOpenRequests.length,
+      accepted: overviewRequests.filter((r) => r.status === 'accepted').length,
+      inProgress: overviewRequests.filter((r) => r.status === 'in_progress').length,
+      completed: overviewRequests.filter((r) => r.status === 'completed').length,
+      cancelled: overviewRequests.filter((r) => r.status === 'cancelled').length,
+    }),
+    [overviewOpenRequests.length, overviewRequests],
+  );
+
+  const activeProviderServices = useMemo(
+    () => providerServices.filter((svc) => svc.active !== false),
+    [providerServices],
+  );
+
+  const filteredProviderServices = useMemo(() => {
+    return providerServices.filter((svc) => {
+      const statusOk =
+        serviceStatusFilter === 'all' ||
+        (serviceStatusFilter === 'active' ? svc.active !== false : svc.active === false);
+      const searchOk = serviceSearch
+        ? String(svc.serviceType || '').toLowerCase().includes(serviceSearch.toLowerCase())
+        : true;
+      return statusOk && searchOk;
+    });
+  }, [providerServices, serviceSearch, serviceStatusFilter]);
+
+  const providerSetupReady = useMemo(() => {
+    const cityReady = Boolean((localProvider?.city || provider?.city || '').trim());
+    const serviceReady = activeProviderServices.length > 0;
+    return cityReady && serviceReady;
+  }, [activeProviderServices.length, localProvider?.city, provider?.city]);
+
+  const recommendedCategories = useMemo(() => {
+    const activeNames = new Set(
+      activeProviderServices.map((svc) => String(svc.serviceType || '').trim().toLowerCase()).filter(Boolean),
+    );
+    return SERVICE_CATEGORIES.filter((category) =>
+      SERVICE_CATEGORY_MAP[category].some((service) => activeNames.has(service.toLowerCase())),
+    );
+  }, [activeProviderServices]);
+
+  const effectiveSelectedCategories = useMemo(
+    () => ((localProvider?.serviceCategories?.length ? localProvider.serviceCategories : selectedCategories) as ServiceCategory[]),
+    [localProvider?.serviceCategories, selectedCategories],
+  );
+
+  const suggestedServiceTemplateNames = useMemo(() => {
+    const names = effectiveSelectedCategories.flatMap((category) => SERVICE_CATEGORY_MAP[category] || []);
+    const deduped = Array.from(new Set(names));
+    return deduped.length > 0 ? deduped : DEFAULT_SERVICE_TEMPLATE_NAMES;
+  }, [effectiveSelectedCategories]);
+
+  const suggestedServiceTemplates = useMemo(
+    () =>
+      suggestedServiceTemplateNames.map((serviceType) => ({
+        serviceType,
+        ...SERVICE_TEMPLATE_PRESETS[serviceType],
+      })),
+    [suggestedServiceTemplateNames],
+  );
+
+  const profileReadiness = useMemo(() => {
+    const checks = [
+      Boolean((localProvider?.city || '').trim()),
+      Boolean((localProvider?.availability || '').trim()),
+      Boolean(localProvider?.skills?.length),
+      Boolean(localProvider?.workshops?.length),
+      activeProviderServices.length > 0,
+      Boolean(localProvider?.serviceCategories?.length),
+    ];
+    const completed = checks.filter(Boolean).length;
+    return {
+      percent: Math.round((completed / checks.length) * 100),
+      completed,
+      total: checks.length,
+      checks,
+    };
+  }, [activeProviderServices.length, localProvider]);
+
+  const avgServicePrice = useMemo(() => {
+    const priced = activeProviderServices
+      .map((s) => s.price)
+      .filter((p): p is number => typeof p === 'number' && Number.isFinite(p) && p > 0);
+    if (priced.length === 0) return null;
+    return Math.round(priced.reduce((sum, p) => sum + p, 0) / priced.length);
+  }, [activeProviderServices]);
+
+  const recentOpenCount = useMemo(() => overviewOpenRequests.length, [overviewOpenRequests.length]);
+
+  const acceptanceRate = useMemo(() => {
+    const actionable = overviewStats.accepted + overviewStats.inProgress + overviewStats.completed;
+    if (actionable === 0) return 0;
+    return Math.round((overviewStats.completed / actionable) * 100);
+  }, [overviewStats.accepted, overviewStats.completed, overviewStats.inProgress]);
+
+  const priorityAlerts = useMemo(() => {
+    const alerts: Array<{ level: 'warn' | 'critical'; message: string }> = [];
+    if (!(localProvider?.availability || '').trim()) {
+      alerts.push({ level: 'warn', message: 'Availability is not set. You may miss matching opportunities.' });
+    }
+    if (activeProviderServices.length === 0) {
+      alerts.push({ level: 'critical', message: 'No active services. You are unlikely to receive requests.' });
+    }
+    const staleOpen = openRequests.filter((req) => {
+      if (!req.createdAt) return false;
+      const ts = new Date(req.createdAt).getTime();
+      return Number.isFinite(ts) && Date.now() - ts > 2 * 60 * 60 * 1000;
+    }).length;
+    if (staleOpen > 0) {
+      alerts.push({ level: 'warn', message: `${staleOpen} open requests are older than 2h.` });
+    }
+    return alerts;
+  }, [activeProviderServices.length, localProvider?.availability, openRequests]);
+
+  const recentActivity = useMemo(() => {
+    return [...overviewRequests]
+      .sort((a, b) => {
+        const aTs = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const bTs = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return bTs - aTs;
+      })
+      .slice(0, 5)
+      .map((req) => ({
+        id: req.id,
+        title: req.title,
+        when: req.updatedAt || req.createdAt,
+        status: req.status,
+      }));
+  }, [overviewRequests]);
+
+  const nextBestAction = useMemo(() => {
+    if (!(localProvider?.availability || '').trim()) {
+      return 'Set your availability to appear in more customer matches.';
+    }
+    if (activeProviderServices.length < 3) {
+      return 'Add or activate at least 3 services to increase discoverability.';
+    }
+    if (!(localProvider?.serviceCategories || []).length) {
+      return 'Select service categories so jobs are routed accurately.';
+    }
+    if (!(localProvider?.workshops || []).length) {
+      return 'Add workshop locations to improve local request targeting.';
+    }
+    return 'Great setup. Keep response time low to maximize acceptance rate.';
+  }, [activeProviderServices.length, localProvider]);
+
+  const enrichedOpenRequests = useMemo(() => {
+    const providerCity = (localProvider?.city || provider?.city || '').trim().toLowerCase();
+    const activeServiceNames = new Set(
+      activeProviderServices.map((svc) => String(svc.serviceType || '').trim().toLowerCase()).filter(Boolean),
+    );
+    const now = Date.now();
+    return [...openRequests]
+      .map((req) => {
+        let score = 0;
+        const reasons: MatchReason[] = [];
+        const reqCity = (req.city || '').trim().toLowerCase();
+        if (providerCity && reqCity && providerCity === reqCity) {
+          score += 50;
+          reasons.push('city_match');
+        }
+        const reqService = String(req.serviceType || '').trim().toLowerCase();
+        if (reqService && activeServiceNames.has(reqService)) {
+          score += 35;
+          reasons.push('service_match');
+        }
+        const createdAt = req.createdAt ? new Date(req.createdAt).getTime() : Number.NaN;
+        if (!Number.isNaN(createdAt)) {
+          const mins = (now - createdAt) / 60000;
+          if (mins <= 10) {
+            score += 25;
+            reasons.push('new_request');
+          } else if (mins <= 60) {
+            score += 10;
+          }
+        }
+        return { ...req, _matchScore: score, _matchReasons: reasons };
+      })
+      .sort((a, b) => b._matchScore - a._matchScore);
+  }, [activeProviderServices, localProvider?.city, openRequests, provider?.city]);
+
+  const openRequestInsights = useMemo(() => {
+    const total = enrichedOpenRequests.length;
+    const strongMatches = enrichedOpenRequests.filter((req) => req._matchScore >= 60).length;
+    const newPool = enrichedOpenRequests.filter((req) => req._matchReasons.includes('new_request')).length;
+    const cityMatched = enrichedOpenRequests.filter((req) => req._matchReasons.includes('city_match')).length;
+    return { total, strongMatches, newPool, cityMatched };
+  }, [enrichedOpenRequests]);
+
   const formatDateTime = (value?: string) => {
     if (!value) return '';
     const date = new Date(value);
@@ -219,6 +512,63 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       hour: '2-digit',
       minute: '2-digit',
     }).format(date);
+  };
+
+  const normalizeVehicleText = (vehicle: unknown): string => {
+    if (typeof vehicle === 'string') return vehicle.trim();
+    if (!vehicle || typeof vehicle !== 'object') return '';
+    const raw = vehicle as Record<string, unknown>;
+    const makeModel = [raw.make, raw.model]
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .map((part) => part.trim())
+      .join(' ');
+    const year = typeof raw.year === 'number' || typeof raw.year === 'string' ? String(raw.year).trim() : '';
+    const reg = typeof raw.reg === 'string' ? raw.reg.trim() : '';
+    const city = typeof raw.city === 'string' ? raw.city.trim() : '';
+    const fuel = typeof raw.fuel === 'string' ? raw.fuel.trim() : '';
+    const label = [makeModel, year ? `(${year})` : '', fuel, reg ? `· ${reg}` : '', city ? `· ${city}` : '']
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+·/g, ' ·')
+      .trim();
+    if (label) return label;
+    try {
+      return JSON.stringify(vehicle);
+    } catch {
+      return '';
+    }
+  };
+
+  const normalizeServiceRequest = (req: ServiceRequest): ServiceRequest => ({
+    ...req,
+    vehicle: normalizeVehicleText(req.vehicle),
+    carDetails: normalizeVehicleText(req.carDetails),
+    city: typeof req.city === 'string' ? req.city : '',
+  });
+
+  const formatRelative = (value?: string) => {
+    if (!value) return 'just now';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'just now';
+    const diffMs = Date.now() - date.getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
+
+  const formatSlaRemaining = (createdAt?: string) => {
+    if (!createdAt) return null;
+    const created = new Date(createdAt).getTime();
+    if (Number.isNaN(created)) return null;
+    const SLA_MINUTES = 120;
+    const remaining = SLA_MINUTES - Math.floor((Date.now() - created) / 60000);
+    if (remaining <= 0) return 'Expired';
+    if (remaining < 60) return `${remaining}m left`;
+    return `${Math.floor(remaining / 60)}h ${remaining % 60}m left`;
   };
 
   const statusBadge = (status: RequestStatus) => {
@@ -310,6 +660,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       }
       const data = await resp.json();
       setProviderServices(data);
+      setEditingServiceType(null);
     } catch (err) {
       setServicesError(err instanceof Error ? err.message : 'Failed to load services');
     } finally {
@@ -327,6 +678,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         price: serviceForm.price ? Number(serviceForm.price) : undefined,
         description: serviceForm.description,
         etaMinutes: serviceForm.etaMinutes ? Number(serviceForm.etaMinutes) : undefined,
+        includedServices: parseIncludedServicesText(serviceForm.includedServicesText),
         active: serviceForm.active,
       };
       const resp = await fetch('/api/provider-services', {
@@ -342,13 +694,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       setProviderServices(data);
       
       // Reset form after successful save
-      setServiceForm({
-        serviceType: serviceOptions[0],
-        price: '',
-        description: '',
-        etaMinutes: '',
-        active: true,
-      });
+      clearServiceForm();
       
       // Dispatch event to notify admin panel of service update
       window.dispatchEvent(new CustomEvent('serviceProviderServicesUpdated', {
@@ -409,6 +755,75 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     }
   };
 
+  const startEditService = (service: {
+    serviceType: string;
+    price?: number;
+    description?: string;
+    etaMinutes?: number;
+    active?: boolean;
+    includedServices?: IncludedServicePrice[];
+  }) => {
+    setEditingServiceType(service.serviceType);
+    setServiceForm({
+      serviceType: service.serviceType,
+      price: service.price != null ? String(service.price) : '',
+      description: service.description || '',
+      etaMinutes: service.etaMinutes != null ? String(service.etaMinutes) : '',
+      includedServicesText: formatIncludedServicesText(service.includedServices),
+      active: service.active !== false,
+    });
+  };
+
+  const clearServiceForm = () => {
+    setEditingServiceType(null);
+    setServiceForm({
+      serviceType: suggestedServiceTemplateNames[0] || serviceOptions[0],
+      price: '',
+      description: '',
+      etaMinutes: '',
+      includedServicesText: '',
+      active: true,
+    });
+  };
+
+  const applyServiceTemplate = (template: { serviceType: string; price: string; etaMinutes: string; description: string }) => {
+    setEditingServiceType(null);
+    setServiceForm({
+      serviceType: template.serviceType,
+      price: template.price,
+      description: template.description,
+      etaMinutes: template.etaMinutes,
+      includedServicesText: '',
+      active: true,
+    });
+  };
+
+  const deleteService = async (serviceType: string) => {
+    if (!window.confirm(`Delete "${serviceType}" from your service list?`)) return;
+    setSavingService(true);
+    setServicesError(null);
+    try {
+      const headers = await getAuthHeaders();
+      const resp = await fetch(`/api/provider-services?serviceType=${encodeURIComponent(serviceType)}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to delete service');
+      }
+      const data = await resp.json();
+      setProviderServices(Array.isArray(data) ? data : []);
+      if (editingServiceType === serviceType) {
+        clearServiceForm();
+      }
+    } catch (err) {
+      setServicesError(err instanceof Error ? err.message : 'Failed to delete service');
+    } finally {
+      setSavingService(false);
+    }
+  };
+
   const withToken = async (): Promise<string> => {
     const sessionResult = await getSession();
     if (!sessionResult.success || !sessionResult.session?.access_token) {
@@ -434,7 +849,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         throw new Error(data.error || 'Failed to load requests');
       }
       const data = await resp.json();
-      setRequests(data);
+      const normalized = Array.isArray(data) ? data.map((req) => normalizeServiceRequest(req as ServiceRequest)) : [];
+      setRequests(normalized);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load requests');
     } finally {
@@ -453,6 +869,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         cityRaw.toLowerCase() === 'pending setup' ? '' : cityRaw;
       if (cityQuery) params.set('city', cityQuery);
       if (openFilters.serviceType !== 'all') params.set('serviceType', openFilters.serviceType);
+      if (openFilters.last24h) params.set('recentHours', '24');
       const resp = await fetch(`/api/service-requests?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -461,30 +878,35 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         throw new Error(data.error || 'Failed to load open requests');
       }
       const data = await resp.json();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0a2ed1' },
-        body: JSON.stringify({
-          sessionId: '0a2ed1',
-          runId: 'post-fix',
-          hypothesisId: 'H1-H5',
-          location: 'CarServiceDashboard.tsx:fetchOpenRequests',
-          message: 'open pool client response',
-          data: {
-            query: params.toString(),
-            cityFilterSent: Boolean(cityQuery),
-            cityFilterRawLen: cityRaw.length,
-            isPlaceholderCityFilter: cityRaw.toLowerCase() === 'pending setup',
-            serviceType: openFilters.serviceType,
-            ok: resp.ok,
-            resultCount: Array.isArray(data) ? data.length : -1,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      setOpenRequests(data);
+      const normalized = Array.isArray(data) ? data.map((req) => normalizeServiceRequest(req as ServiceRequest)) : [];
+      // Dev-only telemetry hook (avoid noisy localhost calls in production).
+      if (process.env.NODE_ENV !== 'production') {
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0a2ed1' },
+          body: JSON.stringify({
+            sessionId: '0a2ed1',
+            runId: 'post-fix',
+            hypothesisId: 'H1-H5',
+            location: 'CarServiceDashboard.tsx:fetchOpenRequests',
+            message: 'open pool client response',
+            data: {
+              query: params.toString(),
+              cityFilterSent: Boolean(cityQuery),
+              cityFilterRawLen: cityRaw.length,
+              isPlaceholderCityFilter: cityRaw.toLowerCase() === 'pending setup',
+              serviceType: openFilters.serviceType,
+              ok: resp.ok,
+              resultCount: normalized.length,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      setOpenRequests(normalized);
+      setLastOpenRefreshAt(new Date().toISOString());
+      setRefreshNotice(`Open requests refreshed (${normalized.length})`);
+      window.setTimeout(() => setRefreshNotice(null), 2200);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load open requests');
     } finally {
@@ -503,7 +925,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   useEffect(() => {
     if (!provider) return;
     const tick = () => handleRefreshRef.current();
-    const interval = window.setInterval(tick, 5000);
+    const interval = window.setInterval(tick, 30000);
     const onVisibility = () => {
       if (document.visibilityState === 'visible') tick();
     };
@@ -511,6 +933,27 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     return () => {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [provider]);
+
+  useEffect(() => {
+    if (!provider) return;
+    let active = true;
+    const supabase = getSupabaseClient();
+    const channel = supabase
+      .channel(`provider-open-requests-${provider.email || provider.name || 'unknown'}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'service_requests' },
+        () => {
+          if (!active) return;
+          handleRefreshRef.current();
+        },
+      )
+      .subscribe();
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
     };
   }, [provider]);
 
@@ -528,7 +971,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to claim request');
       }
-      const updated = await resp.json();
+      const updated = normalizeServiceRequest(await resp.json());
       setRequests((prev) => [updated, ...prev]);
       setOpenRequests((prev) => prev.filter((req) => req.id !== id));
     } catch (err) {
@@ -540,6 +983,16 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
 
   const updateStatus = async (id: string, status: RequestStatus) => {
     try {
+      const currentRequest = requests.find((req) => req.id === id);
+      if (currentRequest?.status === 'cancelled' || currentRequest?.status === 'completed') {
+        setError('This request is locked and its status cannot be changed.');
+        window.setTimeout(() => {
+          setError((prev) =>
+            prev === 'This request is locked and its status cannot be changed.' ? null : prev,
+          );
+        }, 2500);
+        return;
+      }
       const token = await withToken();
       const resp = await fetch('/api/service-requests', {
         method: 'PATCH',
@@ -550,10 +1003,32 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to update status');
       }
-      const updated = await resp.json();
+      const updated = normalizeServiceRequest(await resp.json());
       setRequests(prev => prev.map(r => (r.id === id ? { ...r, ...updated } : r)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update status');
+    }
+  };
+
+  const deleteCancelledRequest = async (id: string) => {
+    if (!window.confirm('Delete this cancelled request permanently?')) return;
+    setDeletingId(id);
+    setError(null);
+    try {
+      const token = await withToken();
+      const resp = await fetch(`/api/service-requests?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to delete request');
+      }
+      setRequests((prev) => prev.filter((req) => req.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete request');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -660,6 +1135,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          email: localProvider.email,
           name: profileForm.name,
           phone: profileForm.phone,
           city: profileForm.city,
@@ -673,12 +1149,12 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         throw new Error(data.error || 'Failed to update profile');
       }
       const updated = await resp.json();
-      setLocalProvider({ ...localProvider, ...updated });
+      setLocalProvider(updated);
       setEditingProfile(false);
       
       // Dispatch event to notify admin panel and other components
       window.dispatchEvent(new CustomEvent('serviceProviderProfileUpdated', {
-        detail: { providerId: localProvider?.email || localProvider?.name, profile: updated }
+        detail: { providerId: updated?.email || updated?.name, profile: updated }
       }));
       
       // Update localStorage to trigger cross-tab sync
@@ -694,7 +1170,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         });
         if (refreshResp.ok) {
           const refreshed = await refreshResp.json();
-          setLocalProvider({ ...refreshed, ...updated });
+          setLocalProvider(refreshed);
         }
       } catch (refreshErr) {
         console.warn('Failed to refresh provider data:', refreshErr);
@@ -716,19 +1192,19 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       const resp = await fetch('/api/service-providers', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skills: skillsArray }),
+        body: JSON.stringify({ email: localProvider.email, skills: skillsArray }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to update skills');
       }
       const updated = await resp.json();
-      setLocalProvider({ ...localProvider, skills: skillsArray });
+      setLocalProvider(updated);
       setEditingSkills(false);
       
       // Notify admin panel of update
       window.dispatchEvent(new CustomEvent('serviceProviderProfileUpdated', {
-        detail: { providerId: localProvider?.email || localProvider?.name, profile: updated }
+        detail: { providerId: updated?.email || updated?.name, profile: updated }
       }));
       localStorage.setItem('serviceProviderProfileLastUpdate', Date.now().toString());
       window.dispatchEvent(new Event('storage'));
@@ -749,19 +1225,19 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       const resp = await fetch('/api/service-providers', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workshops: workshopsArray }),
+        body: JSON.stringify({ email: localProvider.email, workshops: workshopsArray }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to update workshops');
       }
       const updated = await resp.json();
-      setLocalProvider({ ...localProvider, workshops: workshopsArray });
+      setLocalProvider(updated);
       setEditingWorkshops(false);
       
       // Notify admin panel of update
       window.dispatchEvent(new CustomEvent('serviceProviderProfileUpdated', {
-        detail: { providerId: localProvider?.email || localProvider?.name, profile: updated }
+        detail: { providerId: updated?.email || updated?.name, profile: updated }
       }));
       localStorage.setItem('serviceProviderProfileLastUpdate', Date.now().toString());
       window.dispatchEvent(new Event('storage'));
@@ -781,19 +1257,19 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       const resp = await fetch('/api/service-providers', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceCategories: selectedCategories }),
+        body: JSON.stringify({ email: localProvider.email, serviceCategories: selectedCategories }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to update service categories');
       }
       const updated = await resp.json();
-      setLocalProvider({ ...localProvider, serviceCategories: selectedCategories });
+      setLocalProvider(updated);
       setEditingCategories(false);
       
       // Notify admin panel of update
       window.dispatchEvent(new CustomEvent('serviceProviderProfileUpdated', {
-        detail: { providerId: localProvider?.email || localProvider?.name, profile: updated }
+        detail: { providerId: updated?.email || updated?.name, profile: updated }
       }));
       localStorage.setItem('serviceProviderProfileLastUpdate', Date.now().toString());
       window.dispatchEvent(new Event('storage'));
@@ -832,7 +1308,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  {provider.city}
+                  {localProvider?.city || 'Not set'}
                 </p>
               </div>
             </div>
@@ -929,6 +1405,49 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <>
+              <section className="mb-6 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900">
+                      Profile readiness: {profileReadiness.percent}% ({profileReadiness.completed}/{profileReadiness.total})
+                    </p>
+                    <p className="text-xs text-blue-800 mt-1">Complete setup items to unlock better matching and conversion.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('services')}
+                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    Complete setup
+                  </button>
+                </div>
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
+                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[0] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>City</span>
+                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[1] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Availability</span>
+                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[2] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Skills</span>
+                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[3] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Workshops</span>
+                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[4] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Active services</span>
+                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[5] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Categories</span>
+                </div>
+              </section>
+
+              {priorityAlerts.length > 0 && (
+                <section className="mb-6 space-y-2">
+                  {priorityAlerts.map((alert, idx) => (
+                    <div
+                      key={`${alert.message}-${idx}`}
+                      className={`rounded-lg border px-3 py-2 text-sm ${
+                        alert.level === 'critical'
+                          ? 'border-red-200 bg-red-50 text-red-700'
+                          : 'border-amber-200 bg-amber-50 text-amber-800'
+                      }`}
+                    >
+                      {alert.message}
+                    </div>
+                  ))}
+                </section>
+              )}
+
               {/* Profile Overview Section */}
               <section className="mb-6">
                 <div className="flex items-center justify-between mb-4">
@@ -953,8 +1472,18 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                         <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Availability</p>
                       </div>
                     </div>
-                    <p className="text-xl font-bold text-gray-900 mb-1">{provider.availability || 'Not set'}</p>
+                    <p className="text-xl font-bold text-gray-900 mb-1">{localProvider?.availability || 'Not set'}</p>
                     <p className="text-xs text-gray-500">Preferred working days/hours</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('profile');
+                        setEditingProfile(true);
+                      }}
+                      className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                    >
+                      {localProvider?.availability ? 'Edit availability' : 'Set availability'}
+                    </button>
                   </div>
                   <div className="group bg-gradient-to-br from-white to-purple-50/30 rounded-xl border-2 border-gray-200 p-4 shadow-md hover:shadow-lg hover:border-purple-300 transition-all duration-300">
                     <div className="flex items-center justify-between mb-3">
@@ -1014,6 +1543,15 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   {localProvider?.skills?.length ? localProvider.skills.join(', ') : 'Not set'}
                 </p>
                         <p className="text-xs text-gray-500 font-medium">What you can service</p>
+                        {!localProvider?.skills?.length && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingSkills(true)}
+                            className="mt-2 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-100"
+                          >
+                            Add skills
+                          </button>
+                        )}
               </>
             )}
           </div>
@@ -1075,6 +1613,15 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   {localProvider?.workshops?.length ? localProvider.workshops.join(', ') : 'Not set'}
                 </p>
                         <p className="text-xs text-gray-500 font-medium">Locations you operate</p>
+                        {!localProvider?.workshops?.length && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingWorkshops(true)}
+                            className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                          >
+                            Add workshop
+                          </button>
+                        )}
               </>
             )}
           </div>
@@ -1093,21 +1640,43 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   Service Categories
                 </h2>
                 {!editingCategories && (
-                  <button
-                    type="button"
-                    onClick={() => setEditingCategories(true)}
-                    className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-xs font-semibold hover:from-indigo-700 hover:to-indigo-800 shadow-md transition-all flex items-center gap-1"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Edit
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategories(recommendedCategories);
+                        setEditingCategories(true);
+                      }}
+                      className="px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-all"
+                    >
+                      Auto-select suggested
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategories(true)}
+                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-xs font-semibold hover:from-indigo-700 hover:to-indigo-800 shadow-md transition-all flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                  </div>
                 )}
               </div>
+              {!editingCategories && (
+                <p className="text-xs text-gray-600 mb-3">
+                  Selected {localProvider?.serviceCategories?.length || 0} of {SERVICE_CATEGORIES.length}.{' '}
+                  {recommendedCategories.length > 0 && localProvider?.serviceCategories?.length === 0
+                    ? `Suggested: ${recommendedCategories.join(', ')}`
+                    : 'These categories decide which service suggestions appear in pricing.'}
+                </p>
+              )}
               {editingCategories ? (
                 <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-lg">
-                  <p className="text-sm text-gray-600 mb-3">Select the service categories you provide:</p>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Select the categories you offer. Pricing suggestions will follow these selections.
+                  </p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {SERVICE_CATEGORIES.map((category) => {
                       const isSelected = selectedCategories.includes(category);
@@ -1187,7 +1756,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                           <span className="font-semibold text-gray-900">{category}</span>
                         </div>
                         <div className="text-xs text-gray-600">
-                          {isSelected ? `Includes: ${categoryServices.join(', ')}` : 'Not selected'}
+                          {isSelected ? `Suggested services: ${categoryServices.join(', ')}` : 'Not selected'}
                         </div>
                       </div>
                     );
@@ -1207,54 +1776,104 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                     </div>
                     Request Statistics
                   </h2>
+                  <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
+                    {(['today', '7d', '30d'] as const).map((range) => (
+                      <button
+                        key={range}
+                        type="button"
+                        onClick={() => setOverviewRange(range)}
+                        className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                          overviewRange === range
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        {range === 'today' ? 'Today' : range}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="group bg-gradient-to-br from-white via-blue-50/50 to-white border-2 border-blue-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-blue-400">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                        </svg>
-                      </div>
-                    </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('my-requests');
+                      setStatusFilter('all');
+                    }}
+                    className="group text-left bg-gradient-to-br from-white via-blue-50/50 to-white border-2 border-blue-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-blue-400"
+                  >
                     <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">My Requests</p>
-                    <p className="text-3xl font-extrabold text-gray-900">{stats.total}</p>
-                  </div>
-                  <div className="group bg-gradient-to-br from-white via-amber-50/50 to-white border-2 border-amber-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-amber-400">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                    </div>
+                    <p className="text-3xl font-extrabold text-gray-900">{overviewStats.total}</p>
+                    <p className="text-xs text-gray-500 mt-1">Tap to view all claimed jobs</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('open')}
+                    className="group text-left bg-gradient-to-br from-white via-amber-50/50 to-white border-2 border-amber-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-amber-400"
+                  >
                     <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Open (pool)</p>
-                    <p className="text-3xl font-extrabold text-amber-700">{stats.open}</p>
-                  </div>
-                  <div className="group bg-gradient-to-br from-white via-blue-50/50 to-white border-2 border-blue-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-blue-400">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                    </div>
+                    <p className="text-3xl font-extrabold text-amber-700">{overviewStats.open}</p>
+                    <p className="text-xs text-gray-500 mt-1">{recentOpenCount} in selected period</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('my-requests');
+                      setStatusFilter('accepted');
+                    }}
+                    className="group text-left bg-gradient-to-br from-white via-blue-50/50 to-white border-2 border-blue-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-blue-400"
+                  >
                     <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Accepted</p>
-                    <p className="text-3xl font-extrabold text-blue-700">{stats.accepted}</p>
-                  </div>
-                  <div className="group bg-gradient-to-br from-white via-emerald-50/50 to-white border-2 border-emerald-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-emerald-400">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                    </div>
+                    <p className="text-3xl font-extrabold text-blue-700">{overviewStats.accepted}</p>
+                    <p className="text-xs text-gray-500 mt-1">Acceptance quality: {acceptanceRate}%</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('my-requests');
+                      setStatusFilter('completed');
+                    }}
+                    className="group text-left bg-gradient-to-br from-white via-emerald-50/50 to-white border-2 border-emerald-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-emerald-400"
+                  >
                     <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Completed</p>
-                    <p className="text-3xl font-extrabold text-emerald-700">{stats.completed}</p>
+                    <p className="text-3xl font-extrabold text-emerald-700">{overviewStats.completed}</p>
+                    <p className="text-xs text-gray-500 mt-1">Estimated revenue: ₹{((avgServicePrice || 0) * overviewStats.completed).toLocaleString('en-IN')}</p>
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Operational Metrics</p>
+                    <p className="text-sm text-gray-700 mt-2">Jobs in progress: <span className="font-semibold">{overviewStats.inProgress}</span></p>
+                    <p className="text-sm text-gray-700">Avg job value: <span className="font-semibold">{avgServicePrice ? `₹${avgServicePrice.toLocaleString('en-IN')}` : '-'}</span></p>
+                    <p className="text-sm text-gray-700">Cancellation rate: <span className="font-semibold">{overviewStats.total ? Math.round((overviewStats.cancelled / overviewStats.total) * 100) : 0}%</span></p>
                   </div>
-          </div>
-        </section>
+                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Recent Activity</p>
+                    <div className="mt-2 space-y-2">
+                      {recentActivity.length === 0 ? (
+                        <p className="text-sm text-gray-500">No activity yet.</p>
+                      ) : (
+                        recentActivity.map((item) => (
+                          <div key={item.id} className="text-xs text-gray-700">
+                            <span className="font-semibold">{item.title}</span> is {item.status.replace('_', ' ')} · {formatRelative(item.when)}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
+                    <p className="text-xs uppercase tracking-wide text-indigo-700">Next best action</p>
+                    <p className="text-sm text-indigo-900 mt-2 font-medium">{nextBestAction}</p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('services')}
+                      className="mt-3 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                    >
+                      Fix now
+                    </button>
+                  </div>
+                </div>
+              </section>
             </>
           )}
 
@@ -1491,9 +2110,27 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                     </svg>
                     My Services & Pricing
                   </h2>
-                  <p className="text-sm text-gray-600 mt-1">Control which services you offer and their price.</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Add your services and pricing. Suggestions are based on your selected service categories.
+                  </p>
                 </div>
               </div>
+          <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <p className="text-sm font-semibold text-blue-900">Eligibility status</p>
+            <p className="text-xs text-blue-800 mt-1">
+              {providerSetupReady
+                ? 'You are eligible to receive matched requests.'
+                : 'Complete your setup to improve request matching and visibility.'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className={`rounded-full px-2.5 py-1 font-medium ${((localProvider?.city || '').trim() ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}`}>
+                City: {(localProvider?.city || '').trim() ? 'Ready' : 'Missing'}
+              </span>
+              <span className={`rounded-full px-2.5 py-1 font-medium ${activeProviderServices.length > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                Active services: {activeProviderServices.length}
+              </span>
+            </div>
+          </div>
           {servicesError && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1502,6 +2139,19 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
               {servicesError}
             </div>
           )}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-gray-600 mr-1">Quick add from your categories:</span>
+            {suggestedServiceTemplates.map((template) => (
+              <button
+                key={template.serviceType}
+                type="button"
+                onClick={() => applyServiceTemplate(template)}
+                className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
+              >
+                Use {template.serviceType}
+              </button>
+            ))}
+          </div>
           <div className="bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl p-5 mb-6 border border-gray-200">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div>
@@ -1580,7 +2230,31 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                 rows={3}
               />
             </div>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-700 mb-2">
+                Included services and prices (one per line: `Service name | price | eta`)
+              </label>
+              <textarea
+                value={serviceForm.includedServicesText}
+                onChange={(e) => setServiceForm({ ...serviceForm, includedServicesText: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md resize-y font-mono text-xs"
+                placeholder={'Engine diagnostics | 499 | 25\nBattery health analysis | 299 | 15'}
+                rows={5}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Customer can pick any one or more included services. Total is calculated using selected lines.
+              </p>
+            </div>
             <div className="flex justify-end">
+              {editingServiceType && (
+                <button
+                  type="button"
+                  onClick={clearServiceForm}
+                  className="mr-2 px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 font-semibold hover:bg-gray-50"
+                >
+                  Cancel edit
+                </button>
+              )}
               <button
                 type="button"
                 onClick={upsertService}
@@ -1600,11 +2274,29 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    Save Service
+                    {editingServiceType ? 'Update Service' : 'Save Service'}
                   </>
                 )}
               </button>
             </div>
+          </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={serviceSearch}
+              onChange={(e) => setServiceSearch(e.target.value)}
+              placeholder="Search service"
+              className="px-3 py-2 rounded-lg border-2 border-gray-200 text-sm"
+            />
+            <select
+              value={serviceStatusFilter}
+              onChange={(e) => setServiceStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+              className="px-3 py-2 rounded-lg border-2 border-gray-200 text-sm bg-white"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
           <div className="overflow-x-auto rounded-lg border border-gray-200">
             <table className="min-w-full text-sm">
@@ -1614,13 +2306,16 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Price</th>
                   <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ETA</th>
                   <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Description</th>
+                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Included</th>
+                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Last updated</th>
                   <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Active</th>
+                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {servicesLoading ? (
                   <tr>
-                    <td className="py-8 px-4 text-center text-gray-500" colSpan={5}>
+                    <td className="py-8 px-4 text-center text-gray-500" colSpan={8}>
                       <div className="flex items-center justify-center gap-2">
                         <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -1630,9 +2325,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       </div>
                     </td>
                   </tr>
-                ) : providerServices.length === 0 ? (
+                ) : filteredProviderServices.length === 0 ? (
                   <tr>
-                    <td className="py-12 px-4 text-center" colSpan={5}>
+                    <td className="py-12 px-4 text-center" colSpan={8}>
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-3">
                           <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1645,12 +2340,18 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                     </td>
                   </tr>
                 ) : (
-                  providerServices.map((svc) => (
+                  filteredProviderServices.map((svc) => (
                     <tr key={svc.serviceType} className="hover:bg-gray-50 transition-colors">
                       <td className="py-3 px-4 font-semibold text-gray-900">{svc.serviceType}</td>
                       <td className="py-3 px-4 text-gray-800 font-medium">{svc.price !== undefined ? `₹${svc.price.toLocaleString()}` : '-'}</td>
                       <td className="py-3 px-4 text-gray-800">{svc.etaMinutes ? `${svc.etaMinutes} min` : '-'}</td>
                       <td className="py-3 px-4 text-gray-700">{svc.description || '-'}</td>
+                      <td className="py-3 px-4 text-xs text-gray-700">
+                        {svc.includedServices && svc.includedServices.length > 0
+                          ? `${svc.includedServices.filter((line) => line.active !== false).length} lines`
+                          : '-'}
+                      </td>
+                      <td className="py-3 px-4 text-xs text-gray-600">{svc.updatedAt ? formatDateTime(svc.updatedAt) : '-'}</td>
                       <td className="py-3 px-4">
                         <label className="flex items-center gap-2 cursor-pointer group">
                           <input
@@ -1663,6 +2364,24 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                           {svc.active !== false ? 'Active' : 'Inactive'}
                           </span>
                         </label>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => startEditService(svc)}
+                            className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteService(svc.serviceType)}
+                            className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1700,6 +2419,16 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   className="pl-10 pr-4 py-2.5 rounded-lg border-2 border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md"
               />
               </div>
+              <span
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-800 sm:hidden"
+                title="Showing all cities by default"
+                aria-label="Showing all cities by default"
+              >
+                i
+              </span>
+              <span className="hidden items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 sm:inline-flex">
+                Showing all cities by default
+              </span>
               <select
                 value={openFilters.serviceType}
                 onChange={(e) => setOpenFilters((prev) => ({ ...prev, serviceType: e.target.value }))}
@@ -1712,6 +2441,22 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   </option>
                 ))}
               </select>
+              <label className="inline-flex items-center gap-2 rounded-lg border-2 border-gray-200 px-3 py-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={openFilters.last24h}
+                  onChange={(e) => setOpenFilters((prev) => ({ ...prev, last24h: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                Last 24h
+              </label>
+              <button
+                type="button"
+                onClick={() => setOpenFilters({ city: '', serviceType: 'all', last24h: false })}
+                className="px-4 py-2.5 rounded-lg border-2 border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Clear filters
+              </button>
               <button
                 type="button"
                 onClick={fetchOpenRequests}
@@ -1724,6 +2469,69 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
               </button>
             </div>
           </div>
+          {(openFilters.city || openFilters.serviceType !== 'all' || openFilters.last24h) && (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Active filters:</span>
+              {openFilters.city && (
+                <button
+                  type="button"
+                  onClick={() => setOpenFilters((prev) => ({ ...prev, city: '' }))}
+                  className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800"
+                >
+                  City: {openFilters.city} ×
+                </button>
+              )}
+              {openFilters.serviceType !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setOpenFilters((prev) => ({ ...prev, serviceType: 'all' }))}
+                  className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-800"
+                >
+                  Service: {openFilters.serviceType} ×
+                </button>
+              )}
+              {openFilters.last24h && (
+                <button
+                  type="button"
+                  onClick={() => setOpenFilters((prev) => ({ ...prev, last24h: false }))}
+                  className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800"
+                >
+                  Last 24h ×
+                </button>
+              )}
+            </div>
+          )}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+            <span>Last refreshed: {lastOpenRefreshAt ? formatDateTime(lastOpenRefreshAt) : 'not yet'}</span>
+            {refreshNotice && (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
+                {refreshNotice}
+              </span>
+            )}
+          </div>
+          <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total open</p>
+              <p className="text-lg font-bold text-gray-900">{openRequestInsights.total}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Strong matches</p>
+              <p className="text-lg font-bold text-emerald-900">{openRequestInsights.strongMatches}</p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">New requests</p>
+              <p className="text-lg font-bold text-amber-900">{openRequestInsights.newPool}</p>
+            </div>
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">City matches</p>
+              <p className="text-lg font-bold text-blue-900">{openRequestInsights.cityMatched}</p>
+            </div>
+          </div>
+          {!providerSetupReady && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Complete setup to improve request matching: add workshop city and enable at least one service.
+            </div>
+          )}
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1743,7 +2551,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   <span className="font-medium">Loading open requests...</span>
                 </div>
               </div>
-            ) : openRequests.length === 0 ? (
+            ) : enrichedOpenRequests.length === 0 ? (
               <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-amber-50/30 rounded-xl border-2 border-dashed border-gray-300">
                 <div className="flex flex-col items-center justify-center">
                   <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-4">
@@ -1752,125 +2560,165 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                     </svg>
                   </div>
                   <p className="text-gray-700 font-semibold mb-1">No open requests right now.</p>
-                  <p className="text-sm text-gray-500 mb-4">Check back later for new service requests.</p>
-                <button
-                  type="button"
-                  onClick={loadSampleOpenRequests}
-                    className="text-sm font-semibold text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1"
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  Add dummy open requests
-                </button>
+                  <p className="text-sm text-gray-500 mb-4">Try clearing filters or checking the most recent pool.</p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOpenFilters({ city: '', serviceType: 'all', last24h: false })}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                    >
+                      Show all services
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOpenFilters((prev) => ({ ...prev, last24h: true }))}
+                      className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                    >
+                      Last 24h
+                    </button>
+                    <button
+                      type="button"
+                      onClick={loadSampleOpenRequests}
+                      className="text-sm font-semibold text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add dummy open requests
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
-              openRequests.map((req) => (
-                <div key={req.id} className="border-2 border-gray-200 rounded-xl p-5 bg-gradient-to-br from-white to-gray-50/50 shadow-md hover:shadow-lg transition-all duration-300 hover:border-blue-300">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h3 className="text-lg font-bold text-gray-900">{req.title}</h3>
+              enrichedOpenRequests.map((req) => (
+                <div
+                  key={req.id}
+                  className="rounded-xl border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50/60 p-5 shadow-sm transition-all duration-300 hover:border-blue-300 hover:shadow-lg"
+                >
+                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="truncate text-lg font-bold text-gray-900">{req.title}</h3>
                         <span className={statusBadge(req.status)}>
                           {statusOptions.find((s) => s.value === req.status)?.label || req.status}
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold border border-blue-200">
-                          {req.serviceType || 'General'}
-                        </span>
-                        {req.vehicle && (
-                          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Raised {formatRelative(req.createdAt)} · {formatDateTime(req.createdAt)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => claimRequest(req.id)}
+                      disabled={claimingId === req.id}
+                      className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-300 hover:from-blue-700 hover:to-blue-800 hover:shadow-lg disabled:opacity-60"
+                    >
+                      {claimingId === req.id ? (
+                        <>
+                          <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Claiming...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Claim
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+                      {req.serviceType || 'General'}
+                    </span>
+                    {req._matchReasons.includes('city_match') && (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                        City match
+                      </span>
+                    )}
+                    {req._matchReasons.includes('service_match') && (
+                      <span className="rounded-full border border-indigo-200 bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-800">
+                        Service match
+                      </span>
+                    )}
+                    {req._matchReasons.includes('new_request') && (
+                      <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+                        New request
+                      </span>
+                    )}
+                    <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                      Score {req._matchScore}
+                    </span>
+                    {req.city && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {req.city}
+                      </span>
+                    )}
+                    {normalizeVehicleText(req.vehicle) && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {normalizeVehicleText(req.vehicle)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+                    <div className="space-y-3">
+                      <ServiceRequestPackages services={req.services} total={req.total} />
+                      {req.notes && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
+                          <p className="flex items-start gap-2 text-xs font-medium text-amber-800">
+                            <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
-                            {req.vehicle}
-                          </span>
+                            <span>Notes: {req.notes}</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-white p-3">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Customer & Visit Details</p>
+                      <div className="space-y-2">
+                        {formatSlaRemaining(req.createdAt) && (
+                          <p className="text-xs font-semibold text-amber-700">Claim window: {formatSlaRemaining(req.createdAt)}</p>
                         )}
-                        {req.city && (
-                          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            {req.city}
-                          </span>
-                        )}
-                      </div>
-                      <ServiceRequestPackages services={req.services} />
-                      <div className="space-y-1.5">
                         {req.customerName && (
-                          <p className="text-sm text-gray-700 flex items-center gap-2">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <p className="flex items-center gap-2 text-sm text-gray-700">
+                            <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                             </svg>
                             <span className="font-medium">{req.customerName}</span>
-                            {req.customerPhone && <span className="text-gray-500">• {req.customerPhone}</span>}
-                            {req.customerEmail && <span className="text-gray-500">• {req.customerEmail}</span>}
                           </p>
                         )}
-                      {req.addressLine && (
-                          <p className="text-xs text-gray-600 flex items-start gap-2">
-                            <svg className="w-4 h-4 text-gray-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {req.customerPhone && <p className="text-xs text-gray-600">Phone: {req.customerPhone}</p>}
+                        {req.customerEmail && <p className="text-xs text-gray-600">Email: {req.customerEmail}</p>}
+                        {req.addressLine && (
+                          <p className="flex items-start gap-2 text-xs text-gray-600">
+                            <svg className="mt-0.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                             <span>{req.addressLine}{req.pincode ? `, ${req.pincode}` : ''}</span>
                           </p>
                         )}
-                        {req.carDetails && (
-                          <p className="text-xs text-gray-600 flex items-center gap-2">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Vehicle: {req.carDetails}
-                          </p>
+                        {normalizeVehicleText(req.carDetails) && (
+                          <p className="text-xs text-gray-600">Vehicle: {normalizeVehicleText(req.carDetails)}</p>
                         )}
-                      {req.scheduledAt && (
-                          <p className="text-xs text-gray-600 flex items-center gap-2">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            Scheduled: {formatDateTime(req.scheduledAt)}
-                          </p>
-                        )}
-                        {req.notes && (
-                          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
-                            <p className="text-xs text-amber-800 font-medium flex items-start gap-2">
-                              <svg className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                              <span>Notes: {req.notes}</span>
-                            </p>
-                    </div>
+                        {req.scheduledAt && (
+                          <p className="text-xs text-gray-600">Scheduled: {formatDateTime(req.scheduledAt)}</p>
                         )}
                       </div>
-                    </div>
-                    <div className="flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => claimRequest(req.id)}
-                        disabled={claimingId === req.id}
-                        className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 shadow-md hover:shadow-lg transition-all duration-300 flex items-center gap-2 whitespace-nowrap"
-                      >
-                        {claimingId === req.id ? (
-                          <>
-                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Claiming...
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Claim
-                          </>
-                        )}
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -1882,7 +2730,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
 
           {/* My Requests Tab */}
           {activeTab === 'my-requests' && (
-            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg">
+            <section className="rounded-xl border border-gray-200 bg-slate-50/60 p-6 shadow-lg">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
             <div>
                   <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -1893,23 +2741,56 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   </h2>
                   <p className="text-sm text-gray-600 mt-1">Manage jobs you have claimed.</p>
             </div>
+          </div>
+
+          <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total</p>
+              <p className="text-lg font-bold text-gray-900">{myRequestStats.total}</p>
+            </div>
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">Accepted</p>
+              <p className="text-lg font-bold text-indigo-900">{myRequestStats.accepted}</p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">In Progress</p>
+              <p className="text-lg font-bold text-amber-900">{myRequestStats.inProgress}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Completed Today</p>
+              <p className="text-lg font-bold text-emerald-900">{myRequestStats.completedToday}</p>
+            </div>
+          </div>
+
+          <div className="sticky top-16 z-10 mb-6 -mx-1 rounded-xl border border-gray-200 bg-white/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/75">
             <div className="flex gap-2 flex-wrap">
-              {(['all', 'accepted', 'in_progress', 'completed', 'cancelled'] as const).map((status) => (
+              {[
+                { key: 'all', label: 'All', count: myRequestStats.total },
+                { key: 'accepted', label: 'Accepted', count: myRequestStats.accepted },
+                { key: 'in_progress', label: 'In Progress', count: myRequestStats.inProgress },
+                { key: 'completed', label: 'Completed', count: requests.filter((r) => r.status === 'completed').length },
+                { key: 'cancelled', label: 'Cancelled', count: requests.filter((r) => r.status === 'cancelled').length },
+                { key: 'due_today', label: 'Due Today', count: myRequestStats.dueToday },
+                { key: 'overdue', label: 'Overdue', count: myRequestStats.overdue },
+              ].map((status) => (
                 <button
-                  key={status}
+                  key={status.key}
                   type="button"
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all duration-300 ${
-                    statusFilter === status
-                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 border-blue-600 text-white shadow-md'
-                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-gray-400'
+                  onClick={() => setStatusFilter(status.key as RequestStatus | 'all' | 'due_today' | 'overdue')}
+                  className={`inline-flex items-center gap-2 rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-300 ${
+                    statusFilter === status.key
+                      ? 'border-blue-600 bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
+                      : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
                   }`}
                 >
-                  {status === 'all'
-                    ? 'All'
-                    : status === 'in_progress'
-                    ? 'In Progress'
-                    : status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+                  {status.label}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      statusFilter === status.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {status.count}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1941,8 +2822,29 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                   </div>
-                  <p className="text-gray-700 font-semibold mb-1">No requests yet.</p>
-                  <p className="text-sm text-gray-500 mb-4">Start by claiming requests from the open pool.</p>
+                  <p className="text-gray-700 font-semibold mb-1">
+                    {statusFilter === 'all'
+                      ? 'No requests yet.'
+                      : statusFilter === 'due_today'
+                      ? 'No requests due today.'
+                      : statusFilter === 'overdue'
+                      ? 'No overdue requests.'
+                      : `No ${String(statusFilter).replace('_', ' ')} requests.`}
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    {statusFilter === 'all'
+                      ? 'Start by claiming requests from the open pool.'
+                      : 'Try another filter or switch to all requests.'}
+                  </p>
+                  {statusFilter !== 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('all')}
+                      className="mb-3 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                    >
+                      View all requests
+                    </button>
+                  )}
                 <button
                   type="button"
                   onClick={loadSampleMyRequests}
@@ -1957,82 +2859,152 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
               </div>
             ) : (
               filteredRequests.map((req) => (
-                <div key={req.id} className="border-2 border-gray-200 rounded-xl p-5 bg-gradient-to-br from-white to-gray-50/50 shadow-md hover:shadow-lg transition-all duration-300 hover:border-blue-300">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h3 className="text-lg font-bold text-gray-900">{req.title}</h3>
+                <div key={req.id} className="rounded-xl border-2 border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:border-blue-300 hover:shadow-lg">
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="truncate text-lg font-bold text-gray-900">{req.title}</h3>
                         <span className={statusBadge(req.status)}>
                           {statusOptions.find((s) => s.value === req.status)?.label || req.status}
                         </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold border border-blue-200">
-                          {req.serviceType || 'General'}
-                        </span>
-                        {req.vehicle && (
-                          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            {req.vehicle}
-                          </span>
-                        )}
-                        {req.city && (
-                          <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            {req.city}
+                        {isOverdueRequest(req) && (
+                          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+                            Overdue
                           </span>
                         )}
                       </div>
-                      <ServiceRequestPackages services={req.services} />
-                      <div className="space-y-1.5">
-                        {req.customerName && (
-                          <p className="text-sm text-gray-700 flex items-center gap-2">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            <span className="font-medium">{req.customerName}</span>
-                            {req.customerPhone && <span className="text-gray-500">• {req.customerPhone}</span>}
-                          </p>
-                        )}
-                      {req.scheduledAt && (
-                          <p className="text-xs text-gray-600 flex items-center gap-2">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            Scheduled: {formatDateTime(req.scheduledAt)}
-                          </p>
-                        )}
-                        {req.notes && (
-                          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
-                            <p className="text-xs text-amber-800 font-medium flex items-start gap-2">
-                              <svg className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                              <span>Notes: {req.notes}</span>
-                            </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Created {formatRelative(req.createdAt)} {req.createdAt ? `(${formatDateTime(req.createdAt)})` : ''}
+                      </p>
                     </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                      {req.status !== 'cancelled' && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateStatus(
+                              req.id,
+                              req.status === 'accepted'
+                                ? 'in_progress'
+                                : req.status === 'in_progress'
+                                ? 'completed'
+                                : req.status
+                            )
+                          }
+                          className={`rounded-lg px-4 py-2 text-xs font-semibold text-white ${
+                            req.status === 'accepted'
+                              ? 'bg-indigo-600 hover:bg-indigo-700'
+                              : req.status === 'in_progress'
+                              ? 'bg-emerald-600 hover:bg-emerald-700'
+                              : 'bg-gray-600 hover:bg-gray-700'
+                          }`}
+                        >
+                          {req.status === 'accepted'
+                            ? 'Start Job'
+                            : req.status === 'in_progress'
+                            ? 'Mark Complete'
+                            : 'View Summary'}
+                        </button>
+                      )}
+                      {req.status === 'cancelled' && (
+                        <button
+                          type="button"
+                          onClick={() => deleteCancelledRequest(req.id)}
+                          disabled={deletingId === req.id}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {deletingId === req.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      )}
                       <select
                         value={req.status}
                         onChange={(e) => updateStatus(req.id, e.target.value as RequestStatus)}
-                        className="text-sm border-2 border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white font-semibold shadow-sm hover:shadow-md transition-all"
+                        disabled={
+                          deletingId === req.id ||
+                          req.status === 'cancelled' ||
+                          req.status === 'completed'
+                        }
+                        className="rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:shadow-md focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
                       >
-                        {statusOptions
-                          .filter((opt) => opt.value !== 'open')
-                          .map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
+                        {(req.status === 'accepted'
+                          ? statusOptions.filter((opt) => ['accepted', 'in_progress'].includes(opt.value))
+                          : req.status === 'in_progress'
+                          ? statusOptions.filter((opt) => ['in_progress', 'completed'].includes(opt.value))
+                          : statusOptions.filter((opt) => opt.value === req.status)
+                        ).map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
                       </select>
+                    </div>
+                  </div>
+
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-800">
+                      {req.serviceType || 'General'}
+                    </span>
+                    {req.city && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {req.city}
+                      </span>
+                    )}
+                    {normalizeVehicleText(req.vehicle) && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {normalizeVehicleText(req.vehicle)}
+                      </span>
+                    )}
+                    {req.scheduledAt && (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                        Scheduled {formatDateTime(req.scheduledAt)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+                    <div className="space-y-3">
+                      <ServiceRequestPackages services={req.services} total={req.total} />
+                      {req.notes && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
+                          <p className="flex items-start gap-2 text-xs font-medium text-amber-800">
+                            <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            <span>Notes: {req.notes}</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">Customer Details</p>
+                      <div className="space-y-2">
+                        {req.customerName && (
+                          <p className="flex items-center gap-2 text-sm text-gray-700">
+                            <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            <span className="font-medium">{req.customerName}</span>
+                          </p>
+                        )}
+                        {req.customerPhone && <p className="text-xs text-gray-600">Phone: {req.customerPhone}</p>}
+                        {req.customerEmail && <p className="text-xs text-gray-600">Email: {req.customerEmail}</p>}
+                        {req.addressLine && (
+                          <p className="text-xs text-gray-600">
+                            Address: {req.addressLine}
+                            {req.pincode ? `, ${req.pincode}` : ''}
+                          </p>
+                        )}
+                        {normalizeVehicleText(req.carDetails) && (
+                          <p className="text-xs text-gray-600">Vehicle: {normalizeVehicleText(req.carDetails)}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

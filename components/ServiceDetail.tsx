@@ -21,6 +21,25 @@ interface Service {
   };
 }
 
+type SelectedIncludedService = {
+  id: string;
+  name: string;
+  price?: number;
+};
+
+type ProviderIncludedService = {
+  id?: string;
+  name?: string;
+  price?: number;
+  active?: boolean;
+};
+
+type ProviderServicePublicRow = {
+  serviceType?: string;
+  active?: boolean;
+  includedServices?: ProviderIncludedService[];
+};
+
 // Service definitions with icons - shared between components
 const getServiceIcon = (title: string): React.ReactNode => {
   const icons: Record<string, React.ReactNode> = {
@@ -200,7 +219,8 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
   const supportTel = supportTelHref();
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [servicePricingData, setServicePricingData] = useState<Record<string, Service['pricing']>>({});
-  const [loadingPricing, setLoadingPricing] = useState(true);
+  const [, setLoadingPricing] = useState(true);
+  const [includedPriceById, setIncludedPriceById] = useState<Record<string, number>>({});
 
   // Fetch services pricing from Supabase
   useEffect(() => {
@@ -300,17 +320,53 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
     }
   }, [onBack]);
 
+  useEffect(() => {
+    const loadIncludedPrices = async () => {
+      if (!selectedService?.title) return;
+      try {
+        const resp = await fetch('/api/provider-services?scope=public');
+        if (!resp.ok) return;
+        const rows = await resp.json();
+        const priceMap: Record<string, number> = {};
+        (Array.isArray(rows) ? (rows as ProviderServicePublicRow[]) : [])
+          .filter((row) => row?.serviceType === selectedService.title && row?.active !== false)
+          .forEach((row) => {
+            const included = Array.isArray(row?.includedServices) ? row.includedServices : [];
+            included.forEach((line) => {
+              if (!line || line.active === false || typeof line.name !== 'string') return;
+              const id = line.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+              const price = typeof line.price === 'number' && line.price > 0 ? line.price : undefined;
+              if (price == null) return;
+              priceMap[id] = priceMap[id] == null ? price : Math.min(priceMap[id], price);
+            });
+          });
+        setIncludedPriceById(priceMap);
+      } catch {
+        setIncludedPriceById({});
+      }
+    };
+    loadIncludedPrices();
+  }, [selectedService?.title]);
+
   const handleAddToCart = () => {
     if (!selectedService) return;
 
     // Store service in cart prefill
     const serviceId = `service-${selectedService.title.toLowerCase().replace(/\s+/g, '-')}`;
     const pricing = servicePricingData[selectedService.title] || { basePrice: 0, customQuote: false };
+    const includedServices: SelectedIncludedService[] = selectedService.services
+      .map((service) => ({
+        id: service.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        name: service,
+        price: includedPriceById[service.toLowerCase().replace(/[^a-z0-9]+/g, '-')],
+      }))
+      .filter((service) => Boolean(service.name));
     sessionStorage.setItem('service_cart_prefill', JSON.stringify({
       serviceId,
       serviceName: selectedService.title,
       price: pricing.basePrice || 0,
       customQuote: pricing.customQuote || false,
+      includedServices,
     }));
 
     // Navigate to cart
@@ -375,14 +431,22 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                 Services Included
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                {selectedService.services.map((service, index) => (
-                  <div key={index} className="flex items-start gap-3">
-                    <svg className="w-6 h-6 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-gray-700 dark:text-gray-300 font-medium">{service}</span>
+                {selectedService.services.map((service, index) => {
+                  const includedId = service.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                  const includedPrice = includedPriceById[includedId];
+                  return (
+                  <div
+                    key={index}
+                    className="flex w-full items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-3"
+                  >
+                    <div className="flex-1 flex items-center justify-between gap-2">
+                      <span className="text-gray-700 dark:text-gray-300 font-medium">{service}</span>
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                        {includedPrice ? `From ₹${includedPrice.toLocaleString('en-IN')}` : 'Price at checkout'}
+                      </span>
+                    </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
 

@@ -33,11 +33,45 @@ async function loginServiceProviderWithEmail(
   if (!result.success || !result.session) {
     return { ok: false, message: result.reason || 'Login failed' };
   }
-  const resp = await fetch('/api/service-providers', {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${result.session.access_token}` },
-  });
+
+  const loadProviderDirectly = async (): Promise<Record<string, unknown> | null> => {
+    try {
+      const supabase = getSupabaseClient();
+      const uid = result.session?.user?.id;
+      if (uid) {
+        const { data: byId } = await supabase
+          .from('service_providers')
+          .select('*')
+          .eq('id', uid)
+          .maybeSingle();
+        if (byId) return byId as Record<string, unknown>;
+      }
+      const { data: byEmail } = await supabase
+        .from('service_providers')
+        .select('*')
+        .eq('email', email.toLowerCase().trim())
+        .maybeSingle();
+      return (byEmail as Record<string, unknown> | null) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  let resp: Response;
+  try {
+    resp = await fetch('/api/service-providers', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${result.session.access_token}` },
+    });
+  } catch {
+    const provider = await loadProviderDirectly();
+    if (provider) return { ok: true, provider };
+    return { ok: false, message: 'Unable to reach service provider API. Start local API server or try again.' };
+  }
+
   if (resp.status === 404) {
+    const provider = await loadProviderDirectly();
+    if (provider) return { ok: true, provider };
     return {
       ok: false,
       message: 'No service provider profile found for this account. Contact admin.',

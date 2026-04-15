@@ -49,14 +49,55 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
         throw new Error(result.reason || 'Login failed');
       }
 
-      const resp = await fetch('/api/service-providers', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${result.session.access_token}` },
-      });
+      const loadProviderDirectly = async (): Promise<any | null> => {
+        try {
+          const { getSupabaseClient } = await import('../lib/supabase.js');
+          const supabase = getSupabaseClient();
+          const uid = result.session?.user?.id;
+          if (uid) {
+            const { data: byId } = await supabase
+              .from('service_providers')
+              .select('*')
+              .eq('id', uid)
+              .maybeSingle();
+            if (byId) return byId;
+          }
+          const { data: byEmail } = await supabase
+            .from('service_providers')
+            .select('*')
+            .eq('email', email.toLowerCase().trim())
+            .maybeSingle();
+          return byEmail ?? null;
+        } catch {
+          return null;
+        }
+      };
+
+      let resp: Response;
+      try {
+        resp = await fetch('/api/service-providers', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${result.session.access_token}` },
+        });
+      } catch {
+        const provider = await loadProviderDirectly();
+        if (!provider) {
+          throw new Error('Unable to reach service provider API. Start local API server or try again.');
+        }
+        onLoginSuccess(provider);
+        onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
+        return;
+      }
 
       if (resp.status === 404) {
-        setError('No service provider profile found for this account. Contact admin.');
-        setLoading(false);
+        const provider = await loadProviderDirectly();
+        if (!provider) {
+          setError('No service provider profile found for this account. Contact admin.');
+          setLoading(false);
+          return;
+        }
+        onLoginSuccess(provider);
+        onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
         return;
       }
 
