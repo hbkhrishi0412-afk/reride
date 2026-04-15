@@ -4,6 +4,7 @@ import { getSupabaseClient } from '../lib/supabase';
 import {
     buildServiceBookingConfirmationMessage,
     supportWhatsAppHref,
+    PLATFORM_SUPPORT_PHONE_E164,
 } from '../utils/whatsappShare.js';
 
 type ServicePackage = {
@@ -351,14 +352,50 @@ const ServiceCart: React.FC<Props> = ({
         return () => clearInterval(interval);
     }, []);
 
-    const loadCustomerRequests = async () => {
-        if (!isLoggedIn) {
-            setCustomerRequests([]);
-            return;
-        }
+    const loadCustomerRequestsInFlightRef = useRef(0);
+    /** Count of in-flight loads that should show the full-page list spinner (excludes silent polls). */
+    const requestsForegroundLoadsRef = useRef(0);
+
+    const loadCustomerRequests = async (source = 'unknown') => {
+        const silentRefresh =
+            source === 'interval-5s' || source === 'visibility' || source === 'supabase-realtime';
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
+            body: JSON.stringify({
+                sessionId: 'ad4bf7',
+                hypothesisId: 'H1-H5',
+                runId: 'post-fix',
+                location: 'ServiceCart.tsx:loadCustomerRequests:start',
+                message: 'loadCustomerRequests start',
+                data: {
+                    source,
+                    silentRefresh,
+                    isLoggedIn,
+                    activeTab,
+                    customerUserId: customerUserId ?? null,
+                    inFlight: loadCustomerRequestsInFlightRef.current,
+                    foregroundLoads: requestsForegroundLoadsRef.current,
+                },
+                timestamp: Date.now(),
+            }),
+        }).catch(() => {});
+        // #endregion
+        loadCustomerRequestsInFlightRef.current += 1;
+        const t0 = Date.now();
+        let startedForegroundSpinner = false;
         try {
-            setRequestsLoading(true);
-            setRequestsError(null);
+            if (!isLoggedIn) {
+                setCustomerRequests([]);
+                return;
+            }
+            if (!silentRefresh) {
+                requestsForegroundLoadsRef.current += 1;
+                startedForegroundSpinner = true;
+                setRequestsLoading(true);
+                setRequestsError(null);
+            }
             const resp = await authenticatedFetch('/api/service-requests?scope=customer');
             if (!resp.ok) {
                 throw new Error(`Failed to load requests (${resp.status})`);
@@ -371,15 +408,50 @@ const ServiceCart: React.FC<Props> = ({
                 return bt - at;
             });
             setCustomerRequests(records);
+            if (silentRefresh) {
+                setRequestsError(null);
+            }
         } catch (error) {
             setRequestsError(error instanceof Error ? error.message : 'Failed to load your requests');
         } finally {
-            setRequestsLoading(false);
+            loadCustomerRequestsInFlightRef.current -= 1;
+            if (startedForegroundSpinner) {
+                requestsForegroundLoadsRef.current -= 1;
+                if (requestsForegroundLoadsRef.current <= 0) {
+                    requestsForegroundLoadsRef.current = 0;
+                    setRequestsLoading(false);
+                }
+            }
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
+                body: JSON.stringify({
+                    sessionId: 'ad4bf7',
+                    hypothesisId: 'H1-H4',
+                    runId: 'post-fix',
+                    location: 'ServiceCart.tsx:loadCustomerRequests:finally',
+                    message: 'loadCustomerRequests end',
+                    data: {
+                        source,
+                        silentRefresh,
+                        startedForegroundSpinner,
+                        durationMs: Date.now() - t0,
+                        isLoggedIn,
+                        inFlight: loadCustomerRequestsInFlightRef.current,
+                        foregroundLoads: requestsForegroundLoadsRef.current,
+                    },
+                    timestamp: Date.now(),
+                }),
+            }).catch(() => {});
+            // #endregion
         }
     };
 
-    const loadCustomerRequestsRef = useRef(loadCustomerRequests);
-    loadCustomerRequestsRef.current = loadCustomerRequests;
+    const loadCustomerRequestsRef = useRef<(source?: string) => ReturnType<typeof loadCustomerRequests>>(
+        async () => {},
+    );
+    loadCustomerRequestsRef.current = (src = 'ref-unknown') => loadCustomerRequests(src);
 
     const cancelCustomerRequest = async (requestId: string) => {
         if (!window.confirm('Cancel this service request? Providers will no longer see it as active.')) {
@@ -405,7 +477,7 @@ const ServiceCart: React.FC<Props> = ({
                 }
                 throw new Error(message);
             }
-            await loadCustomerRequests();
+            await loadCustomerRequests('after-cancel');
         } catch (error) {
             setRequestsError(error instanceof Error ? error.message : 'Failed to cancel request');
         } finally {
@@ -440,7 +512,7 @@ const ServiceCart: React.FC<Props> = ({
                 }
                 throw new Error(message);
             }
-            await loadCustomerRequests();
+            await loadCustomerRequests('after-review');
         } catch (e) {
             setRequestsError(e instanceof Error ? e.message : 'Failed to submit review');
         } finally {
@@ -449,14 +521,44 @@ const ServiceCart: React.FC<Props> = ({
     };
 
     useEffect(() => {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
+            body: JSON.stringify({
+                sessionId: 'ad4bf7',
+                hypothesisId: 'H2',
+                runId: 'pre-fix',
+                location: 'ServiceCart.tsx:useEffect[track-deps]',
+                message: 'effect activeTab isLoggedIn',
+                data: { activeTab, isLoggedIn },
+                timestamp: Date.now(),
+            }),
+        }).catch(() => {});
+        // #endregion
         if (activeTab !== 'track') return;
-        loadCustomerRequests();
+        void loadCustomerRequests('effect-activeTab-isLoggedIn');
     }, [activeTab, isLoggedIn]);
 
     useEffect(() => {
         if (activeTab !== 'track' || !isLoggedIn) return;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
+            body: JSON.stringify({
+                sessionId: 'ad4bf7',
+                hypothesisId: 'H4',
+                runId: 'pre-fix',
+                location: 'ServiceCart.tsx:useEffect[interval-5s]',
+                message: 'interval armed',
+                data: { activeTab, isLoggedIn },
+                timestamp: Date.now(),
+            }),
+        }).catch(() => {});
+        // #endregion
         const timer = setInterval(() => {
-            loadCustomerRequestsRef.current();
+            void loadCustomerRequestsRef.current('interval-5s');
         }, 5000);
         return () => clearInterval(timer);
     }, [activeTab, isLoggedIn]);
@@ -465,7 +567,7 @@ const ServiceCart: React.FC<Props> = ({
         if (activeTab !== 'track' || !isLoggedIn) return;
         const onVisible = () => {
             if (document.visibilityState === 'visible') {
-                loadCustomerRequestsRef.current();
+                void loadCustomerRequestsRef.current('visibility');
             }
         };
         document.addEventListener('visibilitychange', onVisible);
@@ -474,6 +576,21 @@ const ServiceCart: React.FC<Props> = ({
 
     useEffect(() => {
         if (activeTab !== 'track' || !isLoggedIn || !customerUserId) return;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
+            body: JSON.stringify({
+                sessionId: 'ad4bf7',
+                hypothesisId: 'H3',
+                runId: 'pre-fix',
+                location: 'ServiceCart.tsx:useEffect[supabase]',
+                message: 'subscribe service_requests',
+                data: { customerUserId },
+                timestamp: Date.now(),
+            }),
+        }).catch(() => {});
+        // #endregion
         const sb = getSupabaseClient();
         const channel = sb
             .channel(`service_requests_customer_${customerUserId}`)
@@ -486,8 +603,23 @@ const ServiceCart: React.FC<Props> = ({
                     filter: `user_id=eq.${customerUserId}`,
                 },
                 () => {
-                    void loadCustomerRequestsRef.current();
-                }
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'ad4bf7' },
+                        body: JSON.stringify({
+                            sessionId: 'ad4bf7',
+                            hypothesisId: 'H3',
+                            runId: 'pre-fix',
+                            location: 'ServiceCart.tsx:supabase:postgres_changes',
+                            message: 'realtime event',
+                            data: { customerUserId },
+                            timestamp: Date.now(),
+                        }),
+                    }).catch(() => {});
+                    // #endregion
+                    void loadCustomerRequestsRef.current('supabase-realtime');
+                },
             )
             .subscribe();
         return () => {
@@ -926,7 +1058,7 @@ const ServiceCart: React.FC<Props> = ({
                 ),
             );
             setActiveTab('track');
-            await loadCustomerRequests();
+            await loadCustomerRequests('after-submit');
         } catch (error) {
             console.error('Error submitting service request:', error);
             setCarFormError(error instanceof Error ? error.message : 'Failed to submit service request. Please try again.');
@@ -956,7 +1088,7 @@ const ServiceCart: React.FC<Props> = ({
                     <h2 className="text-xl font-black text-gray-900 dark:text-white">My Service Requests</h2>
                     <button
                         type="button"
-                        onClick={loadCustomerRequests}
+                        onClick={() => void loadCustomerRequests('refresh-click')}
                         disabled={requestsLoading || !isLoggedIn}
                         className="px-3 py-2 rounded-lg text-sm border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 disabled:opacity-50"
                     >
@@ -966,7 +1098,9 @@ const ServiceCart: React.FC<Props> = ({
                 {postBookingWhatsAppUrl && (
                     <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-900/60 dark:bg-emerald-950/40">
                         <span className="text-gray-800 dark:text-gray-200 font-medium">
-                            Confirm your booking on WhatsApp with ReRide support
+                            {PLATFORM_SUPPORT_PHONE_E164
+                                ? 'Confirm your booking on WhatsApp with ReRide support'
+                                : 'Open WhatsApp with your booking message ready to send'}
                         </span>
                         <a
                             href={postBookingWhatsAppUrl}

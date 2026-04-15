@@ -20,6 +20,7 @@
     "preview": "vite preview",
     "seed:all": "node seed-all-mock-data.js",
     "seed:users": "node seed-all-mock-data.js",
+    "seed:test-provider": "node --import tsx scripts/seed-test-service-provider.ts",
     "clean": "node -e \"const fs = require('fs'); const path = require('path'); const dirs = ['node_modules/.vite', 'dist']; dirs.forEach(d => { try { fs.rmSync(d, { recursive: true, force: true }); console.log('Cleaned:', d); } catch(e) {} });\"",
     "perf": "node performance-optimize.js",
     "perf:clean": "node performance-optimize.js --clean",
@@ -57,7 +58,8 @@
     "cap:build": "npm run build:android && npx cap sync",
     "cap:build:android": "npm run build:android && npx cap sync android",
     "android": "npm run cap:build:android && npx cap open android",
-    "env:copy": "node -e \"const fs=require('fs'); const p='.env'; if(!fs.existsSync(p)){ fs.copyFileSync('.env.example', p); console.log('Created .env from .env.example – edit .env and add your keys.'); } else { console.log('.env already exists.'); }\""
+    "env:copy": "node -e \"const fs=require('fs'); const p='.env'; if(!fs.existsSync(p)){ fs.copyFileSync('.env.example', p); console.log('Created .env from .env.example – edit .env and add your keys.'); } else { console.log('.env already exists.'); }\"",
+    "security:enable-compromised-password-protection": "node scripts/enable-compromised-password-protection.js"
   },
   "dependencies": {
     "@capacitor-community/media": "^9.1.0",

@@ -8,6 +8,7 @@ import Logo from './Logo';
 import CityDropdown from './CityDropdown';
 import SellerDropdown from './SellerDropdown';
 import LanguageSwitcher from './LanguageSwitcher';
+import { supportTelHref } from '../utils/whatsappShare.js';
 
 interface HeaderProps {
     onNavigate: (view: ViewEnum, params?: { city?: string }) => void;
@@ -124,6 +125,8 @@ const Header: React.FC<HeaderProps> = memo(({
         handleNavigate(ViewEnum.NOTIFICATIONS_CENTER);
     };
 
+    const supportTel = supportTelHref();
+
     const DropdownLink: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
         <button 
             onClick={(e) => {
@@ -153,8 +156,9 @@ const Header: React.FC<HeaderProps> = memo(({
                             </span>
                         </div>
                         <div className="flex items-center gap-4">
+                            {supportTel && (
                             <a 
-                                href="tel:+917277277275" 
+                                href={supportTel} 
                                 className="flex items-center gap-1.5 font-semibold text-blue-600 hover:text-blue-700 transition-colors text-sm"
                             >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -162,6 +166,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                 </svg>
                                 <span>{t('header.callUsAt')}</span>
                             </a>
+                            )}
                             <button 
                                 type="button"
                                 onClick={() => setIsLocationModalOpen(true)}

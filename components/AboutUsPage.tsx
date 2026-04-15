@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatSupportPhoneDisplay, supportTelHref } from '../utils/whatsappShare.js';
 import { View } from '../types.js';
 
 interface AboutUsPageProps {
@@ -6,6 +7,7 @@ interface AboutUsPageProps {
 }
 
 const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
+  const supportTel = supportTelHref();
   return (
     <div className="animate-fade-in container mx-auto py-8 max-w-4xl px-4 pb-24 lg:pb-12">
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 md:p-12 border border-gray-100 dark:border-gray-700">
@@ -38,11 +40,17 @@ const AboutUsPage: React.FC<AboutUsPageProps> = ({ onNavigate }) => {
           <section>
             <h2 className="text-2xl font-bold text-reride-text-dark dark:text-white mb-3">Contact</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-              Questions or partnership enquiries? Reach us through Support or call{' '}
-              <a href="tel:+917277277275" className="text-blue-600 font-semibold hover:underline">
-                +91 72772 77275
-              </a>
-              .
+              {supportTel ? (
+                <>
+                  Questions or partnership enquiries? Reach us through Support or call{' '}
+                  <a href={supportTel} className="text-blue-600 font-semibold hover:underline">
+                    {formatSupportPhoneDisplay()}
+                  </a>
+                  .
+                </>
+              ) : (
+                <>Questions or partnership enquiries? Reach us through Support.</>
+              )}
             </p>
             {onNavigate && (
               <button

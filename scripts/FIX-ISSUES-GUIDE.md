@@ -8,7 +8,7 @@ This guide helps you fix the security and performance issues shown in your Supab
 1. ✅ **Function `update_buyer_activity_updated_at`** - Fixed with search_path
 2. ✅ **Function `update_services_updated_at`** - Fixed with search_path  
 3. ✅ **Function `update_updated_at_column`** - Fixed with search_path
-4. ⚠️ **Supabase Auth compromised passwords** - Requires manual Dashboard configuration
+4. ⚠️ **Supabase Auth compromised passwords** - Enable via script or Dashboard
 
 ### Performance Issues (8 total)
 - Slow queries (0.34s - 2.24s) - Fixed with additional indexes
@@ -27,9 +27,19 @@ This script will:
 - ✅ Add performance indexes for faster queries
 - ✅ Optimize query planner statistics
 
-### Step 2: Enable Compromised Password Prevention (Manual)
+### Step 2: Enable Compromised Password Prevention
 
-The script cannot automatically enable this feature. You need to do it manually:
+Use one of these methods:
+
+**Option A (recommended): Run automation script**
+
+1. Set environment variables:
+   - `SUPABASE_ACCESS_TOKEN` (Supabase personal access token)
+   - `SUPABASE_PROJECT_REF` (project reference, e.g. `abcd1234xyz`)
+2. Run:
+   - `npm run security:enable-compromised-password-protection`
+
+**Option B: Enable manually in Dashboard**
 
 1. Go to **Supabase Dashboard**
 2. Navigate to **Authentication** → **Policies**
@@ -100,7 +110,7 @@ After running the script, check:
 ## Next Steps
 
 1. Run the fix script in Supabase SQL Editor
-2. Enable compromised password prevention in Dashboard
+2. Enable compromised password prevention (script or Dashboard)
 3. Monitor the Security and Performance tabs for improvements
 4. Test your application to ensure everything works correctly
 

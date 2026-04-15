@@ -35,6 +35,11 @@ interface ImportMetaEnv {
   readonly VITE_OTP_SMS_PROVIDER?: string
   /** Google OAuth Web client ID for native Android/iOS sign-in (see .env.example). */
   readonly VITE_GOOGLE_WEB_CLIENT_ID?: string
+  /**
+   * Support WhatsApp / click-to-call: full international number, digits only (no +).
+   * Example: 4471234567890. Used for service booking confirmation and header “call us” links.
+   */
+  readonly VITE_SUPPORT_WHATSAPP_E164?: string
   readonly MODE: string
   readonly DEV: boolean
   readonly PROD: boolean

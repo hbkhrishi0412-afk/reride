@@ -173,6 +173,13 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
           </button>
         </div>
         <p className="text-sm text-gray-600 mb-4">For service providers only.</p>
+        {isDev && (
+          <p className="text-xs text-gray-600 mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            Test login (run <code className="rounded bg-white px-1">npm run seed:test-provider</code> once with
+            service role in <code className="rounded bg-white px-1">.env</code>):{' '}
+            <span className="font-medium">provider@test.com</span> / <span className="font-medium">password123</span>
+          </p>
+        )}
         <form className="space-y-3" onSubmit={mode === 'login' ? handleLogin : handleSignup}>
           {mode === 'signup' && (
             <>
