@@ -103,7 +103,9 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           return res.status(403).json({ error: 'Service provider access required for open request pool' });
         }
         const records = await supabaseServiceRequestService.findByStatus('open');
-        const cityFilter = (req.query.city as string) || '';
+        const rawCity = String((req.query.city as string) || '').trim();
+        const cityFilter =
+          rawCity.toLowerCase() === 'pending setup' ? '' : rawCity;
         const serviceTypeFilter = (req.query.serviceType as string) || '';
         const filtered = records.filter((item) => {
           const cityMatches = cityFilter ? item.city?.toLowerCase() === cityFilter.toLowerCase() : true;

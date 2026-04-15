@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../lib/i18n';
 import { View as ViewEnum } from '../types';
+import { supportTelHref } from '../utils/whatsappShare.js';
 
 interface CarServicesProps {
   onNavigate?: (view: ViewEnum) => void;
@@ -144,6 +145,7 @@ function splitBullets(raw: string): string[] {
 }
 
 const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
+  const supportTel = supportTelHref();
   const { t, i18n: i18nFromHook } = useTranslation(undefined, { i18n });
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const servicesSectionRef = useRef<HTMLDivElement>(null);
@@ -424,12 +426,22 @@ const CarServices: React.FC<CarServicesProps> = ({ onNavigate }) => {
             >
               {t('carServices.bookNow')}
             </button>
-            <a
-              href="tel:+917277277275"
-              className="w-full lg:w-auto px-6 py-3.5 lg:px-8 lg:py-4 rounded-xl border-2 border-white/70 text-white font-semibold text-base lg:text-lg hover:bg-white/10 active:bg-white/10 transition-colors"
-            >
-              {t('carServices.callCta')}
-            </a>
+            {supportTel ? (
+              <a
+                href={supportTel}
+                className="w-full lg:w-auto px-6 py-3.5 lg:px-8 lg:py-4 rounded-xl border-2 border-white/70 text-white font-semibold text-base lg:text-lg hover:bg-white/10 active:bg-white/10 transition-colors"
+              >
+                {t('carServices.callCta')}
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigate?.(ViewEnum.SUPPORT)}
+                className="w-full lg:w-auto px-6 py-3.5 lg:px-8 lg:py-4 rounded-xl border-2 border-white/70 text-white font-semibold text-base lg:text-lg hover:bg-white/10 active:bg-white/10 transition-colors"
+              >
+                {t('carServices.callCta')}
+              </button>
+            )}
           </div>
         </div>
       </section>

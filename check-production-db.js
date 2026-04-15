@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Production Database Connection Checker
- * 
+ *
  * This script helps verify your production database setup by:
  * 1. Testing the connection string format
  * 2. Attempting to connect to MongoDB
@@ -35,10 +35,10 @@ function logSection(title) {
 
 async function checkProductionDatabase() {
   logSection('🔍 Production Database Connection Check');
-  
+
   // Get connection string from command line or environment
   const mongoUri = process.argv[2] || process.env.MONGODB_URL || process.env.MONGODB_URI;
-  
+
   if (!mongoUri) {
     log('❌ No connection string provided!', 'red');
     console.log('\nUsage:');
@@ -48,28 +48,28 @@ async function checkProductionDatabase() {
     console.log('   MongoDB Atlas → Clusters → Connect → Connect your application\n');
     return false;
   }
-  
+
   // Step 1: Validate format
   logSection('Step 1: Validating Connection String');
-  
+
   const validation = validateMongoUri(mongoUri);
   if (!validation.valid) {
     log(`❌ Invalid format: ${validation.error}`, 'red');
     return false;
   }
-  
+
   log('✅ Connection string format is valid', 'green');
   const maskedUri = mongoUri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:***@');
   log(`   URI: ${maskedUri}`, 'cyan');
-  
+
   // Step 2: Check database name
   logSection('Step 2: Checking Database Configuration');
-  
+
   try {
     const normalizedUri = ensureDatabaseInUri(mongoUri);
     const dbName = normalizedUri.match(/\/([^?\/]+)(\?|$)/)?.[1] || 'reride';
     log(`✅ Database name: ${dbName}`, 'green');
-    
+
     if (dbName.toLowerCase() !== 'reride') {
       log(`⚠️  Warning: Expected database name 'reride', but found '${dbName}'`, 'yellow');
     }
@@ -77,13 +77,13 @@ async function checkProductionDatabase() {
     log(`❌ Error processing URI: ${error.message}`, 'red');
     return false;
   }
-  
+
   // Step 3: Test connection
   logSection('Step 3: Testing Connection to MongoDB Atlas');
-  
+
   try {
     log('🔄 Attempting to connect...', 'blue');
-    
+
     const connectionOptions = {
       serverSelectionTimeoutMS: 15000,
       socketTimeoutMS: 45000,
@@ -91,17 +91,17 @@ async function checkProductionDatabase() {
       retryWrites: true,
       retryReads: true,
     };
-    
+
     await mongoose.connect(mongoUri, connectionOptions);
     log('✅ Connection successful!', 'green');
-    
+
     // Get connection details
     log('\n📊 Connection Details:', 'bright');
     log(`   Database: ${mongoose.connection.name}`, 'cyan');
     log(`   Host: ${mongoose.connection.host}`, 'cyan');
-    log(`   Port: ${mongoose.connection.port || 'N/A (Atlas)}`, 'cyan');
+    log(`   Port: ${mongoose.connection.port || 'N/A (Atlas)'}`, 'cyan');
     log(`   Ready State: ${mongoose.connection.readyState} (1 = connected)`, 'cyan');
-    
+
     // Check collections
     log('\n📁 Checking Collections:', 'bright');
     try {
@@ -118,7 +118,7 @@ async function checkProductionDatabase() {
     } catch (err) {
       log(`⚠️  Could not list collections: ${err.message}`, 'yellow');
     }
-    
+
     // Test a simple query
     log('\n🧪 Testing Database Operations:', 'bright');
     try {
@@ -129,10 +129,10 @@ async function checkProductionDatabase() {
     } catch (err) {
       log(`⚠️  Ping test failed: ${err.message}`, 'yellow');
     }
-    
+
     await mongoose.disconnect();
     log('\n✅ Disconnected successfully', 'green');
-    
+
     logSection('✅ All Checks Passed!');
     console.log('Your production database connection is working correctly.\n');
     console.log('💡 Next steps:');
@@ -140,19 +140,22 @@ async function checkProductionDatabase() {
     console.log('   2. Verify MongoDB Atlas Network Access allows 0.0.0.0/0');
     console.log('   3. Redeploy on Vercel if you just set the environment variable\n');
     return true;
-    
   } catch (error) {
     log(`❌ Connection failed: ${error.message}`, 'red');
-    
+
     // Provide specific troubleshooting
     console.log('\n🔧 Troubleshooting:\n');
-    
+
     if (error.message.includes('authentication failed') || error.message.includes('bad auth')) {
       log('Authentication Error:', 'yellow');
       console.log('   • Check username and password are correct');
       console.log('   • Verify special characters in password are URL-encoded');
       console.log('   • Check database user exists in MongoDB Atlas → Database Access\n');
-    } else if (error.message.includes('network') || error.message.includes('timeout') || error.message.includes('ENOTFOUND')) {
+    } else if (
+      error.message.includes('network') ||
+      error.message.includes('timeout') ||
+      error.message.includes('ENOTFOUND')
+    ) {
       log('Network Error:', 'yellow');
       console.log('   • Go to MongoDB Atlas → Network Access');
       console.log('   • Click "Add IP Address" → "Allow Access from Anywhere"');
@@ -170,13 +173,13 @@ async function checkProductionDatabase() {
       console.log('   • Verify connection string is correct');
       console.log('   • Check MongoDB Atlas logs\n');
     }
-    
+
     console.log('💡 Common fixes:');
     console.log('   1. MongoDB Atlas → Network Access → Add 0.0.0.0/0');
     console.log('   2. MongoDB Atlas → Clusters → Ensure cluster is RUNNING');
     console.log('   3. Vercel → Settings → Environment Variables → Set MONGODB_URI');
     console.log('   4. Redeploy on Vercel after setting environment variable\n');
-    
+
     return false;
   }
 }
@@ -191,4 +194,3 @@ checkProductionDatabase()
     console.error(error);
     process.exit(1);
   });
-

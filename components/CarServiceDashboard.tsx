@@ -120,7 +120,10 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all');
   const [openFilters, setOpenFilters] = useState({
-    city: provider?.city || '',
+    city:
+      provider?.city?.trim() && provider.city.trim().toLowerCase() !== 'pending setup'
+        ? provider.city.trim()
+        : '',
     serviceType: 'all',
   });
   const [providerServices, setProviderServices] = useState<
@@ -170,6 +173,14 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     availability: provider?.availability || '',
   });
 
+  useEffect(() => {
+    const c = (provider?.city || '').trim();
+    if (c.toLowerCase() === 'pending setup') {
+      setOpenFilters((prev) =>
+        prev.city.trim().toLowerCase() === 'pending setup' ? { ...prev, city: '' } : prev
+      );
+    }
+  }, [provider?.city]);
 
   const sortedRequests = useMemo(
     () =>
@@ -437,7 +448,10 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       const token = await withToken();
       const params = new URLSearchParams();
       params.set('scope', 'open');
-      if (openFilters.city.trim()) params.set('city', openFilters.city.trim());
+      const cityRaw = openFilters.city.trim();
+      const cityQuery =
+        cityRaw.toLowerCase() === 'pending setup' ? '' : cityRaw;
+      if (cityQuery) params.set('city', cityQuery);
       if (openFilters.serviceType !== 'all') params.set('serviceType', openFilters.serviceType);
       const resp = await fetch(`/api/service-requests?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -447,6 +461,29 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
         throw new Error(data.error || 'Failed to load open requests');
       }
       const data = await resp.json();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0a2ed1' },
+        body: JSON.stringify({
+          sessionId: '0a2ed1',
+          runId: 'post-fix',
+          hypothesisId: 'H1-H5',
+          location: 'CarServiceDashboard.tsx:fetchOpenRequests',
+          message: 'open pool client response',
+          data: {
+            query: params.toString(),
+            cityFilterSent: Boolean(cityQuery),
+            cityFilterRawLen: cityRaw.length,
+            isPlaceholderCityFilter: cityRaw.toLowerCase() === 'pending setup',
+            serviceType: openFilters.serviceType,
+            ok: resp.ok,
+            resultCount: Array.isArray(data) ? data.length : -1,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       setOpenRequests(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load open requests');

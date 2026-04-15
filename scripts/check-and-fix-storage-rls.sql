@@ -154,13 +154,9 @@ WHERE schemaname = 'storage'
 -- PART 3: FIX - Create Correct Policies
 -- ============================================================================
 
--- 3.1 Create SELECT policy (Public read access)
+-- 3.1 Public bucket read access is handled by Storage itself.
+-- Keep SELECT policy removed to prevent anonymous bucket-wide listing.
 DROP POLICY IF EXISTS "Public can view images" ON storage.objects;
-
-CREATE POLICY "Public can view images"
-ON storage.objects
-FOR SELECT
-USING (bucket_id = 'Images');
 
 -- 3.2 Create INSERT policy (Authenticated upload) - THE CRITICAL ONE
 CREATE POLICY "Authenticated users can upload images"
@@ -210,7 +206,6 @@ SELECT
   cmd as operation,
   roles,
   CASE 
-    WHEN cmd = 'SELECT' AND with_check IS NULL AND qual::text LIKE '%Images%' THEN '✅ Public read access'
     WHEN cmd = 'INSERT' AND with_check::text LIKE '%Images%' AND with_check::text LIKE '%authenticated%' THEN '✅ Authenticated upload'
     WHEN cmd = 'UPDATE' AND qual::text LIKE '%Images%' AND qual::text LIKE '%authenticated%' THEN '✅ Authenticated update'
     WHEN cmd = 'DELETE' AND qual::text LIKE '%Images%' AND qual::text LIKE '%authenticated%' THEN '✅ Authenticated delete'
@@ -228,15 +223,14 @@ WHERE schemaname = 'storage'
   )
 ORDER BY 
   CASE cmd
-    WHEN 'SELECT' THEN 1
-    WHEN 'INSERT' THEN 2
-    WHEN 'UPDATE' THEN 3
-    WHEN 'DELETE' THEN 4
+    WHEN 'INSERT' THEN 1
+    WHEN 'UPDATE' THEN 2
+    WHEN 'DELETE' THEN 3
     ELSE 5
   END,
   policyname;
 
--- 4.2 Final count check (should be exactly 4 policies)
+-- 4.2 Final count check (should be exactly 3 policies)
 SELECT 
   '=== FINAL COUNT CHECK ===' as section,
   COUNT(*) as total_policies,
@@ -245,7 +239,10 @@ SELECT
   COUNT(CASE WHEN cmd = 'UPDATE' THEN 1 END) as update_policies,
   COUNT(CASE WHEN cmd = 'DELETE' THEN 1 END) as delete_policies,
   CASE 
-    WHEN COUNT(*) = 4 AND COUNT(CASE WHEN cmd = 'INSERT' THEN 1 END) = 1 THEN '✅ Perfect - All policies created correctly'
+    WHEN COUNT(*) = 3
+      AND COUNT(CASE WHEN cmd = 'SELECT' THEN 1 END) = 0
+      AND COUNT(CASE WHEN cmd = 'INSERT' THEN 1 END) = 1 THEN '✅ Perfect - Least-privilege policies created correctly'
+    WHEN COUNT(CASE WHEN cmd = 'SELECT' THEN 1 END) > 0 THEN '⚠️ Broad SELECT policy exists; may allow file listing'
     WHEN COUNT(CASE WHEN cmd = 'INSERT' THEN 1 END) > 1 THEN '❌ ERROR: Multiple INSERT policies found'
     WHEN COUNT(CASE WHEN cmd = 'INSERT' THEN 1 END) = 0 THEN '❌ ERROR: No INSERT policy found'
     ELSE '⚠️ Check policy count'
@@ -287,7 +284,7 @@ WHERE schemaname = 'storage'
 SELECT 
   '=== SCRIPT COMPLETED ===' as section,
   '✅ All duplicate policies removed' as step1,
-  '✅ All policies recreated correctly' as step2,
+  '✅ Least-privilege policies recreated correctly' as step2,
   '✅ Ready to test uploads' as step3,
   'Next: Try uploading an image in your application' as next_step;
 

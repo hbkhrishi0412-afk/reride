@@ -52,8 +52,8 @@ $$;
 -- ============================================================================
 -- PART 2: FIX SECURITY ISSUES - Supabase Auth Compromised Passwords
 -- ============================================================================
--- Note: This requires Supabase Dashboard configuration, but we can enable
--- it via SQL if the auth schema allows it. Otherwise, enable it manually:
+-- Note: This setting is managed in Supabase Auth config (not regular SQL tables).
+-- Use scripts/enable-compromised-password-protection.js for automated setup, or:
 -- Dashboard > Authentication > Policies > Enable "Prevent use of compromised passwords"
 
 -- Try to enable compromised password checking via SQL
@@ -62,13 +62,12 @@ DO $$
 BEGIN
     -- Check if we can set this via SQL
     -- Most Supabase instances require this to be set via Dashboard
-    RAISE NOTICE '⚠️  Compromised password prevention must be enabled manually:';
-    RAISE NOTICE '   1. Go to Supabase Dashboard';
-    RAISE NOTICE '   2. Navigate to Authentication > Policies';
-    RAISE NOTICE '   3. Enable "Prevent use of compromised passwords"';
+    RAISE NOTICE '⚠️  Compromised password prevention is an Auth config setting:';
+    RAISE NOTICE '   1. Run: npm run security:enable-compromised-password-protection';
+    RAISE NOTICE '   2. Or Dashboard > Authentication > Policies > Enable it manually';
     RAISE NOTICE '   This uses Have I Been Pwned API to check passwords';
 EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'ℹ️  Enable compromised password prevention in Dashboard';
+    RAISE NOTICE 'ℹ️  Enable compromised password prevention via script or Dashboard';
 END $$;
 
 -- ============================================================================
@@ -197,7 +196,8 @@ BEGIN
     
     RAISE NOTICE '';
     RAISE NOTICE '⚠️  ACTION REQUIRED: Enable compromised password prevention';
-    RAISE NOTICE '   Dashboard > Authentication > Policies';
+    RAISE NOTICE '   Run: npm run security:enable-compromised-password-protection';
+    RAISE NOTICE '   OR Dashboard > Authentication > Policies';
     RAISE NOTICE '';
     
     -- Check indexes

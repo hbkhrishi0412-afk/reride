@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View as ViewEnum } from '../types';
 import { fetchServices, getServicePricing, fallbackPricing } from '../services/servicePricingService';
+import { supportTelHref } from '../utils/whatsappShare.js';
 
 interface ServiceDetailProps {
   onNavigate?: (view: ViewEnum) => void;
@@ -196,6 +197,7 @@ const serviceDefinitions: Record<string, Omit<Service, 'icon'>> = {
 };
 
 const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => {
+  const supportTel = supportTelHref();
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [servicePricingData, setServicePricingData] = useState<Record<string, Service['pricing']>>({});
   const [loadingPricing, setLoadingPricing] = useState(true);
@@ -519,12 +521,22 @@ const ServiceDetail: React.FC<ServiceDetailProps> = ({ onNavigate, onBack }) => 
                 >
                   Add to Cart
                 </button>
-                <a
-                  href="tel:+917277277275"
-                  className="block w-full px-6 py-4 rounded-xl border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
-                >
-                  Call for Quote
-                </a>
+                {supportTel ? (
+                  <a
+                    href={supportTel}
+                    className="block w-full px-6 py-4 rounded-xl border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
+                  >
+                    Call for Quote
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.(ViewEnum.SUPPORT)}
+                    className="block w-full px-6 py-4 rounded-xl border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 text-center transition-colors active:scale-95 touch-manipulation min-h-[48px] text-base sm:text-lg"
+                  >
+                    Contact support
+                  </button>
+                )}
               </div>
 
               {/* Trust Badges */}

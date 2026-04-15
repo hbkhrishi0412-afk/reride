@@ -24,6 +24,7 @@ import { WebSocketServer } from 'ws';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { appendFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -55,7 +56,14 @@ function getSupabaseJwtPayload(authHeader) {
     try {
       return jwt.verify(token, secret, { algorithms: ['HS256'] });
     } catch {
-      return null;
+      // Wrong secret / clock skew / non-HS256: still decode for local mock APIs so `sub` matches bookings.
+      try {
+        const decoded = jwt.decode(token, { complete: false });
+        if (!decoded || typeof decoded !== 'object' || !decoded.sub) return null;
+        return decoded;
+      } catch {
+        return null;
+      }
     }
   }
   try {
@@ -1109,6 +1117,14 @@ let mockServices = [
 // Helper to pick uid from header/query (fallback to a fixed dev uid)
 const getDevUid = (req) => (req.headers['x-dev-uid'] || req.query.uid || 'dev-uid');
 
+/** Supabase Bearer JWT sub when present; otherwise x-dev-uid / query / dev default (service-requests parity). */
+const getRequestActorId = (req) => {
+  const payload = getSupabaseJwtPayload(req.headers.authorization);
+  const session = sessionFromJwtPayload(payload);
+  if (session?.id) return String(session.id);
+  return getDevUid(req);
+};
+
 // GET /api/users
 app.get('/api/users', (req, res) => {
   const { action, email } = req.query;
@@ -1706,21 +1722,66 @@ app.patch('/api/service-providers', (req, res) => {
 
 // --- Service Requests (dev mock) ---
 app.get('/api/service-requests', (req, res) => {
-  const providerId = getDevUid(req);
+  const actorId = getRequestActorId(req);
   const scope = req.query.scope || 'mine';
 
   if (scope === 'open') {
-    const cityFilter = (req.query.city || '').toString().toLowerCase();
+    const rawCity = (req.query.city || '').toString().trim();
+    const cityFilter =
+      rawCity.toLowerCase() === 'pending setup' ? '' : rawCity.toLowerCase();
     const serviceTypeFilter = req.query.serviceType || '';
+    const jwtPayload = getSupabaseJwtPayload(req.headers.authorization);
+    const jwtSession = sessionFromJwtPayload(jwtPayload);
     const open = mockServiceRequests.filter(r => r.status === 'open');
+    let rejCity = 0;
+    let rejCand = 0;
+    let rejSvc = 0;
     const filtered = open.filter(r => {
       const cityMatches = cityFilter ? (r.city || '').toLowerCase() === cityFilter : true;
       const serviceMatches = serviceTypeFilter ? r.serviceType === serviceTypeFilter : true;
       const cands = r.candidateProviderIds;
       const candidateOk =
-        !Array.isArray(cands) || cands.length === 0 || cands.includes(providerId);
+        !Array.isArray(cands) ||
+        cands.length === 0 ||
+        cands.some((id) => String(id) === String(actorId));
+      if (!cityMatches) rejCity += 1;
+      if (!serviceMatches) rejSvc += 1;
+      if (!candidateOk) rejCand += 1;
       return cityMatches && serviceMatches && candidateOk;
     });
+    // #region agent log
+    const __agentPayload = {
+      sessionId: '0a2ed1',
+      runId: 'post-fix',
+      hypothesisId: 'H1-H6',
+      location: 'dev-api-server.js:GET /api/service-requests scope=open',
+      message: 'open pool filter breakdown',
+      data: {
+        actorIdIsDefaultDevUid: actorId === 'dev-uid',
+        hasJwtSub: Boolean(jwtSession?.id),
+        jwtMatchesActorId: Boolean(jwtSession?.id && jwtSession.id === actorId),
+        cityFilterLen: cityFilter.length,
+        cityFilterDroppedPendingSetup: rawCity.toLowerCase() === 'pending setup',
+        serviceTypeFilter: String(serviceTypeFilter || ''),
+        openStatusCount: open.length,
+        returnedCount: filtered.length,
+        rejCity,
+        rejCand,
+        rejSvc,
+      },
+      timestamp: Date.now(),
+    };
+    try {
+      appendFileSync(join(__dirname, 'debug-0a2ed1.log'), `${JSON.stringify(__agentPayload)}\n`);
+    } catch {
+      /* ignore */
+    }
+    fetch('http://127.0.0.1:7242/ingest/5b6f90c8-812c-4202-acd3-f36cea066e0b', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0a2ed1' },
+      body: JSON.stringify(__agentPayload),
+    }).catch(() => {});
+    // #endregion
     return res.json(filtered);
   }
 
@@ -1729,11 +1790,10 @@ app.get('/api/service-requests', (req, res) => {
   }
 
   if (scope === 'customer') {
-    const uid = getDevUid(req);
-    return res.json(mockServiceRequests.filter(r => r.customerId === uid));
+    return res.json(mockServiceRequests.filter(r => r.customerId === actorId));
   }
 
-  const records = mockServiceRequests.filter(r => r.providerId === providerId);
+  const records = mockServiceRequests.filter(r => r.providerId === actorId);
   return res.json(records);
 });
 
@@ -1766,7 +1826,7 @@ app.post('/api/service-requests', (req, res) => {
     return res.status(400).json({ error: 'Missing required field: title' });
   }
   const id = `req-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
-  const customerId = req.body?.customerId || getDevUid(req);
+  const customerId = req.body?.customerId || getRequestActorId(req);
   const record = {
     id,
     providerId,
@@ -1800,7 +1860,7 @@ app.post('/api/service-requests', (req, res) => {
 });
 
 app.patch('/api/service-requests', (req, res) => {
-  const uid = getDevUid(req);
+  const uid = getRequestActorId(req);
   const { id, action, ...updates } = req.body || {};
   if (!id) return res.status(400).json({ error: 'Missing request id' });
   const idx = mockServiceRequests.findIndex(r => r.id === id);
@@ -1837,7 +1897,11 @@ app.patch('/api/service-requests', (req, res) => {
 
   if (action === 'claim') {
     const cands = existing.candidateProviderIds;
-    if (Array.isArray(cands) && cands.length > 0 && !cands.includes(uid)) {
+    const uidOk =
+      !Array.isArray(cands) ||
+      cands.length === 0 ||
+      cands.some((id) => String(id) === String(uid));
+    if (!uidOk) {
       return res.status(403).json({ error: 'This request is not assigned to your workshop' });
     }
     if (existing.status !== 'open' || existing.providerId) {

@@ -59,14 +59,9 @@ You have two options:
 2. Select the `Images` bucket
 3. Click **"New Policy"** for each operation:
 
-##### Policy 1: Public Read Access (SELECT)
-- **Policy name:** `Public can view images`
-- **Allowed operation:** `SELECT`
-- **Target roles:** `anon`, `authenticated`
-- **Policy definition:**
-  ```sql
-  bucket_id = 'Images'
-  ```
+##### Policy 1: Public Bucket Access (No SELECT policy needed)
+- `Images` is configured as a **public bucket**, so direct object URLs work without adding a broad `SELECT` policy on `storage.objects`.
+- Do **not** add `FOR SELECT USING (bucket_id = 'Images')` for `anon`, because that allows clients to list bucket contents.
 
 ##### Policy 2: Authenticated Upload (INSERT) - **THIS IS THE CRITICAL ONE**
 - **Policy name:** `Authenticated users can upload images`
@@ -107,7 +102,6 @@ You have two options:
 
 2. The script will:
    - Check if the bucket exists
-   - Test SELECT permission (listing files)
    - Test INSERT permission (uploading a test file)
    - Report any issues
 
@@ -148,12 +142,6 @@ DROP POLICY IF EXISTS "Public can view images" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can upload images" ON storage.objects;
 DROP POLICY IF EXISTS "Users can update their own images" ON storage.objects;
 DROP POLICY IF EXISTS "Users can delete their own images" ON storage.objects;
-
--- Create SELECT policy (public read)
-CREATE POLICY "Public can view images"
-ON storage.objects
-FOR SELECT
-USING (bucket_id = 'Images');
 
 -- Create INSERT policy (authenticated upload) - CRITICAL!
 CREATE POLICY "Authenticated users can upload images"
