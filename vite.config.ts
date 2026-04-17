@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
   base: capacitor ? './' : '/',
   define: {
     __RERIDE_CAPACITOR__: JSON.stringify(!!capacitor),
+    __RERIDE_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   plugins: [
     {
