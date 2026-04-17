@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getSession } from '../services/supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase';
 import {
@@ -9,6 +9,11 @@ import {
   SERVICE_TEMPLATE_PRESETS,
   type ServiceCategory,
 } from '../constants/serviceProviderCatalog.js';
+import {
+  getSubServicesFor,
+  subServiceIdFromName,
+  type SubServiceTemplate,
+} from '../constants/carServiceSubServices.js';
 
 interface Provider {
   name: string;
@@ -126,33 +131,164 @@ const statusOptions: { value: RequestStatus; label: string }[] = [
 
 const serviceOptions = CAR_SERVICE_OPTIONS;
 
-const parseIncludedServicesText = (raw: string): IncludedServicePrice[] => {
-  const result: IncludedServicePrice[] = [];
-  raw.split('\n').forEach((line, idx) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-    const [nameRaw, priceRaw, etaRaw] = trimmed.split('|').map((part) => part.trim());
-    const name = nameRaw || '';
-    if (!name) return;
-    const price = priceRaw ? Number(priceRaw) : undefined;
-    const etaMinutes = etaRaw ? Number(etaRaw) : undefined;
-    const entry: IncludedServicePrice = {
-      id: `inc-${idx + 1}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
-      name,
-      active: true,
-    };
-    if (price != null && Number.isFinite(price)) entry.price = price;
-    if (etaMinutes != null && Number.isFinite(etaMinutes)) entry.etaMinutes = etaMinutes;
-    result.push(entry);
-  });
-  return result;
+// ETA unit helpers — the provider form lets the user express ETA in minutes,
+// hours, or days. Internally we always store ETA as minutes to keep the backend
+// and downstream consumers unchanged.
+type EtaUnit = 'min' | 'hr' | 'day';
+
+const pickEtaUnit = (minutes: number | undefined | null): EtaUnit => {
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return 'min';
+  if (minutes >= 1440 && minutes % 1440 === 0) return 'day';
+  if (minutes >= 60 && minutes % 60 === 0) return 'hr';
+  return 'min';
 };
 
-const formatIncludedServicesText = (items?: IncludedServicePrice[]): string =>
-  (items || [])
-    .filter((item) => item.active !== false)
-    .map((item) => [item.name, item.price != null ? String(item.price) : '', item.etaMinutes != null ? String(item.etaMinutes) : ''].join(' | '))
-    .join('\n');
+const etaValueInUnit = (minutes: number, unit: EtaUnit): number => {
+  if (unit === 'day') return minutes / 1440;
+  if (unit === 'hr') return minutes / 60;
+  return minutes;
+};
+
+const etaToMinutes = (value: number, unit: EtaUnit): number => {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  if (unit === 'day') return Math.round(value * 1440);
+  if (unit === 'hr') return Math.round(value * 60);
+  return Math.round(value);
+};
+
+const formatEtaReadable = (minutes: number | undefined | null): string => {
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) return '';
+  if (minutes >= 1440 && minutes % 1440 === 0) {
+    const d = minutes / 1440;
+    return `${d} day${d === 1 ? '' : 's'}`;
+  }
+  if (minutes >= 1440) {
+    const d = Math.floor(minutes / 1440);
+    const h = Math.round((minutes - d * 1440) / 60);
+    return h > 0 ? `${d}d ${h}h` : `${d}d`;
+  }
+  if (minutes >= 60 && minutes % 60 === 0) {
+    const h = minutes / 60;
+    return `${h} hr${h === 1 ? '' : 's'}`;
+  }
+  if (minutes >= 60) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h}h ${m}m`;
+  }
+  return `${minutes} min`;
+};
+
+// Editable sub-service row used in the provider form. Prices/ETAs are kept as
+// strings so empty inputs don't coerce to 0 and providers can type freely.
+type IncludedServiceDraft = {
+  id: string;
+  name: string;
+  priceText: string;
+  etaText: string;
+  etaUnit: EtaUnit;
+  active: boolean;
+};
+
+const draftFromIncluded = (item: IncludedServicePrice, fallbackIdx: number): IncludedServiceDraft => {
+  const unit = pickEtaUnit(item.etaMinutes);
+  return {
+    id:
+      (item.id && String(item.id).trim()) ||
+      subServiceIdFromName(item.name) ||
+      `line-${fallbackIdx + 1}`,
+    name: item.name || '',
+    priceText: item.price != null && Number.isFinite(item.price) ? String(item.price) : '',
+    etaText:
+      item.etaMinutes != null && Number.isFinite(item.etaMinutes)
+        ? String(etaValueInUnit(item.etaMinutes, unit))
+        : '',
+    etaUnit: unit,
+    active: item.active !== false,
+  };
+};
+
+const draftFromTemplate = (tmpl: SubServiceTemplate, fallbackIdx: number): IncludedServiceDraft => {
+  const unit = pickEtaUnit(tmpl.suggestedEtaMinutes);
+  return {
+    id: tmpl.id || subServiceIdFromName(tmpl.name) || `line-${fallbackIdx + 1}`,
+    name: tmpl.name,
+    priceText:
+      tmpl.suggestedPrice != null && Number.isFinite(tmpl.suggestedPrice) && tmpl.suggestedPrice > 0
+        ? String(tmpl.suggestedPrice)
+        : '',
+    etaText:
+      tmpl.suggestedEtaMinutes != null && Number.isFinite(tmpl.suggestedEtaMinutes)
+        ? String(etaValueInUnit(tmpl.suggestedEtaMinutes, unit))
+        : '',
+    etaUnit: unit,
+    active: true,
+  };
+};
+
+const buildDraftsForServiceType = (
+  serviceType: string,
+  existing?: IncludedServicePrice[],
+): IncludedServiceDraft[] => {
+  const canonical = getSubServicesFor(serviceType);
+  const existingByKey = new Map<string, IncludedServicePrice>();
+  (existing || []).forEach((item) => {
+    const key = subServiceIdFromName(item.name) || String(item.id || '').trim();
+    if (key) existingByKey.set(key, item);
+  });
+
+  const drafts: IncludedServiceDraft[] = [];
+  const used = new Set<string>();
+
+  canonical.forEach((tmpl, idx) => {
+    const key = subServiceIdFromName(tmpl.name);
+    const match = existingByKey.get(key);
+    if (match) {
+      drafts.push(draftFromIncluded(match, idx));
+      used.add(key);
+    } else {
+      // If provider hasn't added this canonical sub-service yet, include it as
+      // inactive by default so they can opt-in per sub-service.
+      drafts.push({
+        ...draftFromTemplate(tmpl, idx),
+        active: existing && existing.length > 0 ? false : true,
+      });
+    }
+  });
+
+  // Append any custom sub-services the provider previously added that aren't
+  // in the canonical list.
+  (existing || []).forEach((item, idx) => {
+    const key = subServiceIdFromName(item.name) || String(item.id || '').trim();
+    if (!key || used.has(key)) return;
+    drafts.push(draftFromIncluded(item, canonical.length + idx));
+    used.add(key);
+  });
+
+  return drafts;
+};
+
+const includedDraftsToPayload = (drafts: IncludedServiceDraft[]): IncludedServicePrice[] =>
+  drafts
+    .map((draft, idx) => {
+      const name = (draft.name || '').trim();
+      if (!name) return null;
+      const priceNum = draft.priceText.trim() ? Number(draft.priceText) : undefined;
+      const etaRaw = draft.etaText.trim() ? Number(draft.etaText) : undefined;
+      const etaMinutes =
+        etaRaw != null && Number.isFinite(etaRaw) && etaRaw >= 0
+          ? etaToMinutes(etaRaw, draft.etaUnit || 'min')
+          : undefined;
+      const entry: IncludedServicePrice = {
+        id: draft.id || subServiceIdFromName(name) || `line-${idx + 1}`,
+        name,
+        active: draft.active,
+      };
+      if (priceNum != null && Number.isFinite(priceNum) && priceNum >= 0) entry.price = priceNum;
+      if (etaMinutes != null) entry.etaMinutes = etaMinutes;
+      return entry;
+    })
+    .filter((entry): entry is IncludedServicePrice => entry !== null);
 
 const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) => {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
@@ -176,14 +312,23 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   const [servicesLoading, setServicesLoading] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [savingService, setSavingService] = useState(false);
-  const [serviceForm, setServiceForm] = useState({
+  const [serviceForm, setServiceForm] = useState<{
+    serviceType: string;
+    price: string;
+    description: string;
+    etaMinutes: string;
+    etaUnit: EtaUnit;
+    includedServices: IncludedServiceDraft[];
+    active: boolean;
+  }>(() => ({
     serviceType: serviceOptions[0],
     price: '',
     description: '',
     etaMinutes: '',
-    includedServicesText: '',
+    etaUnit: 'min',
+    includedServices: buildDraftsForServiceType(serviceOptions[0]),
     active: true,
-  });
+  }));
   const [serviceSearch, setServiceSearch] = useState('');
   const [serviceStatusFilter, setServiceStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [editingServiceType, setEditingServiceType] = useState<string | null>(null);
@@ -211,14 +356,18 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     return 'overview';
   });
   const [editingProfile, setEditingProfile] = useState(false);
-  const [profileForm, setProfileForm] = useState({
-    name: provider?.name || '',
-    email: provider?.email || '',
-    phone: provider?.phone || '',
-    city: provider?.city || '',
-    state: provider?.state || '',
-    district: provider?.district || '',
-    availability: provider?.availability || '',
+  const [profileForm, setProfileForm] = useState(() => {
+    const rawCity = (provider?.city || '').trim();
+    const cleanCity = rawCity.toLowerCase() === 'pending setup' ? '' : rawCity;
+    return {
+      name: provider?.name || '',
+      email: provider?.email || '',
+      phone: provider?.phone || '',
+      city: cleanCity,
+      state: provider?.state || '',
+      district: provider?.district || '',
+      availability: provider?.availability || '',
+    };
   });
 
   useEffect(() => {
@@ -400,8 +549,6 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     if (priced.length === 0) return null;
     return Math.round(priced.reduce((sum, p) => sum + p, 0) / priced.length);
   }, [activeProviderServices]);
-
-  const recentOpenCount = useMemo(() => overviewOpenRequests.length, [overviewOpenRequests.length]);
 
   const acceptanceRate = useMemo(() => {
     const actionable = overviewStats.accepted + overviewStats.inProgress + overviewStats.completed;
@@ -674,12 +821,17 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     setServicesError(null);
     try {
       const headers = await getAuthHeaders();
+      const etaRaw = serviceForm.etaMinutes ? Number(serviceForm.etaMinutes) : undefined;
+      const etaMinutesPayload =
+        etaRaw != null && Number.isFinite(etaRaw) && etaRaw >= 0
+          ? etaToMinutes(etaRaw, serviceForm.etaUnit || 'min')
+          : undefined;
       const body = {
         serviceType: serviceForm.serviceType,
         price: serviceForm.price ? Number(serviceForm.price) : undefined,
         description: serviceForm.description,
-        etaMinutes: serviceForm.etaMinutes ? Number(serviceForm.etaMinutes) : undefined,
-        includedServices: parseIncludedServicesText(serviceForm.includedServicesText),
+        etaMinutes: etaMinutesPayload,
+        includedServices: includedDraftsToPayload(serviceForm.includedServices),
         active: serviceForm.active,
       };
       const resp = await fetch('/api/provider-services', {
@@ -765,38 +917,143 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
     includedServices?: IncludedServicePrice[];
   }) => {
     setEditingServiceType(service.serviceType);
+    const unit = pickEtaUnit(service.etaMinutes);
     setServiceForm({
       serviceType: service.serviceType,
       price: service.price != null ? String(service.price) : '',
       description: service.description || '',
-      etaMinutes: service.etaMinutes != null ? String(service.etaMinutes) : '',
-      includedServicesText: formatIncludedServicesText(service.includedServices),
+      etaMinutes:
+        service.etaMinutes != null ? String(etaValueInUnit(service.etaMinutes, unit)) : '',
+      etaUnit: unit,
+      includedServices: buildDraftsForServiceType(service.serviceType, service.includedServices),
       active: service.active !== false,
     });
   };
 
   const clearServiceForm = () => {
+    const nextType = suggestedServiceTemplateNames[0] || serviceOptions[0];
     setEditingServiceType(null);
     setServiceForm({
-      serviceType: suggestedServiceTemplateNames[0] || serviceOptions[0],
+      serviceType: nextType,
       price: '',
       description: '',
       etaMinutes: '',
-      includedServicesText: '',
+      etaUnit: 'min',
+      includedServices: buildDraftsForServiceType(nextType),
       active: true,
     });
   };
 
   const applyServiceTemplate = (template: { serviceType: string; price: string; etaMinutes: string; description: string }) => {
     setEditingServiceType(null);
+    // Template ETA values are provided in minutes; pick a natural unit for display.
+    const etaMin = template.etaMinutes ? Number(template.etaMinutes) : NaN;
+    const unit = Number.isFinite(etaMin) ? pickEtaUnit(etaMin) : 'min';
+    const etaText = Number.isFinite(etaMin) ? String(etaValueInUnit(etaMin, unit)) : template.etaMinutes;
     setServiceForm({
       serviceType: template.serviceType,
       price: template.price,
       description: template.description,
-      etaMinutes: template.etaMinutes,
-      includedServicesText: '',
+      etaMinutes: etaText,
+      etaUnit: unit,
+      includedServices: buildDraftsForServiceType(template.serviceType),
       active: true,
     });
+  };
+
+  // When the provider changes the service type in the form, show ONLY the
+  // sub-services that belong to the newly selected service. Sub-services from
+  // the previously selected service type are dropped so they don't leak across
+  // services. Prices/ETAs are preserved only for items whose names are present
+  // in the new service type's canonical list.
+  const changeServiceTypeInForm = (nextType: string) => {
+    setServiceForm((prev) => {
+      const canonicalForNext = getSubServicesFor(nextType);
+      const canonicalKeys = new Set(canonicalForNext.map((t) => subServiceIdFromName(t.name)));
+
+      // Index previously-entered drafts by canonical slug for price/ETA preservation.
+      const prevByKey = new Map<string, IncludedServiceDraft>();
+      prev.includedServices.forEach((d) => {
+        const key = subServiceIdFromName(d.name);
+        if (key && canonicalKeys.has(key)) prevByKey.set(key, d);
+      });
+
+      const drafts: IncludedServiceDraft[] = canonicalForNext.map((tmpl, idx) => {
+        const key = subServiceIdFromName(tmpl.name);
+        const preservedDraft = prevByKey.get(key);
+        const base = draftFromTemplate(tmpl, idx);
+        if (preservedDraft) {
+          return {
+            ...base,
+            priceText: preservedDraft.priceText || base.priceText,
+            etaText: preservedDraft.etaText || base.etaText,
+            etaUnit: preservedDraft.etaText ? preservedDraft.etaUnit : base.etaUnit,
+            active: true,
+          };
+        }
+        return { ...base, active: true };
+      });
+
+      return {
+        ...prev,
+        serviceType: nextType,
+        includedServices: drafts,
+      };
+    });
+  };
+
+  const updateSubServiceDraft = (idx: number, patch: Partial<IncludedServiceDraft>) => {
+    setServiceForm((prev) => {
+      const next = prev.includedServices.slice();
+      next[idx] = { ...next[idx], ...patch };
+      return { ...prev, includedServices: next };
+    });
+  };
+
+  const removeSubServiceDraft = (idx: number) => {
+    setServiceForm((prev) => {
+      const next = prev.includedServices.slice();
+      next.splice(idx, 1);
+      return { ...prev, includedServices: next };
+    });
+  };
+
+  const addCustomSubServiceDraft = () => {
+    setServiceForm((prev) => ({
+      ...prev,
+      includedServices: [
+        ...prev.includedServices,
+        {
+          id: `custom-${Date.now()}`,
+          name: '',
+          priceText: '',
+          etaText: '',
+          etaUnit: 'min',
+          active: true,
+        },
+      ],
+    }));
+  };
+
+  const toggleAllSubServiceDrafts = (active: boolean) => {
+    setServiceForm((prev) => ({
+      ...prev,
+      includedServices: prev.includedServices.map((d) => ({ ...d, active })),
+    }));
+  };
+
+  const subServiceTotal = useMemo(() => {
+    return serviceForm.includedServices
+      .filter((d) => d.active)
+      .reduce((sum, d) => {
+        const n = Number(d.priceText);
+        return Number.isFinite(n) && n > 0 ? sum + n : sum;
+      }, 0);
+  }, [serviceForm.includedServices]);
+
+  const applySubServiceTotalAsBase = () => {
+    if (subServiceTotal <= 0) return;
+    setServiceForm((prev) => ({ ...prev, price: String(subServiceTotal) }));
   };
 
   const deleteService = async (serviceType: string) => {
@@ -1304,13 +1561,32 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Service Dashboard</h1>
-                <p className="text-xs text-gray-600 flex items-center gap-1">
-                  <svg className="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  {localProvider?.city || 'Not set'}
-                </p>
+                {(() => {
+                  const rawCity = (localProvider?.city || '').trim();
+                  const hasRealCity = rawCity && rawCity.toLowerCase() !== 'pending setup';
+                  return (
+                    <p className="text-xs text-gray-600 flex items-center gap-1">
+                      <svg className="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {hasRealCity ? (
+                        rawCity
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('profile');
+                            setEditingProfile(true);
+                          }}
+                          className="text-amber-700 hover:text-amber-800 underline decoration-dotted underline-offset-2"
+                        >
+                          Set your city
+                        </button>
+                      )}
+                    </p>
+                  );
+                })()}
               </div>
             </div>
             <button
@@ -1406,415 +1682,311 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
           {/* Overview Tab */}
           {activeTab === 'overview' && (
             <>
-              <section className="mb-6 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-blue-900">
-                      Profile readiness: {profileReadiness.percent}% ({profileReadiness.completed}/{profileReadiness.total})
-                    </p>
-                    <p className="text-xs text-blue-800 mt-1">Complete setup items to unlock better matching and conversion.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('services')}
-                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                  >
-                    Complete setup
-                  </button>
-                </div>
-                <div className="mt-3 grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
-                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[0] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>City</span>
-                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[1] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Availability</span>
-                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[2] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Skills</span>
-                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[3] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Workshops</span>
-                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[4] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Active services</span>
-                  <span className={`rounded-full px-2.5 py-1 font-medium ${profileReadiness.checks[5] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>Categories</span>
-                </div>
-              </section>
-
-              {priorityAlerts.length > 0 && (
-                <section className="mb-6 space-y-2">
-                  {priorityAlerts.map((alert, idx) => (
-                    <div
-                      key={`${alert.message}-${idx}`}
-                      className={`rounded-lg border px-3 py-2 text-sm ${
-                        alert.level === 'critical'
-                          ? 'border-red-200 bg-red-50 text-red-700'
-                          : 'border-amber-200 bg-amber-50 text-amber-800'
-                      }`}
-                    >
-                      {alert.message}
-                    </div>
-                  ))}
+              {priorityAlerts.some((a) => a.level === 'critical') && (
+                <section className="mb-6">
+                  {priorityAlerts
+                    .filter((a) => a.level === 'critical')
+                    .slice(0, 1)
+                    .map((alert, idx) => (
+                      <div
+                        key={`${alert.message}-${idx}`}
+                        className="flex items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <svg className="h-5 w-5 flex-shrink-0 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.33 16a2 2 0 001.74 3z" />
+                          </svg>
+                          <p className="text-sm font-medium text-red-800">{alert.message}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('services')}
+                          className="flex-shrink-0 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+                        >
+                          Add services
+                        </button>
+                      </div>
+                    ))}
                 </section>
               )}
 
-              {/* Profile Overview Section */}
-              <section className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
+              {profileReadiness.percent < 100 && (
+                <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <h2 className="text-base font-semibold text-gray-900">Finish setting up your profile</h2>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {profileReadiness.completed} of {profileReadiness.total} steps complete · helps you get more requests
+                      </p>
                     </div>
-                    Profile Overview
-                  </h2>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="group bg-gradient-to-br from-white to-blue-50/30 rounded-xl border-2 border-gray-200 p-4 shadow-md hover:shadow-lg hover:border-blue-300 transition-all duration-300">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Availability</p>
-                      </div>
-                    </div>
-                    <p className="text-xl font-bold text-gray-900 mb-1">{localProvider?.availability || 'Not set'}</p>
-                    <p className="text-xs text-gray-500">Preferred working days/hours</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTab('profile');
-                        setEditingProfile(true);
-                      }}
-                      className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                    >
-                      {localProvider?.availability ? 'Edit availability' : 'Set availability'}
-                    </button>
+                    <span className="text-sm font-semibold text-gray-900">{profileReadiness.percent}%</span>
                   </div>
-                  <div className="group bg-gradient-to-br from-white to-purple-50/30 rounded-xl border-2 border-gray-200 p-4 shadow-md hover:shadow-lg hover:border-purple-300 transition-all duration-300">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Skills</p>
-                        </div>
-                      </div>
-                      {!editingSkills && (
-                        <button
-                          type="button"
-                          onClick={() => setEditingSkills(true)}
-                          className="px-2.5 py-1 text-xs font-semibold text-purple-600 hover:text-white hover:bg-purple-600 rounded-md transition-all duration-300 border border-purple-200 hover:border-purple-600"
-                        >
-                          Edit
-                        </button>
-                      )}
-                    </div>
-            {editingSkills ? (
-                      <div className="space-y-3">
-                <input
-                  type="text"
-                  value={skillsInput}
-                  onChange={(e) => setSkillsInput(e.target.value)}
-                  placeholder="Comma-separated skills"
-                          className="w-full px-4 py-2.5 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={saveSkills}
-                    disabled={savingProfile}
-                            className="px-4 py-2 text-sm font-semibold bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 disabled:opacity-60 shadow-md transition-all"
-                  >
-                    {savingProfile ? 'Saving...' : 'Save'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingSkills(false);
-                      setSkillsInput(localProvider?.skills?.join(', ') || '');
-                    }}
-                            className="px-4 py-2 text-sm font-semibold bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                        <p className="text-lg font-bold text-gray-900 mb-2">
-                  {localProvider?.skills?.length ? localProvider.skills.join(', ') : 'Not set'}
-                </p>
-                        <p className="text-xs text-gray-500 font-medium">What you can service</p>
-                        {!localProvider?.skills?.length && (
-                          <button
-                            type="button"
-                            onClick={() => setEditingSkills(true)}
-                            className="mt-2 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-100"
-                          >
-                            Add skills
-                          </button>
-                        )}
-              </>
-            )}
-          </div>
-                  <div className="group bg-gradient-to-br from-white to-emerald-50/30 rounded-xl border-2 border-gray-200 p-4 shadow-md hover:shadow-lg hover:border-emerald-300 transition-all duration-300">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
-                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Workshops</p>
-                        </div>
-                      </div>
-                      {!editingWorkshops && (
-                        <button
-                          type="button"
-                          onClick={() => setEditingWorkshops(true)}
-                          className="px-2.5 py-1 text-xs font-semibold text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-md transition-all duration-300 border border-emerald-200 hover:border-emerald-600"
-                        >
-                          Edit
-                        </button>
-                      )}
-                    </div>
-            {editingWorkshops ? (
-                      <div className="space-y-3">
-                <input
-                  type="text"
-                  value={workshopsInput}
-                  onChange={(e) => setWorkshopsInput(e.target.value)}
-                  placeholder="Comma-separated locations"
-                          className="w-full px-4 py-2.5 text-sm border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={saveWorkshops}
-                    disabled={savingProfile}
-                            className="px-4 py-2 text-sm font-semibold bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-lg hover:from-emerald-700 hover:to-emerald-800 disabled:opacity-60 shadow-md transition-all"
-                  >
-                    {savingProfile ? 'Saving...' : 'Save'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingWorkshops(false);
-                      setWorkshopsInput(localProvider?.workshops?.join(', ') || '');
-                    }}
-                            className="px-4 py-2 text-sm font-semibold bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                        <p className="text-lg font-bold text-gray-900 mb-2">
-                  {localProvider?.workshops?.length ? localProvider.workshops.join(', ') : 'Not set'}
-                </p>
-                        <p className="text-xs text-gray-500 font-medium">Locations you operate</p>
-                        {!localProvider?.workshops?.length && (
-                          <button
-                            type="button"
-                            onClick={() => setEditingWorkshops(true)}
-                            className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                          >
-                            Add workshop
-                          </button>
-                        )}
-              </>
-            )}
-          </div>
-          </div>
-        </section>
-
-            {/* Service Categories Section */}
-            <section className="mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-md">
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                    </svg>
+                  <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden mb-5">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                      style={{ width: `${profileReadiness.percent}%` }}
+                    />
                   </div>
-                  Service Categories
-                </h2>
-                {!editingCategories && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedCategories(recommendedCategories);
-                        setEditingCategories(true);
-                      }}
-                      className="px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-all"
-                    >
-                      Auto-select suggested
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingCategories(true)}
-                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 text-white text-xs font-semibold hover:from-indigo-700 hover:to-indigo-800 shadow-md transition-all flex items-center gap-1"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      Edit
-                    </button>
-                  </div>
-                )}
-              </div>
-              {!editingCategories && (
-                <p className="text-xs text-gray-600 mb-3">
-                  Selected {localProvider?.serviceCategories?.length || 0} of {SERVICE_CATEGORIES.length}.{' '}
-                  {recommendedCategories.length > 0 && localProvider?.serviceCategories?.length === 0
-                    ? `Suggested: ${recommendedCategories.join(', ')}`
-                    : 'These categories decide which service suggestions appear in pricing.'}
-                </p>
-              )}
-              {editingCategories ? (
-                <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-lg">
-                  <p className="text-sm text-gray-600 mb-3">
-                    Select the categories you offer. Pricing suggestions will follow these selections.
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {SERVICE_CATEGORIES.map((category) => {
-                      const isSelected = selectedCategories.includes(category);
-                      const categoryServices = SERVICE_CATEGORY_MAP[category];
-                      return (
-                        <label
-                          key={category}
-                          className={`relative flex flex-col p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-indigo-500 bg-indigo-50 shadow-md'
-                              : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+                  <ul className="divide-y divide-gray-100">
+                    {[
+                      {
+                        label: 'City',
+                        done: profileReadiness.checks[0],
+                        value: localProvider?.city,
+                        action: () => {
+                          setActiveTab('profile');
+                          setEditingProfile(true);
+                        },
+                        actionLabel: 'Set city',
+                      },
+                      {
+                        label: 'Availability',
+                        done: profileReadiness.checks[1],
+                        value: localProvider?.availability,
+                        action: () => {
+                          setActiveTab('profile');
+                          setEditingProfile(true);
+                        },
+                        actionLabel: 'Set availability',
+                      },
+                      {
+                        label: 'Skills',
+                        done: profileReadiness.checks[2],
+                        value: localProvider?.skills?.join(', '),
+                        action: () => setEditingSkills(true),
+                        actionLabel: 'Add skills',
+                      },
+                      {
+                        label: 'Workshops',
+                        done: profileReadiness.checks[3],
+                        value: localProvider?.workshops?.join(', '),
+                        action: () => setEditingWorkshops(true),
+                        actionLabel: 'Add workshop',
+                      },
+                      {
+                        label: 'Active services',
+                        done: profileReadiness.checks[4],
+                        value: activeProviderServices.length ? `${activeProviderServices.length} active` : undefined,
+                        action: () => setActiveTab('services'),
+                        actionLabel: 'Add services',
+                      },
+                      {
+                        label: 'Service categories',
+                        done: profileReadiness.checks[5],
+                        value: localProvider?.serviceCategories?.join(', '),
+                        action: () => {
+                          setSelectedCategories(localProvider?.serviceCategories || recommendedCategories);
+                          setEditingCategories(true);
+                        },
+                        actionLabel: 'Choose categories',
+                      },
+                    ].map((item) => (
+                      <li key={item.label} className="flex items-center gap-3 py-3">
+                        <span
+                          className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full ${
+                            item.done ? 'bg-emerald-100 text-emerald-700' : 'border-2 border-gray-200 bg-white'
                           }`}
                         >
-                          <div className="flex items-center gap-2 mb-2">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedCategories([...selectedCategories, category]);
-                                } else {
-                                  setSelectedCategories(selectedCategories.filter(c => c !== category));
-                                }
-                              }}
-                              className="h-4 w-4 rounded border-2 border-gray-300 text-indigo-600 focus:ring-2 focus:ring-indigo-500"
-                            />
-                            <span className="font-semibold text-gray-900">{category}</span>
-                          </div>
-                          <div className="text-xs text-gray-600 ml-6">
-                            Includes: {categoryServices.join(', ')}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <div className="flex gap-2 justify-end mt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingCategories(false);
-                        setSelectedCategories(localProvider?.serviceCategories || []);
-                      }}
-                      className="px-4 py-2 text-sm font-semibold bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={saveCategories}
-                      disabled={savingProfile}
-                      className="px-4 py-2 text-sm font-semibold bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-60 shadow-md transition-all"
-                    >
-                      {savingProfile ? 'Saving...' : 'Save Categories'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {SERVICE_CATEGORIES.map((category) => {
-                    const isSelected = localProvider?.serviceCategories?.includes(category);
-                    const categoryServices = SERVICE_CATEGORY_MAP[category];
-                    return (
-                      <div
-                        key={category}
-                        className={`p-4 rounded-lg border-2 ${
-                          isSelected
-                            ? 'border-indigo-500 bg-indigo-50'
-                            : 'border-gray-200 bg-gray-50 opacity-60'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          {isSelected && (
-                            <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          {item.done ? (
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                             </svg>
-                          )}
-                          <span className="font-semibold text-gray-900">{category}</span>
+                          ) : null}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${item.done ? 'text-gray-900' : 'text-gray-700'}`}>{item.label}</p>
+                          {item.done && item.value ? (
+                            <p className="text-xs text-gray-500 truncate">{item.value}</p>
+                          ) : null}
                         </div>
-                        <div className="text-xs text-gray-600">
-                          {isSelected ? `Suggested services: ${categoryServices.join(', ')}` : 'Not selected'}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
+                        {!item.done && (
+                          <button
+                            type="button"
+                            onClick={item.action}
+                            className="flex-shrink-0 rounded-md border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                          >
+                            {item.actionLabel}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
 
-              {/* Stats Cards */}
+                  {editingSkills && (
+                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <label className="block text-xs font-semibold text-gray-700 mb-2">Skills (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={skillsInput}
+                        onChange={(e) => setSkillsInput(e.target.value)}
+                        placeholder="e.g. Engine repair, AC service, Detailing"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingSkills(false);
+                            setSkillsInput(localProvider?.skills?.join(', ') || '');
+                          }}
+                          className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveSkills}
+                          disabled={savingProfile}
+                          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
+                        >
+                          {savingProfile ? 'Saving...' : 'Save skills'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {editingWorkshops && (
+                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <label className="block text-xs font-semibold text-gray-700 mb-2">Workshop locations (comma-separated)</label>
+                      <input
+                        type="text"
+                        value={workshopsInput}
+                        onChange={(e) => setWorkshopsInput(e.target.value)}
+                        placeholder="e.g. Koramangala, Indiranagar"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingWorkshops(false);
+                            setWorkshopsInput(localProvider?.workshops?.join(', ') || '');
+                          }}
+                          className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveWorkshops}
+                          disabled={savingProfile}
+                          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
+                        >
+                          {savingProfile ? 'Saving...' : 'Save workshops'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {editingCategories && (
+                    <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-semibold text-gray-700">Select the categories you offer</label>
+                        {recommendedCategories.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCategories(recommendedCategories)}
+                            className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                          >
+                            Auto-select suggested
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {SERVICE_CATEGORIES.map((category) => {
+                          const isSelected = selectedCategories.includes(category);
+                          return (
+                            <label
+                              key={category}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm cursor-pointer ${
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-50 text-blue-900'
+                                  : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedCategories([...selectedCategories, category]);
+                                  } else {
+                                    setSelectedCategories(selectedCategories.filter((c) => c !== category));
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="font-medium">{category}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCategories(false);
+                            setSelectedCategories(localProvider?.serviceCategories || []);
+                          }}
+                          className="px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200 rounded-md"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveCategories}
+                          disabled={savingProfile}
+                          className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-60"
+                        >
+                          {savingProfile ? 'Saving...' : 'Save categories'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+
+
+              {/* KPI Stats */}
               <section className="mb-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-md">
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                      </svg>
-                    </div>
-                    Request Statistics
-                  </h2>
-                  <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-900">At a glance</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Your activity and performance</p>
+                  </div>
+                  <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-0.5">
                     {(['today', '7d', '30d'] as const).map((range) => (
                       <button
                         key={range}
                         type="button"
                         onClick={() => setOverviewRange(range)}
-                        className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                        className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${
                           overviewRange === range
-                            ? 'bg-blue-600 text-white'
+                            ? 'bg-gray-900 text-white'
                             : 'text-gray-600 hover:bg-gray-100'
                         }`}
                       >
-                        {range === 'today' ? 'Today' : range}
+                        {range === 'today' ? 'Today' : range === '7d' ? '7 days' : '30 days'}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab('my-requests');
-                      setStatusFilter('all');
-                    }}
-                    className="group text-left bg-gradient-to-br from-white via-blue-50/50 to-white border-2 border-blue-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-blue-400"
-                  >
-                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">My Requests</p>
-                    <p className="text-3xl font-extrabold text-gray-900">{overviewStats.total}</p>
-                    <p className="text-xs text-gray-500 mt-1">Tap to view all claimed jobs</p>
-                  </button>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <button
                     type="button"
                     onClick={() => setActiveTab('open')}
-                    className="group text-left bg-gradient-to-br from-white via-amber-50/50 to-white border-2 border-amber-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-amber-400"
+                    className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-amber-400 hover:shadow-sm transition-all"
                   >
-                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Open (pool)</p>
-                    <p className="text-3xl font-extrabold text-amber-700">{overviewStats.open}</p>
-                    <p className="text-xs text-gray-500 mt-1">{recentOpenCount} in selected period</p>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Open jobs</span>
+                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-50 text-amber-600">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </span>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900 leading-none">{overviewStats.open}</p>
+                    <p className="text-xs text-gray-500 mt-2">Available to claim</p>
                   </button>
                   <button
                     type="button"
@@ -1822,11 +1994,18 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       setActiveTab('my-requests');
                       setStatusFilter('accepted');
                     }}
-                    className="group text-left bg-gradient-to-br from-white via-blue-50/50 to-white border-2 border-blue-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-blue-400"
+                    className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-sm transition-all"
                   >
-                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Accepted</p>
-                    <p className="text-3xl font-extrabold text-blue-700">{overviewStats.accepted}</p>
-                    <p className="text-xs text-gray-500 mt-1">Acceptance quality: {acceptanceRate}%</p>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Accepted</span>
+                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </span>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900 leading-none">{overviewStats.accepted}</p>
+                    <p className="text-xs text-gray-500 mt-2">{overviewStats.inProgress} in progress</p>
                   </button>
                   <button
                     type="button"
@@ -1834,483 +2013,884 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       setActiveTab('my-requests');
                       setStatusFilter('completed');
                     }}
-                    className="group text-left bg-gradient-to-br from-white via-emerald-50/50 to-white border-2 border-emerald-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-all duration-300 hover:border-emerald-400"
+                    className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-emerald-400 hover:shadow-sm transition-all"
                   >
-                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-1">Completed</p>
-                    <p className="text-3xl font-extrabold text-emerald-700">{overviewStats.completed}</p>
-                    <p className="text-xs text-gray-500 mt-1">Estimated revenue: ₹{((avgServicePrice || 0) * overviewStats.completed).toLocaleString('en-IN')}</p>
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Operational Metrics</p>
-                    <p className="text-sm text-gray-700 mt-2">Jobs in progress: <span className="font-semibold">{overviewStats.inProgress}</span></p>
-                    <p className="text-sm text-gray-700">Avg job value: <span className="font-semibold">{avgServicePrice ? `₹${avgServicePrice.toLocaleString('en-IN')}` : '-'}</span></p>
-                    <p className="text-sm text-gray-700">Cancellation rate: <span className="font-semibold">{overviewStats.total ? Math.round((overviewStats.cancelled / overviewStats.total) * 100) : 0}%</span></p>
-                  </div>
-                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500">Recent Activity</p>
-                    <div className="mt-2 space-y-2">
-                      {recentActivity.length === 0 ? (
-                        <p className="text-sm text-gray-500">No activity yet.</p>
-                      ) : (
-                        recentActivity.map((item) => (
-                          <div key={item.id} className="text-xs text-gray-700">
-                            <span className="font-semibold">{item.title}</span> is {item.status.replace('_', ' ')} · {formatRelative(item.when)}
-                          </div>
-                        ))
-                      )}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Completed</span>
+                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </span>
                     </div>
+                    <p className="text-3xl font-bold text-gray-900 leading-none">{overviewStats.completed}</p>
+                    <p className="text-xs text-gray-500 mt-2">{acceptanceRate}% completion rate</p>
+                  </button>
+                  <div className="bg-white border border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Est. revenue</span>
+                      <span className="flex h-7 w-7 items-center justify-center rounded-md bg-violet-50 text-violet-600">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </span>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900 leading-none">
+                      ₹{((avgServicePrice || 0) * overviewStats.completed).toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Avg job: {avgServicePrice ? `₹${avgServicePrice.toLocaleString('en-IN')}` : 'NA'}
+                    </p>
                   </div>
-                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-indigo-700">Next best action</p>
-                    <p className="text-sm text-indigo-900 mt-2 font-medium">{nextBestAction}</p>
+                </div>
+              </section>
+
+              {/* Activity + Next action */}
+              <section className="mb-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white">
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900">Recent activity</h3>
                     <button
                       type="button"
-                      onClick={() => setActiveTab('services')}
-                      className="mt-3 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                      onClick={() => setActiveTab('my-requests')}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-800"
                     >
-                      Fix now
+                      View all
                     </button>
                   </div>
+                  {recentActivity.length === 0 ? (
+                    <div className="px-5 py-10 text-center">
+                      <div className="mx-auto h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                        <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm text-gray-500">No activity yet</p>
+                      <p className="text-xs text-gray-400 mt-1">New requests will appear here</p>
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-gray-100">
+                      {recentActivity.map((item) => {
+                        const statusStyles: Record<string, string> = {
+                          open: 'bg-amber-50 text-amber-700',
+                          accepted: 'bg-blue-50 text-blue-700',
+                          in_progress: 'bg-violet-50 text-violet-700',
+                          completed: 'bg-emerald-50 text-emerald-700',
+                          cancelled: 'bg-gray-100 text-gray-600',
+                        };
+                        return (
+                          <li key={item.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{formatRelative(item.when)}</p>
+                            </div>
+                            <span
+                              className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                                statusStyles[item.status] || 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {item.status.replace('_', ' ')}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600 text-white">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </span>
+                    <h3 className="text-sm font-semibold text-blue-900">Suggested next step</h3>
+                  </div>
+                  <p className="text-sm text-blue-900 mb-4">{nextBestAction}</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('services')}
+                    className="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    Take action
+                  </button>
+                  {overviewStats.cancelled > 0 && (
+                    <p className="mt-4 pt-4 border-t border-blue-200 text-xs text-blue-800">
+                      Cancellation rate: <span className="font-semibold">{overviewStats.total ? Math.round((overviewStats.cancelled / overviewStats.total) * 100) : 0}%</span>
+                    </p>
+                  )}
                 </div>
               </section>
             </>
           )}
 
           {/* Profile Tab */}
-          {activeTab === 'profile' && (
-            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
+          {activeTab === 'profile' && (() => {
+            // Normalize placeholder values so "Pending setup" and "0000000000" are
+            // treated as missing rather than real data.
+            const cleanValue = (raw?: string): string => {
+              const v = (raw || '').trim();
+              if (!v) return '';
+              if (v.toLowerCase() === 'pending setup') return '';
+              if (v === '0000000000') return '';
+              return v;
+            };
+            const cName = cleanValue(localProvider?.name);
+            const cEmail = cleanValue(localProvider?.email);
+            const cPhone = cleanValue(localProvider?.phone);
+            const cCity = cleanValue(localProvider?.city);
+            const cState = cleanValue(localProvider?.state);
+            const cDistrict = cleanValue(localProvider?.district);
+            const cAvailability = cleanValue(localProvider?.availability);
+
+            const profileFields = [
+              { key: 'name', filled: !!cName },
+              { key: 'phone', filled: !!cPhone },
+              { key: 'city', filled: !!cCity },
+              { key: 'state', filled: !!cState },
+              { key: 'district', filled: !!cDistrict },
+              { key: 'availability', filled: !!cAvailability },
+            ];
+            const filledCount = profileFields.filter((f) => f.filled).length;
+            const completion = Math.round((filledCount / profileFields.length) * 100);
+            const isComplete = completion === 100;
+            const initial = (cName || cEmail || 'P').trim().charAt(0).toUpperCase();
+
+            const availabilityOptions = [
+              { value: '', label: 'Select availability' },
+              { value: 'weekdays', label: 'Weekdays (Mon–Fri)' },
+              { value: 'weekends', label: 'Weekends (Sat–Sun)' },
+              { value: 'daily', label: 'All week (Mon–Sun)' },
+              { value: '24x7', label: '24 × 7' },
+            ];
+            const availabilityLabel = (val: string) => {
+              const match = availabilityOptions.find((o) => o.value === val.toLowerCase());
+              return match ? match.label : val;
+            };
+
+            const FieldView: React.FC<{
+              label: string;
+              icon: React.ReactNode;
+              value: string;
+              emptyHint?: string;
+              locked?: boolean;
+              helper?: string;
+            }> = ({ label, icon, value, emptyHint, locked, helper }) => (
+              <div>
+                <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
+                  <span className="text-gray-400">{icon}</span>
+                  {label}
+                  {locked && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 normal-case tracking-normal">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Locked
+                    </span>
+                  )}
+                </label>
+                {value ? (
+                  <div className="px-3.5 py-2.5 bg-white rounded-lg border border-gray-200 text-gray-900 font-medium text-sm">
+                    {value}
                   </div>
-                  Profile Settings
-                </h2>
-                {!editingProfile && (
-                  <button
-                    onClick={() => setEditingProfile(true)}
-                    className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-semibold hover:from-blue-700 hover:to-blue-800 shadow-md transition-all flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                ) : (
+                  <div className="px-3.5 py-2.5 rounded-lg border border-dashed border-amber-300 bg-amber-50/60 text-amber-700 text-sm flex items-center gap-2">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Edit Profile
-                  </button>
+                    {emptyHint || `Add your ${label.toLowerCase()}`}
+                  </div>
                 )}
+                {helper && <p className="mt-1 text-[11px] text-gray-400">{helper}</p>}
               </div>
-              {error && (
-                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {error}
-                </div>
-              )}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-            <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      Name
-                    </label>
-                    {editingProfile ? (
-                      <input
-                        type="text"
-                        value={profileForm.name}
-                        onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      />
-                    ) : (
-                      <div className="px-4 py-2.5 bg-gray-50 rounded-lg border-2 border-gray-200 text-gray-900 font-medium">
-                        {localProvider?.name || 'Not set'}
-            </div>
-                    )}
-          </div>
-            <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      Email
-                    </label>
-                    <div className="px-4 py-2.5 bg-gray-50 rounded-lg border-2 border-gray-200 text-gray-600">
-                      {localProvider?.email || 'Not set'}
-                      <span className="ml-2 text-xs text-gray-500">(Cannot be changed)</span>
+            );
+
+            const FieldEdit: React.FC<{
+              label: string;
+              icon: React.ReactNode;
+              required?: boolean;
+              children: React.ReactNode;
+              helper?: string;
+            }> = ({ label, icon, required, children, helper }) => (
+              <div>
+                <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1.5">
+                  <span className="text-gray-400">{icon}</span>
+                  {label}
+                  {required && <span className="text-red-500 normal-case tracking-normal">*</span>}
+                </label>
+                {children}
+                {helper && <p className="mt-1 text-[11px] text-gray-400">{helper}</p>}
+              </div>
+            );
+
+            const userIcon = (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            );
+            const mailIcon = (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            );
+            const phoneIcon = (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+            );
+            const pinIcon = (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            );
+            const mapIcon = (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+              </svg>
+            );
+            const clockIcon = (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            );
+
+            const inputCls =
+              'w-full px-3.5 py-2.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition';
+
+            return (
+              <section className="space-y-5">
+                {/* Hero / Summary card */}
+                <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
+                  <div className="relative px-5 sm:px-8 pt-6 pb-5">
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-5">
+                      <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl bg-white shadow-lg ring-4 ring-white flex items-center justify-center">
+                        <div className="h-full w-full rounded-[14px] bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 text-white flex items-center justify-center text-3xl font-bold">
+                          {initial}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0 sm:pb-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+                            {cName || 'Service Provider'}
+                          </h2>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-700 px-2.5 py-0.5 text-[11px] font-semibold">
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M10 2L3 5v6c0 4.5 3 8.5 7 9 4-0.5 7-4.5 7-9V5l-7-3z" />
+                            </svg>
+                            Service Provider
+                          </span>
+                          {isComplete && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-0.5 text-[11px] font-semibold">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Complete
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-sm text-gray-500 flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1">{mailIcon}{cEmail || 'No email'}</span>
+                          {cCity && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span className="inline-flex items-center gap-1">{pinIcon}{cCity}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 sm:pb-1">
+                        {!editingProfile ? (
+                          <button
+                            onClick={() => setEditingProfile(true)}
+                            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 shadow-sm transition flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit Profile
+                          </button>
+                        ) : (
+                          <span className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold inline-flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Editing
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Completion progress */}
+                    <div className="mt-5">
+                      <div className="flex items-center justify-between text-xs text-gray-600 mb-1.5">
+                        <span className="font-medium">Profile completion</span>
+                        <span className="font-semibold text-gray-900">
+                          {filledCount} / {profileFields.length} fields · {completion}%
+                        </span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isComplete
+                              ? 'bg-gradient-to-r from-emerald-500 to-emerald-600'
+                              : completion >= 50
+                              ? 'bg-gradient-to-r from-blue-500 to-purple-500'
+                              : 'bg-gradient-to-r from-amber-400 to-amber-500'
+                          }`}
+                          style={{ width: `${Math.max(completion, 4)}%` }}
+                        />
+                      </div>
+                      {!isComplete && (
+                        <p className="mt-2 text-[11px] text-gray-500">
+                          Complete your profile so customers can find and trust you.
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </div>
+
+                {error && (
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {error}
+                  </div>
+                )}
+
+                {/* Personal information */}
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <div className="flex items-center gap-3 px-5 sm:px-6 py-4 border-b border-gray-100">
+                    <div className="h-9 w-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      Phone
-                    </label>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Personal information</h3>
+                      <p className="text-xs text-gray-500">Your contact details shown to customers.</p>
+                    </div>
+                  </div>
+                  <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
                     {editingProfile ? (
-                      <input
-                        type="tel"
-                        value={profileForm.phone}
-                        onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                        placeholder="e.g., 1234567890"
-                      />
+                      <>
+                        <FieldEdit label="Full name" icon={userIcon} required>
+                          <input
+                            type="text"
+                            value={profileForm.name}
+                            onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                            className={inputCls}
+                            placeholder="e.g., Rahul Kumar"
+                          />
+                        </FieldEdit>
+                        <FieldEdit label="Email" icon={mailIcon} helper="Email is used for sign-in and cannot be changed.">
+                          <div className="px-3.5 py-2.5 bg-gray-50 rounded-lg border border-gray-200 text-gray-500 text-sm flex items-center justify-between gap-2">
+                            <span className="truncate">{cEmail || '—'}</span>
+                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                          </div>
+                        </FieldEdit>
+                        <FieldEdit label="Phone" icon={phoneIcon} required helper="Used for booking confirmations.">
+                          <input
+                            type="tel"
+                            value={profileForm.phone}
+                            onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                            className={inputCls}
+                            placeholder="e.g., 9876543210"
+                          />
+                        </FieldEdit>
+                      </>
                     ) : (
-                      <div className="px-4 py-2.5 bg-gray-50 rounded-lg border-2 border-gray-200 text-gray-900 font-medium">
-                        {localProvider?.phone || 'Not set'}
-                      </div>
+                      <>
+                        <FieldView label="Full name" icon={userIcon} value={cName} emptyHint="Add your full name" />
+                        <FieldView label="Email" icon={mailIcon} value={cEmail} locked />
+                        <FieldView label="Phone" icon={phoneIcon} value={cPhone} emptyHint="Add a contact number" />
+                      </>
                     )}
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+                {/* Service location */}
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <div className="flex items-center gap-3 px-5 sm:px-6 py-4 border-b border-gray-100">
+                    <div className="h-9 w-9 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
-                      City
-                    </label>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Service location</h3>
+                      <p className="text-xs text-gray-500">Where you offer services. Used to match nearby customers.</p>
+                    </div>
+                  </div>
+                  <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-5">
                     {editingProfile ? (
-                      <input
-                        type="text"
-                        value={profileForm.city}
-                        onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                        placeholder="e.g., Mumbai"
-                      />
+                      <>
+                        <FieldEdit label="City" icon={pinIcon} required>
+                          <input
+                            type="text"
+                            value={profileForm.city}
+                            onChange={(e) => setProfileForm({ ...profileForm, city: e.target.value })}
+                            className={inputCls}
+                            placeholder="e.g., Mumbai"
+                          />
+                        </FieldEdit>
+                        <FieldEdit label="State" icon={mapIcon}>
+                          <input
+                            type="text"
+                            value={profileForm.state}
+                            onChange={(e) => setProfileForm({ ...profileForm, state: e.target.value })}
+                            className={inputCls}
+                            placeholder="e.g., Maharashtra"
+                          />
+                        </FieldEdit>
+                        <FieldEdit label="District" icon={mapIcon}>
+                          <input
+                            type="text"
+                            value={profileForm.district}
+                            onChange={(e) => setProfileForm({ ...profileForm, district: e.target.value })}
+                            className={inputCls}
+                            placeholder="e.g., Mumbai Suburban"
+                          />
+                        </FieldEdit>
+                      </>
                     ) : (
-                      <div className="px-4 py-2.5 bg-gray-50 rounded-lg border-2 border-gray-200 text-gray-900 font-medium">
-                        {localProvider?.city || 'Not set'}
-                      </div>
+                      <>
+                        <FieldView label="City" icon={pinIcon} value={cCity} emptyHint="Add your city" />
+                        <FieldView label="State" icon={mapIcon} value={cState} emptyHint="Add your state" />
+                        <FieldView label="District" icon={mapIcon} value={cDistrict} emptyHint="Add your district" />
+                      </>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
-                      </svg>
-                      State
-                    </label>
-                    {editingProfile ? (
-                      <input
-                        type="text"
-                        value={profileForm.state}
-                        onChange={(e) => setProfileForm({ ...profileForm, state: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                        placeholder="e.g., Maharashtra"
-                      />
-                    ) : (
-                      <div className="px-4 py-2.5 bg-gray-50 rounded-lg border-2 border-gray-200 text-gray-900 font-medium">
-                        {localProvider?.state || 'Not set'}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                      </svg>
-                      District
-                    </label>
-                    {editingProfile ? (
-                      <input
-                        type="text"
-                        value={profileForm.district}
-                        onChange={(e) => setProfileForm({ ...profileForm, district: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                        placeholder="e.g., Mumbai Suburban"
-                      />
-                    ) : (
-                      <div className="px-4 py-2.5 bg-gray-50 rounded-lg border-2 border-gray-200 text-gray-900 font-medium">
-                        {localProvider?.district || 'Not set'}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                </div>
+
+                {/* Availability */}
+                <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <div className="flex items-center gap-3 px-5 sm:px-6 py-4 border-b border-gray-100">
+                    <div className="h-9 w-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Availability
-                    </label>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-gray-900">Working availability</h3>
+                      <p className="text-xs text-gray-500">When you're available to take service bookings.</p>
+                    </div>
+                  </div>
+                  <div className="p-5 sm:p-6">
                     {editingProfile ? (
-                      <input
-                        type="text"
-                        value={profileForm.availability}
-                        onChange={(e) => setProfileForm({ ...profileForm, availability: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                        placeholder="e.g., Monday-Friday, 9 AM - 6 PM"
-                      />
+                      <FieldEdit label="Availability" icon={clockIcon}>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {availabilityOptions
+                            .filter((o) => o.value !== '')
+                            .map((opt) => {
+                              const selected =
+                                (profileForm.availability || '').toLowerCase() === opt.value;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() =>
+                                    setProfileForm({ ...profileForm, availability: opt.value })
+                                  }
+                                  className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition ${
+                                    selected
+                                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </FieldEdit>
                     ) : (
-                      <div className="px-4 py-2.5 bg-gray-50 rounded-lg border-2 border-gray-200 text-gray-900 font-medium">
-                        {localProvider?.availability || 'Not set'}
-                      </div>
+                      <FieldView
+                        label="Availability"
+                        icon={clockIcon}
+                        value={cAvailability ? availabilityLabel(cAvailability) : ''}
+                        emptyHint="Set your working days"
+                      />
                     )}
                   </div>
                 </div>
-              </div>
-              {editingProfile && (
-                <div className="mt-6 flex gap-3 justify-end">
-                  <button
-                    onClick={() => {
-                      setEditingProfile(false);
-                      setProfileForm({
-                        name: localProvider?.name || '',
-                        email: localProvider?.email || '',
-                        phone: localProvider?.phone || '',
-                        city: localProvider?.city || '',
-                        state: localProvider?.state || '',
-                        district: localProvider?.district || '',
-                        availability: localProvider?.availability || '',
-                      });
-                    }}
-                    className="px-6 py-2.5 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={saveProfile}
-                    disabled={savingProfile}
-                    className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 shadow-md transition-all flex items-center gap-2"
-                  >
-                    {savingProfile ? (
-                      <>
-                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Save Changes
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
+
+                {/* Sticky action bar when editing */}
+                {editingProfile && (
+                  <div className="sticky bottom-4 z-10">
+                    <div className="rounded-xl border border-gray-200 bg-white/95 backdrop-blur shadow-lg px-4 py-3 flex items-center justify-between gap-3">
+                      <div className="text-xs text-gray-500 hidden sm:block">
+                        Review your changes, then save to update your public profile.
+                      </div>
+                      <div className="flex gap-2 ml-auto">
+                        <button
+                          onClick={() => {
+                            setEditingProfile(false);
+                            setProfileForm({
+                              name: cName,
+                              email: cEmail,
+                              phone: cPhone,
+                              city: cCity,
+                              state: cState,
+                              district: cDistrict,
+                              availability: cAvailability,
+                            });
+                          }}
+                          className="px-5 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={saveProfile}
+                          disabled={savingProfile}
+                          className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 shadow-sm transition flex items-center gap-2"
+                        >
+                          {savingProfile ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Save changes
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </section>
+            );
+          })()}
 
           {/* Services & Pricing Tab */}
           {activeTab === 'services' && (
-            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                    </svg>
-                    My Services & Pricing
-                  </h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Add your services and pricing. Suggestions are based on your selected service categories.
-                  </p>
+            <section className="space-y-5">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <div>
+                    <h2 className="text-base font-semibold text-gray-900">
+                      {editingServiceType ? `Edit ${editingServiceType}` : 'Add a service'}
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Set price, ETA and what's included. Customers see this when matching.
+                    </p>
+                  </div>
+                  <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700">
+                    <span className={`h-1.5 w-1.5 rounded-full ${activeProviderServices.length > 0 ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    {activeProviderServices.length} active
+                  </span>
+                </div>
+                {suggestedServiceTemplates.length > 0 && (
+                  <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-gray-500 mr-1">Suggested:</span>
+                    {suggestedServiceTemplates.slice(0, 6).map((template) => (
+                      <button
+                        key={template.serviceType}
+                        type="button"
+                        onClick={() => applyServiceTemplate(template)}
+                        className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                      >
+                        + {template.serviceType}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {servicesError && (
+                  <div className="mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-sm text-red-700">
+                    {servicesError}
+                  </div>
+                )}
+                <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="md:col-span-1">
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Service</label>
+                    <select
+                      value={serviceForm.serviceType}
+                      onChange={(e) => changeServiceTypeInForm(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {serviceOptions.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Full service price (₹)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={serviceForm.price}
+                        onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
+                        className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="1999"
+                      />
+                      {subServiceTotal > 0 && (
+                        <button
+                          type="button"
+                          onClick={applySubServiceTotalAsBase}
+                          title="Use the sum of active sub-service prices as the full service price"
+                          className="whitespace-nowrap rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                        >
+                          Use ₹{subServiceTotal.toLocaleString('en-IN')}
+                        </button>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-gray-500">
+                      Charged when a customer books the entire service bundle.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">ETA</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={serviceForm.etaMinutes}
+                        onChange={(e) => setServiceForm({ ...serviceForm, etaMinutes: e.target.value })}
+                        className="flex-1 min-w-0 px-3 py-2 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder={
+                          serviceForm.etaUnit === 'day' ? '1' : serviceForm.etaUnit === 'hr' ? '2' : '120'
+                        }
+                      />
+                      <select
+                        value={serviceForm.etaUnit}
+                        onChange={(e) =>
+                          setServiceForm({ ...serviceForm, etaUnit: e.target.value as EtaUnit })
+                        }
+                        className="px-3 py-2 rounded-md border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        aria-label="ETA unit"
+                      >
+                        <option value="min">minutes</option>
+                        <option value="hr">hours</option>
+                        <option value="day">days</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Description</label>
+                  <textarea
+                    value={serviceForm.description}
+                    onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
+                    className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    placeholder="Optional details or inclusions"
+                    rows={2}
+                  />
+                </div>
+                <div className="mt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700">
+                        Sub-services &amp; per-item pricing
+                      </label>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Set a price for each sub-service. Customers can book the full service or only the sub-services they need.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleAllSubServiceDrafts(true)}
+                        className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Enable all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleAllSubServiceDrafts(false)}
+                        className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Disable all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={addCustomSubServiceDraft}
+                        className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+                      >
+                        + Add custom
+                      </button>
+                    </div>
+                  </div>
+
+                  {serviceForm.includedServices.length === 0 ? (
+                    <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-4 text-center text-xs text-gray-600">
+                      No sub-services defined yet. Click "+ Add custom" to add one.
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-gray-200 divide-y divide-gray-100">
+                      <div className="hidden sm:grid grid-cols-[24px_1fr_110px_150px_80px] gap-2 px-3 py-2 bg-gray-50 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                        <span></span>
+                        <span>Sub-service</span>
+                        <span>Price (₹)</span>
+                        <span>ETA</span>
+                        <span className="text-right">Remove</span>
+                      </div>
+                      {serviceForm.includedServices.map((draft, idx) => (
+                        <div
+                          key={draft.id || `row-${idx}`}
+                          className={`grid grid-cols-1 sm:grid-cols-[24px_1fr_110px_150px_80px] gap-2 px-3 py-2 items-center ${
+                            draft.active ? '' : 'opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={draft.active}
+                              onChange={(e) => updateSubServiceDraft(idx, { active: e.target.checked })}
+                              title={draft.active ? 'Active – visible to customers' : 'Inactive – hidden from customers'}
+                              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            value={draft.name}
+                            onChange={(e) => updateSubServiceDraft(idx, { name: e.target.value })}
+                            placeholder="Sub-service name"
+                            className="w-full px-2.5 py-1.5 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            value={draft.priceText}
+                            onChange={(e) => updateSubServiceDraft(idx, { priceText: e.target.value })}
+                            placeholder="0"
+                            className="w-full px-2.5 py-1.5 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums"
+                          />
+                          <div className="flex gap-1.5">
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={draft.etaText}
+                              onChange={(e) => updateSubServiceDraft(idx, { etaText: e.target.value })}
+                              placeholder={draft.etaUnit === 'day' ? '1' : draft.etaUnit === 'hr' ? '2' : '30'}
+                              className="w-full min-w-0 px-2.5 py-1.5 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums"
+                            />
+                            <select
+                              value={draft.etaUnit || 'min'}
+                              onChange={(e) =>
+                                updateSubServiceDraft(idx, { etaUnit: e.target.value as EtaUnit })
+                              }
+                              className="px-1.5 py-1.5 rounded-md border border-gray-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              aria-label="ETA unit"
+                            >
+                              <option value="min">min</option>
+                              <option value="hr">hr</option>
+                              <option value="day">day</option>
+                            </select>
+                          </div>
+                          <div className="flex sm:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => removeSubServiceDraft(idx)}
+                              className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                              title="Remove this sub-service"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {subServiceTotal > 0 && (
+                        <div className="flex items-center justify-between px-3 py-2 bg-gray-50 text-xs text-gray-700">
+                          <span>Sum of active sub-service prices</span>
+                          <span className="font-semibold tabular-nums">
+                            ₹{subServiceTotal.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-4 flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={serviceForm.active}
+                      onChange={(e) => setServiceForm({ ...serviceForm, active: e.target.checked })}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    Active (visible to customers)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {editingServiceType && (
+                      <button
+                        type="button"
+                        onClick={clearServiceForm}
+                        className="px-3 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={upsertService}
+                      disabled={savingService}
+                      className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                    >
+                      {savingService
+                        ? 'Saving…'
+                        : editingServiceType
+                        ? 'Update service'
+                        : 'Save service'}
+                    </button>
+                  </div>
                 </div>
               </div>
-          <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-            <p className="text-sm font-semibold text-blue-900">Eligibility status</p>
-            <p className="text-xs text-blue-800 mt-1">
-              {providerSetupReady
-                ? 'You are eligible to receive matched requests.'
-                : 'Complete your setup to improve request matching and visibility.'}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <span className={`rounded-full px-2.5 py-1 font-medium ${((localProvider?.city || '').trim() ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')}`}>
-                City: {(localProvider?.city || '').trim() ? 'Ready' : 'Missing'}
-              </span>
-              <span className={`rounded-full px-2.5 py-1 font-medium ${activeProviderServices.length > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                Active services: {activeProviderServices.length}
-              </span>
-            </div>
-          </div>
-          {servicesError && (
-            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {servicesError}
-            </div>
-          )}
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-gray-600 mr-1">Quick add from your categories:</span>
-            {suggestedServiceTemplates.map((template) => (
-              <button
-                key={template.serviceType}
-                type="button"
-                onClick={() => applyServiceTemplate(template)}
-                className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
-              >
-                Use {template.serviceType}
-              </button>
-            ))}
-          </div>
-          <div className="bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl p-5 mb-6 border border-gray-200">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                  Service
-                </label>
-              <select
-                value={serviceForm.serviceType}
-                onChange={(e) => setServiceForm({ ...serviceForm, serviceType: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all shadow-sm hover:shadow-md"
-              >
-                {serviceOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Price (₹)
-                </label>
-              <input
-                type="number"
-                value={serviceForm.price}
-                onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md"
-                placeholder="e.g., 1999"
-              />
-            </div>
-            <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  ETA (minutes)
-                </label>
-              <input
-                type="number"
-                value={serviceForm.etaMinutes}
-                onChange={(e) => setServiceForm({ ...serviceForm, etaMinutes: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md"
-                placeholder="e.g., 120"
-              />
-            </div>
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={serviceForm.active}
-                  onChange={(e) => setServiceForm({ ...serviceForm, active: e.target.checked })}
-                    className="h-5 w-5 rounded border-2 border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 transition-all"
-                />
-                  <span className="group-hover:text-blue-600 transition-colors">Active</span>
-              </label>
-            </div>
-            </div>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-                </svg>
-                Description
-              </label>
-              <textarea
-                value={serviceForm.description}
-                onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md resize-none"
-                placeholder="Optional details or inclusions"
-                rows={3}
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-gray-700 mb-2">
-                Included services and prices (one per line: `Service name | price | eta`)
-              </label>
-              <textarea
-                value={serviceForm.includedServicesText}
-                onChange={(e) => setServiceForm({ ...serviceForm, includedServicesText: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md resize-y font-mono text-xs"
-                placeholder={'Engine diagnostics | 499 | 25\nBattery health analysis | 299 | 15'}
-                rows={5}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Customer can pick any one or more included services. Total is calculated using selected lines.
-              </p>
-            </div>
-            <div className="flex justify-end">
-              {editingServiceType && (
-                <button
-                  type="button"
-                  onClick={clearServiceForm}
-                  className="mr-2 px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 font-semibold hover:bg-gray-50"
-                >
-                  Cancel edit
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={upsertService}
-                disabled={savingService}
-                className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 shadow-md hover:shadow-lg transition-all duration-300 flex items-center gap-2"
-              >
-                {savingService ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    {editingServiceType ? 'Update Service' : 'Save Service'}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={serviceSearch}
-              onChange={(e) => setServiceSearch(e.target.value)}
-              placeholder="Search service"
-              className="px-3 py-2 rounded-lg border-2 border-gray-200 text-sm"
-            />
-            <select
-              value={serviceStatusFilter}
-              onChange={(e) => setServiceStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
-              className="px-3 py-2 rounded-lg border-2 border-gray-200 text-sm bg-white"
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
+
+              <div className="bg-white rounded-xl border border-gray-200">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-gray-100">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Your services
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      ({filteredProviderServices.length})
+                    </span>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={serviceSearch}
+                      onChange={(e) => setServiceSearch(e.target.value)}
+                      placeholder="Search…"
+                      className="px-3 py-1.5 rounded-md border border-gray-300 text-sm w-40"
+                    />
+                    <select
+                      value={serviceStatusFilter}
+                      onChange={(e) => setServiceStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+                      className="px-3 py-1.5 rounded-md border border-gray-300 text-sm bg-white"
+                    >
+                      <option value="all">All</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+          <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Service</th>
-                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Price</th>
-                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">ETA</th>
-                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Description</th>
-                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Included</th>
-                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Last updated</th>
-                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Active</th>
-                  <th className="py-3 px-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Service</th>
+                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Price</th>
+                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">ETA</th>
+                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Description</th>
+                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Included</th>
+                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Updated</th>
+                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Status</th>
+                  <th className="py-2.5 px-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -2330,55 +2910,68 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                   <tr>
                     <td className="py-12 px-4 text-center" colSpan={8}>
                       <div className="flex flex-col items-center justify-center">
-                        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-                          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                         </div>
-                        <p className="text-gray-600 font-medium">No services added yet.</p>
-                        <p className="text-sm text-gray-500 mt-1">Add your first service using the form above.</p>
+                        <p className="text-sm font-medium text-gray-700">No services added yet</p>
+                        <p className="text-xs text-gray-500 mt-1">Add your first service using the form above.</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   filteredProviderServices.map((svc) => (
-                    <tr key={svc.serviceType} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-3 px-4 font-semibold text-gray-900">{svc.serviceType}</td>
-                      <td className="py-3 px-4 text-gray-800 font-medium">{svc.price !== undefined ? `₹${svc.price.toLocaleString()}` : '-'}</td>
-                      <td className="py-3 px-4 text-gray-800">{svc.etaMinutes ? `${svc.etaMinutes} min` : '-'}</td>
-                      <td className="py-3 px-4 text-gray-700">{svc.description || '-'}</td>
-                      <td className="py-3 px-4 text-xs text-gray-700">
-                        {svc.includedServices && svc.includedServices.length > 0
-                          ? `${svc.includedServices.filter((line) => line.active !== false).length} lines`
-                          : '-'}
+                    <tr key={svc.serviceType} className="hover:bg-gray-50">
+                      <td className="py-3 px-4 font-medium text-gray-900">{svc.serviceType}</td>
+                      <td className="py-3 px-4 text-gray-800 tabular-nums">{svc.price !== undefined && svc.price !== null ? `₹${svc.price.toLocaleString('en-IN')}` : <span className="text-gray-400 italic">NA</span>}</td>
+                      <td className="py-3 px-4 text-gray-700 tabular-nums">{svc.etaMinutes ? formatEtaReadable(svc.etaMinutes) : <span className="text-gray-400 italic">NA</span>}</td>
+                      <td className="py-3 px-4 text-gray-600 max-w-xs truncate">{svc.description && svc.description.trim() ? svc.description : <span className="text-gray-400 italic">NA</span>}</td>
+                      <td className="py-3 px-4 text-xs text-gray-600">
+                        {svc.includedServices && svc.includedServices.length > 0 ? (
+                          (() => {
+                            const actives = svc.includedServices.filter((line) => line.active !== false);
+                            const priced = actives.filter(
+                              (line) => line.price != null && Number.isFinite(line.price) && (line.price as number) > 0,
+                            ).length;
+                            return (
+                              <span title={`${priced} priced / ${actives.length} active`}>
+                                {actives.length} active · {priced} priced
+                              </span>
+                            );
+                          })()
+                        ) : (
+                          <span className="text-gray-400 italic">NA</span>
+                        )}
                       </td>
-                      <td className="py-3 px-4 text-xs text-gray-600">{svc.updatedAt ? formatDateTime(svc.updatedAt) : '-'}</td>
+                      <td className="py-3 px-4 text-xs text-gray-500">{svc.updatedAt ? formatDateTime(svc.updatedAt) : <span className="text-gray-400 italic">NA</span>}</td>
                       <td className="py-3 px-4">
-                        <label className="flex items-center gap-2 cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            checked={svc.active !== false}
-                            onChange={(e) => toggleServiceActive(svc.serviceType, e.target.checked)}
-                            className="h-4 w-4 rounded border-2 border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 transition-all"
-                          />
-                          <span className={`text-sm font-medium ${svc.active !== false ? 'text-emerald-600' : 'text-gray-500'}`}>
+                        <button
+                          type="button"
+                          onClick={() => toggleServiceActive(svc.serviceType, !(svc.active !== false))}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            svc.active !== false
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${svc.active !== false ? 'bg-emerald-500' : 'bg-gray-400'}`} />
                           {svc.active !== false ? 'Active' : 'Inactive'}
-                          </span>
-                        </label>
+                        </button>
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
+                      <td className="py-3 px-4 text-right">
+                        <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => startEditService(svc)}
-                            className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                            className="rounded-md px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
                           >
                             Edit
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteService(svc.serviceType)}
-                            className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                            className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
                           >
                             Delete
                           </button>
@@ -2390,149 +2983,190 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
               </tbody>
             </table>
           </div>
+        </div>
         </section>
           )}
 
           {/* Open Requests Tab */}
           {activeTab === 'open' && (
-            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-            <div>
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Open Requests (claimable)
-                  </h2>
-                  <p className="text-sm text-gray-600 mt-1">Pool of new jobs you can accept.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="relative">
-                <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              <input
-                type="text"
-                value={openFilters.city}
-                onChange={(e) => setOpenFilters((prev) => ({ ...prev, city: e.target.value }))}
-                placeholder="Filter by city"
-                  className="pl-10 pr-4 py-2.5 rounded-lg border-2 border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:shadow-md"
-              />
+            <section className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex flex-col gap-1 mb-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-base font-semibold text-gray-900">Open requests</h2>
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <span className="hidden sm:inline">
+                      <span className="font-semibold text-gray-900">{openRequestInsights.total}</span> total
+                      {openRequestInsights.strongMatches > 0 && (
+                        <> · <span className="font-semibold text-emerald-700">{openRequestInsights.strongMatches}</span> strong match{openRequestInsights.strongMatches === 1 ? '' : 'es'}</>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={fetchOpenRequests}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      <svg className={`h-3.5 w-3.5 ${openLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Jobs you can claim · last refreshed {lastOpenRefreshAt ? formatRelative(lastOpenRefreshAt) : 'not yet'}
+                  {refreshNotice && <span className="ml-2 text-emerald-700 font-medium">· {refreshNotice}</span>}
+                </p>
               </div>
-              <span
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-800 sm:hidden"
-                title="Showing all cities by default"
-                aria-label="Showing all cities by default"
-              >
-                i
-              </span>
-              <span className="hidden items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 sm:inline-flex">
-                Showing all cities by default
-              </span>
-              <select
-                value={openFilters.serviceType}
-                onChange={(e) => setOpenFilters((prev) => ({ ...prev, serviceType: e.target.value }))}
-                className="px-4 py-2.5 rounded-lg border-2 border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-all shadow-sm hover:shadow-md"
-              >
-                <option value="all">All services</option>
-                {serviceOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-              <label className="inline-flex items-center gap-2 rounded-lg border-2 border-gray-200 px-3 py-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={openFilters.last24h}
-                  onChange={(e) => setOpenFilters((prev) => ({ ...prev, last24h: e.target.checked }))}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                Last 24h
-              </label>
-              <button
-                type="button"
-                onClick={() => setOpenFilters({ city: '', serviceType: 'all', last24h: false })}
-                className="px-4 py-2.5 rounded-lg border-2 border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Clear filters
-              </button>
-              <button
-                type="button"
-                onClick={fetchOpenRequests}
-                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold hover:from-gray-900 hover:to-black shadow-md hover:shadow-lg transition-all duration-300 flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                Apply
-              </button>
-            </div>
-          </div>
-          {(openFilters.city || openFilters.serviceType !== 'all' || openFilters.last24h) && (
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Active filters:</span>
-              {openFilters.city && (
-                <button
-                  type="button"
-                  onClick={() => setOpenFilters((prev) => ({ ...prev, city: '' }))}
-                  className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800"
-                >
-                  City: {openFilters.city} ×
-                </button>
+
+              {(() => {
+                // Build city suggestions from currently-loaded open requests plus
+                // the provider's own city so the dropdown always has something useful.
+                const seen = new Set<string>();
+                const citySuggestions: string[] = [];
+                const pushCity = (c?: string) => {
+                  const trimmed = (c || '').trim();
+                  if (!trimmed) return;
+                  const key = trimmed.toLowerCase();
+                  if (key === 'pending setup' || seen.has(key)) return;
+                  seen.add(key);
+                  citySuggestions.push(trimmed);
+                };
+                pushCity(localProvider?.city);
+                openRequests.forEach((req) => pushCity(req.city));
+                citySuggestions.sort((a, b) => a.localeCompare(b));
+
+                const applyFilterChange = (patch: Partial<typeof openFilters>) => {
+                  setOpenFilters((prev) => ({ ...prev, ...patch }));
+                };
+                // Auto-refresh on discrete filter changes (select / checkbox).
+                // The city text input debounces via the Apply button below.
+                const onServiceTypeChange = (v: string) => {
+                  applyFilterChange({ serviceType: v });
+                  window.setTimeout(fetchOpenRequests, 0);
+                };
+                const onLast24hChange = (v: boolean) => {
+                  applyFilterChange({ last24h: v });
+                  window.setTimeout(fetchOpenRequests, 0);
+                };
+                const onCitySelect = (v: string) => {
+                  applyFilterChange({ city: v });
+                  window.setTimeout(fetchOpenRequests, 0);
+                };
+
+                const hasAnyFilter =
+                  !!openFilters.city || openFilters.serviceType !== 'all' || openFilters.last24h;
+
+                return (
+                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+                    {/* City — text input + datalist so it's searchable AND a dropdown */}
+                    <div className="relative flex-1 min-w-[180px]">
+                      <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <input
+                        type="text"
+                        list="open-city-suggestions"
+                        value={openFilters.city}
+                        onChange={(e) => applyFilterChange({ city: e.target.value })}
+                        onBlur={fetchOpenRequests}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            fetchOpenRequests();
+                          }
+                        }}
+                        placeholder="Any city — type or choose"
+                        className="w-full pl-8 pr-8 py-1.5 rounded-md border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <datalist id="open-city-suggestions">
+                        {citySuggestions.map((c) => (
+                          <option key={c} value={c} />
+                        ))}
+                      </datalist>
+                    </div>
+
+                    {/* Quick city chips — fastest way to pick from known cities */}
+                    {citySuggestions.length > 0 && (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {citySuggestions.slice(0, 3).map((c) => {
+                          const selected = openFilters.city.trim().toLowerCase() === c.toLowerCase();
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => onCitySelect(selected ? '' : c)}
+                              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                                selected
+                                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                              }`}
+                            >
+                              {c}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <select
+                      value={openFilters.serviceType}
+                      onChange={(e) => onServiceTypeChange(e.target.value)}
+                      className="px-3 py-1.5 rounded-md border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="all">All services</option>
+                      {serviceOptions.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={openFilters.last24h}
+                        onChange={(e) => onLast24hChange(e.target.checked)}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      Last 24h
+                    </label>
+                    {hasAnyFilter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenFilters({ city: '', serviceType: 'all', last24h: false });
+                          window.setTimeout(fetchOpenRequests, 0);
+                        }}
+                        className="px-3 py-1.5 rounded-md text-xs font-medium text-gray-600 hover:bg-gray-200"
+                      >
+                        Clear
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={fetchOpenRequests}
+                      className="ml-auto px-3 py-1.5 rounded-md bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 inline-flex items-center gap-1.5"
+                    >
+                      <svg className={`w-3.5 h-3.5 ${openLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {openLoading ? 'Applying...' : 'Apply'}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {!providerSetupReady && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Add your city and at least one active service to receive better matches.</span>
+                </div>
               )}
-              {openFilters.serviceType !== 'all' && (
-                <button
-                  type="button"
-                  onClick={() => setOpenFilters((prev) => ({ ...prev, serviceType: 'all' }))}
-                  className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-800"
-                >
-                  Service: {openFilters.serviceType} ×
-                </button>
-              )}
-              {openFilters.last24h && (
-                <button
-                  type="button"
-                  onClick={() => setOpenFilters((prev) => ({ ...prev, last24h: false }))}
-                  className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800"
-                >
-                  Last 24h ×
-                </button>
-              )}
-            </div>
-          )}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-            <span>Last refreshed: {lastOpenRefreshAt ? formatDateTime(lastOpenRefreshAt) : 'not yet'}</span>
-            {refreshNotice && (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
-                {refreshNotice}
-              </span>
-            )}
-          </div>
-          <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total open</p>
-              <p className="text-lg font-bold text-gray-900">{openRequestInsights.total}</p>
-            </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Strong matches</p>
-              <p className="text-lg font-bold text-emerald-900">{openRequestInsights.strongMatches}</p>
-            </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">New requests</p>
-              <p className="text-lg font-bold text-amber-900">{openRequestInsights.newPool}</p>
-            </div>
-            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">City matches</p>
-              <p className="text-lg font-bold text-blue-900">{openRequestInsights.cityMatched}</p>
-            </div>
-          </div>
-          {!providerSetupReady && (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              Complete setup to improve request matching: add workshop city and enable at least one service.
-            </div>
-          )}
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2553,39 +3187,29 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                 </div>
               </div>
             ) : enrichedOpenRequests.length === 0 ? (
-              <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-amber-50/30 rounded-xl border-2 border-dashed border-gray-300">
+              <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                 <div className="flex flex-col items-center justify-center">
-                  <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-4">
-                    <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <p className="text-gray-700 font-semibold mb-1">No open requests right now.</p>
-                  <p className="text-sm text-gray-500 mb-4">Try clearing filters or checking the most recent pool.</p>
+                  <p className="text-sm font-medium text-gray-800 mb-1">No open requests right now</p>
+                  <p className="text-xs text-gray-500 mb-4">Try clearing filters or check back soon.</p>
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <button
                       type="button"
                       onClick={() => setOpenFilters({ city: '', serviceType: 'all', last24h: false })}
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                     >
-                      Show all services
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOpenFilters((prev) => ({ ...prev, last24h: true }))}
-                      className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
-                    >
-                      Last 24h
+                      Clear filters
                     </button>
                     <button
                       type="button"
                       onClick={loadSampleOpenRequests}
-                      className="text-sm font-semibold text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1"
+                      className="text-xs font-medium text-blue-700 hover:text-blue-800 hover:underline"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Add dummy open requests
+                      Load sample requests
                     </button>
                   </div>
                 </div>
@@ -2594,7 +3218,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
               enrichedOpenRequests.map((req) => (
                 <div
                   key={req.id}
-                  className="rounded-xl border-2 border-gray-200 bg-gradient-to-br from-white to-gray-50/60 p-5 shadow-sm transition-all duration-300 hover:border-blue-300 hover:shadow-lg"
+                  className="rounded-xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all"
                 >
                   <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3">
                     <div className="min-w-0 flex-1">
@@ -2612,7 +3236,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       type="button"
                       onClick={() => claimRequest(req.id)}
                       disabled={claimingId === req.id}
-                      className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-300 hover:from-blue-700 hover:to-blue-800 hover:shadow-lg disabled:opacity-60"
+                      className="inline-flex items-center gap-2 whitespace-nowrap rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors"
                     >
                       {claimingId === req.id ? (
                         <>
@@ -2731,71 +3355,54 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
 
           {/* My Requests Tab */}
           {activeTab === 'my-requests' && (
-            <section className="rounded-xl border border-gray-200 bg-slate-50/60 p-6 shadow-lg">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-            <div>
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    My Requests
-                  </h2>
-                  <p className="text-sm text-gray-600 mt-1">Manage jobs you have claimed.</p>
-            </div>
-          </div>
+            <section className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">My requests</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {myRequestStats.total} total
+                    {myRequestStats.inProgress > 0 && <> · <span className="text-amber-700 font-medium">{myRequestStats.inProgress} in progress</span></>}
+                    {myRequestStats.overdue > 0 && <> · <span className="text-red-700 font-medium">{myRequestStats.overdue} overdue</span></>}
+                  </p>
+                </div>
+              </div>
 
-          <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total</p>
-              <p className="text-lg font-bold text-gray-900">{myRequestStats.total}</p>
-            </div>
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">Accepted</p>
-              <p className="text-lg font-bold text-indigo-900">{myRequestStats.accepted}</p>
-            </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">In Progress</p>
-              <p className="text-lg font-bold text-amber-900">{myRequestStats.inProgress}</p>
-            </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Completed Today</p>
-              <p className="text-lg font-bold text-emerald-900">{myRequestStats.completedToday}</p>
-            </div>
-          </div>
-
-          <div className="sticky top-16 z-10 mb-6 -mx-1 rounded-xl border border-gray-200 bg-white/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/75">
-            <div className="flex gap-2 flex-wrap">
-              {[
-                { key: 'all', label: 'All', count: myRequestStats.total },
-                { key: 'accepted', label: 'Accepted', count: myRequestStats.accepted },
-                { key: 'in_progress', label: 'In Progress', count: myRequestStats.inProgress },
-                { key: 'completed', label: 'Completed', count: requests.filter((r) => r.status === 'completed').length },
-                { key: 'cancelled', label: 'Cancelled', count: requests.filter((r) => r.status === 'cancelled').length },
-                { key: 'due_today', label: 'Due Today', count: myRequestStats.dueToday },
-                { key: 'overdue', label: 'Overdue', count: myRequestStats.overdue },
-              ].map((status) => (
-                <button
-                  key={status.key}
-                  type="button"
-                  onClick={() => setStatusFilter(status.key as RequestStatus | 'all' | 'due_today' | 'overdue')}
-                  className={`inline-flex items-center gap-2 rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-300 ${
-                    statusFilter === status.key
-                      ? 'border-blue-600 bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                      : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
-                  }`}
-                >
-                  {status.label}
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs ${
-                      statusFilter === status.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
-                    }`}
-                  >
-                    {status.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
+              <div className="sticky top-16 z-10 mb-5 -mx-5 px-5 py-3 bg-white border-b border-gray-100">
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    { key: 'all', label: 'All', count: myRequestStats.total },
+                    { key: 'accepted', label: 'Accepted', count: myRequestStats.accepted },
+                    { key: 'in_progress', label: 'In progress', count: myRequestStats.inProgress },
+                    { key: 'completed', label: 'Completed', count: requests.filter((r) => r.status === 'completed').length },
+                    { key: 'cancelled', label: 'Cancelled', count: requests.filter((r) => r.status === 'cancelled').length },
+                    { key: 'due_today', label: 'Due today', count: myRequestStats.dueToday },
+                    { key: 'overdue', label: 'Overdue', count: myRequestStats.overdue },
+                  ].map((status) => {
+                    const isActive = statusFilter === status.key;
+                    return (
+                      <button
+                        key={status.key}
+                        type="button"
+                        onClick={() => setStatusFilter(status.key as RequestStatus | 'all' | 'due_today' | 'overdue')}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                          isActive
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {status.label}
+                        <span
+                          className={`tabular-nums ${
+                            isActive ? 'text-white/80' : 'text-gray-500'
+                          }`}
+                        >
+                          {status.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2816,51 +3423,59 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                 </div>
               </div>
             ) : filteredRequests.length === 0 ? (
-              <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-blue-50/30 rounded-xl border-2 border-dashed border-gray-300">
+              <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                 <div className="flex flex-col items-center justify-center">
-                  <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mb-4">
-                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-3">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                   </div>
-                  <p className="text-gray-700 font-semibold mb-1">
+                  <p className="text-sm font-medium text-gray-800 mb-1">
                     {statusFilter === 'all'
-                      ? 'No requests yet.'
+                      ? 'No requests yet'
                       : statusFilter === 'due_today'
-                      ? 'No requests due today.'
+                      ? 'No requests due today'
                       : statusFilter === 'overdue'
-                      ? 'No overdue requests.'
-                      : `No ${String(statusFilter).replace('_', ' ')} requests.`}
+                      ? 'No overdue requests'
+                      : `No ${String(statusFilter).replace('_', ' ')} requests`}
                   </p>
-                  <p className="text-sm text-gray-500 mb-4">
+                  <p className="text-xs text-gray-500 mb-4">
                     {statusFilter === 'all'
-                      ? 'Start by claiming requests from the open pool.'
-                      : 'Try another filter or switch to all requests.'}
+                      ? 'Claim requests from the open pool to get started.'
+                      : 'Try another filter or view all requests.'}
                   </p>
-                  {statusFilter !== 'all' && (
+                  <div className="flex items-center gap-2">
+                    {statusFilter !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setStatusFilter('all')}
+                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        View all
+                      </button>
+                    )}
+                    {statusFilter === 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('open')}
+                        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                      >
+                        Browse open requests
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setStatusFilter('all')}
-                      className="mb-3 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                      onClick={loadSampleMyRequests}
+                      className="text-xs font-medium text-gray-500 hover:text-gray-700 hover:underline"
                     >
-                      View all requests
+                      Load samples
                     </button>
-                  )}
-                <button
-                  type="button"
-                  onClick={loadSampleMyRequests}
-                    className="text-sm font-semibold text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1"
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  Add dummy my requests
-                </button>
+                  </div>
                 </div>
               </div>
             ) : (
               filteredRequests.map((req) => (
-                <div key={req.id} className="rounded-xl border-2 border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:border-blue-300 hover:shadow-lg">
+                <div key={req.id} className="rounded-xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all">
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -2879,7 +3494,7 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {req.status !== 'cancelled' && (
+                      {req.status !== 'cancelled' && req.status !== 'completed' && (
                         <button
                           type="button"
                           onClick={() =>
@@ -2892,19 +3507,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                                 : req.status
                             )
                           }
-                          className={`rounded-lg px-4 py-2 text-xs font-semibold text-white ${
-                            req.status === 'accepted'
-                              ? 'bg-indigo-600 hover:bg-indigo-700'
-                              : req.status === 'in_progress'
-                              ? 'bg-emerald-600 hover:bg-emerald-700'
-                              : 'bg-gray-600 hover:bg-gray-700'
-                          }`}
+                          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                         >
-                          {req.status === 'accepted'
-                            ? 'Start Job'
-                            : req.status === 'in_progress'
-                            ? 'Mark Complete'
-                            : 'View Summary'}
+                          {req.status === 'accepted' ? 'Start job' : 'Mark complete'}
                         </button>
                       )}
                       {req.status === 'cancelled' && (
@@ -2912,32 +3517,28 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                           type="button"
                           onClick={() => deleteCancelledRequest(req.id)}
                           disabled={deletingId === req.id}
-                          className="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-md px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
                         >
-                          {deletingId === req.id ? 'Deleting...' : 'Delete'}
+                          {deletingId === req.id ? 'Deleting…' : 'Delete'}
                         </button>
                       )}
-                      <select
-                        value={req.status}
-                        onChange={(e) => updateStatus(req.id, e.target.value as RequestStatus)}
-                        disabled={
-                          deletingId === req.id ||
-                          req.status === 'cancelled' ||
-                          req.status === 'completed'
-                        }
-                        className="rounded-lg border-2 border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:shadow-md focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
-                      >
-                        {(req.status === 'accepted'
-                          ? statusOptions.filter((opt) => ['accepted', 'in_progress'].includes(opt.value))
-                          : req.status === 'in_progress'
-                          ? statusOptions.filter((opt) => ['in_progress', 'completed'].includes(opt.value))
-                          : statusOptions.filter((opt) => opt.value === req.status)
-                        ).map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
+                      {req.status !== 'completed' && req.status !== 'cancelled' && (
+                        <select
+                          value={req.status}
+                          onChange={(e) => updateStatus(req.id, e.target.value as RequestStatus)}
+                          disabled={deletingId === req.id}
+                          className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+                        >
+                          {(req.status === 'accepted'
+                            ? statusOptions.filter((opt) => ['accepted', 'in_progress'].includes(opt.value))
+                            : statusOptions.filter((opt) => ['in_progress', 'completed'].includes(opt.value))
+                          ).map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   </div>
 

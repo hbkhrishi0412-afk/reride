@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { TFunction } from 'i18next';
 import type { MobileFilterCategoryId } from './mobileFilterTypes.js';
 
@@ -36,37 +37,51 @@ export const MobileMarketplaceFilterModal: React.FC<MobileMarketplaceFilterModal
   footer,
   t,
 }) => {
+  // Ensure the portal target exists (only on the client).
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    setPortalTarget(document.body);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     const body = document.body;
     if (!body) return;
     const prevOverflow = body.style.overflow;
-    const prevPosition = body.style.position;
-    const prevWidth = body.style.width;
     body.style.overflow = 'hidden';
-    body.style.position = 'fixed';
-    body.style.width = '100%';
     return () => {
       body.style.overflow = prevOverflow;
-      body.style.position = prevPosition;
-      body.style.width = prevWidth;
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !portalTarget) return null;
 
-  return (
-    <>
+  // Rendered through a portal to document.body so the modal escapes the
+  // `.native-app` / `.native-scroll` transform trap (transform creates a new
+  // containing block for fixed-position descendants AND a stacking context,
+  // which was clipping the modal to the scrollable <main> region and letting
+  // the bottom nav paint on top of it).
+  const modal = (
+    <div
+      className="mobile-marketplace-filter-modal-root"
+      style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+    >
       <div
-        className="fixed inset-0 z-[9998] bg-black/45"
+        className="fixed inset-0 bg-black/45"
+        style={{ zIndex: 9998 }}
         aria-hidden="true"
         onClick={onClose}
         onKeyDown={(e) => e.key === 'Escape' && onClose()}
         role="presentation"
       />
       <div
-        className="fixed inset-0 z-[9999] flex flex-col bg-white"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0)' }}
+        className="fixed inset-0 flex flex-col bg-white"
+        style={{
+          zIndex: 9999,
+          paddingBottom: 'env(safe-area-inset-bottom, 0)',
+          paddingTop: 'env(safe-area-inset-top, 0)',
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="mobile-filter-dialog-title"
@@ -115,8 +130,10 @@ export const MobileMarketplaceFilterModal: React.FC<MobileMarketplaceFilterModal
         </div>
         <div className="shrink-0 bg-[#222222] border-t border-black/20 safe-bottom">{footer}</div>
       </div>
-    </>
+    </div>
   );
+
+  return createPortal(modal, portalTarget);
 };
 
 export default MobileMarketplaceFilterModal;

@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { TFunction } from 'i18next';
 
 export interface MobileSortSheetProps {
@@ -18,6 +19,12 @@ export const MobileSortSheet: React.FC<MobileSortSheetProps> = ({
   options,
   t,
 }) => {
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    setPortalTarget(document.body);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     const body = document.body;
@@ -29,19 +36,23 @@ export const MobileSortSheet: React.FC<MobileSortSheetProps> = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !portalTarget) return null;
 
-  return (
-    <>
+  // Portal to body so the sheet escapes the `.native-app` / `.native-scroll`
+  // transform containing-block (same fix as MobileMarketplaceFilterModal).
+  const sheet = (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9997 }}>
       <div
-        className="fixed inset-0 z-[9996] bg-black/50"
+        className="fixed inset-0 bg-black/50"
+        style={{ zIndex: 9996 }}
         onClick={onClose}
         onKeyDown={(e) => e.key === 'Escape' && onClose()}
         role="presentation"
         aria-hidden="true"
       />
       <div
-        className="fixed left-0 right-0 bottom-0 z-[9997] bg-white rounded-t-2xl shadow-2xl max-h-[70vh] flex flex-col safe-bottom"
+        className="fixed left-0 right-0 bottom-0 bg-white rounded-t-2xl shadow-2xl max-h-[70vh] flex flex-col safe-bottom"
+        style={{ zIndex: 9997 }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="mobile-sort-title"
@@ -86,8 +97,10 @@ export const MobileSortSheet: React.FC<MobileSortSheetProps> = ({
           })}
         </ul>
       </div>
-    </>
+    </div>
   );
+
+  return createPortal(sheet, portalTarget);
 };
 
 export default MobileSortSheet;

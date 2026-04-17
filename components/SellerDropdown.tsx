@@ -57,7 +57,7 @@ const SellerDropdown: React.FC<SellerDropdownProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-2.5 text-sm font-semibold leading-none text-gray-700 transition-colors hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 lg:px-3.5"
+        className="inline-flex h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl px-4 text-[15px] font-semibold text-gray-700 transition-all duration-300 hover:-translate-y-0.5 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600"
       >
         {t('nav.sellCar')}
         <svg 

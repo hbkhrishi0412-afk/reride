@@ -50,13 +50,36 @@ export const HOME_DISCOVERY_CATEGORIES = [
   },
 ] as const;
 
-/** Circular city tiles on mobile — gradient keyed by display name for stable theming. */
+/**
+ * Mobile city-card gradients — intentionally LIGHT (pastel) so the dark
+ * monument silhouette and bold city abbreviation read with high contrast,
+ * like a travel-app postcard. Previous dark gradients were swallowing the
+ * white monument overlay; flipping to pastel bg + dark foreground makes the
+ * silhouette the visual star of the card.
+ */
 export const HOME_MOBILE_CITY_GRADIENT: Record<HomeDiscoveryCityName, string> = {
-  'Delhi NCR': 'linear-gradient(135deg, #A855F7 0%, #9333EA 50%, #7C3AED 100%)',
-  Hyderabad: 'linear-gradient(135deg, #EC4899 0%, #F43F5E 50%, #DC2626 100%)',
-  Bangalore: 'linear-gradient(135deg, #4ADE80 0%, #10B981 50%, #14B8A6 100%)',
-  Pune: 'linear-gradient(135deg, #8B5CF6 0%, #9333EA 50%, #D946EF 100%)',
-  Mumbai: 'linear-gradient(135deg, #F97316 0%, #EA580C 50%, #DC2626 100%)',
+  'Delhi NCR': 'linear-gradient(135deg, #F3E8FF 0%, #E9D5FF 45%, #DDD6FE 100%)',
+  Hyderabad: 'linear-gradient(135deg, #FFE4E6 0%, #FECDD3 45%, #FECACA 100%)',
+  Bangalore: 'linear-gradient(135deg, #DCFCE7 0%, #BBF7D0 45%, #A7F3D0 100%)',
+  Pune: 'linear-gradient(135deg, #F5E8FF 0%, #E9D5FF 45%, #FAE8FF 100%)',
+  Mumbai: 'linear-gradient(135deg, #FFF1E0 0%, #FFE0C0 45%, #FED7AA 100%)',
+};
+
+/**
+ * Solid + soft accents for each city, used in the redesigned mobile location
+ * cards (count chip background and the soft tinted footer/border). Picked from
+ * the same hue family as `HOME_MOBILE_CITY_GRADIENT` so the card reads as a
+ * single coordinated unit.
+ */
+export const HOME_MOBILE_CITY_ACCENT: Record<
+  HomeDiscoveryCityName,
+  { solid: string; soft: string; ring: string }
+> = {
+  'Delhi NCR': { solid: '#7C3AED', soft: '#F3E8FF', ring: 'rgba(124, 58, 237, 0.18)' },
+  Hyderabad: { solid: '#E11D48', soft: '#FFE4E6', ring: 'rgba(225, 29, 72, 0.18)' },
+  Bangalore: { solid: '#0F9D72', soft: '#D1FAE5', ring: 'rgba(15, 157, 114, 0.18)' },
+  Pune: { solid: '#9333EA', soft: '#F5E8FF', ring: 'rgba(147, 51, 234, 0.18)' },
+  Mumbai: { solid: '#EA580C', soft: '#FFEDD5', ring: 'rgba(234, 88, 12, 0.18)' },
 };
 
 /** Desktop “Explore by location” pill gradients (Tailwind). */

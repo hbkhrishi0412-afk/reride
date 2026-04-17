@@ -11,6 +11,7 @@ import { supabaseServiceProviderService } from '../services/supabase-service-pro
 import { getSupabaseAdminClient } from '../lib/supabase.js';
 import { verifySupabaseToken } from '../server/supabase-auth.js';
 import { readVehicleCatalogFromSupabase, writeVehicleCatalogToSupabase } from '../lib/vehicleCatalogSupabase.js';
+import { sendInquiryNotificationToSeller } from '../lib/email.js';
 // Supabase admin database utilities (replaces Firebase admin functions)
 import { 
   adminRead, 
@@ -1850,7 +1851,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             name,
             email: normalizedEmail,
             phone: '0000000000',
-            city: 'Pending setup',
+            city: '',
             workshops: [],
             skills: [],
             availability: 'weekdays',
@@ -1880,7 +1881,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
             email: normalizedEmail,
             mobile: provider.phone || '0000000000',
             role: 'service_provider',
-            location: provider.city || 'Pending setup',
+            location: provider.city && provider.city.toLowerCase() !== 'pending setup' ? provider.city : '',
             status: 'active',
             authProvider: 'google',
             firebaseUid: supabaseUserRecord.id,
@@ -4360,14 +4361,49 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     }
 
     if (action === 'boost') {
-      const { vehicleId, packageId } = req.body;
+      const {
+        vehicleId,
+        packageId,
+        razorpay_order_id: boostOrderId,
+        razorpay_payment_id: boostPaymentId,
+        razorpay_signature: boostSignature,
+      } = req.body;
       const vehicleIdNum = typeof vehicleId === 'string' ? parseInt(vehicleId, 10) : Number(vehicleId);
       const vehicle = await vehicleService.findById(vehicleIdNum);
-      
+
       if (!vehicle) {
         return res.status(404).json({ success: false, reason: 'Vehicle not found' });
       }
-      
+
+      // SECURITY: Only the vehicle's seller (or admin) may boost it.
+      const sellerEmailLower = String(vehicle.sellerEmail || '').toLowerCase().trim();
+      const authedEmailLower = String(auth.user?.email || '').toLowerCase().trim();
+      if (auth.user?.role !== 'admin' && sellerEmailLower && authedEmailLower !== sellerEmailLower) {
+        return res.status(403).json({ success: false, reason: 'You can only boost your own listings.' });
+      }
+
+      // REVENUE GATE: Require a verified Razorpay payment for this boost.
+      // Admins may bypass for manual promotions, otherwise we require signed payment proof.
+      if (auth.user?.role !== 'admin') {
+        const keySecret = process.env.RAZORPAY_KEY_SECRET;
+        if (!keySecret) {
+          return res.status(503).json({ success: false, reason: 'Boost payments are not configured. Please contact support.' });
+        }
+        if (!boostOrderId || !boostPaymentId || !boostSignature) {
+          return res.status(402).json({
+            success: false,
+            reason: 'Payment required. Please complete the Razorpay checkout before boosting.',
+            requiresPayment: true,
+          });
+        }
+        const expectedBoostSig = createHmac('sha256', keySecret)
+          .update(`${String(boostOrderId)}|${String(boostPaymentId)}`)
+          .digest('hex');
+        if (expectedBoostSig !== String(boostSignature)) {
+          return res.status(400).json({ success: false, reason: 'Invalid Razorpay signature for boost payment.' });
+        }
+      }
+
       // Add boost information if packageId is provided
       // packageId format is like "top_search_3", "homepage_spot", etc.
       // Extract type and duration from packageId
@@ -4419,7 +4455,36 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
         activeBoosts,
         isFeatured: true
       });
-      
+
+      // Record the boost payment (if any) so admins have a full audit trail.
+      if (boostPaymentId && boostOrderId) {
+        try {
+          const nowIso = new Date().toISOString();
+          const prId = `payment_boost_${Date.now()}`;
+          await adminCreate('payment_requests', {
+            id: prId,
+            sellerEmail: sellerEmailLower || authedEmailLower,
+            amount: Number(req.body.amount) || 0,
+            plan: 'boost',
+            planId: packageId || 'boost',
+            status: 'approved',
+            paymentMethod: 'razorpay',
+            transactionId: String(boostPaymentId),
+            razorpayOrderId: String(boostOrderId),
+            createdAt: nowIso,
+            requestedAt: nowIso,
+            updatedAt: nowIso,
+            reviewedAt: nowIso,
+            notes: `Boost for vehicle ${vehicleIdNum} (${boostType}, ${boostDuration}d)`,
+            vehicleId: vehicleIdNum,
+            boostType,
+            boostDuration,
+          }, String(prId));
+        } catch (paymentLogErr) {
+          logWarn('Failed to log boost payment:', paymentLogErr);
+        }
+      }
+
       const updatedVehicle = await vehicleService.findById(vehicleIdNum);
       return res.status(200).json({ success: true, vehicle: updatedVehicle });
     }
@@ -7190,9 +7255,56 @@ async function handlePayments(req: VercelRequest, res: VercelResponse, _options:
 
         await adminCreate(paymentRequestsPath, paymentRequest, String(id));
 
+        // Upgrade the seller's subscription plan immediately after a verified payment.
+        // Previously this only happened after an admin manually approved the payment_requests row,
+        // which meant paying sellers waited indefinitely for access. With a verified Razorpay
+        // signature we can safely activate the plan right here.
+        //
+        // IMPORTANT: Do NOT upgrade the user's subscription when the plan is actually a boost
+        // package – boosts use the same create-order endpoint but a different confirmation path
+        // (/api/vehicles?action=boost). If we ever receive one here, just record the payment.
+        let updatedUser: Record<string, unknown> | null = null;
+        const planLowerCandidate = planStr.toLowerCase();
+        const isBoostPlan = planLowerCandidate.startsWith('boost');
+        // Only allow the four known subscription tiers to land in the user row.
+        const ALLOWED_SUBSCRIPTION_PLANS = new Set(['free', 'pro', 'premium', 'basic']);
+        const isKnownPlan = ALLOWED_SUBSCRIPTION_PLANS.has(planLowerCandidate);
+        try {
+          const existingUser = (!isBoostPlan && isKnownPlan)
+            ? await userService.findByEmail(String(sellerEmail))
+            : null;
+          if (existingUser) {
+            const planLower = planLowerCandidate;
+            // Resolve plan duration – default to 30 days. Callers can override with `durationDays`.
+            const requestedDays = Number((b as Record<string, unknown>).durationDays);
+            const planDurationDays = Number.isFinite(requestedDays) && requestedDays > 0
+              ? Math.min(365, Math.floor(requestedDays))
+              : 30;
+            const expiry = new Date();
+            expiry.setDate(expiry.getDate() + planDurationDays);
+
+            const userUpdate: Record<string, unknown> = {
+              subscriptionPlan: planLower,
+              planExpiryDate: expiry.toISOString(),
+              planUpdatedAt: now,
+              lastPaymentId: String(razorpay_payment_id),
+            };
+            await userService.update(normSeller, userUpdate);
+            updatedUser = { ...(existingUser as unknown as Record<string, unknown>), ...userUpdate };
+          } else if (!isBoostPlan && !isKnownPlan) {
+            logWarn('confirm-razorpay-payment: unknown plan id, skipping user upgrade:', planStr);
+          } else if (!isBoostPlan) {
+            logWarn('confirm-razorpay-payment: seller not found in users table:', sellerEmail);
+          }
+        } catch (planUpgradeErr) {
+          logWarn('Failed to auto-upgrade plan after Razorpay confirm:', planUpgradeErr);
+          // We still return success for the payment itself; the admin can retroactively fix the user.
+        }
+
         return res.status(201).json({
           success: true,
           paymentRequest,
+          user: updatedUser,
         });
       } catch (error) {
         return res.status(500).json({
@@ -7726,7 +7838,28 @@ async function handleConversations(req: VercelRequest, res: VercelResponse, _opt
         } catch (notifErr) {
           console.warn('⚠️ API: Failed to create message notification (non-fatal):', notifErr);
         }
-        
+
+        // Fire-and-forget email notification to the seller for new customer inquiries.
+        // We only email sellers (not customer replies) to avoid noise, and skip if the
+        // sender is the seller themselves. Errors never block the API response.
+        try {
+          const isSellerRecipient = normalizedSellerId && recipientEmail === normalizedSellerId;
+          if (isSellerRecipient && recipientEmail) {
+            const vehicleTitle = String(conversation.vehicleName || 'your listing');
+            const preview = messageText.length > 140 ? messageText.substring(0, 140) + '…' : messageText;
+            void sendInquiryNotificationToSeller(
+              recipientEmail,
+              senderName || 'A buyer',
+              vehicleTitle,
+              preview || '(new message)',
+            ).catch((mailErr) => {
+              console.warn('⚠️ API: inquiry email failed (non-fatal):', mailErr);
+            });
+          }
+        } catch (mailErr) {
+          console.warn('⚠️ API: inquiry email dispatch failed (non-fatal):', mailErr);
+        }
+
         console.log('✅ API: Message added successfully:', { conversationId, messageId: message?.id, messageCount: updatedConversation.messages?.length });
         return res.status(200).json({ success: true, data: updatedConversation });
       } catch (error) {

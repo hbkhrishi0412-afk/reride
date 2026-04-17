@@ -61,11 +61,22 @@ export const getOptimizedImageUrl = (url: string, width?: number, quality: numbe
     return `${url}${sep}${params.join('&')}`;
   }
 
-  // Supabase: on-the-fly transforms use `/storage/v1/render/image/public/...` (Pro+).
-  // Appending width/format/resize query params to `/object/public/...` URLs does not
-  // serve transformed files and often 404s or errors on Free tier — use the raw public URL.
+  // Supabase: on-the-fly transforms live at `/storage/v1/render/image/public/...`
+  // (Pro+ or projects with image transformations enabled). Rewrite the raw
+  // `/object/public/...` URL to the render endpoint only when a width was
+  // requested — without this, cards would always download the full-size
+  // original (e.g. a 425 KB PNG for the 2023 Toyota Innova hero), which can
+  // stall/fail on slower connections and render as a blank gray tile while
+  // lighter WebP siblings load fine. LazyImage falls back to the raw object
+  // URL on error if transforms are not enabled for the project.
   if (url.includes('supabase.co') && url.includes('/storage/v1/object/public/')) {
-    return url.split('?')[0];
+    const raw = url.split('?')[0];
+    if (!width) return raw;
+    const rendered = raw.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
+    const params: string[] = [`width=${width}`];
+    if (quality) params.push(`quality=${quality}`);
+    params.push('resize=contain');
+    return `${rendered}?${params.join('&')}`;
   }
   // Already a render/transform URL — avoid double-appending params
   if (url.includes('supabase.co') && url.includes('/storage/v1/render/image/public/')) {
@@ -160,18 +171,25 @@ export function rewriteRootRelativeMediaUrlForPackagedApp(url: string): string {
 }
 
 /**
- * Checks if an image URL is from a known placeholder service that returns random images
+ * Checks if an image URL is from a known placeholder service that returns random/unusable images.
+ *
+ * Note: `picsum.photos` is intentionally NOT filtered here — the mock/seed data
+ * (localStorage/reRideVehicles.json, FALLBACK_VEHICLES, dev-api-server, etc.) uses
+ * deterministic `picsum.photos/seed/<slug>/800/600` URLs as legitimate demo images.
+ * Treating them as placeholders caused demo listings (e.g. the 2023 Toyota Innova in
+ * Ahmedabad, seed "ToyotaInnova27") to render as "No image" on the home carousel.
+ *
+ * Similarly `unsplash.com` proper (e.g. `images.unsplash.com/photo-<id>`) returns
+ * specific deterministic images — only `source.unsplash.com/...` returns random
+ * content, so we filter only that.
  * @param url - The image URL to check
  * @returns true if the URL is from a placeholder service
  */
 const isPlaceholderService = (url: string): boolean => {
   if (!url || typeof url !== 'string') return false;
   const lowerUrl = url.toLowerCase();
-  // List of known placeholder services that return random images
-  return lowerUrl.includes('unsplash.com') || 
-         lowerUrl.includes('picsum.photos') || 
+  return lowerUrl.includes('via.placeholder.com') ||
          lowerUrl.includes('placeholder.com') ||
-         lowerUrl.includes('via.placeholder.com') ||
          lowerUrl.includes('loremflickr.com') ||
          lowerUrl.includes('source.unsplash.com');
 };

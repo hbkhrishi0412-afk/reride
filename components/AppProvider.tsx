@@ -31,6 +31,8 @@ import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
 import { deduplicateRequest } from '../utils/requestDeduplication';
 import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';
 import * as buyerService from '../services/buyerService';
+import { createSafetyReport } from '../services/trustSafetyService';
+import { addLocalRecentId } from '../utils/recentlyViewed';
 import { useSupabaseRealtime } from '../hooks/useSupabaseRealtime';
 import { sanitizePersistedChatMessage, supabaseRowToConversation } from '../services/supabase-conversation-service';
 import { emailToKey } from '../services/supabase-user-service';
@@ -435,7 +437,7 @@ interface AppContextType {
   toggleTyping: (conversationId: string, isTyping: boolean) => void;
   flagContent: (type: 'vehicle' | 'conversation', id: number | string, reason?: string) => void;
   updateUser: (email: string, updates: Partial<User>) => Promise<void>;
-  deleteUser: (email: string) => void;
+  deleteUser: (email: string) => Promise<void>;
   updateVehicle: (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => Promise<void>;
   deleteVehicle: (id: number) => void;
   selectVehicle: (vehicle: Vehicle) => void;
@@ -600,10 +602,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const currentUserRef = useRef<User | null>(null);
   currentUserRef.current = currentUser;
-  const [comparisonList, setComparisonList] = useState<number[]>([]);
-  const [ratings, setRatings] = useState<{ [key: string]: number[] }>({});
-  const [sellerRatings, setSellerRatings] = useState<{ [key: string]: number[] }>({});
-  const [wishlist, setWishlist] = useState<number[]>([]);
+  const [comparisonList, setComparisonList] = useState<number[]>(() => {
+    try {
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
+      const stored = localStorage.getItem('reride_comparison_list');
+      const parsed = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed.filter((n: unknown) => typeof n === 'number') : [];
+    } catch { return []; }
+  });
+  const [ratings, setRatings] = useState<{ [key: string]: number[] }>(() => {
+    try {
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') return {};
+      const stored = localStorage.getItem('vehicleRatings');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+  const [sellerRatings, setSellerRatings] = useState<{ [key: string]: number[] }>(() => {
+    try {
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') return {};
+      const stored = localStorage.getItem('sellerRatings');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+  const [wishlist, setWishlist] = useState<number[]>(() => {
+    try {
+      if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
+      const stored = localStorage.getItem('reride_wishlist');
+      const parsed = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed.filter((n: unknown) => typeof n === 'number') : [];
+    } catch { return []; }
+  });
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [toasts, setToasts] = useState<ToastType[]>([]);
   const [forgotPasswordRole, setForgotPasswordRole] = useState<'customer' | 'seller' | null>(null);
@@ -630,6 +658,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [vehicles]);
   const [initialSearchQuery, setInitialSearchQuery] = useState<string>('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  // Persist wishlist / comparison / ratings to localStorage so they survive refresh.
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        localStorage.setItem('reride_wishlist', JSON.stringify(wishlist || []));
+      }
+    } catch (error) { logWarn('Failed to persist wishlist:', error); }
+  }, [wishlist]);
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        localStorage.setItem('reride_comparison_list', JSON.stringify(comparisonList || []));
+      }
+    } catch (error) { logWarn('Failed to persist comparison list:', error); }
+  }, [comparisonList]);
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        localStorage.setItem('vehicleRatings', JSON.stringify(ratings || {}));
+      }
+    } catch (error) { logWarn('Failed to persist ratings:', error); }
+  }, [ratings]);
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        localStorage.setItem('sellerRatings', JSON.stringify(sellerRatings || {}));
+      }
+    } catch (error) { logWarn('Failed to persist seller ratings:', error); }
+  }, [sellerRatings]);
   const [userLocation, setUserLocationState] = useState<string>(() => {
     if (typeof window === 'undefined' || typeof localStorage === 'undefined') return 'Mumbai';
     try {
@@ -870,6 +928,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveChat(null);
       setComparisonList([]);
       setWishlist([]);
+      try {
+        localStorage.removeItem('reride_wishlist');
+        localStorage.removeItem('reride_comparison_list');
+      } catch { /* ignore storage errors */ }
       
       // Navigate to home
       setCurrentView(View.HOME);
@@ -1004,7 +1066,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           name: (userForSession.name && String(userForSession.name).trim()) || 'Service provider',
           email: userForSession.email,
           phone: userForSession.mobile || '',
-          city: loc || 'Pending setup',
+          city: loc || '',
         };
         window.dispatchEvent(new CustomEvent('reride:service-provider-oauth', { detail }));
       } catch {
@@ -1203,9 +1265,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 mobile: String(p.phone ?? (session.user.phone as string) ?? ''),
                 role: 'service_provider',
                 location:
-                  typeof p.city === 'string' && p.city.trim()
+                  typeof p.city === 'string' && p.city.trim() && p.city.trim().toLowerCase() !== 'pending setup'
                     ? p.city.trim()
-                    : 'Pending setup',
+                    : '',
                 status: 'active',
                 createdAt: new Date().toISOString(),
                 authProvider: isGoogleProvider ? 'google' : session.user.phone ? 'phone' : 'email',
@@ -1308,7 +1370,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               name: (user.name && String(user.name).trim()) || 'Service provider',
               email: user.email,
               phone: user.mobile || '',
-              city: loc || 'Pending setup',
+              city: loc || '',
             },
           }),
         );
@@ -5722,6 +5784,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           conv && conv.id === id ? { ...conv, isFlagged: true, flagReason: reason } : conv
         ) : []);
       }
+
+      // Persist the report so admins/moderators can review it.
+      try {
+        const reportedBy = currentUser?.email || 'anonymous';
+        const targetType = type === 'vehicle' ? 'vehicle' : 'conversation';
+        createSafetyReport(reportedBy, targetType, id, 'other', reason || 'No reason provided');
+      } catch (error) {
+        logWarn('Failed to persist safety report:', error);
+      }
+
+      // Best-effort: also notify the server so the report survives cross-device.
+      // Endpoint may not exist in all environments; we swallow 404/network errors.
+      try {
+        void fetch('/api/content-reports', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(getAuthHeaders() || {}) },
+          body: JSON.stringify({
+            reportedBy: currentUser?.email || 'anonymous',
+            targetType: type,
+            targetId: id,
+            reason: reason || 'No reason provided',
+            createdAt: new Date().toISOString(),
+          }),
+        }).catch(() => { /* ignore network errors */ });
+      } catch { /* ignore */ }
+
+      // Audit log
+      try {
+        const actor = currentUser?.name || currentUser?.email || 'Anonymous';
+        const entry = logAction(actor, 'Flag Content', String(id), `Flagged ${type}${reason ? ': ' + reason : ''}`);
+        setAuditLog(prev => [entry, ...prev]);
+      } catch { /* ignore */ }
+
       addToast(t('toast.contentFlagged', { reasonSuffix: reason ? ': ' + reason : '' }), 'warning');
     },
     updateUser: async (email: string, updates: Partial<User>) => {
@@ -6046,19 +6141,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Don't show generic toast - inner catch already showed specific error message
       }
     },
-    deleteUser: (email: string) => {
+    deleteUser: async (email: string) => {
       const user = Array.isArray(users) ? users.find(u => u.email === email) : undefined;
-      
-      // Log audit entry for user deletion
       const actor = currentUser?.name || currentUser?.email || 'System';
       const userInfo = user ? `${user.name} (${user.email})` : email;
-      const entry = logAction(actor, 'Delete User', email, `Deleted user: ${userInfo}`);
-      setAuditLog(prev => [entry, ...prev]);
-      
-      const nextUsers = Array.isArray(users) ? users.filter(user => user && user.email !== email) : [];
-      setUsers(nextUsers);
-      syncAllUserCaches(nextUsers);
-      addToast(t('toast.userDeletedSuccess'), 'success');
+
+      try {
+        const { deleteUser: deleteUserApi } = await import('../services/userService');
+        const result = await deleteUserApi(email);
+        if (!result?.success) {
+          addToast(t('toast.deleteUserFailed') || 'Failed to delete user', 'error');
+          return;
+        }
+
+        const entry = logAction(actor, 'Delete User', email, `Deleted user: ${userInfo}`);
+        setAuditLog(prev => [entry, ...prev]);
+
+        const nextUsers = Array.isArray(users) ? users.filter(user => user && user.email !== email) : [];
+        setUsers(nextUsers);
+        syncAllUserCaches(nextUsers);
+        addToast(t('toast.userDeletedSuccess'), 'success');
+      } catch (error) {
+        logError('Failed to delete user via API:', error);
+        addToast(t('toast.deleteUserFailed') || 'Failed to delete user. Please try again.', 'error');
+      }
     },
     updateVehicle: async (id: number, updates: Partial<Vehicle>, options?: VehicleUpdateOptions) => {
       await updateVehicleHandler(id, updates, options);
@@ -6126,6 +6232,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           logWarn('Failed to track recently viewed vehicle:', error);
         });
       }
+
+      // Also record in a local, anon-friendly list so the mobile home page
+      // can show a "Continue browsing" strip for logged-out visitors too.
+      addLocalRecentId(idNum);
       
       // CRITICAL: Store vehicle in sessionStorage FIRST (synchronous, immediate)
       // This ensures the vehicle is available even if state update is delayed

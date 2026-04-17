@@ -3,6 +3,7 @@ import type { Conversation } from '../types';
 import InlineChat from './InlineChat';
 import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
+import { createSafetyReport } from '../services/trustSafetyService';
 
 interface DashboardMessagesProps {
   conversations: Conversation[];
@@ -208,7 +209,32 @@ const DashboardMessages: React.FC<DashboardMessagesProps> = memo(({
               onUserStoppedTyping={onUserStoppedTyping}
               uploaderEmail={sellerEmail ?? undefined}
               onMarkMessagesAsRead={onMarkMessagesAsRead}
-              onFlagContent={() => {}}
+              onFlagContent={(type, id, reason) => {
+                try {
+                  createSafetyReport(
+                    sellerEmail || 'anonymous',
+                    type === 'vehicle' ? 'vehicle' : 'conversation',
+                    id,
+                    'other',
+                    reason || 'No reason provided',
+                  );
+                } catch (e) {
+                  console.warn('Failed to save safety report:', e);
+                }
+                try {
+                  void fetch('/api/content-reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      reportedBy: sellerEmail || 'anonymous',
+                      targetType: type,
+                      targetId: id,
+                      reason: reason || 'No reason provided',
+                      createdAt: new Date().toISOString(),
+                    }),
+                  }).catch(() => { /* ignore network errors */ });
+                } catch { /* ignore */ }
+              }}
               onOfferResponse={onOfferResponse}
               height="h-96"
             />

@@ -129,32 +129,38 @@ const MobileHeader: React.FC<MobileHeaderProps> = ({
           <div className="flex items-center gap-2">
             {rightAction || (
               <>
-                {/* Search Icon */}
-                <button
-                  onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                  className="p-2 rounded-full active:scale-95 native-transition"
-                  style={{ 
-                    minWidth: '44px', 
-                    minHeight: '44px',
-                    background: 'rgba(0, 0, 0, 0.04)',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)'
-                  }}
-                  aria-label="Search"
-                  data-testid="mobile-search-button"
-                >
-                  <svg 
-                    className="w-6 h-6" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24" 
-                    strokeWidth={2.5}
-                    style={{ 
-                    color: isGradientView ? '#FFFFFF' : '#1A1A1A'
-                  }}
+                {/* Search Icon — shortcut to Browse Cars for screens that
+                    don't have their own search bar. Hidden on USED_CARS /
+                    RENTAL because the page already renders a full-width
+                    search input in the body, so showing a second glass icon
+                    in the header is confusing ("why two search options?"). */}
+                {currentView !== ViewEnum.USED_CARS && currentView !== ViewEnum.RENTAL && (
+                  <button
+                    onClick={() => onNavigate(ViewEnum.USED_CARS)}
+                    className="p-2 rounded-full active:scale-95 native-transition"
+                    style={{
+                      minWidth: '44px',
+                      minHeight: '44px',
+                      background: 'rgba(0, 0, 0, 0.04)',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)'
+                    }}
+                    aria-label="Search"
+                    data-testid="mobile-search-button"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </button>
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      strokeWidth={2.5}
+                      style={{
+                        color: isGradientView ? '#FFFFFF' : '#1A1A1A'
+                      }}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </button>
+                )}
 
                 {/* Notifications Icon */}
                 {currentUser && (

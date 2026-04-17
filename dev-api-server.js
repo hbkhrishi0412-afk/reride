@@ -1376,7 +1376,7 @@ app.post('/api/users', (req, res) => {
         name: displayName,
         email: normalizedEmail,
         phone: '0000000000',
-        city: 'Pending setup',
+        city: '',
         workshops: [],
         skills: [],
         availability: 'weekdays',
@@ -1412,7 +1412,7 @@ app.get('/api/service-providers', (req, res) => {
           : 'Service Provider'),
       email: jwtSession?.email || `${uid}@example.com`,
       phone: jwtSession?.phone || '0000000000',
-      city: 'Pending setup',
+      city: '',
       workshops: [],
       skills: [],
       availability: 'weekdays',
@@ -1424,6 +1424,34 @@ app.get('/api/service-providers', (req, res) => {
 });
 
 // --- Provider Services (dev mock) ---
+// Normalize sub-service (included service) rows so empty/invalid entries are
+// dropped and prices/ETAs are coerced to numbers. Mirrors api/provider-services.ts.
+function normalizeIncludedServices(input) {
+  if (!Array.isArray(input)) return [];
+  const result = [];
+  input.forEach((entry, idx) => {
+    const raw = entry || {};
+    const id = String(raw.id || '').trim() || `line-${idx + 1}`;
+    const name = String(raw.name || '').trim();
+    if (!name) return;
+    const normalized = {
+      id,
+      name,
+      active: raw.active !== false,
+    };
+    if (raw.price != null) {
+      const p = Number(raw.price);
+      if (Number.isFinite(p)) normalized.price = p;
+    }
+    if (raw.etaMinutes != null) {
+      const e = Number(raw.etaMinutes);
+      if (Number.isFinite(e)) normalized.etaMinutes = e;
+    }
+    result.push(normalized);
+  });
+  return result;
+}
+
 app.get('/api/provider-services', (req, res) => {
   const scope = req.query.scope || 'mine';
   const uid = getDevUid(req);
@@ -1434,6 +1462,7 @@ app.get('/api/provider-services', (req, res) => {
         providerId: pid,
         serviceType,
         ...payload,
+        includedServices: Array.isArray(payload.includedServices) ? payload.includedServices : [],
       }))
     );
     return res.json(flattened);
@@ -1441,7 +1470,11 @@ app.get('/api/provider-services', (req, res) => {
 
   if (scope === 'mine') {
     const mine = mockProviderServices[uid] || {};
-    const list = Object.entries(mine).map(([serviceType, payload]) => ({ serviceType, ...payload }));
+    const list = Object.entries(mine).map(([serviceType, payload]) => ({
+      serviceType,
+      ...payload,
+      includedServices: Array.isArray(payload.includedServices) ? payload.includedServices : [],
+    }));
     return res.json(list);
   }
 
@@ -1450,20 +1483,31 @@ app.get('/api/provider-services', (req, res) => {
 
 app.patch('/api/provider-services', (req, res) => {
   const uid = getDevUid(req);
-  const { serviceType, price, description = '', etaMinutes, active = true } = req.body || {};
+  const { serviceType, price, description, etaMinutes, active = true, includedServices } = req.body || {};
   if (!serviceType) return res.status(400).json({ error: 'Missing serviceType' });
   if (!isValidServiceType(serviceType)) return res.status(400).json({ error: 'Invalid serviceType' });
   const normalizedServiceType = String(serviceType).trim();
   mockProviderServices[uid] = mockProviderServices[uid] || {};
+  const existing = mockProviderServices[uid][normalizedServiceType] || {};
+  const parsedIncludedServices =
+    includedServices !== undefined
+      ? normalizeIncludedServices(includedServices)
+      : normalizeIncludedServices(existing.includedServices);
   mockProviderServices[uid][normalizedServiceType] = {
+    ...existing,
     serviceType: normalizedServiceType,
-    price: price !== undefined ? Number(price) : undefined,
-    description,
-    etaMinutes: etaMinutes !== undefined ? Number(etaMinutes) : undefined,
+    price: price !== undefined ? Number(price) : existing.price,
+    description: description !== undefined ? String(description || '') : existing.description || '',
+    etaMinutes: etaMinutes !== undefined ? Number(etaMinutes) : existing.etaMinutes,
     active,
     updatedAt: new Date().toISOString(),
+    includedServices: parsedIncludedServices,
   };
-  const list = Object.entries(mockProviderServices[uid]).map(([st, payload]) => ({ serviceType: st, ...payload }));
+  const list = Object.entries(mockProviderServices[uid]).map(([st, payload]) => ({
+    serviceType: st,
+    ...payload,
+    includedServices: Array.isArray(payload.includedServices) ? payload.includedServices : [],
+  }));
   return res.json(list);
 });
 
@@ -1782,7 +1826,7 @@ app.patch('/api/service-providers', (req, res) => {
           : 'Service Provider'),
       email: jwtSession?.email || `${uid}@example.com`,
       phone: jwtSession?.phone || '0000000000',
-      city: 'Pending setup',
+      city: '',
       workshops: [],
       skills: [],
       availability: 'weekdays',

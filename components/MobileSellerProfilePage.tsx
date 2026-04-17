@@ -153,16 +153,20 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
 
             {/* Stats */}
             <div className="flex items-center gap-4 mb-3">
-              <button
-                onClick={() => {}}
-                className="text-sm text-gray-600"
-              >
+              <span className="text-sm text-gray-600" aria-label={`${followersCount} followers`}>
                 <span className="font-semibold text-gray-900">{followersCount}</span> Followers
-              </button>
+              </span>
               <span className="text-gray-300">•</span>
               <button
-                onClick={() => {}}
-                className="text-sm text-gray-600"
+                type="button"
+                onClick={() => {
+                  if (typeof document !== 'undefined') {
+                    const target = document.getElementById('seller-listings-grid');
+                    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }}
+                className="text-sm text-gray-600 underline-offset-2 hover:underline"
+                aria-label={`Jump to ${vehicles.length} listings`}
               >
                 <span className="font-semibold text-gray-900">{vehicles.length}</span> Listings
               </button>
@@ -299,7 +303,7 @@ export const MobileSellerProfilePage: React.FC<MobileSellerProfilePageProps> = (
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div id="seller-listings-grid" className="space-y-4">
             {filteredVehicles.map((vehicle) => (
               <div
                 key={vehicle.id}

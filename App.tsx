@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams, useNavigate as useRouterNavigate } from 'react-router-dom';
 import { AppProvider, useApp } from './components/AppProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageTransition from './components/PageTransition';
@@ -28,7 +28,7 @@ import MobileSearch from './components/MobileSearch';
 import MobilePushNotificationManager from './components/MobilePushNotificationManager';
 import NativePushRegistration from './components/NativePushRegistration';
 import AppRatingPrompt from './components/AppRatingPrompt';
-import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates } from './types';
+import { View as ViewEnum, Vehicle, User, SubscriptionPlan, Notification, Conversation, ChatMessage, LocationCoordinates, type SearchFilters } from './types';
 import { countUnreadMessageThreads } from './utils/unreadCounts';
 import {
   conversationBelongsToCustomer,
@@ -307,6 +307,8 @@ const preloadCriticalComponents = () => {
 
 const AppContent: React.FC = () => {
   const routerLocation = useLocation();
+  const [routerSearchParams, setRouterSearchParams] = useSearchParams();
+  const routerNavigate = useRouterNavigate();
   // Detect if running as mobile app (standalone/installed PWA)
   const { isMobileApp } = useIsMobileApp();
   
@@ -486,7 +488,7 @@ const AppContent: React.FC = () => {
       setServiceProvider({
         ...(detail as unknown as ServiceProvider),
         name,
-        city: city || 'Pending setup',
+        city: city || '',
       });
       navigate(ViewEnum.CAR_SERVICE_DASHBOARD);
       addToast(`Welcome, ${name}!`, 'success');
@@ -615,6 +617,95 @@ const AppContent: React.FC = () => {
    * else a minimal stub (same idea as dealer directory) so View Profile works if the seller is not
    * yet in the in-memory list.
    */
+  /**
+   * Deep-linked structured filters parsed from the current URL's search
+   * params (e.g. `/used-cars?make=Maruti&maxPrice=300000`).
+   *
+   * This is the authoritative path for chip clicks on the mobile home page.
+   * Passing filters here — instead of a natural-language string through
+   * `initialSearchQuery` — guarantees the list actually filters even when
+   * the Gemini proxy is offline.
+   */
+  const filtersFromUrl = useMemo<Partial<SearchFilters> | undefined>(() => {
+    const filters: Partial<SearchFilters> = {};
+    const make = routerSearchParams.get('make');
+    const model = routerSearchParams.get('model');
+    const category = routerSearchParams.get('category');
+    const fuelType = routerSearchParams.get('fuelType');
+    const transmission = routerSearchParams.get('transmission');
+    const ownership = routerSearchParams.get('ownership');
+    const minPrice = routerSearchParams.get('minPrice');
+    const maxPrice = routerSearchParams.get('maxPrice');
+    const minYear = routerSearchParams.get('minYear');
+    const maxYear = routerSearchParams.get('maxYear');
+    const year = routerSearchParams.get('year');
+    const location = routerSearchParams.get('location');
+    if (make) filters.make = make;
+    if (model) filters.model = model;
+    if (category) filters.category = category as SearchFilters['category'];
+    if (fuelType) filters.fuelType = fuelType;
+    if (transmission) filters.transmission = transmission;
+    if (ownership && ['1', '2', '3plus'].includes(ownership)) {
+      filters.ownership = ownership as SearchFilters['ownership'];
+    }
+    if (minPrice != null && minPrice !== '' && Number.isFinite(Number(minPrice))) filters.minPrice = Number(minPrice);
+    if (maxPrice != null && maxPrice !== '' && Number.isFinite(Number(maxPrice))) filters.maxPrice = Number(maxPrice);
+    if (minYear != null && minYear !== '' && Number.isFinite(Number(minYear))) filters.minYear = Number(minYear);
+    if (maxYear != null && maxYear !== '' && Number.isFinite(Number(maxYear))) filters.maxYear = Number(maxYear);
+    if (year != null && year !== '' && Number.isFinite(Number(year))) filters.year = Number(year);
+    if (location) filters.location = location;
+    return Object.keys(filters).length > 0 ? filters : undefined;
+  }, [routerSearchParams]);
+
+  /**
+   * Deep-link helper: navigate to `/used-cars` and encode structured
+   * filters / search query into the URL. Reading URL params on mount
+   * means refreshes and shared links always reproduce the same result.
+   *
+   * `q` is mapped to `initialSearchQuery` so the plain-text haystack
+   * filter (`vehicleMatchesSearchText`) kicks in immediately, even before
+   * the AI proxy responds.
+   */
+  const applyFilters = React.useCallback(
+    (opts: {
+      filters?: Record<string, string | number>;
+      query?: string;
+    }) => {
+      const params = new URLSearchParams();
+      if (opts.filters) {
+        Object.entries(opts.filters).forEach(([k, v]) => {
+          if (v === undefined || v === null || v === '') return;
+          params.set(k, String(v));
+        });
+      }
+      if (opts.query && opts.query.trim()) {
+        params.set('q', opts.query.trim());
+        setInitialSearchQuery(opts.query.trim());
+      } else {
+        setInitialSearchQuery('');
+      }
+      const qs = params.toString();
+      routerNavigate(qs ? `/used-cars?${qs}` : '/used-cars', {
+        state: { view: ViewEnum.USED_CARS, timestamp: Date.now() },
+      });
+    },
+    [routerNavigate, setInitialSearchQuery]
+  );
+
+  // If the URL has `?q=...` on mount / refresh, seed `initialSearchQuery`
+  // so the list's text-match fallback starts narrowing rows right away.
+  useEffect(() => {
+    const q = routerSearchParams.get('q');
+    if (q && q.trim() && q.trim() !== initialSearchQuery) {
+      setInitialSearchQuery(q.trim());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routerSearchParams]);
+
+  // Silence unused-var warning for the setter (we use routerNavigate to push
+  // URLs directly; setRouterSearchParams is kept around for future use).
+  void setRouterSearchParams;
+
   const openSellerProfileByEmail = React.useCallback(
     (sellerEmail: string | undefined) => {
       const normalized = sellerEmail?.toLowerCase().trim() ?? '';
@@ -1272,6 +1363,7 @@ const AppContent: React.FC = () => {
                 setInitialSearchQuery(query);
                 navigate(ViewEnum.USED_CARS);
               }}
+              onApplyFilters={applyFilters}
               onSelectCategory={(category) => {
                 setSelectedCategory(category);
                 navigate(ViewEnum.USED_CARS);
@@ -1305,6 +1397,9 @@ const AppContent: React.FC = () => {
                 // Pass city in navigate params — navigate(USED_CARS) without params clears the filter in AppProvider.
                 navigate(ViewEnum.USED_CARS, { city });
               }}
+              userLocation={userLocation}
+              onLocationChange={setUserLocation}
+              addToast={addToast}
             />
           );
         }
@@ -1314,6 +1409,7 @@ const AppContent: React.FC = () => {
               setInitialSearchQuery(query);
               navigate(ViewEnum.USED_CARS);
             }}
+            onApplyFilters={applyFilters}
             onSelectCategory={(category) => {
               setSelectedCategory(category);
               navigate(ViewEnum.USED_CARS);
@@ -1404,6 +1500,7 @@ const AppContent: React.FC = () => {
               categoryTitle={selectedCity ? `Used Cars in ${selectedCity}` : "Used Cars"}
               initialCategory={currentCategory}
               initialSearchQuery={initialSearchQuery}
+              initialFilters={filtersFromUrl}
               onViewSellerProfile={openSellerProfileByEmail}
               userLocation={userLocation}
               currentUser={currentUser}
@@ -3164,7 +3261,7 @@ const AppContent: React.FC = () => {
                     city:
                       typeof provider.city === 'string' && provider.city.trim()
                         ? provider.city.trim()
-                        : 'Pending setup',
+                        : '',
                   });
                   navigate(ViewEnum.CAR_SERVICE_DASHBOARD);
                   addToast(`Welcome, ${name}!`, 'success');
