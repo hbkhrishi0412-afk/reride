@@ -2,6 +2,7 @@
 /// <reference types="vite-plugin-pwa/client" />
 
 declare const __RERIDE_CAPACITOR__: boolean;
+declare const __RERIDE_BUILD_TIME__: string;
 
 // Optional dependency - types when not installed
 declare module '@sentry/react' {
