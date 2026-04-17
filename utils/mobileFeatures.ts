@@ -170,8 +170,20 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 // Get VAPID public key for web push (required for push notifications to work)
 function getVapidPublicKey(): string {
-  // Set VITE_VAPID_PUBLIC_KEY in .env (e.g. from Firebase Cloud Messaging or web-push generate-vapid-keys)
-  return process.env.VITE_VAPID_PUBLIC_KEY || '';
+  // Vite replaces `import.meta.env.VITE_*` at build time for browser bundles.
+  // `process.env.VITE_*` is NOT replaced in client code and returns undefined.
+  // Falling back to process.env keeps Node tooling / tests happy.
+  const fromImportMeta =
+    typeof import.meta !== 'undefined' &&
+    (import.meta as unknown as { env?: Record<string, string | undefined> }).env
+      ? (import.meta as unknown as { env: Record<string, string | undefined> }).env
+          .VITE_VAPID_PUBLIC_KEY
+      : undefined;
+  const fromProcessEnv =
+    typeof process !== 'undefined' && process.env
+      ? process.env.VITE_VAPID_PUBLIC_KEY
+      : undefined;
+  return (fromImportMeta || fromProcessEnv || '').trim();
 }
 
 // ============================================

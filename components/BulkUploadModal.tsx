@@ -9,20 +9,55 @@ interface BulkUploadModalProps {
     sellerEmail: string;
 }
 
-// Simple CSV to JSON parser
-const parseCSV = (csvText: string): Record<string, string>[] => {
-    const lines = csvText.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim());
-    const rows = [];
-    for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',');
-        if (values.length === headers.length) {
-            const row = headers.reduce((acc, header, index) => {
-                acc[header] = values[index].trim();
-                return acc;
-            }, {} as Record<string, string>);
-            rows.push(row);
+// RFC 4180-ish CSV parser: handles quoted fields, embedded commas, escaped quotes (""), CRLF.
+const parseCSVLine = (line: string): string[] => {
+    const fields: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"') {
+                if (line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else {
+                current += ch;
+            }
+        } else if (ch === '"') {
+            inQuotes = true;
+        } else if (ch === ',') {
+            fields.push(current);
+            current = '';
+        } else {
+            current += ch;
         }
+    }
+    fields.push(current);
+    return fields.map(f => f.trim());
+};
+
+const parseCSV = (csvText: string): Record<string, string>[] => {
+    // Strip BOM (Excel exports prepend \ufeff) and normalize CRLF → LF.
+    const normalized = csvText.replace(/^\ufeff/, '').replace(/\r\n?/g, '\n');
+    const rawLines = normalized.split('\n').filter(line => line.trim().length > 0);
+    if (rawLines.length < 2) return [];
+    const headers = parseCSVLine(rawLines[0]);
+    const rows: Record<string, string>[] = [];
+    for (let i = 1; i < rawLines.length; i++) {
+        const values = parseCSVLine(rawLines[i]);
+        if (values.length !== headers.length) {
+            // Skip malformed rows rather than silently misaligning columns.
+            continue;
+        }
+        const row: Record<string, string> = {};
+        headers.forEach((header, idx) => {
+            row[header] = values[idx];
+        });
+        rows.push(row);
     }
     return rows;
 };
@@ -147,7 +182,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fade-in" onClick={onClose}>
             <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="p-6 border-b dark:border-gray-200-200">
+                <div className="p-6 border-b dark:border-gray-200">
                     <h2 className="text-xl font-bold text-reride-text-dark dark:text-reride-text-dark">{t('dashboard.bulkModal.title')}</h2>
                     <p className="text-sm text-reride-text-dark dark:text-reride-text-dark">{t('dashboard.bulkModal.subtitle')}</p>
                 </div>
@@ -158,7 +193,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
                             <h3 className="font-semibold">{t('dashboard.bulkModal.step1Title')}</h3>
                             <p>{t('dashboard.bulkModal.step1Body')}</p>
                             <button onClick={downloadTemplate} className="font-semibold hover:underline transition-colors" style={{ color: '#FF6B35' }} onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-blue)'} onMouseLeave={(e) => e.currentTarget.style.color = 'var(--reride-orange)'}>{t('dashboard.bulkModal.downloadTemplate')}</button>
-                            <div className="mt-4 p-6 border-2 border-dashed border-gray-200 dark:border-gray-200-300 rounded-lg">
+                            <div className="mt-4 p-6 border-2 border-dashed border-gray-200 dark:border-gray-300 rounded-lg">
                                 <input type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-reride-text-dark file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:text-white" style={{ ['--file-bg' as any]: 'var(--reride-orange)', ['--file-hover-bg' as any]: 'var(--reride-blue)' }} />
                             </div>
                         </div>
@@ -184,7 +219,7 @@ const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ onClose, onAddMultipl
                 </div>
 
                 <div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg">
-                    <button onClick={onClose} className="px-4 py-2 bg-white-dark text-reride-text-dark rounded-md hover:bg-white">{t('dashboard.bulkModal.cancel')}</button>
+                    <button onClick={onClose} className="px-4 py-2 bg-gray-100 text-reride-text-dark rounded-md hover:bg-white">{t('dashboard.bulkModal.cancel')}</button>
                     {step === 1 && <button onClick={handleParseAndValidate} disabled={!file} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50">{t('dashboard.bulkModal.nextReview')}</button>}
                     {step === 2 && <button onClick={handleConfirm} className="px-4 py-2 bg-reride-orange text-white rounded-md hover:bg-reride-orange">{t('dashboard.bulkModal.confirmUpload')}</button>}
                 </div>

@@ -26,15 +26,11 @@ CREATE INDEX IF NOT EXISTS idx_services_display_order ON services(display_order)
 -- Enable RLS (Row Level Security)
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;
 
--- Allow public read access to active services
--- Drop policy if it exists to allow re-running the script
-DROP POLICY IF EXISTS "Services are viewable by everyone" ON services;
-CREATE POLICY "Services are viewable by everyone" ON services
-    FOR SELECT USING (active = true);
-
--- Allow admins to manage services (this will be handled by service_role key in API)
--- For now, we'll allow authenticated users with admin role to manage
--- Note: You may need to adjust this based on your auth setup
+-- RLS policies for this table are now managed centrally in
+-- scripts/enable-rls-production.sql (section "10c. SERVICES"). The old policy
+-- name "Services are viewable by everyone" is dropped by that script before
+-- the new "Services read access" is created. After creating the table, run
+-- scripts/enable-rls-production.sql once to apply the policies.
 
 -- Insert default services based on the image
 INSERT INTO services (id, name, display_name, description, base_price, min_price, max_price, price_range, icon_name, active, display_order) VALUES

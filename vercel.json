@@ -87,7 +87,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; connect-src 'self' https://www.reride.co.in https://reride.co.in https://*.vercel.app https://*.supabase.co wss://*.supabase.co https://nominatim.openstreetmap.org https://generativelanguage.googleapis.com https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://api.qrserver.com; frame-ancestors 'self';"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; connect-src 'self' https://www.reride.co.in https://reride.co.in https://*.vercel.app https://*.supabase.co wss://*.supabase.co https://nominatim.openstreetmap.org https://generativelanguage.googleapis.com https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://api.qrserver.com; frame-ancestors 'self';"
         },
         {
           "key": "Permissions-Policy",

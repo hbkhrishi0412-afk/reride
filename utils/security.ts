@@ -126,21 +126,40 @@ export const generateAccessToken = (user: User): string => {
   });
 };
 
+// Generate a cryptographically-random jti (JWT ID) used for refresh-token rotation + revocation.
+const generateJti = (): string => {
+  try {
+    const g = globalThis as unknown as { crypto?: { randomUUID?: () => string; getRandomValues?: (buf: Uint8Array) => Uint8Array } };
+    if (g.crypto?.randomUUID) return g.crypto.randomUUID();
+    if (g.crypto?.getRandomValues) {
+      const buf = new Uint8Array(16);
+      g.crypto.getRandomValues(buf);
+      return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {
+    /* fall through */
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
 export const generateRefreshToken = (user: User): string => {
   const payload = {
     userId: user.id || user.email,
     email: user.email,
-    type: 'refresh'
+    role: user.role,
+    type: 'refresh',
+    // jti lets us revoke individual refresh tokens in Redis on rotation.
+    jti: generateJti(),
   };
-  
+
   const secret = config.JWT.SECRET;
   if (!secret) {
     throw new Error('CRITICAL: JWT_SECRET is not defined in environment variables');
   }
-  return jwt.sign(payload, secret, { 
+  return jwt.sign(payload, secret, {
     expiresIn: config.JWT.REFRESH_TOKEN_EXPIRES_IN as any,
     issuer: config.JWT.ISSUER,
-    audience: config.JWT.AUDIENCE
+    audience: config.JWT.AUDIENCE,
   });
 };
 
@@ -149,6 +168,7 @@ export interface TokenPayload {
   email: string;
   role?: 'customer' | 'seller' | 'admin';
   type?: 'access' | 'refresh';
+  jti?: string;
   iat?: number;
   exp?: number;
   iss?: string;
@@ -223,6 +243,30 @@ export const refreshAccessToken = (refreshToken: string): string => {
   };
   
   return generateAccessToken(user as User);
+};
+
+/**
+ * Rotate a refresh token: verify the old one, return a new access+refresh pair plus the
+ * old token's jti + remaining TTL (seconds) so callers can add it to a revocation list.
+ * Throws if the token is invalid, the wrong type, or expired.
+ */
+export const rotateRefreshToken = (
+  oldRefreshToken: string,
+): { accessToken: string; refreshToken: string; oldJti?: string; oldTtlSeconds: number } => {
+  const decoded = verifyToken(oldRefreshToken);
+  if (decoded.type !== 'refresh') {
+    throw new Error('Invalid token type');
+  }
+  const user: Partial<User> = {
+    id: decoded.userId as string,
+    email: decoded.email as string,
+    role: (decoded.role as 'customer' | 'seller' | 'admin') || 'customer',
+  };
+  const accessToken = generateAccessToken(user as User);
+  const refreshToken = generateRefreshToken(user as User);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const oldTtlSeconds = Math.max(0, (decoded.exp ?? nowSeconds) - nowSeconds);
+  return { accessToken, refreshToken, oldJti: decoded.jti, oldTtlSeconds };
 };
 
 // Input sanitization utilities

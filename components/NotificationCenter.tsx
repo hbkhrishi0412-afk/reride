@@ -156,7 +156,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ notifications, 
                 )}
             </div>
             
-            <footer className="p-2 border-t dark:border-gray-200-200 text-center">
+            <footer className="p-2 border-t dark:border-gray-200 text-center">
                 <button
                     type="button"
                     onClick={onViewAll}

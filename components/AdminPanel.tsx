@@ -240,7 +240,7 @@ const BarChart: React.FC<{ title: string; data: { label: string; value: number }
                     <div key={label} className="grid grid-cols-[100px_1fr] items-center gap-4 text-sm">
                         <span className="font-medium text-reride-text-dark dark:text-reride-text-dark truncate text-right">{label}</span>
                         <div className="flex items-center gap-2">
-                            <div className="w-full bg-white-dark dark:bg-white rounded-full h-5">
+                            <div className="w-full bg-gray-100 dark:bg-white rounded-full h-5">
                                 <div
                                     className="h-5 rounded-full text-white text-xs flex items-center justify-end pr-2"
                                     style={{ width: `${(value / maxValue) * 100}%`, background: 'var(--gradient-warm)' }}
@@ -354,7 +354,7 @@ const AuditLogView: React.FC<{ auditLog: AuditLogEntry[] }> = ({ auditLog }) => 
       placeholder="Search logs..."
       value={searchTerm}
       onChange={(e) => setSearchTerm(e.target.value)}
-      className="flex-grow p-2 border border-gray-200 dark:border-gray-200-300 rounded-lg bg-white dark:text-reride-text-dark focus:outline-none transition w-full sm:w-64" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
+      className="flex-grow p-2 border border-gray-200 dark:border-gray-300 rounded-lg bg-white dark:text-reride-text-dark focus:outline-none transition w-full sm:w-64" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
     />
   );
 
@@ -2920,7 +2920,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                         <select 
                             value={planFilter} 
                             onChange={(e) => setPlanFilter(e.target.value as SubscriptionPlan)}
-                            className="p-2 border border-gray-200 dark:border-gray-200-300 rounded-lg bg-white dark:text-reride-text-dark"
+                            className="p-2 border border-gray-200 dark:border-gray-300 rounded-lg bg-white dark:text-reride-text-dark"
                         >
                             <option value="all">All Plans</option>
                             <option value="free">Free</option>

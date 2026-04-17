@@ -13,10 +13,16 @@ const config: CapacitorConfig = {
     // Native Google: @capawesome/capacitor-google-sign-in + VITE_GOOGLE_WEB_CLIENT_ID at Vite build time.
     // Supabase: signInWithIdToken. GCP: Web client (this ID) + Android client (package + SHA-1) in same project.
     SplashScreen: {
-      launchShowDuration: 500,
+      // 500 ms is too short on low-end Android devices — the WebView often hasn't
+      // finished first paint by then, so users see a blank white flash. 1500 ms gives
+      // the JS bundle time to hydrate before autoHide fires.
+      launchShowDuration: 1500,
+      launchAutoHide: true,
       backgroundColor: "#FFFFFF",
       showSpinner: true,
-      spinnerColor: "#FF6B35"
+      spinnerColor: "#FF6B35",
+      androidSpinnerStyle: "large",
+      iosSpinnerStyle: "large"
     }
   },
   android: {

@@ -308,15 +308,20 @@ CREATE TABLE IF NOT EXISTS service_providers (
     location TEXT,
     services TEXT[],
     rating NUMERIC CHECK (rating >= 0 AND rating <= 5),
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     metadata JSONB
 );
 
+-- Add status for databases created before this column existed
+ALTER TABLE service_providers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+
 -- Create indexes for service_providers table
 CREATE INDEX IF NOT EXISTS idx_service_providers_email ON service_providers(email);
 CREATE INDEX IF NOT EXISTS idx_service_providers_location ON service_providers(location);
 CREATE INDEX IF NOT EXISTS idx_service_providers_rating ON service_providers(rating);
+CREATE INDEX IF NOT EXISTS idx_service_providers_status ON service_providers(status);
 
 -- Enable RLS (Row Level Security) for service_providers
 ALTER TABLE service_providers ENABLE ROW LEVEL SECURITY;
@@ -590,91 +595,20 @@ CREATE TRIGGER update_service_requests_updated_at BEFORE UPDATE ON service_reque
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
--- 12. RLS POLICIES (Optional - Uncomment after testing)
+-- 12. RLS POLICIES
 -- ============================================================================
--- These policies control who can read/write data. Adjust based on your needs.
-
--- Users Policies:
--- Allow users to read their own data
--- CREATE POLICY "Users can read own data" ON users
---   FOR SELECT USING (auth.uid()::text = id);
-
--- Allow users to update their own data
--- CREATE POLICY "Users can update own data" ON users
---   FOR UPDATE USING (auth.uid()::text = id);
-
--- Allow public read access to active users (for seller profiles)
--- CREATE POLICY "Public can read active users" ON users
---   FOR SELECT USING (status = 'active');
-
--- Vehicles Policies:
--- Allow public read access to published vehicles
--- CREATE POLICY "Public can read published vehicles" ON vehicles
---   FOR SELECT USING (status = 'published');
-
--- Allow sellers to insert their own vehicles
--- CREATE POLICY "Sellers can insert own vehicles" ON vehicles
---   FOR INSERT WITH CHECK (auth.uid()::text = seller_email);
-
--- Allow sellers to update their own vehicles
--- CREATE POLICY "Sellers can update own vehicles" ON vehicles
---   FOR UPDATE USING (auth.uid()::text = seller_email);
-
--- Conversations Policies:
--- Allow users to read their own conversations
--- CREATE POLICY "Users can read own conversations" ON conversations
---   FOR SELECT USING (
---     auth.uid()::text = customer_id OR 
---     auth.uid()::text = seller_id
---   );
-
--- Allow users to create conversations
--- CREATE POLICY "Users can create conversations" ON conversations
---   FOR INSERT WITH CHECK (auth.uid()::text = customer_id);
-
--- Allow users to update their own conversations
--- CREATE POLICY "Users can update own conversations" ON conversations
---   FOR UPDATE USING (
---     auth.uid()::text = customer_id OR 
---     auth.uid()::text = seller_id
---   );
-
--- Notifications Policies:
--- Allow users to read their own notifications
--- CREATE POLICY "Users can read own notifications" ON notifications
---   FOR SELECT USING (auth.uid()::text = user_id);
-
--- Allow users to update their own notifications
--- CREATE POLICY "Users can update own notifications" ON notifications
---   FOR UPDATE USING (auth.uid()::text = user_id);
-
--- New Cars Policies:
--- Allow public read access to new cars
--- CREATE POLICY "Public can read new cars" ON new_cars
---   FOR SELECT USING (true);
-
--- Plans Policies:
--- Allow public read access to plans
--- CREATE POLICY "Public can read plans" ON plans
---   FOR SELECT USING (true);
-
--- Service Providers Policies:
--- Allow public read access to service providers
--- CREATE POLICY "Public can read service providers" ON service_providers
---   FOR SELECT USING (true);
-
--- Service Requests Policies:
--- Allow users to read their own service requests
--- CREATE POLICY "Users can read own service requests" ON service_requests
---   FOR SELECT USING (auth.uid()::text = user_id);
-
--- Allow service providers to read requests assigned to them
--- CREATE POLICY "Providers can read assigned requests" ON service_requests
---   FOR SELECT USING (auth.uid()::text = provider_id);
-
--- Allow users to create their own service requests
--- CREATE POLICY "Users can create service requests" ON service_requests
---   FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+-- This file only creates tables + enables RLS. The actual policy set lives in
+-- a dedicated, idempotent script so you can re-run it without touching the
+-- schema:
+--
+--     scripts/enable-rls-production.sql   (apply before going to production)
+--     scripts/disable-rls-production.sql  (emergency rollback)
+--
+-- Until enable-rls-production.sql is applied, every table above has RLS ON
+-- with no policies → the anon/authenticated role will see EMPTY results. The
+-- API keeps working because it uses SUPABASE_SERVICE_ROLE_KEY, which bypasses
+-- RLS. Run enable-rls-production.sql BEFORE relying on the Supabase client
+-- (e.g. realtime subscriptions, client-side reads).
 
 -- ============================================================================
 -- 13. VERIFICATION: Check that all tables and columns exist
@@ -772,7 +706,7 @@ COMMENT ON COLUMN service_requests.provider_id IS 'Foreign key reference to serv
 -- ============================================================================
 -- Next steps:
 -- 1. Verify all tables exist in Supabase Dashboard → Table Editor
--- 2. Review and enable RLS policies as needed (uncomment policies above)
+-- 2. Run scripts/enable-rls-production.sql to install the production RLS policies
 -- 3. Test your application connection
 -- 4. Run migration script if migrating from Firebase
 -- ============================================================================

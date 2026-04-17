@@ -24,23 +24,24 @@ interface IncludedService {
 
 function normalizeIncludedServices(input: unknown): IncludedService[] {
   if (!Array.isArray(input)) return [];
-  return input
-    .map((entry, idx) => {
-      const raw = entry as Record<string, unknown>;
-      const id = String(raw.id || '').trim() || `line-${idx + 1}`;
-      const name = String(raw.name || '').trim();
-      if (!name) return null;
-      const priceNum = raw.price != null ? Number(raw.price) : undefined;
-      const etaNum = raw.etaMinutes != null ? Number(raw.etaMinutes) : undefined;
-      return {
-        id,
-        name,
-        price: priceNum != null && Number.isFinite(priceNum) ? priceNum : undefined,
-        etaMinutes: etaNum != null && Number.isFinite(etaNum) ? etaNum : undefined,
-        active: raw.active !== false,
-      };
-    })
-    .filter((entry): entry is IncludedService => Boolean(entry));
+  const result: IncludedService[] = [];
+  input.forEach((entry, idx) => {
+    const raw = entry as Record<string, unknown>;
+    const id = String(raw.id || '').trim() || `line-${idx + 1}`;
+    const name = String(raw.name || '').trim();
+    if (!name) return;
+    const priceNum = raw.price != null ? Number(raw.price) : undefined;
+    const etaNum = raw.etaMinutes != null ? Number(raw.etaMinutes) : undefined;
+    const normalized: IncludedService = {
+      id,
+      name,
+      active: raw.active !== false,
+    };
+    if (priceNum != null && Number.isFinite(priceNum)) normalized.price = priceNum;
+    if (etaNum != null && Number.isFinite(etaNum)) normalized.etaMinutes = etaNum;
+    result.push(normalized);
+  });
+  return result;
 }
 
 function normalizeProviderService(serviceType: string, payload: ProviderService): ProviderService {

@@ -29,27 +29,12 @@ CREATE INDEX IF NOT EXISTS idx_buyer_activity_updated_at ON buyer_activity(updat
 -- Enable RLS (Row Level Security)
 ALTER TABLE buyer_activity ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies: Users can only access their own buyer activity
--- Drop policies if they exist to allow re-running the script
-DROP POLICY IF EXISTS "Users can read own buyer activity" ON buyer_activity;
-DROP POLICY IF EXISTS "Users can insert own buyer activity" ON buyer_activity;
-DROP POLICY IF EXISTS "Users can update own buyer activity" ON buyer_activity;
-
--- SELECT: Users can read their own buyer activity
-CREATE POLICY "Users can read own buyer activity" ON buyer_activity
-    FOR SELECT
-    USING ((select auth.uid())::text = user_id);
-
--- INSERT: Users can insert their own buyer activity
-CREATE POLICY "Users can insert own buyer activity" ON buyer_activity
-    FOR INSERT
-    WITH CHECK ((select auth.uid())::text = user_id);
-
--- UPDATE: Users can update their own buyer activity
-CREATE POLICY "Users can update own buyer activity" ON buyer_activity
-    FOR UPDATE
-    USING ((select auth.uid())::text = user_id)
-    WITH CHECK ((select auth.uid())::text = user_id);
+-- RLS policies for this table are now managed centrally in
+-- scripts/enable-rls-production.sql (section "10h. BUYER_ACTIVITY"). That
+-- script uses (SELECT auth.uid()) to avoid the "Auth RLS Initialization Plan"
+-- performance warning and drops the legacy policy names before recreating
+-- them. After creating the table, run scripts/enable-rls-production.sql once
+-- to apply the policies.
 
 -- Auto-update updated_at timestamp
 -- SECURITY: Set search_path to prevent SQL injection vulnerabilities

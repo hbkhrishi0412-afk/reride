@@ -162,11 +162,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = memo(
       : undefined;
 
   useEffect(() => {
+    // Only mark as read when the chat window is actually open. Also debounce rapid
+    // message bursts (e.g. several realtime events in quick succession) into a single
+    // server call so we don't write-amplify the conversations table.
+    if (isMinimized) return;
     const sig = `${conversation.id}:${String(lastMessageId ?? '')}:${currentUserRole}`;
     if (lastMarkReadSignatureRef.current === sig) return;
-    lastMarkReadSignatureRef.current = sig;
-    onMarkMessagesAsRead(conversation.id, currentUserRole);
-  }, [conversation.id, currentUserRole, lastMessageId, onMarkMessagesAsRead]);
+    const handle = setTimeout(() => {
+      lastMarkReadSignatureRef.current = sig;
+      onMarkMessagesAsRead(conversation.id, currentUserRole);
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [conversation.id, currentUserRole, lastMessageId, isMinimized, onMarkMessagesAsRead]);
 
   useEffect(() => {
     const closeIfOutside = (target: EventTarget | null) => {

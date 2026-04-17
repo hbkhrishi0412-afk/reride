@@ -23,10 +23,12 @@ const SECURITY_CONFIG = {
     get SECRET() {
       const secret = (process.env.JWT_SECRET || '').trim();
       if (secret) return secret;
-      if (process.env.NODE_ENV === 'production') {
-        return '';
-      }
-      return 'dev-only-secret-not-for-production';
+      const isLocalDev =
+        (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') &&
+        !process.env.VERCEL_ENV &&
+        !process.env.VERCEL;
+      if (isLocalDev) return 'dev-only-secret-not-for-production';
+      return '';
     },
     // Token expiration times
     // Access tokens: shorter-lived for security (compromised tokens expire faster)
@@ -154,6 +156,10 @@ const SECURITY_CONFIG = {
 export const getSecurityConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
   const envSecret = (process.env.JWT_SECRET || '').trim();
+  const isLocalDev =
+    (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') &&
+    !process.env.VERCEL_ENV &&
+    !process.env.VERCEL;
 
   const jwtStatic = SECURITY_CONFIG.JWT;
   return {
@@ -166,10 +172,10 @@ export const getSecurityConfig = () => {
       AUDIENCE: jwtStatic.AUDIENCE,
       get SECRET() {
         if (envSecret) return envSecret;
-        if (isProduction) {
+        if (!isLocalDev) {
           throw new Error(
-            'JWT_SECRET is required in production but is not set. ' +
-              'Configure JWT_SECRET in your environment (e.g. Vercel → Environment Variables).'
+            'JWT_SECRET is required in this environment but is not set. ' +
+              'Configure JWT_SECRET in your environment (e.g. Vercel → Environment Variables → Production AND Preview).'
           );
         }
         return 'dev-only-secret-not-for-production';

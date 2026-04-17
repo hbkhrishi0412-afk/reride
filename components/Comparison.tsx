@@ -108,7 +108,7 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome,
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b-2 border-gray-200-300 dark:border-gray-200-300">
+            <tr className="border-b-2 border-gray-300 dark:border-gray-300">
               <th className="text-left font-bold text-lg text-reride-text-dark p-4 sticky left-0 bg-white z-10">{t('compare.featureColumn')}</th>
               {vehicles.map(vehicle => (
                 <th key={vehicle.id} className="p-4 min-w-[220px]">
@@ -123,7 +123,7 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome,
             {specFields.map((key) => {
               const hasDifference = areValuesDifferent(key);
               return (
-                <tr key={String(key)} className="border-b border-gray-200-200 dark:border-gray-200-200">
+                <tr key={String(key)} className="border-b border-gray-200 dark:border-gray-200">
                   <td className="font-semibold text-brand-gray-600 dark:text-reride-text-dark p-4 sticky left-0 bg-white z-10">{specLabels[key] ?? String(key)}</td>
                   {vehicles.map(vehicle => {
                     let value = vehicle[key];
@@ -163,13 +163,13 @@ const Comparison: React.FC<ComparisonProps> = ({ vehicles, onBack: onBackToHome,
             <tr className="h-4"></tr>
             <tr>
               <td colSpan={vehicles.length + 1} className="pt-6 pb-2">
-                 <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark border-b-2 border-gray-200-300 dark:border-gray-200-300 pb-2">{t('compare.featuresSection')}</h2>
+                 <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark border-b-2 border-gray-300 dark:border-gray-300 pb-2">{t('compare.featuresSection')}</h2>
               </td>
             </tr>
             {allFeatures.map((feature) => {
               const hasDifference = areValuesDifferent('features');
               return (
-                 <tr key={feature} className="border-b border-gray-200-200 dark:border-gray-200-200">
+                 <tr key={feature} className="border-b border-gray-200 dark:border-gray-200">
                      <td className="font-semibold text-brand-gray-600 dark:text-reride-text-dark p-4 sticky left-0 bg-white z-10">{feature}</td>
                      {vehicles.map(vehicle => (
                         <td key={`${vehicle.id}-${feature}`} className="p-4 transition-colors" style={highlightDiffs && hasDifference ? { backgroundColor: 'rgba(30, 136, 229, 0.1)' } : undefined}>

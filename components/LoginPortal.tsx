@@ -115,7 +115,7 @@ const LoginPortal: React.FC<LoginPortalProps> = ({ onNavigate }) => {
               Or continue as a guest &rarr;
           </button>
       </div>
-       <div className="mt-6 pt-6 border-t border-gray-200-200 dark:border-gray-200-200">
+       <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-200">
            <div className="text-sm">
               <button
                   onClick={() => onNavigate(View.ADMIN_LOGIN)}

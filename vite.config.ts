@@ -105,23 +105,73 @@ export default defineConfig(({ mode }) => {
   },
   build: {
     target: 'es2020',
-    ...(capacitor
-      ? {
-          // ESM + Rollup code-splitting so React.lazy() routes are separate chunks.
-          // The old single IIFE (~4MB+) was very slow to parse on mobile WebViews.
-          chunkSizeWarningLimit: 1200,
-        }
-      : {
-          rollupOptions: {
-            output: {
-              manualChunks: undefined,
-              format: 'iife',
-              entryFileNames: 'assets/[name].js',
-              chunkFileNames: 'assets/[name].js',
-              assetFileNames: 'assets/[name].[ext]',
-            },
-          },
-        }),
+    // Default Rollup ESM output with content-hashed filenames on BOTH web and
+    // Capacitor builds. This enables React.lazy() code-splitting and lets the
+    // `immutable` Cache-Control header on /assets/* be safe (new deploy → new
+    // hash → new URL). The old web-only IIFE branch produced a single ~4.6MB
+    // bundle and caused stale-cache issues because filenames were unhashed.
+    chunkSizeWarningLimit: capacitor ? 1200 : 800,
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+        // Split the main vendor bundle into logical groups so a first paint only
+        // pulls the code it actually needs. Routes that use maps/charts/i18n
+        // don't make every other page wait for those libraries to download.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          // React + router + head management — needed on every page
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react-router-dom/') ||
+            id.includes('node_modules/react-router/') ||
+            id.includes('node_modules/react-helmet-async/') ||
+            id.includes('node_modules/scheduler/')
+          ) {
+            return 'vendor-react'
+          }
+          if (id.includes('node_modules/@supabase/')) return 'vendor-supabase'
+          if (id.includes('node_modules/@tanstack/')) return 'vendor-query'
+          if (
+            id.includes('node_modules/framer-motion/') ||
+            id.includes('node_modules/@emotion/')
+          ) {
+            return 'vendor-motion'
+          }
+          if (
+            id.includes('node_modules/leaflet') ||
+            id.includes('node_modules/react-leaflet/')
+          ) {
+            return 'vendor-maps'
+          }
+          if (
+            id.includes('node_modules/chart.js/') ||
+            id.includes('node_modules/react-chartjs-2/')
+          ) {
+            return 'vendor-charts'
+          }
+          if (
+            id.includes('node_modules/i18next') ||
+            id.includes('node_modules/react-i18next/')
+          ) {
+            return 'vendor-i18n'
+          }
+          if (id.includes('node_modules/@sentry/')) return 'vendor-sentry'
+          if (
+            id.includes('node_modules/dompurify/') ||
+            id.includes('node_modules/validator/') ||
+            id.includes('node_modules/bcryptjs/') ||
+            id.includes('node_modules/jsonwebtoken/')
+          ) {
+            return 'vendor-crypto-sanitize'
+          }
+          if (id.includes('node_modules/socket.io-client/')) return 'vendor-socket'
+          return 'vendor-misc'
+        },
+      },
+    },
   },
 }
 })
