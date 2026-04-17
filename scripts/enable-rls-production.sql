@@ -16,7 +16,8 @@
 --     app_config, push_device_tokens, services, faqs, support_tickets,
 --     sell_car_submissions, payment_requests, buyer_activity,
 --     service_request_audit_logs)
---   - storage.objects for the 'Images' bucket (SELECT/INSERT/UPDATE/DELETE)
+--   - storage.objects for the 'Images' bucket (INSERT/UPDATE/DELETE; SELECT
+--     only for authenticated — not public/anon — see storage section)
 --
 -- The older per-concern scripts below are superseded and kept only for
 -- history — do NOT run them after this one, they would create duplicate
@@ -34,9 +35,11 @@
 -- Supabase dashboard warnings that CANNOT be fixed in SQL — do these by hand:
 --
 --   1. "Public Bucket Allows Listing" on storage.Images
---      Dashboard → Storage → Images → Configuration → toggle "Public bucket"
---      OFF. With the policies below, files stay visible via their public URLs
---      (vehicles render fine) but nobody can list every filename in the bucket.
+--      Do NOT add a broad FOR SELECT policy for role `anon` on storage.objects.
+--      Keep the bucket Public if you want .../object/public/Images/... URLs;
+--      public buckets already serve files without that policy. An anon SELECT
+--      policy is what enables `list()` / enumeration of every path (the linter
+--      warning). Use authenticated-only SELECT if clients need delete/upsert.
 --
 --   2. "Leaked Password Protection Disabled"
 --      Dashboard → Authentication → Policies → enable
@@ -788,17 +791,26 @@ END $$;
 -- ============================================================================
 -- Clean up every prior variant of these policies so re-runs are idempotent.
 DROP POLICY IF EXISTS "Public can view images"               ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can read Images objects" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can upload images" ON storage.objects;
 DROP POLICY IF EXISTS "Users can update their own images"    ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can update images" ON storage.objects;
 DROP POLICY IF EXISTS "Users can delete their own images"    ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can delete images" ON storage.objects;
 
--- Public read: vehicle photos must render for anonymous visitors.
-CREATE POLICY "Public can view images"
+-- No anon/public SELECT: it allows listing every object path while the bucket
+-- is Public. Public URLs still work (see Storage bucket fundamentals).
+-- Authenticated SELECT: Storage often needs this for client delete/upsert.
+-- USING must not be ONLY `bucket_id = '…'` or Supabase linter 0025 flags it
+-- ("Public Bucket Allows Listing") even with TO authenticated.
+CREATE POLICY "Authenticated users can read Images objects"
 ON storage.objects
 FOR SELECT
-USING (bucket_id = 'Images');
+TO authenticated
+USING (
+  bucket_id = 'Images'
+  AND (SELECT auth.role()) = 'authenticated'
+);
 
 -- Upload: only authenticated users. The API uses the service role (bypasses
 -- RLS) when uploading server-side; this policy handles direct client uploads.
@@ -884,7 +896,7 @@ BEGIN
   WHERE schemaname = 'storage'
     AND tablename = 'objects'
     AND policyname IN (
-      'Public can view images',
+      'Authenticated users can read Images objects',
       'Authenticated users can upload images',
       'Users can update their own images',
       'Users can delete their own images'
