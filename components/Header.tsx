@@ -388,8 +388,8 @@ const Header: React.FC<HeaderProps> = memo(({
                                             />
                                         </button>
                                         {isUserMenuOpen && (
-                                            <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-md shadow-lg border dark:border-gray-200-200 animate-fade-in z-20">
-                                                <div className="p-4 border-b dark:border-gray-200-200">
+                                            <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-md shadow-lg border dark:border-gray-200 animate-fade-in z-20">
+                                                <div className="p-4 border-b dark:border-gray-200">
                                                     <p className="font-semibold text-sm text-reride-text-dark dark:text-white">
                                                         {t('user.greeting', { name: currentUser.name ? currentUser.name.split(' ')[0] : '' })}
                                                     </p>
@@ -400,7 +400,7 @@ const Header: React.FC<HeaderProps> = memo(({
                                                 {currentUser.role === 'seller' && <DropdownLink onClick={onOpenMessages}>{t('nav.messages')} {inboxCount > 0 && `(${inboxCount})`}</DropdownLink>}
                                                 {currentUser.role === 'admin' && <DropdownLink onClick={() => handleNavigate(ViewEnum.ADMIN_PANEL)}>{t('nav.adminPanel')}</DropdownLink>}
                                                 <DropdownLink onClick={() => handleNavigate(ViewEnum.PROFILE)}>{t('nav.myProfile')}</DropdownLink>
-                                                <div className="border-t dark:border-gray-200-200">
+                                                <div className="border-t dark:border-gray-200">
                                                     <DropdownLink onClick={onLogout}>{t('nav.logout')}</DropdownLink>
                                                 </div>
                                             </div>

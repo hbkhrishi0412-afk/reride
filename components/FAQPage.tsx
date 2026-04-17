@@ -54,19 +54,19 @@ const FAQPage: React.FC<FAQPageProps> = ({ faqItems }) => {
           placeholder="Search questions..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full p-4 border border-gray-200-300 dark:border-gray-200-300 rounded-xl focus:outline-none bg-white dark:bg-brand-gray-700 text-lg" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
+          className="w-full p-4 border border-gray-300 dark:border-gray-300 rounded-xl focus:outline-none bg-white dark:bg-brand-gray-700 text-lg" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
         />
       </div>
 
       <div className="space-y-8">
         {Object.entries(filteredAndGroupedFAQs).map(([category, items]) => (
           <div key={category}>
-            <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-4 border-b border-gray-200-200 dark:border-gray-200-200 pb-2">
+            <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-4 border-b border-gray-200 dark:border-gray-200 pb-2">
               {category}
             </h2>
             <div className="space-y-4">
               {(items as FAQItem[]).map((item) => (
-                <div key={item.id} className="border-b border-gray-200-200 dark:border-gray-200-200 last:border-b-0">
+                <div key={item.id} className="border-b border-gray-200 dark:border-gray-200 last:border-b-0">
                   <button
                     onClick={() => toggleItem(item.id)}
                     className="w-full flex justify-between items-center text-left py-4 focus:outline-none"

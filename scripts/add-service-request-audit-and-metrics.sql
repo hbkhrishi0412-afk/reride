@@ -27,27 +27,11 @@ create index if not exists idx_service_requests_provider_status
 
 alter table public.service_request_audit_logs enable row level security;
 
-do $$
-begin
-  if not exists (
-    select 1 from pg_policies
-    where schemaname = 'public'
-      and tablename = 'service_request_audit_logs'
-      and policyname = 'service_request_audit_logs_admin_read'
-  ) then
-    create policy service_request_audit_logs_admin_read
-      on public.service_request_audit_logs
-      for select
-      to authenticated
-      using (
-        exists (
-          select 1
-          from public.users u
-          where lower(trim(u.email)) = lower(trim(auth.jwt() ->> 'email'))
-            and u.role = 'admin'
-        )
-      );
-  end if;
-end $$;
+-- RLS policies for this table are now managed centrally in
+-- scripts/enable-rls-production.sql (section "10i. SERVICE_REQUEST_AUDIT_LOGS").
+-- That script wraps auth.jwt() in (SELECT ...) to avoid the "Auth RLS
+-- Initialization Plan" performance warning, and drops the legacy policy
+-- (service_request_audit_logs_admin_read) before recreating it. After creating
+-- the table, run scripts/enable-rls-production.sql once to apply the policies.
 
 -- No INSERT policy is needed for service role writes done from server-side admin key.

@@ -158,7 +158,7 @@ export const OfferModal: React.FC<{
                                 style={{ colorScheme: 'light dark' }}
                                 autoFocus
                                 required
-                                className="w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg bg-white dark:bg-brand-gray-700 text-lg text-gray-900 dark:text-white focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
+                                className="w-full p-3 border border-gray-300 dark:border-gray-300 rounded-lg bg-white dark:bg-brand-gray-700 text-lg text-gray-900 dark:text-white focus:outline-none" onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--reride-orange)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(255, 107, 53, 0.1)'; }} onBlur={(e) => { e.currentTarget.style.borderColor = ''; e.currentTarget.style.boxShadow = ''; }}
                             />
                         </div>
                         {error && <p className="text-sm text-reride-orange mt-2">{error}</p>}
@@ -189,7 +189,7 @@ export const OfferMessage: React.FC<{
         pending: { text: "Pending", color: "bg-reride-blue-light text-reride-text-dark dark:bg-reride-blue/50 dark:text-reride-text-dark border-gray-200" },
         accepted: { text: "Accepted", color: "bg-reride-orange-light text-reride-orange dark:bg-reride-orange/50 dark:text-reride-orange border-reride-orange" },
         rejected: { text: "Rejected", color: "bg-reride-orange-light text-reride-orange dark:bg-reride-orange/50 dark:text-reride-orange border-reride-orange" },
-        countered: { text: "Countered", color: "bg-white-dark text-reride-text-dark dark:bg-white dark:text-reride-text-dark border-gray-500" },
+        countered: { text: "Countered", color: "bg-gray-100 text-reride-text-dark dark:bg-white dark:text-reride-text-dark border-gray-500" },
         confirmed: { text: "Confirmed", color: "bg-reride-orange-light text-reride-orange dark:bg-reride-orange/50 dark:text-reride-orange border-reride-orange" },
     };
 
@@ -219,7 +219,7 @@ export const OfferMessage: React.FC<{
                     </span>
                 </div>
                 {showActions && (
-                    <div className="mt-3 pt-3 border-t border-gray-200-200 dark:border-gray-200-300 flex gap-2">
+                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-300 flex gap-2">
                         <button 
                             type="button"
                             onClick={(e) => {

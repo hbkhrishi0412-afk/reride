@@ -36,7 +36,7 @@ const VehicleHistory: React.FC<VehicleHistoryProps> = ({ serviceRecords, acciden
   if (combinedHistory.length === 0) {
     return (
       <div className="p-6 bg-white rounded-xl shadow-soft">
-        <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4 border-b dark:border-gray-200-200 pb-2">Vehicle History</h3>
+        <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4 border-b dark:border-gray-200 pb-2">Vehicle History</h3>
         <p className="text-center text-reride-text dark:text-reride-text py-8">No service or accident history available for this vehicle.</p>
       </div>
     );
@@ -44,14 +44,14 @@ const VehicleHistory: React.FC<VehicleHistoryProps> = ({ serviceRecords, acciden
 
   return (
     <div className="p-6 bg-white rounded-xl shadow-soft">
-      <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-6 border-b dark:border-gray-200-200 pb-2">Vehicle History</h3>
-      <ol className="relative border-l border-gray-200 dark:border-gray-200-200 ml-5">
+      <h3 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-6 border-b dark:border-gray-200 pb-2">Vehicle History</h3>
+      <ol className="relative border-l border-gray-200 dark:border-gray-200 ml-5">
         {combinedHistory.map((item, index) => (
           <li key={index} className="mb-10 ml-8">
             <span className="absolute -left-5 flex items-center justify-center">
                 <TimelineIcon type={item.type} />
             </span>
-            <div className="p-4 bg-white dark:bg-white/50 border border-gray-200-200 dark:border-gray-200-200 rounded-lg shadow-sm">
+            <div className="p-4 bg-white dark:bg-white/50 border border-gray-200 dark:border-gray-200 rounded-lg shadow-sm">
                 <div className="flex justify-between items-center mb-2">
                     <time className="text-sm font-normal leading-none text-reride-text-dark dark:text-reride-text-dark">{new Date(item.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</time>
                     {item.type === 'accident' && <span className="bg-reride-orange-light text-reride-orange text-xs font-semibold px-2.5 py-0.5 rounded dark:bg-reride-orange dark:text-reride-orange">{item.severity}</span>}

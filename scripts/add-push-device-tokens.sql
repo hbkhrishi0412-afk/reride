@@ -12,33 +12,12 @@ CREATE INDEX IF NOT EXISTS idx_push_device_tokens_updated ON push_device_tokens 
 
 -- Required for API exposure in Supabase: lock data to the signed-in user only.
 ALTER TABLE push_device_tokens ENABLE ROW LEVEL SECURITY;
-ALTER TABLE push_device_tokens FORCE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can read own push token" ON push_device_tokens;
-CREATE POLICY "Users can read own push token"
-  ON push_device_tokens
-  FOR SELECT
-  TO authenticated
-  USING (LOWER(user_email) = LOWER(auth.jwt() ->> 'email'));
-
-DROP POLICY IF EXISTS "Users can insert own push token" ON push_device_tokens;
-CREATE POLICY "Users can insert own push token"
-  ON push_device_tokens
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (LOWER(user_email) = LOWER(auth.jwt() ->> 'email'));
-
-DROP POLICY IF EXISTS "Users can update own push token" ON push_device_tokens;
-CREATE POLICY "Users can update own push token"
-  ON push_device_tokens
-  FOR UPDATE
-  TO authenticated
-  USING (LOWER(user_email) = LOWER(auth.jwt() ->> 'email'))
-  WITH CHECK (LOWER(user_email) = LOWER(auth.jwt() ->> 'email'));
-
-DROP POLICY IF EXISTS "Users can delete own push token" ON push_device_tokens;
-CREATE POLICY "Users can delete own push token"
-  ON push_device_tokens
-  FOR DELETE
-  TO authenticated
-  USING (LOWER(user_email) = LOWER(auth.jwt() ->> 'email'));
+-- RLS POLICIES: the actual policies for this table are now managed centrally in
+-- scripts/enable-rls-production.sql (look for section "10b. PUSH_DEVICE_TOKENS").
+-- That script wraps every auth.jwt() call in (SELECT ...) to avoid the
+-- "Auth RLS Initialization Plan" performance warning, and drops all legacy
+-- policies ("Users can read own push token", etc.) before recreating them.
+--
+-- After creating the table, run scripts/enable-rls-production.sql once to apply
+-- the policies.

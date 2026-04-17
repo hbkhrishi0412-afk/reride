@@ -466,7 +466,7 @@ export async function handleServiceRequests(req: VercelRequest, res: VercelRespo
           cancelled: [],
           open: [],
         };
-        const nextAllowed = allowedTransitions[current] || [];
+        const nextAllowed = (current ? allowedTransitions[current] : undefined) || [];
         if (normalizedStatus !== current && !nextAllowed.includes(normalizedStatus)) {
           return res.status(409).json({
             error: `Invalid status transition from ${current} to ${normalizedStatus}`,

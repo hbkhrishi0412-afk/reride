@@ -219,7 +219,7 @@ const ComboboxInput: React.FC<{
           disabled={disabled}
           placeholder={placeholder}
           required={required}
-          className={`block w-full p-3 pr-10 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-200-300'}`}
+          className={`block w-full p-3 pr-10 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`}
           style={!error ? { boxShadow: 'none' } : {}}
         />
         <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
@@ -268,13 +268,13 @@ const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type
         {tooltip && <HelpTooltip text={tooltip} />}
     </label>
     {type === 'select' ? (
-        <select id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''}>
+        <select id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''}>
             {children}
         </select>
     ) : type === 'textarea' ? (
-        <textarea id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} rows={rows} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''} />
+        <textarea id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} rows={rows} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''} />
     ) : (
-        <input type={type} id={String(name)} name={String(name)} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-200-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => { e.currentTarget.style.boxShadow = ''; if (onBlur) onBlur(e); }} />
+        <input type={type} id={String(name)} name={String(name)} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => { e.currentTarget.style.boxShadow = ''; if (onBlur) onBlur(e); }} />
     )}
     {error && <p className="mt-1 text-xs text-reride-orange">{error}</p>}
   </div>
@@ -522,7 +522,7 @@ const initialFormState: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'> = 
 const FormFieldset: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
     const [isOpen, setIsOpen] = useState(true);
     return (
-        <fieldset className="border border-gray-200 dark:border-gray-200-200 rounded-lg p-4">
+        <fieldset className="border border-gray-200 dark:border-gray-200 rounded-lg p-4">
             <legend className="px-2 text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark">
                 <button type="button" onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2">
                     <span>{isOpen ? '▼' : '►'}</span>
@@ -1255,7 +1255,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
 
     return (
       <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6 border-b dark:border-gray-200-200 pb-4">
+        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6 border-b dark:border-gray-200 pb-4">
           {editingVehicle ? 'Edit Vehicle Listing' : 'List a New Vehicle'}
         </h2>
         {isPlanExpired && (
@@ -1400,8 +1400,8 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     <div>
                         <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Fixes Done / Upgrades</label>
                         <div className="flex gap-2">
-                            <input type="text" value={fixInput} onChange={(e) => setFixInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFix(); } }} placeholder="e.g., New tires installed" className="flex-grow p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg" />
-                            <button type="button" onClick={handleAddFix} className="bg-white-dark dark:bg-white font-bold py-2 px-4 rounded-lg">Add Fix</button>
+                            <input type="text" value={fixInput} onChange={(e) => setFixInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFix(); } }} placeholder="e.g., New tires installed" className="flex-grow p-3 border border-gray-200 dark:border-gray-300 rounded-lg" />
+                            <button type="button" onClick={handleAddFix} className="bg-gray-100 dark:bg-white font-bold py-2 px-4 rounded-lg">Add Fix</button>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                             {(formData.qualityReport?.fixesDone || []).map(fix => (
@@ -1420,7 +1420,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                      <div>
                         <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Images</label>
                         <div className="mt-1">
-                            <label htmlFor="file-upload" className={`relative cursor-pointer bg-white rounded-lg border-2 border-gray-200 dark:border-gray-200-300 border-dashed transition-colors duration-200 flex flex-col items-center justify-center text-center p-6 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`} style={{ borderColor: isUploading ? '' : undefined }} onMouseEnter={(e) => !isUploading && (e.currentTarget.style.borderColor = 'var(--reride-orange)')} onMouseLeave={(e) => !isUploading && (e.currentTarget.style.borderColor = '')}>
+                            <label htmlFor="file-upload" className={`relative cursor-pointer bg-white rounded-lg border-2 border-gray-200 dark:border-gray-300 border-dashed transition-colors duration-200 flex flex-col items-center justify-center text-center p-6 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`} style={{ borderColor: isUploading ? '' : undefined }} onMouseEnter={(e) => !isUploading && (e.currentTarget.style.borderColor = 'var(--reride-orange)')} onMouseLeave={(e) => !isUploading && (e.currentTarget.style.borderColor = '')}>
                                 <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
@@ -1442,7 +1442,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                      <div>
                         <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Documents</label>
                         <div className="mt-1 flex items-center gap-2">
-                             <select id="document-type" className="p-3 border rounded-lg bg-white dark:text-reride-text-dark border-gray-200 dark:border-gray-200-300">
+                             <select id="document-type" className="p-3 border rounded-lg bg-white dark:text-reride-text-dark border-gray-200 dark:border-gray-300">
                                 <option>Registration Certificate (RC)</option>
                                 <option>Insurance</option>
                                 <option>Pollution Under Control (PUC)</option>
@@ -1456,7 +1456,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                         </div>
                          <div className="mt-2 flex flex-wrap gap-2">
                             {(formData.documents || []).map(doc => (
-                                <span key={doc.url} className="bg-white-dark dark:bg-white text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-2">
+                                <span key={doc.url} className="bg-gray-100 dark:bg-white text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-2">
                                     {doc.fileName} ({doc.name})
                                     <button type="button" onClick={() => handleRemoveDocument(doc.url)}>&times;</button>
                                 </span>
@@ -1466,8 +1466,8 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     <div>
                         <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Key Features</label>
                         <div className="flex gap-2">
-                            <input type="text" value={featureInput} onChange={(e) => setFeatureInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }} placeholder="e.g., Sunroof" className="flex-grow p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg" />
-                            <button type="button" onClick={handleAddFeature} className="bg-white-dark dark:bg-white font-bold py-2 px-4 rounded-lg">Add</button>
+                            <input type="text" value={featureInput} onChange={(e) => setFeatureInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }} placeholder="e.g., Sunroof" className="flex-grow p-3 border border-gray-200 dark:border-gray-300 rounded-lg" />
+                            <button type="button" onClick={handleAddFeature} className="bg-gray-100 dark:bg-white font-bold py-2 px-4 rounded-lg">Add</button>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">{formData.features.map(feature => ( <span key={feature} className="brand-badge-orange text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-2">{feature}<button type="button" onClick={() => handleRemoveFeature(feature)}>&times;</button></span> ))}</div>
                     </div>
@@ -1476,7 +1476,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             <label htmlFor="description" className="block text-sm font-medium">Vehicle Description</label>
                             <button type="button" onClick={handleGenerateDescription} disabled={isGeneratingDesc || !formData.make || !formData.model} className="text-sm font-semibold text-reride-orange disabled:opacity-50"> {isGeneratingDesc ? '...' : '✨ Generate with AI'}</button>
                         </div>
-                        <textarea id="description" name="description" rows={4} value={formData.description} onChange={handleChange} className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg" />
+                        <textarea id="description" name="description" rows={4} value={formData.description} onChange={handleChange} className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg" />
                     </div>
                 </div>
             </FormFieldset>
@@ -1507,7 +1507,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             value={formData.offerTitle ?? ''}
                             onChange={handleChange}
                             placeholder={t('vehicle.detail.offer.specialOffer')}
-                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg"
                         />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1521,7 +1521,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                 type="date"
                                 value={formData.offerStartDate ?? ''}
                                 onChange={handleChange}
-                                className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                                className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg"
                             />
                         </div>
                         <div>
@@ -1534,7 +1534,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                                 type="date"
                                 value={formData.offerEndDate ?? ''}
                                 onChange={handleChange}
-                                className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                                className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg"
                             />
                         </div>
                     </div>
@@ -1549,7 +1549,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             value={formData.offerDateLabel ?? ''}
                             onChange={handleChange}
                             placeholder={t('sellerListing.placeholder.offerDateLabel')}
-                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg"
                         />
                     </div>
                     <div>
@@ -1563,7 +1563,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             value={formData.offerDescription ?? ''}
                             onChange={handleChange}
                             placeholder={t('vehicle.detail.offer.loanOffersOnAllCars')}
-                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg"
                         />
                     </div>
                     <div>
@@ -1577,7 +1577,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             value={formData.offerHighlight ?? ''}
                             onChange={handleChange}
                             placeholder={t('vehicle.detail.offer.roiStartingAt')}
-                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg"
                         />
                     </div>
                     <div>
@@ -1591,7 +1591,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                             value={formData.offerDisclaimer ?? ''}
                             onChange={handleChange}
                             placeholder={t('sellerListing.placeholder.offerDisclaimer')}
-                            className="block w-full p-3 border border-gray-200 dark:border-gray-200-300 rounded-lg"
+                            className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg"
                         />
                     </div>
                 </div>
@@ -1636,7 +1636,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 > 
                     {editingVehicle ? 'Update Vehicle' : 'List My Vehicle'} 
                 </button>
-                <button type="button" onClick={onCancel} className="w-full sm:w-auto bg-white0 text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-white">Cancel</button>
+                <button type="button" onClick={onCancel} className="w-full sm:w-auto bg-gray-500 text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-gray-600">Cancel</button>
             </div>
           </form>
 
@@ -1656,12 +1656,12 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                    {aiSuggestions && Object.keys(aiSuggestions.featureSuggestions).length > 0 && (
                      <div>
                         <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4 flex items-center gap-2">✨ Suggested Features</h3>
-                        <div className="bg-brand-gray-light dark:bg-white p-4 rounded-lg border dark:border-gray-200-200 max-h-96 overflow-y-auto">
+                        <div className="bg-brand-gray-light dark:bg-white p-4 rounded-lg border dark:border-gray-200 max-h-96 overflow-y-auto">
                             {Object.entries(aiSuggestions.featureSuggestions).map(([category, features]) => {
                                 if (!Array.isArray(features) || features.length === 0) return null;
                                 return (
                                     <div key={category} className="mb-4 last:mb-0">
-                                        <h4 className="font-bold text-reride-text-dark dark:text-reride-text-dark mb-2 pb-1 border-b dark:border-gray-200-300">{category}</h4>
+                                        <h4 className="font-bold text-reride-text-dark dark:text-reride-text-dark mb-2 pb-1 border-b dark:border-gray-300">{category}</h4>
                                         <div className="space-y-2">
                                             {features.map(feature => (
                                                 <label key={feature} className="flex items-center space-x-3 cursor-pointer group">
@@ -1803,7 +1803,7 @@ const InquiriesView: React.FC<{
                 ? new Date(conv.lastMessageAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
                 : 'N/A';
               return (
-              <div key={conv.id} onClick={() => handleSelectConversation(conv)} className="p-4 rounded-lg cursor-pointer hover:bg-brand-gray-light dark:hover:bg-white border-b dark:border-gray-200-200 flex items-center justify-between">
+              <div key={conv.id} onClick={() => handleSelectConversation(conv)} className="p-4 rounded-lg cursor-pointer hover:bg-brand-gray-light dark:hover:bg-white border-b dark:border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     {!conv.isReadBySeller && <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF6B35' }}></div>}
                     <div>
@@ -3340,7 +3340,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               )}
               </>
             ) : (
-                <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-200 dark:border-gray-200-300">
+                <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-200 dark:border-gray-300">
                     <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2-2H5a2 2 0 01-2-2z" />
                     </svg>

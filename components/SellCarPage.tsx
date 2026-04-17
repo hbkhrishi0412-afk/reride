@@ -211,34 +211,61 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-    
+
     if (!email || !password) {
       setLoginError('Please enter both email and password');
       return;
     }
-    
+
+    // Basic client-side validation before hitting the API.
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email.trim())) {
+      setLoginError('Please enter a valid email address.');
+      return;
+    }
+
     setIsLoggingIn(true);
-    
+
     try {
-      // Simulate login - in real app, this would call your login API
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // After successful login, proceed to step 1 (car form)
-      if (sellerType === 'dealer') {
-        // For dealer, you might want to redirect to seller dashboard or continue
-        handleNextStep();
-      } else {
-        // For individual, continue to car form
-        handleNextStep();
+      // SECURITY: Previously this was a fake `setTimeout(1000)` that accepted ANY
+      // credentials — a full authentication bypass. Delegate to the real API.
+      const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+      const response = await authenticatedFetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'login',
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.success) {
+        setLoginError(data?.reason || 'Invalid email or password. Please try again.');
+        return;
       }
-      
-      // Save remember me preference
+
+      // Persist tokens so downstream API calls are authenticated.
+      if (data.accessToken) {
+        try { localStorage.setItem('accessToken', data.accessToken); } catch { /* quota */ }
+      }
+      if (data.refreshToken) {
+        try { localStorage.setItem('refreshToken', data.refreshToken); } catch { /* quota */ }
+      }
+      if (data.user) {
+        try { localStorage.setItem('user', JSON.stringify(data.user)); } catch { /* quota */ }
+      }
+
       if (rememberMe) {
         const storageKey = sellerType === 'dealer' ? 'rememberedSellerEmail' : 'rememberedCustomerEmail';
-        localStorage.setItem(storageKey, email);
+        try { localStorage.setItem(storageKey, email); } catch { /* quota */ }
       }
+
+      handleNextStep();
     } catch (error) {
-      setLoginError('Invalid email or password. Please try again.');
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      setLoginError(`Login failed: ${message}`);
     } finally {
       setIsLoggingIn(false);
     }
@@ -252,24 +279,22 @@ const SellCarPage: React.FC<SellCarPageProps> = ({ onNavigate }) => {
 
   const handleRegistrationSubmit = async () => {
     setRegistrationError('');
-    
-    if (!registrationNumber.trim()) {
+
+    const trimmed = registrationNumber.trim().toUpperCase();
+    if (!trimmed) {
       setRegistrationError('Please enter a registration number');
       return;
     }
-    
-    if (!validateRegistration(registrationNumber)) {
+    if (!validateRegistration(trimmed)) {
       setRegistrationError('Please enter a valid registration number (e.g., MH01AB1234)');
       return;
     }
-    
-    setIsVerifying(true);
-    
-    // Simulate API call for verification
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
+
+    // We only do client-side format validation here — there is no RTO/Vahan integration
+    // yet. Previously this was a fake 2s setTimeout that made it look like a real
+    // verification call, which is misleading. Set state and advance immediately.
     setIsVerifying(false);
-    setCarDetails(prev => ({ ...prev, registration: registrationNumber }));
+    setCarDetails(prev => ({ ...prev, registration: trimmed }));
     handleNextStep();
   };
 

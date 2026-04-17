@@ -531,7 +531,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
                         </div>
                     </div>
                     <div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-white-dark text-reride-text-dark rounded-md hover:bg-white">Cancel</button>
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-100 text-reride-text-dark rounded-md hover:bg-white">Cancel</button>
                         <button type="submit" className="px-4 py-2 btn-brand-primary text-white rounded-md">Save Changes</button>
                     </div>
                 </form>

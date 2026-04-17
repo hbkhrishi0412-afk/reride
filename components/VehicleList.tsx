@@ -1811,7 +1811,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   if (isWishlistMode) {
      return (
       <div className="animate-fade-in container mx-auto py-8">
-        <h1 className="text-3xl font-extrabold text-reride-text-dark dark:text-reride-text-dark mb-5 border-b border-gray-200-200 dark:border-gray-200-200 pb-3">{categoryTitle}</h1>
+        <h1 className="text-3xl font-extrabold text-reride-text-dark dark:text-reride-text-dark mb-5 border-b border-gray-200 dark:border-gray-200 pb-3">{categoryTitle}</h1>
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {isLoading ? (
             Array.from({ length: 3 }).map((_, index) => <VehicleCardSkeleton key={index} />)
@@ -1830,7 +1830,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     );
   }
 
-  const formElementClass = "block w-full p-3 border border-gray-200-300 dark:border-gray-200-300 rounded-lg focus:outline-none transition bg-white dark:bg-white dark:text-reride-text-dark disabled:bg-reride-light-gray dark:disabled:bg-reride-light-gray disabled:cursor-not-allowed";
+  const formElementClass = "block w-full p-3 border border-gray-300 dark:border-gray-300 rounded-lg focus:outline-none transition bg-white dark:bg-white dark:text-reride-text-dark disabled:bg-reride-light-gray dark:disabled:bg-reride-light-gray disabled:cursor-not-allowed";
 
   const renderFilterControls = (isMobile: boolean) => {
     const state = isMobile
@@ -2397,7 +2397,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
                       <button onClick={() => handleAiSearch()} disabled={isAiSearching} className="btn-brand-primary text-white font-bold py-2 px-3 lg:px-4 rounded-lg transition-colors disabled:bg-brand-gray-400 disabled:cursor-wait text-xs lg:text-sm whitespace-nowrap flex-shrink-0">{isAiSearching ? '...' : 'Search'}</button>
                   </div>
                   {showSuggestions && suggestions.length > 0 && (
-                      <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200-200 dark:border-gray-200-300 z-10 overflow-hidden"><ul className="divide-y divide-brand-gray-100 dark:divide-brand-gray-600">{suggestions.map((suggestion, index) => ( <li key={index}><button onClick={() => handleSuggestionClick(suggestion)} className="w-full text-left px-4 py-2 text-reride-text-dark dark:text-brand-gray-200 hover:bg-reride-off-white dark:hover:bg-brand-gray-600 transition-colors">{suggestion}</button></li>))}</ul></div>
+                      <div className="absolute top-full mt-2 w-full bg-white dark:bg-brand-gray-700 rounded-lg shadow-soft-xl border border-gray-200 dark:border-gray-300 z-10 overflow-hidden"><ul className="divide-y divide-brand-gray-100 dark:divide-brand-gray-600">{suggestions.map((suggestion, index) => ( <li key={index}><button onClick={() => handleSuggestionClick(suggestion)} className="w-full text-left px-4 py-2 text-reride-text-dark dark:text-brand-gray-200 hover:bg-reride-off-white dark:hover:bg-brand-gray-600 transition-colors">{suggestion}</button></li>))}</ul></div>
                   )}
               </div>
           </div>

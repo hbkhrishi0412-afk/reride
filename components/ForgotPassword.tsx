@@ -35,7 +35,7 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack, onResetSent }) 
     }
   };
   
-  const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-200-300 dark:border-gray-200-300 placeholder-brand-gray-500 text-reride-text-dark dark:text-brand-gray-200 bg-white focus:outline-none focus:z-10 sm:text-sm";
+  const formInputClass = "appearance-none relative block w-full px-4 py-3 border border-gray-300 dark:border-gray-300 placeholder-brand-gray-500 text-reride-text-dark dark:text-brand-gray-200 bg-white focus:outline-none focus:z-10 sm:text-sm";
 
 
   return (

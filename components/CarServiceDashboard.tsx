@@ -126,26 +126,27 @@ const statusOptions: { value: RequestStatus; label: string }[] = [
 
 const serviceOptions = CAR_SERVICE_OPTIONS;
 
-const parseIncludedServicesText = (raw: string): IncludedServicePrice[] =>
-  raw
-    .split('\n')
-    .map((line, idx) => {
-      const trimmed = line.trim();
-      if (!trimmed) return null;
-      const [nameRaw, priceRaw, etaRaw] = trimmed.split('|').map((part) => part.trim());
-      const name = nameRaw || '';
-      if (!name) return null;
-      const price = priceRaw ? Number(priceRaw) : undefined;
-      const etaMinutes = etaRaw ? Number(etaRaw) : undefined;
-      return {
-        id: `inc-${idx + 1}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
-        name,
-        price: price != null && Number.isFinite(price) ? price : undefined,
-        etaMinutes: etaMinutes != null && Number.isFinite(etaMinutes) ? etaMinutes : undefined,
-        active: true,
-      };
-    })
-    .filter((line): line is IncludedServicePrice => Boolean(line));
+const parseIncludedServicesText = (raw: string): IncludedServicePrice[] => {
+  const result: IncludedServicePrice[] = [];
+  raw.split('\n').forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const [nameRaw, priceRaw, etaRaw] = trimmed.split('|').map((part) => part.trim());
+    const name = nameRaw || '';
+    if (!name) return;
+    const price = priceRaw ? Number(priceRaw) : undefined;
+    const etaMinutes = etaRaw ? Number(etaRaw) : undefined;
+    const entry: IncludedServicePrice = {
+      id: `inc-${idx + 1}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+      name,
+      active: true,
+    };
+    if (price != null && Number.isFinite(price)) entry.price = price;
+    if (etaMinutes != null && Number.isFinite(etaMinutes)) entry.etaMinutes = etaMinutes;
+    result.push(entry);
+  });
+  return result;
+};
 
 const formatIncludedServicesText = (items?: IncludedServicePrice[]): string =>
   (items || [])

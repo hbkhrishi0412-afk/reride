@@ -63,9 +63,10 @@ import {
   sanitizeString,
   validateEmail,
   verifyToken,
-  refreshAccessToken,
+  rotateRefreshToken,
   type TokenPayload
 } from '../utils/security.js';
+import { isRefreshTokenRevoked, revokeRefreshToken } from '../lib/token-revocation.js';
 import { getSecurityConfig } from '../utils/security-config.js';
 import { attachApiCors } from '../utils/attach-api-cors.js';
 import { isAndroidWebViewAssetLoaderOrigin } from '../utils/cors-origin.js';
@@ -376,14 +377,23 @@ async function mainHandler(
         ? rawOrigin[0]
         : undefined;
   const isPackagedAndroidWebView = isAndroidWebViewAssetLoaderOrigin(originHeader);
-  const isCapacitorApp =
-    originHeader === 'https://localhost' ||
-    originHeader === 'https://127.0.0.1' ||
-    originHeader === 'capacitor://localhost' ||
-    originHeader === 'ionic://localhost' ||
-    originHeader === 'http://localhost' ||
-    originHeader === 'http://127.0.0.1' ||
+  // In production, only these origins are genuinely Capacitor native. Browser origins
+  // like http://localhost or http://127.0.0.1 are NOT native — any malicious tab at
+  // those origins could otherwise forge x-app-client: capacitor and bypass CSRF.
+  const isNativeCapacitorOrigin =
+    originHeader === 'https://localhost' || // Android (androidScheme: https)
+    originHeader === 'capacitor://localhost' || // iOS
+    originHeader === 'ionic://localhost' || // Legacy
     isPackagedAndroidWebView;
+  // Dev-only origins (Vite dev server, emulator webview) — trusted ONLY outside of
+  // prod/staging so you can still run the mobile app locally.
+  const isDevCapacitorOrigin =
+    process.env.NODE_ENV !== 'production' &&
+    !process.env.VERCEL_ENV &&
+    (originHeader === 'https://127.0.0.1' ||
+      originHeader === 'http://localhost' ||
+      originHeader === 'http://127.0.0.1');
+  const isCapacitorApp = isNativeCapacitorOrigin || isDevCapacitorOrigin;
 
   // Handle CORS preflight (OPTIONS) and browser checks (HEAD)
   // This MUST be checked before any routing to prevent 405 errors
@@ -1896,42 +1906,58 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, _options: Ha
       });
     }
 
-    // TOKEN REFRESH
+    // TOKEN REFRESH (with rotation + revocation)
     if (action === 'refresh-token') {
-      const { refreshToken } = req.body;
-      
-      if (!refreshToken) {
+      const { refreshToken: incomingRefreshToken } = req.body;
+
+      if (!incomingRefreshToken) {
         logWarn('⚠️ Refresh token request missing token');
-        return res.status(400).json({ 
-          success: false, 
+        return res.status(400).json({
+          success: false,
           reason: 'Refresh token is required.',
-          error: 'No refresh token provided in request body'
+          error: 'No refresh token provided in request body',
         });
       }
 
       try {
-        // FIX: Use the utility to verify and refresh the token properly
-        // This recovers the original user data from the refresh token
         logInfo('🔄 Refreshing access token...');
-        const newAccessToken = refreshAccessToken(refreshToken);
-        logInfo('✅ Access token refreshed successfully');
-        
-        // CRITICAL FIX: Also return a new refresh token to extend the session
-        // This prevents refresh token expiration issues
-        // Note: refreshAccessToken only returns access token, so we keep the same refresh token
-        // In a production system, you might want to rotate refresh tokens for security
-        return res.status(200).json({ 
-          success: true, 
-          accessToken: newAccessToken,
-          refreshToken // Keep the same refresh token (or implement rotation)
+
+        // Peek at the jti without fully trusting the payload yet.
+        const preVerify = verifyToken(incomingRefreshToken);
+        if (preVerify.type !== 'refresh') {
+          throw new Error('Invalid token type');
+        }
+        if (await isRefreshTokenRevoked(preVerify.jti)) {
+          // A revoked refresh token being reused is a strong signal of theft/replay.
+          logSecurity('🚨 Revoked refresh token reuse attempt', {
+            userId: preVerify.userId,
+            email: preVerify.email,
+            jti: preVerify.jti,
+          });
+          return res.status(401).json({
+            success: false,
+            reason: 'Refresh token has been revoked. Please log in again.',
+            error: 'refresh_token_revoked',
+          });
+        }
+
+        const rotated = rotateRefreshToken(incomingRefreshToken);
+        // Immediately revoke the old jti so it cannot be used again even if it leaked.
+        await revokeRefreshToken(rotated.oldJti, rotated.oldTtlSeconds);
+
+        logInfo('✅ Access token refreshed + rotated successfully');
+        return res.status(200).json({
+          success: true,
+          accessToken: rotated.accessToken,
+          refreshToken: rotated.refreshToken,
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         logWarn('❌ Refresh token failed:', errorMessage);
-        return res.status(401).json({ 
-          success: false, 
+        return res.status(401).json({
+          success: false,
           reason: 'Invalid or expired refresh token. Please log in again.',
-          error: errorMessage
+          error: errorMessage,
         });
       }
     }
@@ -4786,25 +4812,60 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
       });
     }
     
-    const vehicleData = {
-      id: Date.now(),
-      ...req.body,
+    // SECURITY: Field allowlist — `...req.body` previously let attackers inject
+    // `isFeatured: true`, `views: 999999`, `certificationStatus: 'certified'`,
+    // `trustScore: 100`, etc. Only allow fields the client is legitimately expected to set.
+    const ALLOWED_VEHICLE_CREATE_FIELDS = [
+      'category', 'make', 'model', 'year', 'price', 'mileage',
+      'fuelType', 'transmission', 'color', 'bodyType', 'numberOfOwners',
+      'description', 'features', 'location', 'city', 'state', 'pincode',
+      'registrationNumber', 'insuranceValidTill', 'condition',
+      'sellerName', 'sellerPhone', 'sellerType',
+      'qualityReport', 'offerDetails', 'tags', 'title', 'engineCc',
+      'kmDriven', 'variant', 'listingType', 'negotiable', 'status'
+    ] as const;
+    const body = (req.body || {}) as Record<string, unknown>;
+    const sanitizedBody: Record<string, unknown> = {};
+    for (const key of ALLOWED_VEHICLE_CREATE_FIELDS) {
+      if (key in body) sanitizedBody[key] = body[key];
+    }
+    // Clamp status to the published/unpublished/sold enum — prevent free-text injection.
+    const validStatuses = new Set(['published', 'unpublished', 'sold']);
+    const requestedStatus = typeof sanitizedBody.status === 'string' ? sanitizedBody.status : '';
+    const clampedStatus = validStatuses.has(requestedStatus) ? requestedStatus : 'published';
+    // Admins may additionally seed privileged fields (e.g. bulk import of certified listings).
+    const ADMIN_ONLY_FIELDS = ['isFeatured', 'certificationStatus', 'trustScore', 'activeBoosts'] as const;
+    const adminExtras: Record<string, unknown> = {};
+    if (auth.user?.role === 'admin') {
+      for (const key of ADMIN_ONLY_FIELDS) {
+        if (key in body) adminExtras[key] = body[key];
+      }
+    }
+    const vehicleData: Record<string, unknown> = {
+      ...sanitizedBody,
+      ...adminExtras,
+      // Server-controlled fields — never take these from client input.
+      sellerEmail: authenticatedEmail,
       images: normalizedImages,
       views: 0,
       inquiriesCount: 0,
+      status: clampedStatus,
+      ...(auth.user?.role === 'admin' ? {} : {
+        isFeatured: false,
+        certificationStatus: 'none',
+      }),
       createdAt: new Date().toISOString(),
       listingExpiresAt
     };
     
     try {
       console.log('💾 Saving new vehicle to Firebase...', { 
-        id: vehicleData.id, 
         make: vehicleData.make, 
         model: vehicleData.model,
         sellerEmail: vehicleData.sellerEmail 
       });
       
-      const newVehicle = await vehicleService.create(vehicleData);
+      const newVehicle = await vehicleService.create(vehicleData as unknown as Omit<VehicleType, 'id'>);
       console.log('✅ Vehicle saved successfully to Firebase:', newVehicle.id);
       
       // Verify the vehicle was saved by querying it back
@@ -4870,9 +4931,43 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
             ? [updateData.images] 
             : [];
       }
-      
+
+      // SECURITY: Field allowlist for vehicle PUT — prevent non-admins from tampering with
+      // views, featured status, certification status, trust score, or seller email.
+      const ALLOWED_VEHICLE_UPDATE_FIELDS = [
+        'category', 'make', 'model', 'year', 'price', 'mileage',
+        'fuelType', 'transmission', 'color', 'bodyType', 'numberOfOwners',
+        'description', 'features', 'location', 'city', 'state', 'pincode',
+        'registrationNumber', 'insuranceValidTill', 'condition',
+        'sellerName', 'sellerPhone', 'sellerType',
+        'qualityReport', 'offerDetails', 'tags', 'title', 'engineCc',
+        'kmDriven', 'variant', 'listingType', 'negotiable',
+        'images', 'status'
+      ] as const;
+      const ADMIN_ONLY_UPDATE_FIELDS = [
+        'isFeatured', 'certificationStatus', 'trustScore', 'activeBoosts',
+        'views', 'inquiriesCount', 'sellerEmail', 'listingExpiresAt'
+      ] as const;
+      const rawUpdate = updateData as Record<string, unknown>;
+      const sanitizedUpdate: Record<string, unknown> = {};
+      for (const key of ALLOWED_VEHICLE_UPDATE_FIELDS) {
+        if (key in rawUpdate) sanitizedUpdate[key] = rawUpdate[key];
+      }
+      if (auth.user?.role === 'admin') {
+        for (const key of ADMIN_ONLY_UPDATE_FIELDS) {
+          if (key in rawUpdate) sanitizedUpdate[key] = rawUpdate[key];
+        }
+      }
+      // Clamp status to the valid enum.
+      if ('status' in sanitizedUpdate) {
+        const validStatuses = new Set(['published', 'unpublished', 'sold']);
+        if (typeof sanitizedUpdate.status !== 'string' || !validStatuses.has(sanitizedUpdate.status)) {
+          delete sanitizedUpdate.status;
+        }
+      }
+
       // Update vehicle in Firebase
-      await vehicleService.update(vehicleIdNum, updateData);
+      await vehicleService.update(vehicleIdNum, sanitizedUpdate);
       console.log('✅ Vehicle updated and saved successfully:', vehicleIdNum);
       
       // Verify the update by querying again

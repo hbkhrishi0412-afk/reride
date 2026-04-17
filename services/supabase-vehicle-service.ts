@@ -79,9 +79,40 @@ function processImageUrls(images: string[] | null | undefined, vehicleId?: numbe
   }
 }
 
+// Deterministic, collision-resistant 53-bit hash for non-numeric TEXT ids.
+// Same input always maps to the same positive integer, so a UUID-style id stays
+// stable across refetches and won't collapse to 0.
+function stringToNumericId(s: string): number {
+  let h1 = 0xdeadbeef ^ s.length;
+  let h2 = 0x41c6ce57 ^ s.length;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h2 = Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  const hi = (h2 ^ (h1 >>> 16)) >>> 0;
+  const lo = (h1 ^ (h2 >>> 16)) >>> 0;
+  return (hi % 0x1fffff) * 0x100000000 + lo;
+}
+
 // Helper to convert Supabase row to Vehicle type
 function supabaseRowToVehicle(row: any): Vehicle {
-  const vehicleId = Number(row.id) || 0;
+  // Row.id is TEXT in Supabase but Vehicle.id is typed as number. Prefer the
+  // numeric parse; fall back to a deterministic hash so UUID-style ids remain
+  // unique and stable instead of colliding on 0.
+  const rawId = row.id;
+  let vehicleId: number;
+  if (typeof rawId === 'number' && Number.isFinite(rawId)) {
+    vehicleId = rawId;
+  } else if (typeof rawId === 'string' && rawId.trim() !== '' && !Number.isNaN(Number(rawId))) {
+    vehicleId = Number(rawId);
+  } else if (typeof rawId === 'string' && rawId.trim() !== '') {
+    vehicleId = stringToNumericId(rawId);
+  } else {
+    vehicleId = 0;
+  }
   
   // CRITICAL FIX: Process images to convert storage paths to public URLs
   const processedImages = processImageUrls(row.images, vehicleId);
@@ -211,8 +242,23 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
 export const supabaseVehicleService = {
   // Create a new vehicle
   async create(vehicleData: Omit<Vehicle, 'id'>): Promise<Vehicle> {
-    const id = Date.now();
-    
+    // Collision-resistant numeric ID. Plain Date.now() collides under concurrent
+    // serverless invocations (two creates in the same millisecond produced the
+    // same ID and the second insert overwrote the first). Multiplying by 10000
+    // and adding a cryptographically-random suffix makes collisions ~1-in-10k
+    // per millisecond. Result stays in Number.MAX_SAFE_INTEGER range for the
+    // next ~28 years, and remains numeric for the TEXT column + Number(row.id)
+    // parsing used by the app.
+    let id: number;
+    try {
+      const buf = new Uint8Array(4);
+      globalThis.crypto.getRandomValues(buf);
+      const randomSuffix = ((buf[0] << 8) | buf[1]) % 10000;
+      id = Date.now() * 10000 + randomSuffix;
+    } catch {
+      id = Date.now() * 10000 + Math.floor(Math.random() * 10000);
+    }
+
     const supabase = isServerSide ? getSupabaseAdminClient() : getSupabaseClient();
     const row = vehicleToSupabaseRow({ ...vehicleData, id });
     

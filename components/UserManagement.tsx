@@ -129,7 +129,7 @@ const CreateUserModal: React.FC<{
                         </div>
                     </div>
                     <div className="bg-white px-6 py-3 flex justify-end gap-4 rounded-b-lg">
-                        <button type="button" onClick={onClose} disabled={isLoading} className="px-4 py-2 bg-white-dark text-reride-text-dark rounded-md hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
+                        <button type="button" onClick={onClose} disabled={isLoading} className="px-4 py-2 bg-gray-100 text-reride-text-dark rounded-md hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
                         <button type="submit" disabled={isLoading} className="px-4 py-2 btn-brand-primary text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed">
                             {isLoading ? 'Creating...' : 'Create User'}
                         </button>
@@ -150,7 +150,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, currentUser, onT
     }, [users, roleFilter]);
 
     const filterActions = (
-        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as RoleFilter)} className="p-2 border border-gray-200 dark:border-gray-200-300 rounded-lg bg-white dark:text-reride-text-dark">
+        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as RoleFilter)} className="p-2 border border-gray-200 dark:border-gray-300 rounded-lg bg-white dark:text-reride-text-dark">
             <option value="all">All Users</option>
             <option value="customer">Customers</option>
             <option value="seller">Sellers</option>
@@ -209,7 +209,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ users, currentUser, onT
                                         <td className="px-6 py-4">{user.name}</td>
                                         <td className="px-6 py-4">{user.email}</td>
                                         <td className="px-6 py-4"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === 'admin' ? 'bg-reride-orange-light text-reride-orange' : user.role === 'seller' ? 'brand-badge-orange' : 'bg-reride-orange-light text-reride-orange'}`}>{user.role}</span></td>
-                                        <td className="px-6 py-4"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.status === 'active' ? 'bg-reride-orange-light text-reride-orange' : 'bg-white-dark text-reride-text-dark'}`}>{user.status}</span></td>
+                                        <td className="px-6 py-4"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.status === 'active' ? 'bg-reride-orange-light text-reride-orange' : 'bg-gray-100 text-reride-text-dark'}`}>{user.status}</span></td>
                                         <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{formattedDate}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             <button 
