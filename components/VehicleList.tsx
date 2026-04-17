@@ -31,6 +31,13 @@ interface VehicleListProps {
   categoryTitle?: string;
   initialCategory?: VehicleCategory | 'ALL';
   initialSearchQuery?: string;
+  /**
+   * Deterministic filters applied on mount / when the reference changes.
+   * Use this for deep-linked chip clicks (budget, brand) instead of
+   * round-tripping a natural-language string through the AI parser —
+   * that path silently fails when the Gemini proxy is unreachable.
+   */
+  initialFilters?: Partial<SearchFilters>;
   isWishlistMode?: boolean;
   onViewSellerProfile: (sellerEmail: string) => void;
   userLocation?: string;
@@ -244,10 +251,19 @@ function matchesVehicleFilters(vehicle: Vehicle, snap: VehicleListFilterSnapshot
     if (vehicleCategory !== filterCategory) return false;
   }
   if (snap.makeFilter && snap.makeFilter.trim() !== '') {
-    if (vehicle.make?.toLowerCase().trim() !== snap.makeFilter.toLowerCase().trim()) return false;
+    // Alias-aware comparison so a short chip value like "Maruti" still matches
+    // the canonical catalog value "Maruti Suzuki" (and vice-versa). Keeps
+    // exact match as the primary check to avoid false positives.
+    const vm = vehicle.make?.toLowerCase().trim() ?? '';
+    const fm = snap.makeFilter.toLowerCase().trim();
+    if (!vm) return false;
+    if (vm !== fm && !vm.includes(fm) && !fm.includes(vm)) return false;
   }
   if (snap.modelFilter && snap.modelFilter.trim() !== '') {
-    if (vehicle.model?.toLowerCase().trim() !== snap.modelFilter.toLowerCase().trim()) return false;
+    const vmo = vehicle.model?.toLowerCase().trim() ?? '';
+    const fmo = snap.modelFilter.toLowerCase().trim();
+    if (!vmo) return false;
+    if (vmo !== fmo && !vmo.includes(fmo) && !fmo.includes(vmo)) return false;
   }
   if (snap.selectedPriceBuckets.length > 0) {
     if (!vehicleMatchesPriceBuckets(vehicle.price, snap.selectedPriceBuckets)) return false;
@@ -297,6 +313,7 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   categoryTitle, 
   initialCategory = 'ALL', 
   initialSearchQuery = '', 
+  initialFilters,
   isWishlistMode = false, 
   onViewSellerProfile, 
   userLocation = '', 
@@ -904,6 +921,95 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchQuery]);
 
+  // Deep-linked structured filters: apply directly via setters so chip
+  // clicks (budget, brand, fuel) don't depend on the Gemini proxy.
+  //
+  // The dependency key is a stable JSON serialization of the payload so a
+  // new object reference with the same values doesn't re-trigger.
+  const initialFiltersKey = initialFilters ? JSON.stringify(initialFilters) : '';
+  useEffect(() => {
+    if (!initialFilters) return;
+    const hasAny =
+      initialFilters.make ||
+      initialFilters.model ||
+      initialFilters.category ||
+      initialFilters.fuelType ||
+      initialFilters.transmission ||
+      initialFilters.location ||
+      initialFilters.minPrice != null ||
+      initialFilters.maxPrice != null ||
+      initialFilters.minYear != null ||
+      initialFilters.maxYear != null ||
+      initialFilters.year != null ||
+      initialFilters.minMileage != null ||
+      initialFilters.maxMileage != null ||
+      initialFilters.ownership;
+    if (!hasAny) return;
+
+    if (initialFilters.category) {
+      setCategoryFilter(initialFilters.category);
+    }
+    if (initialFilters.make != null) {
+      setMakeFilter(initialFilters.make);
+    }
+    if (initialFilters.model != null) {
+      setModelFilter(initialFilters.model);
+    }
+    if (initialFilters.minPrice != null || initialFilters.maxPrice != null) {
+      setSelectedPriceBuckets([]);
+      setPriceRange({
+        min: initialFilters.minPrice != null ? initialFilters.minPrice : MIN_PRICE,
+        max: initialFilters.maxPrice != null ? initialFilters.maxPrice : MAX_PRICE,
+      });
+    }
+    if (initialFilters.minMileage != null || initialFilters.maxMileage != null) {
+      setMileageRange({
+        min: initialFilters.minMileage != null ? initialFilters.minMileage : MIN_MILEAGE,
+        max: initialFilters.maxMileage != null ? initialFilters.maxMileage : MAX_MILEAGE,
+      });
+    }
+    if (initialFilters.fuelType) {
+      setFuelTypeFilter(initialFilters.fuelType);
+    }
+    if (initialFilters.transmission) {
+      setTransmissionFilter(initialFilters.transmission);
+    }
+    if (initialFilters.ownership) {
+      setOwnershipFilter(initialFilters.ownership as OwnershipFilterValue);
+    }
+    if (initialFilters.year != null && Number.isFinite(initialFilters.year)) {
+      setYearFilter(String(Math.round(initialFilters.year)));
+      setYearBounds({ min: null, max: null });
+    } else if (initialFilters.minYear != null || initialFilters.maxYear != null) {
+      setYearFilter('0');
+      setYearBounds({
+        min:
+          initialFilters.minYear != null && Number.isFinite(initialFilters.minYear)
+            ? Math.round(initialFilters.minYear)
+            : null,
+        max:
+          initialFilters.maxYear != null && Number.isFinite(initialFilters.maxYear)
+            ? Math.round(initialFilters.maxYear)
+            : null,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFiltersKey]);
+
+  // When a chip sent a short make like "Maruti" but the catalog stores the
+  // canonical name "Maruti Suzuki", swap to the canonical value so the filter
+  // dropdown shows the right selection (and downstream logic behaves
+  // consistently). No-op if already exact or nothing loaded.
+  useEffect(() => {
+    if (!makeFilter) return;
+    if (!uniqueMakes || uniqueMakes.length === 0) return;
+    const canonical = resolveMakeFromList(makeFilter, uniqueMakes);
+    if (canonical && canonical !== makeFilter) {
+      setMakeFilter(canonical);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [makeFilter, uniqueMakes]);
+
   useEffect(() => {
     setCategoryFilter(initialCategory);
   }, [initialCategory]);
@@ -1116,6 +1222,14 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
       const newStateFilter = tempFilters.stateFilter?.trim() || '';
       const stateFilterChanged = newStateFilter !== initialStateFilter;
       setIsStateFilterUserSet(stateFilterChanged ? !!(newStateFilter && newStateFilter !== '') : initialIsStateFilterUserSet);
+
+      // If the user just cleared the state filter but a city is still selected,
+      // clear the city too — otherwise the selectedCity -> stateFilter sync
+      // effect immediately re-applies the state filter right after Apply runs,
+      // which is why "Clear All" + "View All X Cars" appeared to do nothing.
+      if (!newStateFilter && onCityChange && selectedCity?.trim()) {
+        onCityChange('');
+      }
       
       setCurrentPage(1); // Reset to first page when filters are applied
       
@@ -1159,6 +1273,17 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           yearMax: null,
           stateFilter: '',
       });
+      // Also clear the city if one is selected, otherwise the city -> state
+      // sync effect would immediately re-apply a state filter the moment the
+      // user hits "View All X Cars". Matches desktop handleResetFilters.
+      if (onCityChange && selectedCity?.trim()) {
+        onCityChange('');
+      }
+      // Mark the (now-empty) state as no longer user-set so the initial-
+      // user-set snapshot taken when the modal opened does not sneak back in
+      // on Apply.
+      setInitialStateFilter('');
+      setInitialIsStateFilterUserSet(false);
   };
 
   const handleAiQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2082,53 +2207,98 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
           background: 'linear-gradient(180deg, #FAFAFA 0%, #FFFFFF 100%)',
         }}
       >
-        {/* Premium Search Bar */}
+        {/* Premium Search Bar — single pill with embedded submit button.
+            Replaces the old card+button layout which truncated the placeholder. */}
         <div className="px-4 pt-4 pb-3">
-          <div 
-            className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 p-4"
-            style={{
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)'
-            }}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="flex-1 relative">
-                <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search by brand, model, budget..."
-                  value={aiSearchQuery}
-                  onChange={handleAiQueryChange}
-                  onFocus={() => setShowSuggestions(suggestions.length > 0)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAiSearch(); }}
-                  className="w-full pl-12 pr-4 py-3.5 text-base bg-gray-50 border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:bg-white transition-all"
-                  style={{ fontSize: '16px' }}
-                />
-              </div>
+          <div className="relative">
+            <div
+              className="group flex items-center gap-2 rounded-full border border-gray-200/80 bg-white pl-4 pr-1.5 py-1.5 transition-all focus-within:border-orange-400 focus-within:ring-4 focus-within:ring-orange-500/10"
+              style={{ boxShadow: '0 6px 20px rgba(15, 23, 42, 0.06)' }}
+            >
+              <svg
+                className="w-5 h-5 text-gray-400 group-focus-within:text-orange-500 transition-colors flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+
+              <input
+                type="text"
+                placeholder="Search by brand, model, budget…"
+                value={aiSearchQuery}
+                onChange={handleAiQueryChange}
+                onFocus={() => setShowSuggestions(suggestions.length > 0)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAiSearch(); }}
+                className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[15px] leading-none text-gray-900 placeholder:text-gray-400 py-2.5"
+                style={{ fontSize: '16px' }}
+                aria-label="Search vehicles"
+                inputMode="search"
+                enterKeyHint="search"
+              />
+
+              {aiSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleAiQueryChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>);
+                    setShowSuggestions(false);
+                  }}
+                  className="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:scale-95 transition-all"
+                  aria-label="Clear search"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+
               <button
+                type="button"
                 onClick={() => handleAiSearch()}
                 disabled={isAiSearching}
-                className="px-5 py-3.5 rounded-xl font-bold text-sm text-white transition-all disabled:opacity-50 active:scale-95"
+                className="flex-shrink-0 flex items-center justify-center gap-1.5 h-10 px-4 rounded-full font-semibold text-[13px] text-white transition-all disabled:opacity-60 active:scale-95"
                 style={{
                   background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)',
-                  boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
-                  minWidth: '80px'
+                  boxShadow: '0 6px 14px rgba(255, 107, 53, 0.35)'
                 }}
+                aria-label={isAiSearching ? 'Searching' : 'Search'}
               >
-                {isAiSearching ? '...' : 'Search'}
+                {isAiSearching ? (
+                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <span className="leading-none">Search</span>
+                  </>
+                )}
               </button>
             </div>
+
             {showSuggestions && suggestions.length > 0 && (
-              <div className="mt-2 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
-                <ul className="divide-y divide-gray-100">
+              <div
+                className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-gray-100 overflow-hidden z-20"
+                style={{ boxShadow: '0 12px 32px rgba(15, 23, 42, 0.12)' }}
+              >
+                <ul className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
                   {suggestions.map((suggestion, index) => (
                     <li key={index}>
                       <button
+                        type="button"
                         onClick={() => handleSuggestionClick(suggestion)}
-                        className="w-full text-left px-4 py-3 text-gray-900 hover:bg-gray-50 transition-colors font-medium"
+                        className="w-full text-left px-4 py-3 text-gray-800 hover:bg-gray-50 active:bg-gray-100 transition-colors font-medium flex items-center gap-3"
                       >
-                        {suggestion}
+                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <span className="truncate">{suggestion}</span>
                       </button>
                     </li>
                   ))}
@@ -2348,23 +2518,29 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
   // Desktop UI (existing)
   return (
     <>
-      <div className="min-h-screen bg-white lg:bg-gradient-to-br lg:from-slate-50 lg:via-white lg:to-blue-50 relative overflow-hidden">
+      <div className="min-h-screen bg-white lg:bg-gradient-to-br lg:from-slate-50 lg:via-white lg:to-orange-50/60 relative overflow-hidden">
         {/* Background Elements - Hidden on mobile */}
         <div className="hidden lg:block absolute inset-0 overflow-hidden">
-          <div className="absolute top-20 right-20 w-80 h-80 bg-gradient-to-br from-blue-200/20 to-purple-200/20 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-tr from-orange-200/15 to-pink-200/15 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+          <div className="absolute top-20 right-20 w-80 h-80 bg-gradient-to-br from-orange-200/25 to-amber-200/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-tr from-orange-200/15 to-rose-200/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
         </div>
         
         <div className="relative z-10 used-cars-page grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-4 lg:gap-8 container mx-auto py-4 lg:py-8">
           <aside className={`filters hidden lg:block lg:sticky top-24 self-start space-y-6 transition-all duration-300 ${isDesktopFilterVisible ? 'w-[300px] opacity-100' : 'w-0 opacity-0 -translate-x-full'}`}>
               <div className={`bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-6 ${isDesktopFilterVisible ? 'block' : 'hidden'}`}>
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <div
+                    className="w-8 h-8 rounded-xl flex items-center justify-center shadow-md"
+                    style={{
+                      background: 'linear-gradient(135deg, #FF6B35 0%, #F97316 50%, #FB923C 100%)',
+                      boxShadow: '0 6px 14px -4px rgba(255, 107, 53, 0.5), inset 0 1px 0 rgba(255,255,255,0.25)',
+                    }}
+                  >
                     <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
                     </svg>
                   </div>
-                  <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 via-blue-800 to-purple-800 bg-clip-text text-transparent">{t('listings.filtersTitle')}</h2>
+                  <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 via-orange-700 to-amber-600 bg-clip-text text-transparent">{t('listings.filtersTitle')}</h2>
                 </div>
                 {renderFilterControls(false)}
               </div>

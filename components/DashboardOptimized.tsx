@@ -75,12 +75,13 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
     // Handle wishlist toggle - this would need to be passed from parent
   };
 
+  // Only tabs with shipped implementations are surfaced. Analytics + profile settings
+  // live on the main Dashboard / Profile routes respectively; we expose them via
+  // navigation links below rather than empty "coming soon" panes.
   const navigationItems = [
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'listings', label: 'Listings', icon: '🚗' },
     { id: 'messages', label: 'Messages', icon: '💬' },
-    { id: 'analytics', label: 'Analytics', icon: '📈' },
-    { id: 'profile', label: 'Profile', icon: '👤' },
   ] as const;
 
   const renderContent = () => {
@@ -128,12 +129,21 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
           />
         );
       case 'analytics':
+        // Analytics currently lives on the main Dashboard. Route the user there
+        // instead of showing an empty placeholder.
         return (
           <div className="text-center py-8">
             <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
               Analytics
             </h2>
-            <p className="text-gray-600">Analytics view coming soon...</p>
+            <p className="text-gray-600 mb-4">Detailed analytics are available on the full Seller Dashboard.</p>
+            <button
+              type="button"
+              onClick={() => onNavigate(View.SELLER_DASHBOARD)}
+              className="inline-flex items-center px-4 py-2 bg-brand-blue-600 text-white rounded-lg hover:bg-brand-blue-700"
+            >
+              Open full dashboard
+            </button>
           </div>
         );
       case 'profile':
@@ -142,7 +152,14 @@ const DashboardOptimized: React.FC<DashboardOptimizedProps> = memo((props) => {
             <h2 className="text-xl font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">
               Profile Settings
             </h2>
-            <p className="text-gray-600">Profile settings coming soon...</p>
+            <p className="text-gray-600 mb-4">Manage your profile on the Profile page.</p>
+            <button
+              type="button"
+              onClick={() => onNavigate(View.PROFILE)}
+              className="inline-flex items-center px-4 py-2 bg-brand-blue-600 text-white rounded-lg hover:bg-brand-blue-700"
+            >
+              Open profile
+            </button>
           </div>
         );
       default:

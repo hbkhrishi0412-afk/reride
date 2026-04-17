@@ -783,6 +783,7 @@ const ServiceCart: React.FC<Props> = ({
     const [couponInput, setCouponInput] = useState('');
     const [couponMessage, setCouponMessage] = useState('');
     const [isPriceExpanded, setIsPriceExpanded] = useState(false);
+    const [isAddOnsExpanded, setIsAddOnsExpanded] = useState(false);
     const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
     const [addressForm, setAddressForm] = useState<Partial<Address>>({});
 
@@ -1131,21 +1132,6 @@ const ServiceCart: React.FC<Props> = ({
         return fromItems;
     }, [items, availableServicePackages, activeServicePackageId]);
 
-    const suggestedPackages = useMemo(() => {
-        const unselected = availableServicePackages.filter(
-            (pkg) => !pkg.includedServiceId,
-        ).filter(
-            (pkg) => !items.some((item) => item.serviceId === pkg.id),
-        );
-        const priced = unselected
-            .filter((pkg) => !pkg.isCustom && pkg.price > 0)
-            .sort((a, b) => a.price - b.price);
-        const custom = unselected.filter((pkg) => pkg.isCustom || pkg.price <= 0);
-
-        // Keep suggestions focused: show a few relevant next options, not every package.
-        return [...priced, ...custom].slice(0, 3);
-    }, [availableServicePackages, items]);
-
     const parentServicePackages = useMemo(
         () => availableServicePackages.filter((pkg) => !pkg.includedServiceId),
         [availableServicePackages],
@@ -1293,21 +1279,56 @@ const ServiceCart: React.FC<Props> = ({
             websiteServicePackages.find((pkg) => pkg.id === serviceId) ||
             availableServicePackages.find((pkg) => pkg.id === serviceId);
         if (!selectedMeta) return;
-        const parentType = selectedMeta.parentServiceType || selectedMeta.name;
-        const includedCandidates = availableServicePackages.filter(
-            (entry) =>
-                entry.includedServiceId &&
-                (entry.parentServiceType || '').toLowerCase() === parentType.toLowerCase(),
-        );
-        setItems(includedCandidates.length > 0 ? [] : [{ serviceId, quantity: 1 }]);
+        // Always default to "Full service" mode so customers get a single-click
+        // booking experience. They can switch to "Pick sub-services" via the
+        // toggle to customise which sub-services are included.
+        setItems([{ serviceId, quantity: 1 }]);
+    };
+
+    /** Book the full bundled service (provider's declared base price). */
+    const pickFullServiceForActive = () => {
+        if (!activeServicePackageId) return;
+        setItems([{ serviceId: activeServicePackageId, quantity: 1 }]);
+    };
+
+    /** Switch to sub-service selection mode for the active parent service. */
+    const pickSubServicesForActive = () => {
+        if (!activeServicePackageId) return;
+        setItems((prev) => prev.filter((entry) => entry.serviceId !== activeServicePackageId));
+    };
+
+    /** Select every available sub-service under the active parent service. */
+    const selectAllSubServicesForActive = () => {
+        if (!activeServicePackageId) return;
+        const activeService = availableServicePackages.find((pkg) => pkg.id === activeServicePackageId);
+        if (!activeService) return;
+        const parentType = (activeService.parentServiceType || activeService.name).toLowerCase();
+        const subIds = availableServicePackages
+            .filter(
+                (pkg) =>
+                    pkg.includedServiceId &&
+                    (pkg.parentServiceType || '').toLowerCase() === parentType,
+            )
+            .map((pkg) => pkg.id);
+        setItems((prev) => {
+            const withoutParent = prev.filter((entry) => entry.serviceId !== activeServicePackageId);
+            const existing = new Set(withoutParent.map((entry) => entry.serviceId));
+            const additions = subIds
+                .filter((id) => !existing.has(id))
+                .map((id) => ({ serviceId: id, quantity: 1 }));
+            return [...withoutParent, ...additions];
+        });
     };
 
     const toggleIncludedServiceLine = (serviceId: string) => {
         setItems((prev) => {
-            if (prev.some((entry) => entry.serviceId === serviceId)) {
-                return prev.filter((entry) => entry.serviceId !== serviceId);
+            // Switching to any sub-service always drops the full-service parent
+            // to keep pricing unambiguous.
+            const withoutParent = prev.filter((entry) => entry.serviceId !== activeServicePackageId);
+            if (withoutParent.some((entry) => entry.serviceId === serviceId)) {
+                return withoutParent.filter((entry) => entry.serviceId !== serviceId);
             }
-            return [...prev, { serviceId, quantity: 1 }];
+            return [...withoutParent, { serviceId, quantity: 1 }];
         });
     };
 
@@ -1747,9 +1768,9 @@ const ServiceCart: React.FC<Props> = ({
             </section>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-                <section className="mb-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm sm:text-base font-black text-gray-900 dark:text-white">Booking Progress</h2>
+                <section className="mb-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Booking progress</h2>
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                             {Object.values(bookingChecklist).filter(Boolean).length}/{BOOKING_STEPS.length} complete
                         </span>
@@ -1776,12 +1797,12 @@ const ServiceCart: React.FC<Props> = ({
                     </div>
                 </section>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-                    <div className="lg:col-span-2 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
+                    <div className="lg:col-span-2 space-y-4">
                         {/* Car Details Section */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-xl font-black text-gray-900 dark:text-white">Car Details</h2>
+                        <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Car details</h2>
                                 {carDetails && (
                                     <button
                                         onClick={() => setCarFormOpen(!carFormOpen)}
@@ -1806,18 +1827,13 @@ const ServiceCart: React.FC<Props> = ({
                                 )}
                             </div>
                             {carDetails && !carFormOpen && (
-                                <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-800 rounded-xl p-4 border border-blue-200 dark:border-gray-600">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-                                            🚗
-                                        </div>
-                                        <div>
-                                            <div className="font-black text-lg text-gray-900 dark:text-white">{carDetails.make} {carDetails.model}</div>
-                                            <div className="text-sm text-gray-600 dark:text-gray-400">{carDetails.year} • {carDetails.fuel}</div>
-                                            {(carDetails.reg || carDetails.city) && (
-                                                <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">{carDetails.reg} {carDetails.city}</div>
-                                            )}
-                                        </div>
+                                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-3">
+                                    <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                                        {carDetails.make} {carDetails.model}
+                                    </div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                        {carDetails.year} · {carDetails.fuel}
+                                        {(carDetails.reg || carDetails.city) ? ` · ${[carDetails.reg, carDetails.city].filter(Boolean).join(' · ')}` : ''}
                                     </div>
                                 </div>
                             )}
@@ -1869,7 +1885,7 @@ const ServiceCart: React.FC<Props> = ({
                                     <div className="mt-4 flex justify-end">
                                         <button
                                             onClick={handleSaveCarDetails}
-                                            className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+                                            className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-colors"
                                         >
                                             Save car details
                                         </button>
@@ -1879,9 +1895,9 @@ const ServiceCart: React.FC<Props> = ({
                         </section>
 
                         {/* Address Section */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-xl font-black text-gray-900 dark:text-white">Address</h2>
+                        <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="text-base font-semibold text-gray-900 dark:text-white">Address</h2>
                                 <button
                                     onClick={() => {
                                         const newId = `addr-${Date.now()}`;
@@ -1896,19 +1912,19 @@ const ServiceCart: React.FC<Props> = ({
                                         setEditingAddressId(newId);
                                         setAddressForm({ label: 'New Address', line1: '', city: '', state: '', pincode: '' });
                                     }}
-                                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-semibold hover:shadow-lg transition-all hover:-translate-y-0.5 flex items-center gap-2"
+                                    className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors flex items-center gap-1.5"
                                 >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                     </svg>
-                                    Add Address
+                                    Add address
                                 </button>
                             </div>
                             <div className="space-y-3">
                                 {addresses.map(addr => {
                                     const isEditing = editingAddressId === addr.id;
                                     return (
-                                        <div key={addr.id} className={`p-4 rounded-xl border-2 transition-all ${selectedAddress === addr.id ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 shadow-md' : 'border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 bg-white dark:bg-gray-900'}`}>
+                                        <div key={addr.id} className={`p-3 rounded-lg border transition-colors ${selectedAddress === addr.id ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/10' : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 bg-white dark:bg-gray-900'}`}>
                                             {isEditing ? (
                                                 <div className="space-y-2">
                                                     <div className="flex items-center justify-between mb-2">
@@ -2042,8 +2058,8 @@ const ServiceCart: React.FC<Props> = ({
                         </section>
 
                         {/* Slot Selection Section */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                            <h2 className="text-xl font-black text-gray-900 dark:text-white mb-4">Slot Selection</h2>
+                        <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                            <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Slot selection</h2>
                             <div className="mb-5">
                                 <label htmlFor="service-booking-date" className="text-sm font-bold text-gray-900 dark:text-white mb-2 block">
                                     Date
@@ -2103,476 +2119,370 @@ const ServiceCart: React.FC<Props> = ({
 
                     </div>
 
-                    <div className="space-y-6">
-                        {/* Order Details Section */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-xl font-black text-gray-900 dark:text-white">Selected Services</h3>
-                                {items.length > 0 && (
-                                    <span className="px-3 py-1 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 text-white text-xs font-bold">
-                                        {items.length} {items.length === 1 ? 'Service' : 'Services'}
+                    <div className="space-y-4">
+                        {/* Service Section — single list, inline sub-service picker */}
+                        <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Service</h3>
+                                {items.length > 0 && totals.packageSubtotal > 0 && (
+                                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 tabular-nums">
+                                        ₹{totals.packageSubtotal.toLocaleString('en-IN')}
                                     </span>
                                 )}
                             </div>
-                            
-                            {items.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                                        <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                                        </svg>
-                                    </div>
-                                    <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">No services selected</p>
-                                    <p className="text-xs text-gray-400 dark:text-gray-500">Choose a service below to get started</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {items.map((item, index) => {
-                                        const svc = availableServicePackages.find(s => s.id === item.serviceId);
-                                        if (!svc) {
-                                            return null;
-                                        }
-                                        const isIncludedLine = Boolean(svc.includedServiceId);
-                                        const unitPrice = resolveItemUnitPrice(item, selectedProviders[0]);
-                                        const itemTotal = (unitPrice || 0) * item.quantity;
-                                        return (
-                                            <div key={`${item.serviceId}-${index}`} className="relative bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-blue-900/20 dark:via-purple-900/20 dark:to-pink-900/20 rounded-lg p-3 sm:p-4 border-2 border-blue-200 dark:border-blue-800 shadow-md hover:shadow-lg transition-shadow overflow-hidden">
-                                                {/* Selected Badge */}
-                                                <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10">
-                                                    <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center shadow-sm">
-                                                        <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+
+                            <div className="space-y-2">
+                                {websiteServicePackages.map((pkg) => {
+                                    const isActive = hasExplicitServiceSelection && activeServicePackageId === pkg.id;
+                                    const subServices = isActive ? includedOptionsForActiveServicePriced : [];
+                                    const hasSubs = subServices.length > 0;
+                                    const isFullServiceMode = isActive && items.some((i) => i.serviceId === pkg.id);
+                                    const selectedSubs = isActive
+                                        ? items.filter((i) => subServices.some((s) => s.id === i.serviceId)).length
+                                        : 0;
+                                    const providerPrice = isActive
+                                        ? resolveItemUnitPrice({ serviceId: pkg.id, quantity: 1 }, selectedProviders[0])
+                                        : undefined;
+                                    const displayPrice = providerPrice ?? pkg.price;
+                                    return (
+                                        <div
+                                            key={pkg.id}
+                                            className={`rounded-lg border transition-colors ${
+                                                isActive
+                                                    ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/10'
+                                                    : 'border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => selectServiceForBooking(pkg.id)}
+                                                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left"
+                                            >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <span
+                                                        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                                                            isActive
+                                                                ? 'border-blue-600 bg-blue-600 text-white'
+                                                                : 'border-gray-300 bg-white text-transparent'
+                                                        }`}
+                                                    >
+                                                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                                         </svg>
-                                                    </div>
-                                                </div>
-                                                
-                                                {/* Main Content Grid */}
-                                                <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-3 sm:gap-4">
-                                                    {/* Package Icon */}
-                                                    <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-black text-lg sm:text-xl shadow-md flex-shrink-0 mx-auto sm:mx-0">
-                                                        {svc.name.slice(0, 1)}
-                                                    </div>
-                                                    
-                                                    {/* Package Details */}
-                                                    <div className="flex-1 min-w-0">
-                                                        {/* Package Name */}
-                                                        <div className="font-black text-gray-900 dark:text-white text-base sm:text-lg mb-1.5 pr-6">
-                                                            {svc.name}
+                                                    </span>
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                                            {pkg.name}
                                                         </div>
-                                                        {isIncludedLine && (
-                                                            <div className="mb-2">
-                                                                <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                                                                    Included Service
-                                                                </span>
+                                                        {pkg.description && !isActive && (
+                                                            <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                                                                {pkg.description}
                                                             </div>
                                                         )}
-                                                        
-                                                        {/* Warranty & Description */}
-                                                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2.5">
-                                                            {svc.warrantyMonths > 0 && (
-                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md text-xs font-semibold">
-                                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                                                    </svg>
-                                                                    {svc.warrantyMonths} months warranty
-                                                                </span>
-                                                            )}
-                                                            {svc.description && (
-                                                                <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                                                                    {svc.description}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        
-                                                        {/* Price Information */}
-                                                        <div className="mb-2.5 p-2 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">
-                                                            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1.5">
-                                                                <div>
-                                                                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Unit Price</div>
-                                                                    <div className="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400">
-                                                                        {unitPrice && unitPrice > 0 ? `₹${unitPrice.toLocaleString()}` : 'Price at checkout'}
-                                                                    </div>
-                                                                </div>
-                                                                {item.quantity > 1 && (
-                                                                    <div className="text-left sm:text-right">
-                                                                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Total</div>
-                                                                        <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white">
-                                                                            {item.quantity} × ₹{(unitPrice || 0).toLocaleString()} = ₹{itemTotal.toLocaleString()}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        
-                                                        {/* Quantity Controls & Actions */}
-                                                        <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                                                            <div className="flex flex-col sm:flex-row sm:items-end gap-2.5">
-                                                                {/* Quantity Section */}
-                                                                {!isIncludedLine && (
-                                                                    <div className="flex-shrink-0">
-                                                                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wide">Quantity</label>
-                                                                        <div className="flex items-center gap-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm">
-                                                                            <button
-                                                                                onClick={() => updateQuantity(item.serviceId, -1)}
-                                                                                className="h-8 w-8 rounded-l-lg flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-base border-r border-gray-300 dark:border-gray-600 touch-manipulation"
-                                                                                aria-label="Decrease quantity"
-                                                                            >−</button>
-                                                                            <span className="h-8 w-10 flex items-center justify-center text-sm font-bold text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 border-x border-gray-300 dark:border-gray-600">
-                                                                                {item.quantity}
-                                                                            </span>
-                                                                            <button
-                                                                                onClick={() => updateQuantity(item.serviceId, 1)}
-                                                                                className="h-8 w-8 rounded-r-lg flex items-center justify-center text-gray-700 dark:text-gray-300 active:bg-blue-100 dark:active:bg-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400 transition-all font-bold text-base border-l border-gray-300 dark:border-gray-600 touch-manipulation"
-                                                                                aria-label="Increase quantity"
-                                                                            >+</button>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                                
-                                                                {/* Remove Button */}
-                                                                <div className="flex-shrink-0">
-                                                                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wide sm:opacity-0 sm:h-0">Action</label>
-                                                                    <button
-                                                                        onClick={() => removeService(item.serviceId)}
-                                                                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 active:bg-red-100 dark:active:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-300 font-semibold rounded-lg transition-all border border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 shadow-sm hover:shadow touch-manipulation min-h-[32px] text-sm"
-                                                                        aria-label="Remove package"
-                                                                    >
-                                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                        </svg>
-                                                                        <span className="text-xs">Remove</span>
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                                                <span className="text-sm font-semibold text-blue-700 dark:text-blue-400 shrink-0 tabular-nums">
+                                                    {displayPrice > 0
+                                                        ? `₹${displayPrice.toLocaleString('en-IN')}`
+                                                        : 'At checkout'}
+                                                </span>
+                                            </button>
 
-                            {/* Add More Packages Section - Suggestions */}
-                            {items.length > 0 && suggestedPackages.length > 0 && (
-                                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                                    <h4 className="text-base font-black text-gray-900 dark:text-white mb-1">Suggested Services</h4>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Add more services to your order</p>
-                                    <div className="space-y-3">
-                                        {suggestedPackages.map(pkg => (
-                                            <button
-                                                key={pkg.id}
-                                                onClick={() => {
-                                                    selectServiceForBooking(pkg.id);
-                                                }}
-                                                className="w-full px-4 py-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 text-left hover:border-blue-500 dark:hover:border-blue-600 hover:bg-gradient-to-br hover:from-blue-50 hover:to-purple-50 dark:hover:from-blue-900/20 dark:hover:to-purple-900/20 font-semibold transition-all bg-white dark:bg-gray-900 flex items-center justify-between group"
-                                            >
-                                                <div className="flex items-center gap-4 flex-1">
-                                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-black text-base shadow-md flex-shrink-0">
-                                                        {pkg.name.slice(0, 1)}
+                                            {/* Inline detail panel for the active service */}
+                                            {isActive && hasSubs && (
+                                                <div className="border-t border-blue-100 dark:border-blue-900/40 px-3 py-3 space-y-2.5">
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={pickFullServiceForActive}
+                                                            aria-pressed={isFullServiceMode}
+                                                            className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                                                                isFullServiceMode
+                                                                    ? 'border-blue-600 bg-blue-600 text-white'
+                                                                    : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400 dark:bg-gray-900 dark:text-gray-200 dark:border-gray-600'
+                                                            }`}
+                                                        >
+                                                            Full service
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={pickSubServicesForActive}
+                                                            aria-pressed={!isFullServiceMode}
+                                                            className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                                                                !isFullServiceMode
+                                                                    ? 'border-blue-600 bg-blue-600 text-white'
+                                                                    : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400 dark:bg-gray-900 dark:text-gray-200 dark:border-gray-600'
+                                                            }`}
+                                                        >
+                                                            Pick items{selectedSubs > 0 ? ` (${selectedSubs})` : ''}
+                                                        </button>
                                                     </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="font-black text-gray-900 dark:text-white text-base mb-1">{pkg.name}</div>
-                                                        <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                                                            {pkg.warrantyMonths > 0 && (
-                                                                <span className="inline-flex items-center gap-1">
-                                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                                                    </svg>
-                                                                    {pkg.warrantyMonths} months warranty
+                                                    {!isFullServiceMode && (
+                                                        <div>
+                                                            <div className="flex items-center justify-between mb-1.5">
+                                                                <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                                                                    Sub-services
                                                                 </span>
-                                                            )}
-                                                            {pkg.description && <span>• {pkg.description}</span>}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={selectAllSubServicesForActive}
+                                                                    className="text-[11px] font-semibold text-blue-700 hover:underline"
+                                                                >
+                                                                    Select all
+                                                                </button>
+                                                            </div>
+                                                            <div className="space-y-1.5">
+                                                                {subServices.map((line) => {
+                                                                    const checked = items.some((item) => item.serviceId === line.id);
+                                                                    return (
+                                                                        <button
+                                                                            type="button"
+                                                                            key={line.id}
+                                                                            onClick={() => toggleIncludedServiceLine(line.id)}
+                                                                            aria-pressed={checked}
+                                                                            className={`flex w-full items-center justify-between gap-3 rounded-md border px-2.5 py-1.5 text-left transition-colors ${
+                                                                                checked
+                                                                                    ? 'border-blue-500 bg-blue-100/60 dark:bg-blue-900/30'
+                                                                                    : 'border-gray-200 bg-white hover:border-blue-300 dark:bg-gray-900 dark:border-gray-700'
+                                                                            }`}
+                                                                        >
+                                                                            <span className="flex items-center gap-2 min-w-0">
+                                                                                <span
+                                                                                    className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                                                                        checked
+                                                                                            ? 'border-blue-600 bg-blue-600 text-white'
+                                                                                            : 'border-gray-300 bg-white text-transparent'
+                                                                                    }`}
+                                                                                >
+                                                                                    <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path
+                                                                                            strokeLinecap="round"
+                                                                                            strokeLinejoin="round"
+                                                                                            strokeWidth={3}
+                                                                                            d="M5 13l4 4L19 7"
+                                                                                        />
+                                                                                    </svg>
+                                                                                </span>
+                                                                                <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
+                                                                                    {line.name}
+                                                                                </span>
+                                                                            </span>
+                                                                            <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 shrink-0 tabular-nums">
+                                                                                {line.providerPrice != null && line.providerPrice > 0
+                                                                                    ? `₹${line.providerPrice.toLocaleString('en-IN')}`
+                                                                                    : 'At checkout'}
+                                                                            </span>
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
-                                                <div className="flex items-center gap-3 flex-shrink-0">
-                                                    <div className="text-right">
-                                                        <div className="text-base font-black text-blue-600 dark:text-blue-400">
-                                                            {pkg.price > 0 ? `₹${pkg.price.toLocaleString()}` : 'Custom quote'}
-                                                        </div>
-                                                    </div>
-                                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                                        </svg>
-                                                    </div>
+                                            )}
+
+                                            {isActive && !hasSubs && (
+                                                <div className="border-t border-blue-100 dark:border-blue-900/40 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                                                    Sub-services not published yet — provider will confirm pricing on acceptance.
                                                 </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            
-                            <div className="mt-4">
-                                    <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">Choose Service</h4>
-                                    <div className="space-y-2">
-                                        {websiteServicePackages.map(pkg => (
-                                            <button
-                                                key={pkg.id}
-                                                onClick={() => selectServiceForBooking(pkg.id)}
-                                                className={`w-full px-4 py-3 rounded-xl border-2 text-sm font-semibold transition-all flex items-center justify-between group ${
-                                                    hasExplicitServiceSelection && activeServicePackageId === pkg.id
-                                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                                        : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-500 dark:hover:border-blue-600 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 bg-white dark:bg-gray-900'
-                                                }`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-black text-sm">
-                                                        {pkg.name.slice(0, 1)}
-                                                    </div>
-                                                    <div className="text-left">
-                                                        <div className="font-bold">{pkg.name}</div>
-                                                        <div className="text-xs text-gray-500 dark:text-gray-400">{pkg.description}</div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                                                        {pkg.price > 0 ? `₹${pkg.price.toLocaleString()}` : 'Price at checkout'}
-                                                    </span>
-                                                    <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                                    </svg>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            {hasExplicitServiceSelection && activeServicePackageId && includedOptionsForActiveServicePriced.length > 0 && (
-                                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
-                                    <h4 className="text-sm font-bold text-blue-900 mb-1">Services Included</h4>
-                                    <p className="text-xs text-blue-700 mb-3">
-                                        Select the included services you want. Pricing is based on selected provider.
-                                    </p>
-                                    <div className="space-y-2">
-                                        {includedOptionsForActiveServicePriced.map((line) => {
-                                            const checked = items.some((item) => item.serviceId === line.id);
-                                            return (
-                                                <button
-                                                    type="button"
-                                                    key={line.id}
-                                                    onClick={() => toggleIncludedServiceLine(line.id)}
-                                                    className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors ${
-                                                        checked ? 'border-blue-500 bg-blue-100' : 'border-blue-100 bg-white hover:border-blue-300'
-                                                    }`}
-                                                    aria-pressed={checked}
-                                                >
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                        <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                            checked ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300 bg-white text-transparent'
-                                                        }`}>
-                                                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </span>
-                                                        <span className="text-sm font-medium text-gray-800 truncate">{line.name}</span>
-                                                    </div>
-                                                    <span className="text-sm font-semibold text-blue-700">
-                                                        {line.providerPrice != null && line.providerPrice > 0
-                                                            ? `₹${line.providerPrice.toLocaleString('en-IN')}`
-                                                            : 'Price at checkout'}
-                                                    </span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                            {hasExplicitServiceSelection && activeServicePackageId && includedOptionsForActiveServicePriced.length === 0 && (
-                                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
-                                    Included services for this service are not published by providers yet.
-                                </div>
-                            )}
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </section>
 
+
                         {/* Provider Selection Section */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                            <div className="flex items-center justify-between gap-2 mb-4">
-                                <div>
-                                    <h3 className="text-xl font-black text-gray-900 dark:text-white">Choose Provider</h3>
-                                    {selectedServiceTypes.length > 0 && (
-                                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                            Showing providers for: {selectedServiceTypes.join(', ')}
-                                        </p>
-                                    )}
-                                </div>
+                        <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Provider</h3>
                                 {onUseMyLocation && (
                                     <button
                                         type="button"
                                         onClick={onUseMyLocation}
                                         disabled={isLocating}
-                                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 disabled:opacity-60 transition-colors"
+                                        className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline disabled:opacity-60"
                                     >
-                                        {isLocating ? 'Detecting...' : 'Use my location'}
+                                        {isLocating ? 'Detecting…' : 'Use my location'}
                                     </button>
                                 )}
                             </div>
-                            {selectedServiceTypes.length === 0 && (
-                                <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 rounded-xl">
-                                    <p className="text-sm text-amber-800 dark:text-amber-300 font-semibold">
-                                        Please select a service above to see available providers.
-                                    </p>
+                            {selectedServiceTypes.length === 0 ? (
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    Select a service above to see available providers.
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {sortedAvailableProviders.map(p => {
+                                        const totals = providerTotals[p.id];
+                                        const etaMin = estimateBookingEtaMinutes(
+                                            p.id,
+                                            items,
+                                            providerServices,
+                                            availableServicePackages,
+                                        );
+                                        const rating =
+                                            p.rating != null && Number.isFinite(Number(p.rating))
+                                                ? Number(p.rating)
+                                                : undefined;
+                                        const isSelected = selectedProviders.includes(p.id);
+                                        return (
+                                            <label
+                                                key={p.id}
+                                                className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                                                    isSelected
+                                                        ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-900/10'
+                                                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4 mt-0.5 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                                                    checked={isSelected}
+                                                    onChange={(e) => {
+                                                        const checked = e.target.checked;
+                                                        setSelectedProviders(prev =>
+                                                            checked
+                                                                ? Array.from(new Set([...prev, p.id]))
+                                                                : prev.filter(id => id !== p.id),
+                                                        );
+                                                    }}
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                                                            {p.name}
+                                                        </div>
+                                                        {totals && totals.total > 0 && (
+                                                            <span className="text-sm font-semibold text-blue-700 dark:text-blue-400 tabular-nums shrink-0">
+                                                                ₹{totals.total.toLocaleString('en-IN')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap gap-x-2">
+                                                        {rating != null && <span>★ {rating.toFixed(1)}</span>}
+                                                        <span>{p.city}</span>
+                                                        {p.distanceKm ? <span>{p.distanceKm} km</span> : null}
+                                                        {etaMin != null ? <span>~{etaMin} min</span> : null}
+                                                    </div>
+                                                    {!totals && (
+                                                        <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                                                            Pricing not set for selected services.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                    {availableProviders.length === 0 && (
+                                        <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-3">
+                                            No providers offer all selected services.
+                                        </div>
+                                    )}
+                                    {locationError && (
+                                        <div className="text-xs text-red-600 dark:text-red-400 p-2 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800">
+                                            {locationError}
+                                        </div>
+                                    )}
                                 </div>
                             )}
-                            <div className="space-y-3">
-                                {sortedAvailableProviders.map(p => {
-                                    const totals = providerTotals[p.id];
-                                    const etaMin = estimateBookingEtaMinutes(
-                                        p.id,
-                                        items,
-                                        providerServices,
-                                        availableServicePackages,
-                                    );
-                                    const rating =
-                                        p.rating != null && Number.isFinite(Number(p.rating))
-                                            ? Number(p.rating)
-                                            : undefined;
-                                    return (
-                                        <label key={p.id} className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                                            selectedProviders.includes(p.id)
-                                                ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 shadow-md'
-                                                : 'border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 bg-white dark:bg-gray-900'
-                                        }`}>
-                                            <input
-                                                type="checkbox"
-                                                className="h-5 w-5 mt-1 text-blue-600 focus:ring-2 focus:ring-blue-500"
-                                                checked={selectedProviders.includes(p.id)}
-                                                onChange={(e) => {
-                                                    const checked = e.target.checked;
-                                                    setSelectedProviders(prev =>
-                                                        checked ? Array.from(new Set([...prev, p.id])) : prev.filter(id => id !== p.id)
-                                                    );
-                                                }}
-                                            />
-                                            <div className="flex-1 space-y-2">
-                                                <div className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
-                                                    <span>{p.name}</span>
-                                                    {rating != null && (
-                                                        <span className="text-xs font-bold text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/40 px-2.5 py-0.5 rounded-full">
-                                                            ★ {rating.toFixed(1)}
-                                                        </span>
-                                                    )}
-                                                    {totals && totals.total > 0 && (
-                                                        <span className="text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 px-3 py-1 rounded-full">
-                                                            ₹{totals.total.toLocaleString()}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="text-sm text-gray-600 dark:text-gray-400">
-                                                    {p.city}
-                                                    {p.distanceKm ? ` • ${p.distanceKm} km away` : ''}
-                                                    {etaMin != null ? ` • Est. up to ~${etaMin} min` : ''}
-                                                </div>
-                                                <div className="flex flex-wrap gap-2 text-[11px]">
-                                                    <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 font-bold">
-                                                        Verified workshop
-                                                    </span>
-                                                    <span className="px-2 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-bold">
-                                                        {items.length > 1 ? 'Only 2 slots left today' : 'Available today'}
-                                                    </span>
-                                                    <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 font-bold">
-                                                        Avg response: 8 min
-                                                    </span>
-                                                </div>
-                                                {totals && totals.breakdown.some(b => b.price !== undefined) && (
-                                                    <div className="text-xs text-gray-700 dark:text-gray-300 flex flex-wrap gap-2">
-                                                        {totals.breakdown.map(b => (
-                                                            <span key={b.id} className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full font-semibold">
-                                                                {b.name}{b.price !== undefined ? ` • ₹${b.price}` : ''}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {!totals && (
-                                                    <div className="text-xs text-amber-700 dark:text-amber-400 font-semibold">Pricing not set for selected services.</div>
-                                                )}
-                                            </div>
-                                        </label>
-                                    );
-                                })}
-                                {availableProviders.length === 0 && (
-                                    <div className="text-sm text-gray-600 dark:text-gray-400 text-center py-4">No providers offer all selected services.</div>
-                                )}
-                                {locationError && (
-                                    <div className="text-sm text-red-600 dark:text-red-400 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
-                                        {locationError}
-                                    </div>
-                                )}
-                            </div>
                         </section>
 
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-1">Recommended Add-ons</h3>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Boost service quality with one-tap extras.</p>
-                            <div className="space-y-3">
-                                {mockAddOns.map((addOn) => {
-                                    const selected = selectedAddOns.includes(addOn.id);
-                                    return (
-                                        <button
-                                            key={addOn.id}
-                                            type="button"
-                                            onClick={() => toggleAddOn(addOn.id)}
-                                            className={`w-full rounded-xl border-2 px-4 py-3 text-left transition-all ${
-                                                selected
-                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-700'
-                                                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-blue-300 dark:hover:border-blue-700'
-                                            }`}
-                                        >
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div>
-                                                    <div className="font-bold text-gray-900 dark:text-white">{addOn.name}</div>
-                                                    <div className="text-xs text-gray-600 dark:text-gray-400">{addOn.description}</div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-sm font-black text-blue-600 dark:text-blue-400">₹{addOn.price.toLocaleString()}</div>
-                                                    <div className="text-[11px] text-gray-500 dark:text-gray-400">{addOn.durationMins} mins</div>
-                                                </div>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </section>
-
-                        {/* Coupons Section */}
-                        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4">Coupons</h3>
-                            <div className="mb-4">
-                                <div className="flex gap-2">
-                                    <input
-                                        value={couponInput}
-                                        onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                                        placeholder="Enter coupon code"
-                                        className="flex-1 border-2 border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={applyCouponInput}
-                                        className="px-4 py-2 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-semibold"
-                                    >
-                                        Apply
-                                    </button>
+                        {/* Add-ons (collapsible) */}
+                        <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                            <button
+                                type="button"
+                                onClick={() => setIsAddOnsExpanded((prev) => !prev)}
+                                className="w-full flex items-center justify-between"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">Add-ons</h3>
+                                    {selectedAddOns.length > 0 && (
+                                        <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">
+                                            {selectedAddOns.length} selected
+                                        </span>
+                                    )}
                                 </div>
-                                {bestCoupon && !selectedCoupon && (
-                                    <button
-                                        type="button"
-                                        onClick={() => handleApplyCoupon(bestCoupon.code)}
-                                        className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
-                                    >
-                                        Auto-apply best offer ({bestCoupon.code})
-                                    </button>
-                                )}
-                                {couponMessage && <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">{couponMessage}</p>}
+                                <svg
+                                    className={`w-4 h-4 text-gray-400 transition-transform ${isAddOnsExpanded ? 'rotate-180' : ''}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            {isAddOnsExpanded && (
+                                <div className="mt-3 space-y-2">
+                                    {mockAddOns.map((addOn) => {
+                                        const selected = selectedAddOns.includes(addOn.id);
+                                        return (
+                                            <button
+                                                key={addOn.id}
+                                                type="button"
+                                                onClick={() => toggleAddOn(addOn.id)}
+                                                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                                                    selected
+                                                        ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/20'
+                                                        : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">{addOn.name}</div>
+                                                        <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                                                            {addOn.description} · {addOn.durationMins} min
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-sm font-semibold text-blue-700 dark:text-blue-400 tabular-nums shrink-0">
+                                                        ₹{addOn.price.toLocaleString('en-IN')}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </section>
+
+                        {/* Coupon (compact inline) */}
+                        <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+                            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Coupon</h3>
+                            <div className="flex gap-2">
+                                <input
+                                    value={couponInput}
+                                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                                    placeholder="Enter code"
+                                    className="flex-1 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={applyCouponInput}
+                                    className="px-4 py-2 rounded-md bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-sm font-semibold"
+                                >
+                                    Apply
+                                </button>
                             </div>
-                            <div className="flex flex-wrap gap-3">
+                            {bestCoupon && !selectedCoupon && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleApplyCoupon(bestCoupon.code)}
+                                    className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
+                                >
+                                    Auto-apply best offer ({bestCoupon.code})
+                                </button>
+                            )}
+                            {couponMessage && <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">{couponMessage}</p>}
+                            <div className="flex flex-wrap gap-2 mt-3">
                                 {coupons.map(c => (
                                     <button
                                         key={c.code}
                                         onClick={() => handleApplyCoupon(c.code)}
-                                        className={`px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all ${
-                                            selectedCoupon === c.code 
-                                                ? 'border-blue-600 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' 
-                                                : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-blue-400 dark:hover:border-blue-600 bg-white dark:bg-gray-900'
+                                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                                            selectedCoupon === c.code
+                                                ? 'border-blue-600 bg-blue-600 text-white'
+                                                : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-blue-400'
                                         }`}
                                     >
                                         {c.label}
@@ -2581,79 +2491,74 @@ const ServiceCart: React.FC<Props> = ({
                             </div>
                         </section>
 
-                        {/* Payment Summary Section */}
-                        <section className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-lg border-2 border-blue-200 dark:border-blue-800 p-6">
-                            <h3 className="text-xl font-black text-gray-900 dark:text-white mb-4">Payment Summary</h3>
+                        {/* Payment Summary */}
+                        <section className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 lg:sticky lg:top-4">
+                            <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Payment summary</h3>
                             {checkoutReadiness.length > 0 && (
-                                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                                    Complete before checkout: {checkoutReadiness.join(' • ')}
+                                <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                                    Complete: {checkoutReadiness.join(' • ')}
                                 </div>
                             )}
-                            <div className="space-y-3 mb-4">
-                                <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
-                                    <span className="font-semibold">Base package total</span>
-                                    <span className="font-bold">₹{totals.packageSubtotal.toLocaleString()}</span>
+                            <div className="space-y-2 text-sm mb-4">
+                                <div className="flex justify-between text-gray-700 dark:text-gray-300">
+                                    <span>Services</span>
+                                    <span className="font-semibold tabular-nums">₹{totals.packageSubtotal.toLocaleString('en-IN')}</span>
                                 </div>
+                                {totals.addOnSubtotal > 0 && (
+                                    <div className="flex justify-between text-gray-700 dark:text-gray-300">
+                                        <span>Add-ons</span>
+                                        <span className="font-semibold tabular-nums">₹{totals.addOnSubtotal.toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => setIsPriceExpanded((prev) => !prev)}
-                                    className="w-full text-left text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline"
+                                    className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline"
                                 >
-                                    {isPriceExpanded ? 'Hide' : 'Show'} detailed price breakdown
+                                    {isPriceExpanded ? 'Hide fees' : 'Show fees'}
                                 </button>
                                 {isPriceExpanded && (
-                                    <div className="space-y-2 rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white/80 dark:bg-gray-900/40">
-                                        <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
-                                            <span>Add-ons</span>
-                                            <span>₹{totals.addOnSubtotal.toLocaleString()}</span>
-                                        </div>
-                                        <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
+                                    <div className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400 pl-2">
+                                        <div className="flex justify-between">
                                             <span>Pickup fee</span>
-                                            <span>{totals.pickupFee === 0 ? 'Free' : `₹${totals.pickupFee.toLocaleString()}`}</span>
+                                            <span className="tabular-nums">{totals.pickupFee === 0 ? 'Free' : `₹${totals.pickupFee.toLocaleString('en-IN')}`}</span>
                                         </div>
-                                        <div className="flex justify-between text-xs text-gray-600 dark:text-gray-300">
+                                        <div className="flex justify-between">
                                             <span>Platform fee</span>
-                                            <span>₹{totals.platformFee.toLocaleString()}</span>
+                                            <span className="tabular-nums">₹{totals.platformFee.toLocaleString('en-IN')}</span>
                                         </div>
                                     </div>
                                 )}
-                                <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
-                                    <span className="font-semibold">Discount</span>
-                                    <span className="font-bold text-green-600 dark:text-green-400">-₹{totals.discount.toLocaleString()}</span>
+                                {totals.discount > 0 && (
+                                    <div className="flex justify-between text-green-600 dark:text-green-400">
+                                        <span>Discount</span>
+                                        <span className="font-semibold tabular-nums">-₹{totals.discount.toLocaleString('en-IN')}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-gray-700 dark:text-gray-300">
+                                    <span>Taxes</span>
+                                    <span className="font-semibold tabular-nums">₹{totals.tax.toLocaleString('en-IN')}</span>
                                 </div>
-                                <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
-                                    <span className="font-semibold">Taxes</span>
-                                    <span className="font-bold">₹{totals.tax.toLocaleString()}</span>
-                                </div>
-                                <hr className="border-gray-300 dark:border-gray-600" />
-                                <div className="flex justify-between text-lg font-black text-gray-900 dark:text-white pt-2">
+                                <div className="flex justify-between text-base font-bold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-gray-700">
                                     <span>Total</span>
-                                    <span className="text-blue-600 dark:text-blue-400">₹{totals.total.toLocaleString()}</span>
+                                    <span className="tabular-nums">₹{totals.total.toLocaleString('en-IN')}</span>
                                 </div>
                             </div>
                             <button
                                 onClick={handleSubmit}
-                                className="w-full bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white font-black py-4 rounded-xl shadow-xl hover:shadow-2xl transition-all hover:-translate-y-1 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                 disabled={checkoutReadiness.length > 0}
                             >
                                 Place service request
                             </button>
                             {selectedCoupon && totals.discount > 0 && (
-                                <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400 font-semibold">
-                                    You saved ₹{totals.discount.toLocaleString()} on this booking.
+                                <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400 font-semibold text-center">
+                                    You saved ₹{totals.discount.toLocaleString('en-IN')}
                                 </p>
                             )}
-                            <div className="mt-4 rounded-xl bg-white/80 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 p-3 text-xs text-gray-700 dark:text-gray-300">
-                                <div className="font-bold text-gray-900 dark:text-white mb-2">What happens next?</div>
-                                <div>1) Provider confirms in 5-10 minutes.</div>
-                                <div>2) Pickup assigned and ETA shared.</div>
-                                <div>3) Live status updates in Track Requests.</div>
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                                <span className="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold">Free cancellation up to 2h</span>
-                                <span className="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold">3-month service warranty</span>
-                                <span className="px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold">Secure payment protection</span>
-                            </div>
+                            <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400 text-center">
+                                Free cancellation up to 2h · 3-month warranty
+                            </p>
                         </section>
                     </div>
                 </div>

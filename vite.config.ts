@@ -158,7 +158,13 @@ export default defineConfig(({ mode }) => {
           ) {
             return 'vendor-i18n'
           }
-          if (id.includes('node_modules/@sentry/')) return 'vendor-sentry'
+          // NOTE: Do NOT manually chunk @sentry/* — its packages have internal
+          // circular imports that, when forced into a single chunk by Rollup,
+          // produce a Temporal Dead Zone error in production:
+          //   "Cannot access 'da' before initialization" in vendor-sentry-*.js
+          // Sentry is loaded via a dynamic import() in utils/monitoring.ts, so
+          // Rollup will already create a separate async chunk for it.
+          // See: https://github.com/getsentry/sentry-javascript/issues/9435
           if (
             id.includes('node_modules/dompurify/') ||
             id.includes('node_modules/validator/') ||

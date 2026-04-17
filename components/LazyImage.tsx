@@ -107,6 +107,28 @@ export const LazyImage: React.FC<LazyImageProps> = React.memo(({
     // Prevent infinite error loops
     const target = e?.target as HTMLImageElement;
     if (target && !isInlineImagePlaceholder(target.src) && !target.src.includes('placeholder.com') && !target.src.includes('text=Car')) {
+      // Supabase transform URL failed (e.g. project without the render endpoint
+      // enabled, or a transient 4xx). Retry once with the raw `/object/public/`
+      // URL before giving up — this fixes cards that would otherwise render
+      // empty gray when the optimized variant 404s.
+      const failedUrl = target.src;
+      if (
+        failedUrl.includes('supabase.co') &&
+        failedUrl.includes('/storage/v1/render/image/public/')
+      ) {
+        const rawUrl = failedUrl
+          .replace('/storage/v1/render/image/public/', '/storage/v1/object/public/')
+          .split('?')[0];
+        if (rawUrl && rawUrl !== failedUrl) {
+          logInfo('LazyImage: transform failed, falling back to raw object URL', {
+            from: failedUrl,
+            to: rawUrl,
+          });
+          target.src = rawUrl;
+          return;
+        }
+      }
+
       // Try to convert Supabase storage path if it looks like one
       if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
         // This might be a Supabase storage path that wasn't converted

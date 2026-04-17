@@ -3708,7 +3708,36 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             onUserStoppedTyping={onUserStoppedTyping}
             uploaderEmail={seller.email}
             onMarkMessagesAsRead={onMarkMessagesAsRead}
-            onFlagContent={() => {}}
+            onFlagContent={(type, id, reason) => {
+              // Persist the report so admins/moderators can review it.
+              void import('../services/trustSafetyService').then(({ createSafetyReport }) => {
+                try {
+                  createSafetyReport(
+                    seller.email || 'anonymous',
+                    type === 'vehicle' ? 'vehicle' : 'conversation',
+                    id,
+                    'other',
+                    reason || 'No reason provided',
+                  );
+                } catch (e) {
+                  console.warn('Failed to save safety report:', e);
+                }
+              });
+              // Best-effort server notify (endpoint may be absent in some envs).
+              try {
+                void authenticatedFetch('/api/content-reports', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    reportedBy: seller.email,
+                    targetType: type,
+                    targetId: id,
+                    reason: reason || 'No reason provided',
+                    createdAt: new Date().toISOString(),
+                  }),
+                }).catch(() => { /* ignore */ });
+              } catch { /* ignore */ }
+            }}
             typingStatus={typingStatus}
             onOfferResponse={onOfferResponse}
             onClearChat={onClearChat}
@@ -3728,12 +3757,61 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
             vehicle={vehicleToBoost}
             onClose={() => { setShowBoostModal(false); setVehicleToBoost(null); }}
             onBoost={async (vehicleId, packageId) => {
-              // FIXED: Removed window.location.reload() - use proper state update instead
+              // Find the package price so we can charge the seller via Razorpay before boosting.
+              let razorpayProof: {
+                razorpay_order_id: string;
+                razorpay_payment_id: string;
+                razorpay_signature: string;
+                amountInr: number;
+              } | null = null;
+              try {
+                const { BOOST_PACKAGES } = await import('../constants/boost');
+                const pkg = BOOST_PACKAGES.find((p) => p.id === packageId);
+                if (!pkg) {
+                  alert('Unknown boost package. Please refresh and try again.');
+                  return;
+                }
+                const { openRazorpayBoostCheckout, isRazorpayConfiguredInClient } = await import('../services/razorpayPlanPayment');
+                if (!isRazorpayConfiguredInClient()) {
+                  alert('Online payments are not configured. Please contact support to boost listings.');
+                  return;
+                }
+                razorpayProof = await new Promise((resolve, reject) => {
+                  openRazorpayBoostCheckout({
+                    vehicleId,
+                    packageId,
+                    packageName: pkg.name,
+                    amountInr: Number(pkg.price) || 0,
+                    sellerEmail: seller.email,
+                    sellerName: seller.name,
+                    onSuccess: (proof) => resolve(proof),
+                    onFailure: (message) => reject(new Error(message)),
+                  });
+                });
+              } catch (paymentError) {
+                const msg = paymentError instanceof Error ? paymentError.message : 'Payment failed. Please try again.';
+                alert(msg);
+                return;
+              }
+
+              if (!razorpayProof) {
+                alert('Payment was not completed. Please try again.');
+                return;
+              }
+
               try {
                 const response = await authenticatedFetch('/api/vehicles?action=boost', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ vehicleId, packageId, sellerEmail: seller.email })
+                  body: JSON.stringify({
+                    vehicleId,
+                    packageId,
+                    sellerEmail: seller.email,
+                    razorpay_order_id: razorpayProof.razorpay_order_id,
+                    razorpay_payment_id: razorpayProof.razorpay_payment_id,
+                    razorpay_signature: razorpayProof.razorpay_signature,
+                    amount: razorpayProof.amountInr,
+                  })
                 });
                 
                 if (response.ok) {

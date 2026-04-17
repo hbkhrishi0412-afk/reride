@@ -83,6 +83,85 @@ async function confirmRazorpayOnServer(body: {
 }
 
 /**
+ * Opens Razorpay Checkout to pay for a listing Boost package.
+ * On success returns the Razorpay response (order_id, payment_id, signature) which the caller
+ * then forwards to `/api/vehicles?action=boost` for server-side verification.
+ */
+export function openRazorpayBoostCheckout(options: {
+  vehicleId: number;
+  packageId: string;
+  packageName: string;
+  amountInr: number;
+  sellerEmail: string;
+  sellerName?: string;
+  onSuccess: (razorpay: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+    amountInr: number;
+  }) => void;
+  onFailure: (message: string) => void;
+}): void {
+  const { vehicleId, packageId, packageName, amountInr, sellerEmail, sellerName, onSuccess, onFailure } = options;
+  const keyFromEnv =
+    typeof import.meta !== 'undefined' && import.meta.env?.VITE_RAZORPAY_KEY_ID
+      ? String(import.meta.env.VITE_RAZORPAY_KEY_ID).trim()
+      : '';
+
+  void (async () => {
+    try {
+      const loaded = await loadRazorpayCheckoutScript();
+      if (!loaded || !window.Razorpay) {
+        onFailure('Could not load payment gateway. Please try again later.');
+        return;
+      }
+
+      const amountPaise = Math.max(1, Math.round(Number(amountInr) * 100));
+      // Reuse the same order creation endpoint with a `boost` planId; server only uses planId as metadata.
+      const order = await createRazorpayOrder({
+        amountPaise,
+        planId: `boost:${packageId}` as unknown as SubscriptionPlan,
+        sellerEmail,
+      });
+      const keyId = keyFromEnv || order.keyId;
+
+      const rzp = new window.Razorpay!({
+        key: keyId,
+        amount: order.amount,
+        currency: 'INR',
+        name: 'ReRide',
+        description: `Boost: ${packageName} (Vehicle #${vehicleId})`,
+        order_id: order.orderId,
+        prefill: {
+          email: sellerEmail,
+          name: sellerName || sellerEmail.split('@')[0],
+        },
+        handler: (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) => {
+          onSuccess({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            amountInr,
+          });
+        },
+        modal: {
+          ondismiss: () => {
+            onFailure('Payment cancelled.');
+          },
+        },
+      });
+      rzp.open();
+    } catch (e) {
+      onFailure(e instanceof Error ? e.message : 'Payment could not start');
+    }
+  })();
+}
+
+/**
  * Opens Razorpay Checkout for seller plan upgrade; verifies signature on server and records payment.
  */
 export function openRazorpayPlanCheckout(options: {

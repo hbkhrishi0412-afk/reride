@@ -708,41 +708,51 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     return (
       <>
         {googleRolePickerOverlay}
-      <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-5 px-3 sm:py-8 sm:px-4"
-        style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
-          backgroundSize: '400% 400%',
-          animation: 'gradient 15s ease infinite'
-        }}>
-        {/* Animated background elements */}
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-6 px-4 sm:py-8 bg-[#0B1020]">
+        {/* Ambient gradient background */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(600px 400px at 0% 0%, rgba(255,107,53,0.22) 0%, transparent 60%), radial-gradient(600px 400px at 100% 100%, rgba(124,58,237,0.25) 0%, transparent 60%), linear-gradient(160deg, #0B1020 0%, #111834 55%, #1A1240 100%)',
+          }}
+        />
+        {/* Soft floating blobs */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/10 rounded-full blur-2xl animate-pulse"></div>
-          <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-white/10 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+          <div
+            className="absolute -top-24 -right-16 w-64 h-64 rounded-full blur-3xl opacity-50 animate-pulse"
+            style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
+          />
+          <div
+            className="absolute -bottom-24 -left-16 w-72 h-72 rounded-full blur-3xl opacity-50 animate-pulse"
+            style={{
+              background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)',
+              animationDelay: '2s',
+            }}
+          />
         </div>
 
         <div className="w-full max-w-md relative z-10">
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100/80 p-5 sm:p-6 sm:rounded-3xl sm:border-white/20 sm:bg-white/95 sm:backdrop-blur-xl"
+          <div
+            className="bg-white rounded-3xl border border-white/60 p-5 sm:p-6"
             style={{
-              boxShadow: '0 16px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04)'
-            }}>
-            {/* Logo and Title - Premium Design */}
-            <div className="text-center mb-4">
+              boxShadow:
+                '0 24px 60px -16px rgba(8, 10, 30, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+            }}
+          >
+            {/* Logo and Title */}
+            <div className="text-center mb-5">
               <div className="flex justify-center mb-3">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-purple-600 rounded-xl blur-md opacity-40"></div>
-                  <div className="relative bg-white p-2.5 rounded-xl shadow-md border border-gray-100">
-                    <Logo 
-                      className="scale-100" 
-                      showText={true}
-                      onClick={() => onNavigate(View.USED_CARS)}
-                    />
-                  </div>
-                </div>
+                <Logo
+                  className="scale-100"
+                  showText={true}
+                  onClick={() => onNavigate(View.USED_CARS)}
+                />
               </div>
-              <h1 className="text-xl font-bold text-gray-900 mb-0.5 tracking-tight">
+              <h1 className="text-[22px] font-extrabold text-gray-900 tracking-tight">
                 {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
               </h1>
-              <p className="text-xs sm:text-sm font-medium text-gray-600">
+              <p className="mt-1 text-xs sm:text-sm font-medium text-gray-500">
                 {isLogin ? t('auth.signInContinue') : t('auth.getStarted')}
               </p>
             </div>
@@ -962,49 +972,179 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
     );
   }
 
-  // Desktop UI - Premium Design
+  // Desktop UI - Premium Split-Screen Design
   return (
     <>
       {googleRolePickerOverlay}
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-12 px-4 sm:px-6 lg:px-8"
-      style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%)',
-        backgroundSize: '400% 400%',
-        animation: 'gradient 15s ease infinite'
-      }}>
-      {/* Animated background elements */}
+    <div className="min-h-screen w-full relative overflow-hidden bg-[#0B1020]">
+      {/* Ambient gradient background */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(1000px 600px at -10% -10%, rgba(255,107,53,0.18) 0%, transparent 60%), radial-gradient(900px 600px at 110% 10%, rgba(124,58,237,0.22) 0%, transparent 60%), radial-gradient(1200px 800px at 50% 120%, rgba(59,130,246,0.18) 0%, transparent 60%), linear-gradient(135deg, #0B1020 0%, #111834 50%, #1A1240 100%)',
+        }}
+      />
+      {/* Subtle grid overlay */}
+      <div
+        className="absolute inset-0 opacity-[0.07] pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+          backgroundSize: '56px 56px',
+          maskImage:
+            'radial-gradient(ellipse at center, black 40%, transparent 75%)',
+          WebkitMaskImage:
+            'radial-gradient(ellipse at center, black 40%, transparent 75%)',
+        }}
+      />
+      {/* Floating blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-white/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '4s' }}></div>
+        <div
+          className="absolute -top-32 -right-24 w-[30rem] h-[30rem] rounded-full blur-3xl opacity-40 animate-pulse"
+          style={{ background: 'radial-gradient(circle, #FF6B35 0%, transparent 70%)' }}
+        />
+        <div
+          className="absolute -bottom-40 -left-24 w-[32rem] h-[32rem] rounded-full blur-3xl opacity-40 animate-pulse"
+          style={{
+            background: 'radial-gradient(circle, #7C3AED 0%, transparent 70%)',
+            animationDelay: '2s',
+          }}
+        />
       </div>
 
-      <div className="w-full max-w-md relative z-10">
-        <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8 lg:p-10"
-          style={{
-            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)'
-          }}>
-          {/* Logo and Title - Premium Design */}
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-6">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-purple-600 rounded-2xl blur-lg opacity-50 animate-pulse"></div>
-                <div className="relative bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg">
-                  <Logo 
-                    className="scale-110" 
-                    showText={true}
-                    onClick={() => onNavigate(View.USED_CARS)}
-                  />
-                </div>
-              </div>
+      <div className="relative z-10 min-h-screen grid lg:grid-cols-[1.05fr,1fr]">
+        {/* Left hero panel — desktop only */}
+        <aside className="hidden lg:flex flex-col justify-between p-12 xl:p-16 text-white">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/10 backdrop-blur-md border border-white/15 p-2.5 rounded-2xl shadow-lg">
+              <Logo
+                className="scale-100"
+                showText={true}
+                onClick={() => onNavigate(View.USED_CARS)}
+              />
             </div>
-            <h2 className="text-3xl font-extrabold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 bg-clip-text text-transparent mb-2">
-              {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
-            </h2>
-            <p className="mt-2 text-sm font-medium text-gray-600">
-              {isLogin ? t('auth.signInContinueAccount') : t('auth.getStartedToday')}
+          </div>
+
+          <div className="max-w-xl">
+            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/15 px-3 py-1 text-xs font-semibold tracking-wide text-white/90 backdrop-blur-md">
+              <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+              India&rsquo;s trusted pre-owned marketplace
+            </span>
+            <h1 className="mt-5 text-4xl xl:text-5xl font-extrabold leading-tight tracking-tight text-white">
+              Drive into your{' '}
+              <span className="bg-gradient-to-r from-orange-400 via-orange-300 to-amber-200 bg-clip-text text-transparent">
+                next chapter
+              </span>
+              <span className="block text-white/80 font-semibold text-2xl xl:text-3xl mt-2">
+                with ReRide.
+              </span>
+            </h1>
+            <p className="mt-5 text-base xl:text-lg text-white/70 leading-relaxed">
+              Buy, sell, and service vehicles with verified listings, transparent pricing,
+              and a community built on trust.
+            </p>
+
+            <ul className="mt-8 space-y-4">
+              {[
+                {
+                  title: 'Verified listings',
+                  desc: 'Every vehicle goes through our multi-step verification.',
+                  icon: (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  ),
+                },
+                {
+                  title: 'Transparent pricing',
+                  desc: 'Fair market value, clear paperwork, no hidden fees.',
+                  icon: (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8v8m0 0v2m0-10V6m9 6a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  ),
+                },
+                {
+                  title: 'End-to-end service',
+                  desc: 'From discovery to ownership transfer and beyond.',
+                  icon: (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  ),
+                },
+              ].map((f) => (
+                <li key={f.title} className="flex gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500/25 to-orange-500/10 border border-orange-300/20 text-orange-300">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      {f.icon}
+                    </svg>
+                  </span>
+                  <div>
+                    <p className="font-semibold text-white">{f.title}</p>
+                    <p className="text-sm text-white/65 leading-relaxed">{f.desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-5 max-w-xl">
+            <div className="flex items-center gap-1 text-amber-300" aria-hidden>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <svg key={i} className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+                  <path d="M10 15.27L16.18 19l-1.64-7.03L20 7.24l-7.19-.61L10 0 7.19 6.63 0 7.24l5.46 4.73L3.82 19z" />
+                </svg>
+              ))}
+            </div>
+            <p className="mt-2 text-sm text-white/85 leading-relaxed">
+              &ldquo;Found my dream car in under a week. The team made the paperwork feel effortless.&rdquo;
+            </p>
+            <p className="mt-2 text-xs font-semibold text-white/60">
+              — Priya S., Bengaluru
             </p>
           </div>
+        </aside>
+
+        {/* Right form panel */}
+        <main className="flex items-center justify-center px-4 sm:px-6 py-10 lg:py-12 lg:px-10">
+          <div className="w-full max-w-md relative">
+            {/* Mobile-only logo (above lg) */}
+            <div className="flex justify-center mb-5 lg:hidden">
+              <div className="bg-white/10 backdrop-blur-md border border-white/15 p-2.5 rounded-2xl shadow-lg">
+                <Logo
+                  className="scale-100"
+                  showText={true}
+                  onClick={() => onNavigate(View.USED_CARS)}
+                />
+              </div>
+            </div>
+
+            <div
+              className="bg-white/[0.98] backdrop-blur-xl rounded-3xl border border-white/60 p-7 sm:p-8 lg:p-9"
+              style={{
+                boxShadow:
+                  '0 30px 80px -20px rgba(8, 10, 30, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+              }}
+            >
+              <div className="mb-6">
+                <h2 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-gray-900">
+                  {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
+                </h2>
+                <p className="mt-1.5 text-sm font-medium text-gray-500">
+                  {isLogin ? t('auth.signInContinueAccount') : t('auth.getStartedToday')}
+                </p>
+              </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
             {accountTypeButtonGroup('desktop')}
@@ -1124,10 +1264,19 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center items-center py-3.5 px-5 rounded-xl text-sm font-bold text-white overflow-hidden transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.99]"
+              style={{
+                background: 'linear-gradient(135deg, #FF6B35 0%, #F97316 50%, #FB923C 100%)',
+                boxShadow:
+                  '0 10px 24px -6px rgba(255, 107, 53, 0.55), inset 0 1px 0 rgba(255,255,255,0.25)',
+              }}
             >
+              <span
+                className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 skew-x-[-20deg] bg-white/25 opacity-0 group-hover:opacity-100 group-hover:translate-x-[350%] transition-all duration-700 ease-out"
+                aria-hidden
+              />
               {isLoading ? (
-                <span className="flex items-center">
+                <span className="relative flex items-center">
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -1135,7 +1284,17 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                   {t('auth.processing')}
                 </span>
               ) : (
-                isLogin ? t('auth.signIn') : t('auth.createAccount')
+                <span className="relative flex items-center">
+                  {isLogin ? t('auth.signIn') : t('auth.createAccount')}
+                  <svg
+                    className="ml-2 w-4 h-4 transform group-hover:translate-x-1 transition-transform"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </span>
               )}
             </button>
           </form>
@@ -1147,19 +1306,19 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 <div className="w-full border-t border-gray-200"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white/95 backdrop-blur-sm text-gray-500 font-medium">{t('auth.orContinueWith')}</span>
+                <span className="px-4 bg-white text-gray-500 font-medium">{t('auth.orContinueWith')}</span>
               </div>
             </div>
 
-            <div className="mt-6 grid grid-cols-2 gap-3">
+            <div className="mt-5 grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading || !canUseGoogle}
                 title={!canUseGoogle ? t('auth.googleRequiresCustomerOrSeller') : undefined}
-                className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
+                className="group w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-200 rounded-xl bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-500 transition-all duration-200 disabled:opacity-50 active:scale-[0.98]"
               >
-                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                   <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -1173,9 +1332,9 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 onClick={() => setMode('otp')}
                 disabled={isLoading || !canUseOtp}
                 title={!canUseOtp ? t('auth.otpRequiresCustomerOrSeller') : undefined}
-                className="w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all disabled:opacity-50"
+                className="group w-full inline-flex justify-center items-center py-2.5 px-4 border border-gray-200 rounded-xl bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-orange-500 transition-all duration-200 disabled:opacity-50 active:scale-[0.98]"
               >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 mr-2 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
                 {t('auth.phoneOtp')}
@@ -1190,7 +1349,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <button
                 type="button"
                 onClick={toggleMode}
-                className="font-semibold text-orange-600 hover:text-orange-700"
+                className="font-semibold text-orange-600 hover:text-orange-700 underline-offset-2 hover:underline"
               >
                 {isLogin ? t('auth.createAccount') : t('auth.signIn')}
               </button>
@@ -1198,16 +1357,23 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           </div>
 
           {/* Guest Access */}
-          <div className="mt-4 text-center">
+          <div className="mt-3 text-center">
             <button
               type="button"
               onClick={() => onNavigate(View.USED_CARS)}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
             >
               {t('auth.continueGuest')}
             </button>
           </div>
-        </div>
+            </div>
+
+            {/* Tiny reassurance line below card on small screens */}
+            <p className="mt-4 text-center text-xs text-white/60 lg:hidden">
+              Secured by industry-standard encryption
+            </p>
+          </div>
+        </main>
       </div>
     </div>
     </>

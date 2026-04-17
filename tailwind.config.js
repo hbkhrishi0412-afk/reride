@@ -12,11 +12,11 @@ export default {
       colors: {
         // Reride-Inspired Theme - Vibrant & Professional
         'reride': {
-          // Primary Blue (Main Brand Color)
-          'orange': '#2563EB',
-          'orange-hover': '#3B82F6',
-          'orange-light': 'rgba(37, 99, 235, 0.1)',
-          'orange-dark': '#1D4ED8',
+          // Primary Orange (Main Brand Color)
+          'orange': '#FF6B35',
+          'orange-hover': '#F97316',
+          'orange-light': 'rgba(255, 107, 53, 0.1)',
+          'orange-dark': '#EA580C',
           
           // Secondary Blue (Trust & Info)
           'blue': '#1E88E5',
@@ -49,9 +49,9 @@ export default {
         
         // Backward compatibility aliases
         'brand': {
-          'orange': '#2563EB',
-          'orange-hover': '#3B82F6',
-          'orange-light': 'rgba(37, 99, 235, 0.1)',
+          'orange': '#FF6B35',
+          'orange-hover': '#F97316',
+          'orange-light': 'rgba(255, 107, 53, 0.1)',
           'white': '#FFFFFF',
           'text': {
             DEFAULT: '#2C2C2C',
@@ -72,16 +72,16 @@ export default {
         },
       },
       backgroundImage: {
-        'gradient-orange': 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
-        'gradient-hero': 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+        'gradient-orange': 'linear-gradient(135deg, #FF6B35 0%, #F97316 100%)',
+        'gradient-hero': 'linear-gradient(135deg, #FF6B35 0%, #EA580C 100%)',
         'gradient-subtle': 'linear-gradient(180deg, #FFFFFF 0%, #F5F5F5 100%)',
-        'gradient-primary': 'linear-gradient(135deg, #2563EB 0%, #3B82F6 100%)',
+        'gradient-primary': 'linear-gradient(135deg, #FF6B35 0%, #F97316 100%)',
       },
       boxShadow: {
         'reride': '0 2px 8px rgba(0, 0, 0, 0.08)',
         'reride-md': '0 4px 16px rgba(0, 0, 0, 0.1)',
         'reride-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
-        'orange': '0 4px 20px rgba(37, 99, 235, 0.3)',
+        'orange': '0 4px 20px rgba(255, 107, 53, 0.3)',
         'soft': '0 2px 8px rgba(0, 0, 0, 0.08)',
         'soft-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
       },
