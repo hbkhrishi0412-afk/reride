@@ -28,6 +28,7 @@ import { isDevelopmentEnvironment } from '../utils/environment';
 import { showNotification } from '../services/notificationService';
 import { formatSupabaseError } from '../utils/errorUtils';
 import { logInfo, logWarn, logError, logDebug } from '../utils/logger';
+import { clearRememberMeState } from '../utils/rememberMe';
 import { deduplicateRequest } from '../utils/requestDeduplication';
 import { enrichVehicleWithSellerInfo } from '../utils/vehicleEnrichment';
 import * as buyerService from '../services/buyerService';
@@ -923,7 +924,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('reRideRefreshToken');
       localStorage.removeItem('rememberedCustomerEmail');
       localStorage.removeItem('rememberedSellerEmail');
-      
+      clearRememberMeState();
+
       // Clear user-specific data
       setActiveChat(null);
       setComparisonList([]);
@@ -948,6 +950,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       googleOAuthSyncDoneRef.current = false;
       oauthGoogleProfileSyncInFlightUidRef.current = null;
       localStorage.removeItem('reRideCurrentUser');
+      clearRememberMeState();
       setCurrentView(View.HOME);
       setActiveChat(null);
       addToast(t('toast.loggedOut'), 'info');
@@ -1026,18 +1029,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       /* ignore */
     }
 
-    // Verify user storage (for debugging production issues)
-    const storedInSession = sessionStorage.getItem('currentUser');
-    const storedInLocal = localStorage.getItem('reRideCurrentUser');
-    logInfo('✅ User stored after login:', {
-      email: userForSession.email,
-      role: userForSession.role,
-      storedInSessionStorage: !!storedInSession,
-      storedInLocalStorage: !!storedInLocal,
-      sessionMatches: storedInSession
-        ? JSON.parse(storedInSession).email === userForSession.email
-        : false,
-      localMatches: storedInLocal ? JSON.parse(storedInLocal).email === userForSession.email : false,
+    // Verify user storage (for debugging production issues).
+    // MUST be deferred: running two sessionStorage reads + two JSON.parse calls synchronously
+    // on the same tick that fires the post-login re-render adds ~ms of blocking work to an
+    // already heavy frame and, on low-RAM Android WebViews, can be enough to trigger the
+    // Chromium renderer being killed (manifests as the app "auto-closing" after tapping Sign in).
+    const scheduleIdle = (cb: () => void): void => {
+      if (typeof window === 'undefined') {
+        cb();
+        return;
+      }
+      const ric = (window as unknown as {
+        requestIdleCallback?: (fn: () => void, opts?: { timeout?: number }) => number;
+      }).requestIdleCallback;
+      if (typeof ric === 'function') {
+        ric(cb, { timeout: 1500 });
+      } else {
+        window.setTimeout(cb, 0);
+      }
+    };
+    scheduleIdle(() => {
+      try {
+        const storedInSession = sessionStorage.getItem('currentUser');
+        const storedInLocal = localStorage.getItem('reRideCurrentUser');
+        logInfo('✅ User stored after login:', {
+          email: userForSession.email,
+          role: userForSession.role,
+          storedInSessionStorage: !!storedInSession,
+          storedInLocalStorage: !!storedInLocal,
+          sessionMatches: storedInSession
+            ? JSON.parse(storedInSession).email === userForSession.email
+            : false,
+          localMatches: storedInLocal
+            ? JSON.parse(storedInLocal).email === userForSession.email
+            : false,
+        });
+      } catch {
+        /* debug-only; never let verification break login */
+      }
     });
 
     addToast(t('toast.welcomeBack', { name: userForSession.name }), 'success');
@@ -3174,14 +3203,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    // Small delay to ensure initial load completes first (prevents duplicate fetches)
-    const timeoutId = setTimeout(() => {
+    // Defer until the browser is idle. On low-RAM Android WebViews, firing the heavy
+    // vehicles + users fetch (and the state updates they trigger) in the same tick as the
+    // post-login HOME re-render can push the Chromium renderer over the memory ceiling and
+    // the OS kills it — users see the app "auto-close" right after tapping Sign in.
+    // requestIdleCallback yields the critical frame first, then runs the sync.
+    let idleHandle: number | null = null;
+    let timeoutHandle: number | null = null;
+    const runSync = () => {
+      idleHandle = null;
+      timeoutHandle = null;
       syncLatestData();
-    }, 100);
+    };
+    if (typeof window !== 'undefined') {
+      const ric = (window as unknown as {
+        requestIdleCallback?: (fn: () => void, opts?: { timeout?: number }) => number;
+      }).requestIdleCallback;
+      if (typeof ric === 'function') {
+        idleHandle = ric(runSync, { timeout: 1500 });
+      } else {
+        timeoutHandle = window.setTimeout(runSync, 250);
+      }
+    } else {
+      timeoutHandle = (setTimeout(runSync, 250) as unknown) as number;
+    }
 
     return () => {
       isSubscribed = false;
-      clearTimeout(timeoutId);
+      if (idleHandle !== null && typeof window !== 'undefined') {
+        const cic = (window as unknown as {
+          cancelIdleCallback?: (h: number) => void;
+        }).cancelIdleCallback;
+        if (typeof cic === 'function') cic(idleHandle);
+      }
+      if (timeoutHandle !== null) {
+        clearTimeout(timeoutHandle);
+      }
     };
     // PERFORMANCE: Depend on currentUser object, but effect only runs when email/role actually changes
     // React will compare object reference, so we extract values inside the effect
@@ -5219,15 +5276,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         throw error;
       }
     },
-    onToggleVerifiedStatus: (email: string) => {
-      setUsers(prev => Array.isArray(prev) ? prev.map(user => 
-        user && user.email === email ? { ...user, isVerified: !user.isVerified } : user
-      ) : []);
+    onToggleVerifiedStatus: async (email: string) => {
+      // Previously this only mutated local state + in-memory caches, so the
+      // verification badge would reset on refresh. Now the toggle persists to
+      // Supabase through the `/api/users` endpoint (which writes to the
+      // `users.is_verified` column).
       const targetUser = Array.isArray(users) ? users.find(u => u && u.email === email) : undefined;
-      if (targetUser) {
-        syncUserCachesByEmail(email, { isVerified: !targetUser.isVerified });
+      if (!targetUser) {
+        addToast(t('toast.userNotFound', { email }) || `User not found: ${email}`, 'error');
+        return;
       }
-      addToast(t('toast.verificationToggled', { email }), 'success');
+      const nextValue = !targetUser.isVerified;
+
+      // Optimistic local update so the admin UI reacts immediately.
+      setUsers(prev => Array.isArray(prev) ? prev.map(user =>
+        user && user.email === email ? { ...user, isVerified: nextValue } : user
+      ) : []);
+      syncUserCachesByEmail(email, { isVerified: nextValue });
+
+      try {
+        const { updateUser: updateUserService } = await import('../services/userService');
+        await updateUserService({ email, isVerified: nextValue });
+        addToast(t('toast.verificationToggled', { email }), 'success');
+      } catch (error) {
+        // Roll back on failure so the admin sees the true server state.
+        setUsers(prev => Array.isArray(prev) ? prev.map(user =>
+          user && user.email === email ? { ...user, isVerified: targetUser.isVerified } : user
+        ) : []);
+        syncUserCachesByEmail(email, { isVerified: targetUser.isVerified });
+        console.error('❌ Failed to persist isVerified to backend:', error);
+        addToast(
+          t('toast.verificationToggleFailed', { email }) ||
+            `Failed to update verification status for ${email}. Please try again.`,
+          'error',
+        );
+      }
     },
     onUpdateSupportTicket: async (ticket: SupportTicket) => {
       try {

@@ -53,19 +53,44 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose, onSave, on
         }
         setIsResetting(true);
         try {
-            // Update password in localStorage
-            const users = JSON.parse(localStorage.getItem('reRideUsers') || '[]');
-            const updatedUsers = users.map((u: User) => 
-                u.email === user.email ? { ...u, password: newPassword } : u
-            );
-            localStorage.setItem('reRideUsers', JSON.stringify(updatedUsers));
-            
+            // Attempt the real password reset via the API. The previous implementation
+            // only mutated a local `reRideUsers` cache, which gave admins a misleading
+            // success message while the Supabase-backed credential was unchanged.
+            const { authenticatedFetch } = await import('../utils/authenticatedFetch');
+            const response = await authenticatedFetch('/api/users', {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'admin-reset-password',
+                    email: user.email,
+                    newPassword,
+                }),
+            });
+
+            let payload: { success?: boolean; reason?: string; message?: string } = {};
+            try {
+                payload = await response.json();
+            } catch {
+                payload = {};
+            }
+
+            if (!response.ok || payload.success === false) {
+                const reason =
+                    payload.reason ||
+                    payload.message ||
+                    (response.status === 404 || response.status === 501
+                        ? 'Password reset endpoint is not available on this backend.'
+                        : `Request failed with HTTP ${response.status}.`);
+                setPasswordError(reason);
+                return;
+            }
+
             setNewPassword('');
             setConfirmPassword('');
             setShowPasswordReset(false);
             alert(`Password reset successfully for ${user.email}`);
         } catch (error) {
-            setPasswordError('Failed to reset password');
+            const message = error instanceof Error ? error.message : 'Failed to reset password';
+            setPasswordError(message);
             console.error('Password reset error:', error);
         } finally {
             setIsResetting(false);

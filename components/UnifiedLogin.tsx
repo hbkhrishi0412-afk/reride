@@ -5,6 +5,7 @@ import { login, register } from '../services/userService';
 import { signInWithGoogle, syncWithBackend } from '../services/authService';
 import { signInWithEmail } from '../services/supabase-auth-service';
 import { getSupabaseClient } from '../lib/supabase.js';
+import { setRememberMePreference } from '../utils/rememberMe';
 import OTPLogin from './OTPLogin';
 import PasswordInput from './PasswordInput';
 import Logo from './Logo';
@@ -327,6 +328,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               `remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`,
             );
           }
+          setRememberMePreference(rememberMe);
           onServiceProviderLogin(sp.provider);
           return;
         }
@@ -348,8 +350,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
           } else {
             localStorage.removeItem(`remembered${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)}Email`);
           }
+          setRememberMePreference(rememberMe);
           onLogin(result.user);
         } else {
+          setRememberMePreference(true);
           onRegister(result.user);
         }
       } else {
@@ -369,6 +373,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             } else {
               localStorage.removeItem(spKey);
             }
+            setRememberMePreference(rememberMe);
             onServiceProviderLogin(sp.provider);
             return;
           }

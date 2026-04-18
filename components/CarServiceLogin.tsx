@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { signInWithEmail, resetPassword } from '../services/supabase-auth-service';
+import { setRememberMePreference } from '../utils/rememberMe';
 import { View as ViewEnum } from '../types';
+
+const REMEMBER_EMAIL_KEY = 'rememberedService_providerEmail';
 
 interface CarServiceLoginProps {
   onNavigate: (view: ViewEnum) => void;
@@ -20,7 +23,32 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
   const isDev = process.env.NODE_ENV === 'development';
+
+  useEffect(() => {
+    try {
+      const remembered = localStorage.getItem(REMEMBER_EMAIL_KEY);
+      if (remembered) {
+        setEmail(remembered);
+        setRememberMe(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persistRememberedEmail = () => {
+    try {
+      if (rememberMe && email.trim()) {
+        localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+      } else {
+        localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
 
   const handleMockLogin = () => {
     // Quick dev-only path to view the dashboard without hitting auth
@@ -84,6 +112,8 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
         if (!provider) {
           throw new Error('Unable to reach service provider API. Start local API server or try again.');
         }
+        persistRememberedEmail();
+        setRememberMePreference(rememberMe);
         onLoginSuccess(provider);
         onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
         return;
@@ -96,6 +126,8 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
           setLoading(false);
           return;
         }
+        persistRememberedEmail();
+        setRememberMePreference(rememberMe);
         onLoginSuccess(provider);
         onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
         return;
@@ -107,6 +139,8 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
       }
 
       const provider = await resp.json();
+      persistRememberedEmail();
+      setRememberMePreference(rememberMe);
       onLoginSuccess(provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
     } catch (err) {
@@ -185,6 +219,8 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
       }
 
       const provider = await providerResp.json();
+      persistRememberedEmail();
+      setRememberMePreference(true);
       onLoginSuccess(provider);
       onNavigate(ViewEnum.CAR_SERVICE_DASHBOARD);
     } catch (err) {
@@ -306,33 +342,48 @@ const CarServiceLogin: React.FC<CarServiceLoginProps> = ({ onNavigate, onLoginSu
               className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">For service providers only.</span>
-            <button
-              type="button"
-              onClick={async () => {
-                setError(null);
-                setResetMessage(null);
-                if (!email) {
-                  setError('Enter your email to reset password.');
-                  return;
-                }
-                try {
-                  const result = await resetPassword(email);
-                  if (!result.success) {
-                    throw new Error(result.reason || 'Failed to send reset email');
+          {mode === 'login' && (
+            <div className="flex items-center justify-between">
+              <label className="flex items-center cursor-pointer select-none">
+                <input
+                  id="car-service-remember-me"
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 border-gray-300 rounded"
+                  style={{ accentColor: '#2563EB' }}
+                />
+                <span className="ml-2 text-sm text-gray-700">Remember me</span>
+              </label>
+              <button
+                type="button"
+                onClick={async () => {
+                  setError(null);
+                  setResetMessage(null);
+                  if (!email) {
+                    setError('Enter your email to reset password.');
+                    return;
                   }
-                  setResetMessage('Password reset email sent.');
-                } catch (err) {
-                  const message = err instanceof Error ? err.message : 'Failed to send reset email';
-                  setError(message);
-                }
-              }}
-              className="text-sm text-blue-600 hover:underline"
-            >
-              Forgot password?
-            </button>
-          </div>
+                  try {
+                    const result = await resetPassword(email);
+                    if (!result.success) {
+                      throw new Error(result.reason || 'Failed to send reset email');
+                    }
+                    setResetMessage('Password reset email sent. Check your inbox to set a new password.');
+                  } catch (err) {
+                    const message = err instanceof Error ? err.message : 'Failed to send reset email';
+                    setError(message);
+                  }
+                }}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+          {mode === 'signup' && (
+            <span className="block text-sm text-gray-500">For service providers only.</span>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           {resetMessage && <p className="text-sm text-green-600">{resetMessage}</p>}
           <button

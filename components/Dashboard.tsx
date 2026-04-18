@@ -38,6 +38,31 @@ try {
   // Don't throw - allow component to render without charts
 }
 
+// Stable chart options — hoisted so Chart.js doesn't re-init on every render
+const ANALYTICS_CHART_OPTIONS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { position: 'top' as const },
+    title: { display: true, text: 'Views vs. Inquiries per Vehicle' },
+  },
+  scales: {
+    y: {
+      type: 'linear' as const,
+      display: true,
+      position: 'left' as const,
+      title: { display: true, text: 'Views' },
+    },
+    y1: {
+      type: 'linear' as const,
+      display: true,
+      position: 'right' as const,
+      title: { display: true, text: 'Inquiries' },
+      grid: { drawOnChartArea: false },
+    },
+  },
+} as const;
+
 
 interface DashboardProps {
   seller: User;
@@ -2186,18 +2211,17 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     });
   }, []);
   
-  // Generate month options for the last 12 months
-  const getMonthOptions = useCallback(() => {
+  // Generate month options for the last 12 months — memoized to a stable array so
+  // the <select>'s option list doesn't allocate a fresh array on every render.
+  const monthOptions = useMemo(() => {
     const months: { value: string; label: string }[] = [{ value: 'all', label: 'All Time' }];
     const now = new Date();
-    
     for (let i = 0; i < 12; i++) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthValue = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthLabel = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
       months.push({ value: monthValue, label: monthLabel });
     }
-    
     return months;
   }, []);
 
@@ -2830,7 +2854,7 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             onChange={(e) => setSelectedMonth(e.target.value)}
                             className="px-4 py-2 border border-gray-300 rounded-lg bg-white dark:bg-white text-reride-text-dark focus:outline-none focus:ring-2 focus:ring-reride-orange focus:border-transparent"
                         >
-                            {getMonthOptions().map(month => (
+                            {monthOptions.map(month => (
                                 <option key={month.value} value={month.value}>{month.label}</option>
                             ))}
                         </select>
@@ -2931,39 +2955,9 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
                             }
                             
                             return (
-                              <Bar 
-                                  data={analyticsData.chartData} 
-                                  options={{ 
-                                      responsive: true, 
-                                      plugins: { 
-                                          legend: { position: 'top' }, 
-                                          title: { display: true, text: 'Views vs. Inquiries per Vehicle' } 
-                                      },
-                                      scales: {
-                                          y: {
-                                              type: 'linear',
-                                              display: true,
-                                              position: 'left',
-                                              title: {
-                                                  display: true,
-                                                  text: 'Views'
-                                              }
-                                          },
-                                          y1: {
-                                              type: 'linear',
-                                              display: true,
-                                              position: 'right',
-                                              title: {
-                                                  display: true,
-                                                  text: 'Inquiries'
-                                              },
-                                              grid: {
-                                                  drawOnChartArea: false, // only want the grid lines for one axis to show up
-                                              },
-                                          },
-                                      }
-                                  }} 
-                              />
+                              <div className="h-80 sm:h-96">
+                                <Bar data={analyticsData.chartData} options={ANALYTICS_CHART_OPTIONS as any} />
+                              </div>
                             );
                           } catch (chartError) {
                             // Log error but don't crash the dashboard
@@ -3490,27 +3484,33 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
     }
   }
 
-  const NavItem: React.FC<{ view: DashboardView, children: React.ReactNode, count?: number }> = ({ view, children, count }) => (
-    <button 
-      onClick={() => handleNavigate(view)} 
-      className={`group flex justify-between items-center w-full text-left px-4 py-3 rounded-xl transition-all duration-300 ${
-        activeView === view 
-          ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105' 
-          : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-md hover:-translate-y-0.5'
-      }`}
-    >
-      <span className="font-medium">{children}</span>
-      {count && count > 0 && (
-        <span className={`text-xs font-bold rounded-full px-2 py-0.5 ${
-          activeView === view 
-            ? 'bg-white/20 text-white' 
-            : 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
-        }`}>
-          {count}
-        </span>
-      )}
-    </button>
-  );
+  const NavItem: React.FC<{ view: DashboardView, children: React.ReactNode, count?: number }> = ({ view, children, count }) => {
+    const isActive = activeView === view;
+    return (
+      <button
+        type="button"
+        onClick={() => handleNavigate(view)}
+        aria-current={isActive ? 'page' : undefined}
+        className={`group flex justify-between items-center w-full text-left px-4 py-3 rounded-xl transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 ${
+          isActive
+            ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+            : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-sm'
+        }`}
+      >
+        <span className="font-medium">{children}</span>
+        {count && count > 0 && (
+          <span
+            aria-label={`${count} items`}
+            className={`text-xs font-bold rounded-full px-2 py-0.5 ${
+              isActive ? 'bg-white/20 text-white' : 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
+            }`}
+          >
+            {count}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   // Removed unused AppNavItem component
 
@@ -3557,14 +3557,17 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
         </div>
       )}
       
-      <div className="relative z-10 container mx-auto py-8 px-4">
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8">
+      <div className="relative z-10 container mx-auto py-6 sm:py-8 px-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6 lg:gap-8">
           {/* Premium Sidebar */}
           <aside className="lg:col-span-1">
-            <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-6 space-y-3 sticky top-8">
-              <div className="flex items-center gap-3 mb-6">
+            <nav
+              aria-label={t('nav.dashboard') || 'Seller dashboard'}
+              className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-4 sm:p-5 space-y-2 lg:sticky lg:top-6"
+            >
+              <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                     <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
                   </svg>
                 </div>
@@ -3639,19 +3642,19 @@ const Dashboard: React.FC<DashboardProps> = ({ seller, sellerVehicles, reportedV
               
               <NavItem view="settings">
                 <div className="flex items-center gap-3">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                   </svg>
                   <span>{t('sellerDashboard.nav.settings')}</span>
                 </div>
               </NavItem>
-            </div>
+            </nav>
           </aside>
           
           {/* Premium Main Content */}
-          <main className="lg:col-span-1">
-            <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-8 min-h-[600px]">
+          <main className="lg:col-span-1 min-w-0">
+            <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-4 sm:p-6 lg:p-8 min-h-[500px]">
               {(() => {
                 try {
                   return renderContent();

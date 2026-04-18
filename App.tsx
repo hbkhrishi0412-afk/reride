@@ -2049,6 +2049,9 @@ const AppContent: React.FC = () => {
                     sellerVehiclesFiltered,
                     users || []
                   )}
+                  reportedVehicles={(sellerVehiclesFiltered || []).filter(
+                    (v) => v && v.isFlagged
+                  )}
                   conversations={(conversations || []).filter(
                     (c) =>
                       c &&
@@ -2208,6 +2211,14 @@ const AppContent: React.FC = () => {
           );
         }
 
+        // Derive flagged listings for this seller from the live vehicles list
+        // (powered by Supabase `vehicles.is_flagged` → normalized to `isFlagged`).
+        // Previously this was hardcoded to [] which silently disconnected the
+        // seller's "Reports" inbox from the database.
+        const sellerReportedVehicles = (sellerVehiclesFiltered || []).filter(
+          (v) => v && v.isFlagged
+        );
+
         return (
           <DashboardErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
@@ -2217,7 +2228,7 @@ const AppContent: React.FC = () => {
                 sellerVehiclesFiltered, 
                 users || []
               )}
-              reportedVehicles={[]}
+              reportedVehicles={sellerReportedVehicles}
               onAddVehicle={async (vehicleData, isFeaturing = false) => {
                 try {
                   // Set listingExpiresAt based on subscription plan expiry date

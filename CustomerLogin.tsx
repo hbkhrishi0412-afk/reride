@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, User } from './types';
 import { login, register } from './services/userService';
 import { signInWithGoogle } from './services/authService';
+import { setRememberMePreference } from './utils/rememberMe';
 import OTPLogin from './components/OTPLogin';
 import PasswordInput from './components/PasswordInput';
 
@@ -53,8 +54,10 @@ const CustomerLogin: React.FC<CustomerLoginProps> = ({ onLogin, onRegister, onNa
             if (mode === 'login') {
                 if (rememberMe) localStorage.setItem('rememberedCustomerEmail', email);
                 else localStorage.removeItem('rememberedCustomerEmail');
+                setRememberMePreference(rememberMe);
                 onLogin(result.user);
             } else {
+                setRememberMePreference(true);
                 onRegister(result.user);
             }
         } else {

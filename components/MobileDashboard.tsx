@@ -344,14 +344,16 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
         </div>
       </div>
 
-      {/* Stats Grid - Native Style */}
-      <div className="grid grid-cols-2 gap-4">
-        <div 
+      {/* Stats Grid - Native Style (2x2 balanced layout) */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
           onClick={() => setActiveTab('listings')}
-          className="native-card p-4 cursor-pointer active:opacity-80 native-transition"
+          aria-label={`${t('sellerDashboard.mobile.tab.listings')}: ${totalListings}`}
+          className="native-card p-4 text-left cursor-pointer active:opacity-80 native-transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
         >
           <div className="flex items-center justify-between mb-2">
-            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center" aria-hidden="true">
               <span className="text-xl">🚗</span>
             </div>
             {totalListings > 0 && (
@@ -359,7 +361,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
                 {totalListings}
               </span>
             )}
-            </div>
+          </div>
           <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
             {t('sellerDashboard.mobile.tab.listings')}
           </p>
@@ -367,14 +369,14 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           {activeListings > 0 && (
             <p className="text-xs text-gray-500 mt-1">{t('sellerDashboard.mobile.nActive', { count: activeListings })}</p>
           )}
-        </div>
+        </button>
 
         <div className="native-card p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center" aria-hidden="true">
               <span className="text-xl">👁️</span>
             </div>
-            </div>
+          </div>
           <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
             {t('sellerDashboard.mobile.totalViews')}
           </p>
@@ -382,11 +384,35 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           {totalViews > 0 && (
             <p className="text-xs text-gray-500 mt-1">{t('sellerDashboard.mobile.viewsHint')}</p>
           )}
-          </div>
+        </div>
+
+        {isSeller && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('messages')}
+            aria-label={`${t('sellerDashboard.mobile.tab.messages')}: ${totalInquiries}${unreadSellerThreads > 0 ? `, ${unreadSellerThreads} unread` : ''}`}
+            className="native-card p-4 text-left cursor-pointer active:opacity-80 native-transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center" aria-hidden="true">
+                <span className="text-xl">💬</span>
+              </div>
+              {unreadSellerThreads > 0 && (
+                <span className="text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full">
+                  {unreadSellerThreads} new
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1" style={{ letterSpacing: '0.05em' }}>
+              {t('sellerDashboard.mobile.tab.messages')}
+            </p>
+            <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{totalInquiries}</p>
+          </button>
+        )}
 
         <div className="native-card p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center" aria-hidden="true">
               <span className="text-xl">✅</span>
             </div>
           </div>
@@ -394,7 +420,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
             {t('sellerDashboard.mobile.soldStat')}
           </p>
           <p className="text-2xl font-bold text-gray-900 tracking-tight" style={{ letterSpacing: '-0.03em' }}>{soldListings}</p>
-          {soldListings > 0 && (
+          {soldListings > 0 && totalListings > 0 && (
             <p className="text-xs text-gray-500 mt-1">
               {t('sellerDashboard.mobile.soldSuccess', {
                 percent: Math.round((soldListings / totalListings) * 100),
@@ -403,6 +429,21 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
           )}
         </div>
       </div>
+
+      {/* Plan card skeleton while loading — prevents layout jump */}
+      {isSeller && planLoading && (
+        <div
+          aria-hidden="true"
+          className="rounded-2xl p-5 bg-gradient-to-br from-orange-200 to-orange-300 relative overflow-hidden animate-pulse"
+          style={{ minHeight: 180 }}
+        >
+          <div className="h-5 w-40 bg-white/40 rounded mb-4" />
+          <div className="h-3 w-full bg-white/30 rounded mb-2" />
+          <div className="h-2 w-full bg-white/20 rounded mb-4" />
+          <div className="h-3 w-2/3 bg-white/30 rounded mb-2" />
+          <div className="h-3 w-1/2 bg-white/30 rounded" />
+        </div>
+      )}
 
       {/* Plan Management Card - Premium Design */}
       {isSeller && plan && !planLoading && (

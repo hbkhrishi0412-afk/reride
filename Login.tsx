@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, User } from './types';
 import { signInWithEmail, signUpWithEmail, syncWithBackend } from './services/supabase-auth-service';
 import { signInWithGoogle } from './services/authService';
+import { setRememberMePreference } from './utils/rememberMe';
 import OTPLogin from './components/OTPLogin';
 import PasswordInput from './components/PasswordInput';
 import AuthLayout from './components/AuthLayout';
@@ -53,6 +54,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
             if (backendResult.success && backendResult.user) {
                 if (rememberMe) localStorage.setItem('rememberedSellerEmail', email);
                 else localStorage.removeItem('rememberedSellerEmail');
+                setRememberMePreference(rememberMe);
                 onLogin(backendResult.user);
             } else {
                 throw new Error(backendResult.reason || 'Failed to sync with backend.');
@@ -75,6 +77,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onNavigate, onForgot
             const backendResult = await syncWithBackend(supabaseResult.user, 'seller', 'email');
             
             if (backendResult.success && backendResult.user) {
+                setRememberMePreference(true);
                 onRegister(backendResult.user);
             } else {
                 throw new Error(backendResult.reason || 'Failed to sync with backend.');
