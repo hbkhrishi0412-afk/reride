@@ -158,7 +158,7 @@ const MobileDashboard: React.FC<MobileDashboardProps> = memo(({
     displacement: '',
     groundClearance: '',
     bootSpace: '',
-    qualityReport: { summary: '', fixesDone: [] },
+    qualityReport: { fixesDone: [] },
     certifiedInspection: null,
     certificationStatus: 'none',
   };

@@ -69,7 +69,7 @@ interface DashboardProps {
   sellerVehicles: Vehicle[];
   allVehicles: Vehicle[];
   reportedVehicles: Vehicle[];
-  onAddVehicle: (vehicle: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, isFeaturing: boolean) => void;
+  onAddVehicle: (vehicle: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, isFeaturing: boolean) => void | Promise<void>;
   onAddMultipleVehicles: (vehicles: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>[]) => void;
   onUpdateVehicle: (vehicle: Vehicle) => void;
   onDeleteVehicle: (vehicleId: number) => void;
@@ -285,25 +285,59 @@ const ComboboxInput: React.FC<{
   );
 };
 
-const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type?: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; error?: string; tooltip?: string; required?: boolean; children?: React.ReactNode; disabled?: boolean; placeholder?: string; rows?: number }> = 
-  ({ label, name, type = 'text', value, onChange, onBlur, error, tooltip, required = false, children, disabled = false, placeholder, rows }) => (
+const FormInput: React.FC<{ label: string; name: keyof Vehicle | 'summary'; type?: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void; onBlur?: (e: React.FocusEvent<HTMLInputElement>) => void; error?: string; tooltip?: string; required?: boolean; children?: React.ReactNode; disabled?: boolean; placeholder?: string; rows?: number; prefix?: React.ReactNode; suffix?: React.ReactNode }> =
+  ({ label, name, type = 'text', value, onChange, onBlur, error, tooltip, required = false, children, disabled = false, placeholder, rows, prefix, suffix }) => {
+  const baseInputClasses = `block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300 hover:border-gray-300'}`;
+  const focusOn = (e: React.FocusEvent<HTMLElement>) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)');
+  const focusOff = (e: React.FocusEvent<HTMLElement>) => (e.currentTarget.style.boxShadow = '');
+  return (
   <div>
     <label htmlFor={String(name)} className="flex items-center text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">
         {label}{required && <span className="text-reride-orange ml-0.5">*</span>}
         {tooltip && <HelpTooltip text={tooltip} />}
     </label>
     {type === 'select' ? (
-        <select id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''}>
+        <select id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} className={baseInputClasses} onFocus={focusOn} onBlur={focusOff}>
             {children}
         </select>
     ) : type === 'textarea' ? (
-        <textarea id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} rows={rows} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => e.currentTarget.style.boxShadow = ''} />
+        <textarea id={String(name)} name={String(name)} value={String(value)} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} rows={rows} className={baseInputClasses} onFocus={focusOn} onBlur={focusOff} />
     ) : (
-        <input type={type} id={String(name)} name={String(name)} value={value} onChange={onChange} required={required} disabled={disabled} placeholder={placeholder} className={`block w-full p-3 border rounded-lg focus:outline-none transition bg-white dark:text-reride-text-dark disabled:bg-white dark:disabled:bg-white ${error ? 'border-reride-orange' : 'border-gray-200 dark:border-gray-300'}`} onFocus={(e) => !error && (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.1)')} onBlur={(e) => { e.currentTarget.style.boxShadow = ''; if (onBlur) onBlur(e); }} />
+        <div className="relative">
+            {prefix && (
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-500 text-sm font-semibold">
+                    {prefix}
+                </span>
+            )}
+            <input
+                type={type}
+                id={String(name)}
+                name={String(name)}
+                value={value}
+                onChange={onChange}
+                required={required}
+                disabled={disabled}
+                placeholder={placeholder}
+                className={`${baseInputClasses} ${prefix ? 'pl-8' : ''} ${suffix ? 'pr-10' : ''}`}
+                onFocus={focusOn}
+                onBlur={(e) => { focusOff(e); if (onBlur) onBlur(e); }}
+            />
+            {suffix && (
+                <span className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400 text-xs">
+                    {suffix}
+                </span>
+            )}
+        </div>
     )}
-    {error && <p className="mt-1 text-xs text-reride-orange">{error}</p>}
+    {error && (
+        <p className="mt-1 text-xs text-reride-orange flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+            {error}
+        </p>
+    )}
   </div>
-);
+  );
+};
 
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; gradient?: string }> = memo(({ title, value, icon, gradient = "from-blue-500 to-indigo-600" }) => (
@@ -529,7 +563,6 @@ const initialFormState: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'> = 
   groundClearance: '',
   bootSpace: '',
   qualityReport: {
-    summary: '',
     fixesDone: [],
   },
   certifiedInspection: null,
@@ -544,27 +577,266 @@ const initialFormState: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'> = 
   offerDisclaimer: '',
 };
 
-const FormFieldset: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
-    const [isOpen, setIsOpen] = useState(true);
+const FormFieldset: React.FC<{
+    title: string;
+    children: React.ReactNode;
+    icon?: React.ReactNode;
+    description?: string;
+    step?: number;
+    defaultOpen?: boolean;
+    actions?: React.ReactNode;
+}> = ({ title, children, icon, description, step, defaultOpen = true, actions }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
     return (
-        <fieldset className="border border-gray-200 dark:border-gray-200 rounded-lg p-4">
-            <legend className="px-2 text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark">
-                <button type="button" onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2">
-                    <span>{isOpen ? '▼' : '►'}</span>
-                    {title}
+        <section className="bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden">
+            <header
+                className="flex items-center gap-3 px-5 py-4 cursor-pointer select-none"
+                onClick={() => setIsOpen(!isOpen)}
+                role="button"
+                aria-expanded={isOpen}
+            >
+                {step !== undefined && (
+                    <span
+                        className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm"
+                        style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
+                    >
+                        {step}
+                    </span>
+                )}
+                {icon && step === undefined && (
+                    <span className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-reride-orange-light text-reride-orange">
+                        {icon}
+                    </span>
+                )}
+                <div className="flex-grow min-w-0">
+                    <h3 className="text-base sm:text-lg font-semibold text-reride-text-dark leading-tight">{title}</h3>
+                    {description && <p className="text-xs text-gray-500 mt-0.5 truncate">{description}</p>}
+                </div>
+                {actions && (
+                    <div onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
+                        {actions}
+                    </div>
+                )}
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+                    className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
+                    aria-label={isOpen ? 'Collapse section' : 'Expand section'}
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className={`h-5 w-5 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                 </button>
-            </legend>
-            {isOpen && <div className="mt-4 animate-fade-in">{children}</div>}
-        </fieldset>
+            </header>
+            <div
+                className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
+            >
+                <div className="overflow-hidden">
+                    <div className="px-5 pb-5 pt-1 border-t border-gray-100">{children}</div>
+                </div>
+            </div>
+        </section>
     );
 };
+
+// Premium "no image yet" preview card – shown in Live Preview before any photos are uploaded.
+// Mirrors the listing card layout but replaces the photo with a beautiful branded hero
+// that surfaces Make / Model / Year / Category – giving sellers an aspirational preview.
+const PremiumPreviewPlaceholder: React.FC<{
+    make?: string;
+    model?: string;
+    year?: number | string;
+    category?: string;
+    price?: number;
+    fuelType?: string;
+    transmission?: string;
+    mileage?: number;
+    city?: string;
+    state?: string;
+    sellerName?: string;
+    onUploadClick?: () => void;
+}> = memo(({ make, model, year, category, price, fuelType, transmission, mileage, city, state, sellerName, onUploadClick }) => {
+    const hasIdentity = !!(make && model);
+    const displayMake = (make || '').trim();
+    const displayModel = (model || '').trim();
+    const formattedPrice = price && price > 0 ? `₹${price.toLocaleString('en-IN')}` : '₹ —';
+    const formattedKms = mileage && mileage > 0 ? `${(mileage / 1000).toFixed(mileage >= 10000 ? 0 : 1)}k kms` : '—';
+    const locationText = city || state ? `${city || 'N/A'}${state ? `, ${state}` : ''}` : 'Location not set';
+
+    // Pick a category-appropriate vehicle silhouette
+    const isTwoWheeler = category && /two|bike|motor/i.test(category);
+    const isCommercial = category && /commercial|truck/i.test(category);
+    const VehicleIcon = isTwoWheeler ? (
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="14" cy="46" r="10" />
+            <circle cx="50" cy="46" r="10" />
+            <path d="M22 46l8-18h12l8 18M28 28l-4-8h-6M42 28l4-8h6M30 28l4 8h-8" />
+        </svg>
+    ) : isCommercial ? (
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 42V18h28v24M32 26h12l8 10v6H32" />
+            <circle cx="14" cy="46" r="5" /><circle cx="44" cy="46" r="5" />
+        </svg>
+    ) : (
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 38h48l-6-14a4 4 0 00-3.6-2.4H17.6A4 4 0 0014 24L8 38z" />
+            <path d="M6 38h52v8a2 2 0 01-2 2h-4a4 4 0 01-4-4H16a4 4 0 01-4 4H8a2 2 0 01-2-2v-8z" />
+            <circle cx="18" cy="44" r="4" /><circle cx="46" cy="44" r="4" />
+            <path d="M18 28h28" />
+        </svg>
+    );
+
+    return (
+        <div
+            className="rounded-2xl overflow-hidden ring-1 ring-gray-200 shadow-sm bg-white relative"
+            style={{ fontFamily: "'Poppins', sans-serif" }}
+        >
+            {/* Hero placeholder */}
+            <button
+                type="button"
+                onClick={onUploadClick}
+                className="relative w-full block overflow-hidden group focus:outline-none"
+                style={{ aspectRatio: '16 / 10' }}
+                aria-label="Upload images"
+            >
+                {/* Branded gradient background */}
+                <div
+                    className="absolute inset-0"
+                    style={{
+                        background: 'linear-gradient(135deg, #1A1A2E 0%, #2D1B4E 45%, #FF6B35 130%)',
+                    }}
+                />
+                {/* Decorative blurred orbs */}
+                <div
+                    className="absolute -top-16 -right-16 w-64 h-64 rounded-full opacity-30 blur-3xl"
+                    style={{ background: 'radial-gradient(circle, #FF8456 0%, transparent 70%)' }}
+                />
+                <div
+                    className="absolute -bottom-20 -left-12 w-56 h-56 rounded-full opacity-20 blur-3xl"
+                    style={{ background: 'radial-gradient(circle, #5B8DEF 0%, transparent 70%)' }}
+                />
+                {/* Subtle grid pattern */}
+                <div
+                    className="absolute inset-0 opacity-[0.07]"
+                    style={{
+                        backgroundImage:
+                            'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+                        backgroundSize: '24px 24px',
+                    }}
+                />
+                {/* Giant translucent vehicle silhouette */}
+                <div className="absolute inset-0 flex items-end justify-end pr-2 pb-2 text-white opacity-10 pointer-events-none">
+                    <div className="w-[80%] h-[80%]">{VehicleIcon}</div>
+                </div>
+
+                {/* Top badges */}
+                <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2 z-10">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur text-white text-[10px] font-semibold uppercase tracking-wider border border-white/20">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-300 animate-pulse" />
+                        Live Preview
+                    </span>
+                    {year ? (
+                        <span className="px-2.5 py-1 rounded-full bg-white/90 text-[#1A1A1A] text-xs font-bold shadow-sm">
+                            {year}
+                        </span>
+                    ) : null}
+                </div>
+
+                {/* Center content – Make / Model headline */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center z-10">
+                    {hasIdentity ? (
+                        <>
+                            <h2
+                                className="text-white font-extrabold leading-tight drop-shadow-lg"
+                                style={{ fontSize: 'clamp(20px, 3.6vw, 32px)', letterSpacing: '-0.01em' }}
+                            >
+                                {displayMake}
+                            </h2>
+                            <h3
+                                className="text-white/90 font-semibold leading-tight mt-0.5 drop-shadow"
+                                style={{ fontSize: 'clamp(16px, 2.6vw, 22px)' }}
+                            >
+                                {displayModel}
+                            </h3>
+                            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur border border-white/25 text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                Click to add photos
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="w-14 h-14 mb-3 rounded-2xl bg-white/15 backdrop-blur border border-white/20 flex items-center justify-center text-white">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </div>
+                            <p className="text-white font-bold text-base">Your listing preview</p>
+                            <p className="text-white/70 text-xs mt-1 max-w-[80%]">
+                                Enter Make &amp; Model — and add photos — to see how buyers will view your listing.
+                            </p>
+                        </>
+                    )}
+                </div>
+
+                {/* Bottom subtle gradient for text readability */}
+                <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/40 to-transparent" />
+            </button>
+
+            {/* Card body – mirrors the real VehicleCard layout */}
+            <div className="p-4 flex flex-col" style={{ fontFamily: "'Poppins', sans-serif" }}>
+                <div className="flex justify-between items-start mb-1">
+                    <h3 className="font-bold leading-tight flex-1 pr-2 text-[14px] text-[#1A1A1A]">
+                        {hasIdentity ? `${displayMake} ${displayModel}` : 'Make · Model'}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full flex-shrink-0 bg-[#EEEEEE] text-[#616161] text-[12px] font-medium">
+                        {year || '—'}
+                    </span>
+                </div>
+
+                <p className="mb-2 text-[13px] text-[#616161]">
+                    By <span className="font-semibold" style={{ color: '#FF7F47' }}>{sellerName || 'Your Dealership'}</span>
+                </p>
+
+                <div className="grid grid-cols-3 gap-x-2 mb-2">
+                    <div className="flex items-center gap-1.5 text-[12px] text-[#616161]">
+                        <svg className="flex-shrink-0 w-4 h-4 text-[#2196F3]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.414-1.414L11 10.586V6z" clipRule="evenodd" /></svg>
+                        {formattedKms}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[12px] text-[#616161]">
+                        <svg className="flex-shrink-0 w-4 h-4 text-[#2196F3]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 17.5 9.134a1 1 0 010 1.732l-3.354 1.935-1.18 4.455a1 1 0 01-1.933 0L9.854 12.8 6.5 10.866a1 1 0 010-1.732l3.354-1.935 1.18-4.455A1 1 0 0112 2z" clipRule="evenodd" /></svg>
+                        {fuelType || 'Petrol'}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[12px] text-[#616161]">
+                        <svg className="flex-shrink-0 w-4 h-4 text-[#2196F3]" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" /></svg>
+                        {transmission || 'Manual'}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[12px] text-[#616161] mb-3">
+                    <svg className="flex-shrink-0 w-4 h-4 text-[#2196F3]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>
+                    {locationText}
+                </div>
+
+                <div className="mt-auto pt-3 border-t border-[#E0E0E0]">
+                    <p className="font-extrabold text-[18px]" style={{ color: '#FF7F47' }}>
+                        {formattedPrice}
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+});
 
 interface VehicleFormProps {
     seller: User;
     editingVehicle: Vehicle | null;
     allVehicles: Vehicle[];
-    onAddVehicle: (vehicle: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, isFeaturing: boolean) => void;
-    onUpdateVehicle: (vehicle: Vehicle) => void;
+    onAddVehicle: (vehicle: Omit<Vehicle, 'id' | 'averageRating' | 'ratingCount'>, isFeaturing: boolean) => void | Promise<void>;
+    onUpdateVehicle: (vehicle: Vehicle) => void | Promise<void>;
     onFeatureListing: (vehicleId: number) => Promise<void>;
     onCancel: () => void;
     vehicleData: VehicleData;
@@ -1039,17 +1311,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
       }
     };
 
-    const handleQualityReportChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            qualityReport: {
-                ...(prev.qualityReport!),
-                [name]: value,
-            },
-        }));
-    };
-  
     const handleAddFeature = () => {
       if (featureInput.trim() && !formData.features.includes(featureInput.trim())) {
         setFormData(prev => ({ ...prev, features: [...prev.features, featureInput.trim()] }));
@@ -1066,7 +1327,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
             setFormData(prev => ({
                 ...prev,
                 qualityReport: {
-                    summary: prev.qualityReport?.summary || '',
                     fixesDone: [...(prev.qualityReport?.fixesDone || []), fixInput.trim()]
                 }
             }));
@@ -1078,7 +1338,6 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         setFormData(prev => ({
             ...prev,
             qualityReport: {
-                summary: prev.qualityReport?.summary || '',
                 fixesDone: (prev.qualityReport?.fixesDone || []).filter(f => f !== fixToRemove)
             }
         }));
@@ -1209,7 +1468,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
     // Use currentTime for real-time updates
     const isPlanExpired = !!seller?.planExpiryDate && new Date(seller.planExpiryDate) < currentTime;
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         // Block new listings if plan is expired (allow editing existing vehicles)
         if (!editingVehicle && isPlanExpired) {
@@ -1252,17 +1511,27 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         
         if (editingVehicle) {
             console.log('✏️ Editing existing vehicle:', editingVehicle.id);
-            onUpdateVehicle({ ...editingVehicle, ...sanitizedFormData });
-            if (isFeaturing && !editingVehicle.isFeatured) {
-                void onFeatureListing(editingVehicle.id);
+            try {
+                await Promise.resolve(onUpdateVehicle({ ...editingVehicle, ...sanitizedFormData }));
+                if (isFeaturing && !editingVehicle.isFeatured) {
+                    await onFeatureListing(editingVehicle.id);
+                }
+                onCancel();
+            } catch (err) {
+                console.error('Failed to update listing:', err);
             }
-        } else {
-            console.log('➕ Adding new vehicle');
-            console.log('📧 Seller email in sanitized data:', sanitizedFormData.sellerEmail);
-            console.log('📧 Seller email from props:', seller.email);
-            onAddVehicle(sanitizedFormData, isFeaturing);
+            return;
         }
-        onCancel();
+
+        console.log('➕ Adding new vehicle');
+        console.log('📧 Seller email in sanitized data:', sanitizedFormData.sellerEmail);
+        console.log('📧 Seller email from props:', seller.email);
+        try {
+            await Promise.resolve(onAddVehicle(sanitizedFormData, isFeaturing));
+            onCancel();
+        } catch (err) {
+            console.error('Failed to add vehicle:', err);
+        }
     };
 
     const previewVehicle: Vehicle = {
@@ -1278,34 +1547,107 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
         }
     };
 
+    // Listing completion checklist – drives the progress bar & sidebar health card
+    const listingChecklist = [
+        { key: 'basics', label: 'Make, Model & Year', done: !!(formData.make && formData.model && formData.year) },
+        { key: 'price', label: 'Price set', done: Number(formData.price) > 0 },
+        { key: 'location', label: 'State & City', done: !!(formData.state && formData.city) },
+        { key: 'mileage', label: 'Km Driven', done: Number(formData.mileage) > 0 },
+        { key: 'specs', label: 'Engine / Fuel specs', done: !!(formData.engine && formData.fuelType) },
+        { key: 'images', label: 'At least 1 photo', done: (formData.images?.length || 0) > 0 },
+        { key: 'description', label: 'Description added', done: (formData.description || '').trim().length > 20 },
+        { key: 'features', label: 'Key features added', done: (formData.features?.length || 0) > 0 },
+    ];
+    const completedCount = listingChecklist.filter(i => i.done).length;
+    const completionPercent = Math.round((completedCount / listingChecklist.length) * 100);
+    const completionColor = completionPercent < 40 ? '#EF4444' : completionPercent < 75 ? '#F59E0B' : '#10B981';
+
+    const aiButton = (
+        <button
+            type="button"
+            onClick={handleGetAiSuggestions}
+            disabled={isGeneratingSuggestions || !formData.make || !formData.model || !formData.year}
+            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-1.5 rounded-full border border-reride-orange/30 text-reride-orange bg-reride-orange-light hover:bg-reride-orange hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-reride-orange-light disabled:hover:text-reride-orange"
+            title={!formData.make || !formData.model || !formData.year ? 'Fill Make, Model & Year first' : 'Auto-fill specs with AI'}
+        >
+            {isGeneratingSuggestions ? (
+                <>
+                    <span className="w-3.5 h-3.5 border-2 border-dashed rounded-full animate-spin border-current" />
+                    <span>Generating…</span>
+                </>
+            ) : (
+                <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" /></svg>
+                    <span className="hidden sm:inline">Auto-fill with AI</span>
+                    <span className="sm:hidden">AI</span>
+                </>
+            )}
+        </button>
+    );
+
     return (
-      <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
-        <h2 className="text-2xl font-bold text-reride-text-dark dark:text-reride-text-dark mb-6 border-b dark:border-gray-200 pb-4">
-          {editingVehicle ? 'Edit Vehicle Listing' : 'List a New Vehicle'}
-        </h2>
+      <div className="bg-gradient-to-b from-gray-50 to-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-md">
+        {/* Page header with progress */}
+        <div className="mb-6 pb-5 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-reride-text-dark flex items-center gap-3">
+                        <span
+                            className="inline-flex w-10 h-10 rounded-xl items-center justify-center text-white shadow-md"
+                            style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16l-4-4m0 0l4-4m-4 4h12a4 4 0 014 4v0a4 4 0 01-4 4H4" /></svg>
+                        </span>
+                        {editingVehicle ? 'Edit Vehicle Listing' : 'List a New Vehicle'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1.5 ml-13 sm:ml-0">
+                        {editingVehicle ? 'Update your listing details below.' : 'Fill in the details to create a high-quality listing that sells faster.'}
+                    </p>
+                </div>
+                <div className="sm:min-w-[260px]">
+                    <div className="flex items-center justify-between text-xs font-medium text-gray-600 mb-1.5">
+                        <span>Listing completion</span>
+                        <span className="font-bold" style={{ color: completionColor }}>{completionPercent}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div
+                            className="h-2 rounded-full transition-all duration-500"
+                            style={{ width: `${completionPercent}%`, background: completionColor }}
+                        />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">{completedCount} of {listingChecklist.length} essentials complete</p>
+                </div>
+            </div>
+        </div>
+
         {isPlanExpired && (
-            <div className="mb-4 p-3 rounded bg-red-50 text-red-700 border border-red-200">
-                Your plan has expired. Renew your plan to add new listings.
+            <div className="mb-4 p-4 rounded-xl bg-red-50 text-red-700 border border-red-200 flex items-start gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                <div>
+                    <p className="font-semibold">Your plan has expired</p>
+                    <p className="text-sm">Renew your plan to add new listings.</p>
+                </div>
             </div>
         )}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 lg:gap-8">
           {/* Form Column */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <FormFieldset title="Vehicle Overview">
-                <div className="flex justify-between items-center mb-4 -mt-4">
+          <form onSubmit={handleSubmit} className="space-y-5 lg:col-span-3">
+            <FormFieldset
+                title="Vehicle Overview"
+                step={1}
+                description="Core details buyers see first"
+                actions={
                     <div className="flex items-center gap-2">
-                        <p className="text-xs text-reride-text-dark dark:text-reride-text-dark">Enter core details about your vehicle.</p>
                         {hasVehicleData && (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                                <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
                                 Admin Managed
                             </span>
                         )}
+                        {aiButton}
                     </div>
-                    <button type="button" onClick={handleGetAiSuggestions} disabled={isGeneratingSuggestions || !formData.make || !formData.model || !formData.year} className="text-sm font-semibold text-reride-orange disabled:opacity-50 flex items-center gap-1">
-                        {isGeneratingSuggestions ? (<><div className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-current"></div><span>Generating...</span></>) : '✨ Auto-fill with AI'}
-                    </button>
-                </div>
+                }
+            >
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                     <FormInput label="Category" name="category" type="select" value={formData.category} onChange={handleChange} required>
                         <option value="" disabled>Select Category</option>
@@ -1358,10 +1700,10 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     <FormInput label="Make Year" name="year" type="number" value={formData.year} onChange={handleChange} onBlur={handleBlur} error={errors.year} required />
                     <FormInput label="Registration Year" name="registrationYear" type="number" value={formData.registrationYear} onChange={handleChange} onBlur={handleBlur} required />
                     <div>
-                        <FormInput label="Price (₹)" name="price" type="number" value={formData.price} onChange={handleChange} onBlur={handleBlur} error={errors.price} tooltip="Enter the listing price without commas or symbols." required />
+                        <FormInput label="Price" name="price" type="number" value={formData.price} onChange={handleChange} onBlur={handleBlur} error={errors.price} tooltip="Enter the listing price without commas or symbols." prefix="₹" required />
                         <PricingGuidance vehicleDetails={formData} allVehicles={allVehicles} />
                     </div>
-                    <FormInput label="Km Driven" name="mileage" type="number" value={formData.mileage} onChange={handleChange} onBlur={handleBlur} error={errors.mileage} />
+                    <FormInput label="Km Driven" name="mileage" type="number" value={formData.mileage} onChange={handleChange} onBlur={handleBlur} error={errors.mileage} suffix="km" />
                     <FormInput label="No. of Owners" name="noOfOwners" type="number" value={formData.noOfOwners} onChange={handleChange} onBlur={handleBlur} />
                     <FormInput label="RTO" name="rto" value={formData.rto} onChange={handleChange} placeholder="e.g., MH01" />
                     <FormInput label="State" name="state" type="select" value={formData.state} onChange={handleChange} required>
@@ -1381,7 +1723,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 </div>
             </FormFieldset>
             
-            <FormFieldset title="Vehicle Specifications">
+            <FormFieldset title="Vehicle Specifications" step={2} description="Engine, transmission and performance details">
                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                     <div>
                         <FormInput label="Engine" name="engine" value={formData.engine} onChange={handleChange} tooltip="e.g., 1.5L Petrol, 150kW Motor"/>
@@ -1419,9 +1761,11 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                  </div>
             </FormFieldset>
 
-            <FormFieldset title="Quality Report">
+            <FormFieldset title="Quality Report" step={3} description="List recent fixes and upgrades to build buyer trust" defaultOpen={false}>
                 <div className="space-y-4">
-                    <FormInput label="Summary" name="summary" type="textarea" value={formData.qualityReport?.summary || ''} onChange={handleQualityReportChange} rows={3} placeholder="e.g., Excellent condition, single owner, full service history..."/>
+                    <p className="text-xs text-gray-500 -mt-1">
+                        Tip: write the overall condition and history in the <span className="font-semibold">Vehicle Description</span> below (Step 4). Use this section to highlight specific fixes and upgrades.
+                    </p>
                     <div>
                         <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Fixes Done / Upgrades</label>
                         <div className="flex gap-2">
@@ -1440,74 +1784,259 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 </div>
             </FormFieldset>
             
-            <FormFieldset title="Media, Documents & Description">
-                <div className="space-y-4">
-                     <div>
-                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Images</label>
-                        <div className="mt-1">
-                            <label htmlFor="file-upload" className={`relative cursor-pointer bg-white rounded-lg border-2 border-gray-200 dark:border-gray-300 border-dashed transition-colors duration-200 flex flex-col items-center justify-center text-center p-6 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`} style={{ borderColor: isUploading ? '' : undefined }} onMouseEnter={(e) => !isUploading && (e.currentTarget.style.borderColor = 'var(--reride-orange)')} onMouseLeave={(e) => !isUploading && (e.currentTarget.style.borderColor = '')}>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-reride-text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                                <span className="mt-2 block text-sm font-semibold" style={{ color: '#FF6B35' }}>
-                                    {isUploading ? 'Uploading...' : 'Upload images'}
-                                </span>
-                                <input id="file-upload" type="file" className="sr-only" multiple accept="image/png, image/jpeg" onChange={(e) => handleFileUpload(e, 'image')} disabled={isUploading} />
+            <FormFieldset title="Media, Documents & Description" step={4} description="Photos sell cars — add at least 3 quality images">
+                <div className="space-y-6">
+                    {/* IMAGES */}
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-medium text-reride-text-dark">
+                                Images
+                                <span className="text-xs text-gray-500 ml-2 font-normal">(JPG or PNG, up to 10MB each)</span>
                             </label>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                (formData.images?.length || 0) >= 3
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-amber-100 text-amber-700'
+                            }`}>
+                                {formData.images?.length || 0} / 3+ recommended
+                            </span>
                         </div>
-                        <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-                            {formData.images.map((url, index) => (
-                                <div key={index} className="relative group aspect-square bg-gray-100 rounded-lg overflow-hidden">
-                                    <img src={getSafeImageSrc(url)} className="w-full h-full object-cover rounded-lg shadow-sm" alt={`Vehicle thumbnail ${index + 1}`} />
-                                    <button type="button" onClick={() => handleRemoveImageUrl(url)} className="absolute top-1 right-1 bg-reride-orange text-white rounded-full h-6 w-6 flex items-center justify-center text-sm opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+                        <label
+                            htmlFor="file-upload"
+                            className={`relative block cursor-pointer bg-gradient-to-b from-orange-50/40 to-white rounded-xl border-2 border-dashed border-gray-300 hover:border-reride-orange hover:bg-orange-50/60 transition-all duration-200 p-8 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            onDragOver={(e) => { e.preventDefault(); if (!isUploading) e.currentTarget.classList.add('border-reride-orange', 'bg-orange-50/80'); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-50/80'); }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove('border-reride-orange', 'bg-orange-50/80');
+                                if (isUploading) return;
+                                const files = e.dataTransfer.files;
+                                if (files && files.length > 0) {
+                                    const input = document.getElementById('file-upload') as HTMLInputElement;
+                                    if (input) {
+                                        const dt = new DataTransfer();
+                                        Array.from(files).forEach(f => dt.items.add(f));
+                                        input.files = dt.files;
+                                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                                    }
+                                }
+                            }}
+                        >
+                            <div className="flex flex-col items-center text-center">
+                                <div className="w-14 h-14 rounded-full bg-reride-orange-light flex items-center justify-center mb-3">
+                                    {isUploading ? (
+                                        <svg className="animate-spin h-7 w-7 text-reride-orange" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                    ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-reride-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                        </svg>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
+                                <p className="text-sm font-semibold text-reride-text-dark">
+                                    {isUploading ? 'Uploading…' : (
+                                        <>
+                                            <span className="text-reride-orange">Click to upload</span> or drag & drop
+                                        </>
+                                    )}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">First image will be used as the cover photo</p>
+                            </div>
+                            <input id="file-upload" type="file" className="sr-only" multiple accept="image/png, image/jpeg" onChange={(e) => handleFileUpload(e, 'image')} disabled={isUploading} />
+                        </label>
+                        {formData.images.length > 0 && (
+                            <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                                {formData.images.map((url, index) => (
+                                    <div key={index} className="relative group aspect-square bg-gray-100 rounded-xl overflow-hidden ring-1 ring-gray-200 hover:ring-reride-orange transition-all">
+                                        <img src={getSafeImageSrc(url)} className="w-full h-full object-cover" alt={`Vehicle thumbnail ${index + 1}`} />
+                                        {index === 0 && (
+                                            <span className="absolute top-1.5 left-1.5 bg-reride-orange text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow">
+                                                COVER
+                                            </span>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveImageUrl(url)}
+                                                className="bg-white/95 text-red-600 rounded-full h-8 w-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:scale-110"
+                                                title="Remove image"
+                                                aria-label="Remove image"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                     <div>
-                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark">Documents</label>
-                        <div className="mt-1 flex items-center gap-2">
-                             <select id="document-type" className="p-3 border rounded-lg bg-white dark:text-reride-text-dark border-gray-200 dark:border-gray-300">
+
+                    {/* DOCUMENTS */}
+                    <div>
+                        <label className="block text-sm font-medium text-reride-text-dark mb-2">
+                            Documents
+                            <span className="text-xs text-gray-500 ml-2 font-normal">(PDF, JPG or PNG)</span>
+                        </label>
+                        <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                            <select
+                                id="document-type"
+                                className="flex-grow p-3 border border-gray-200 rounded-lg bg-white text-reride-text-dark focus:outline-none focus:border-reride-orange transition"
+                                onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)')}
+                                onBlur={(e) => (e.currentTarget.style.boxShadow = '')}
+                                defaultValue="Registration Certificate (RC)"
+                            >
                                 <option>Registration Certificate (RC)</option>
                                 <option>Insurance</option>
                                 <option>Pollution Under Control (PUC)</option>
                                 <option>Service Record</option>
                                 <option>Other</option>
                             </select>
-                            <label htmlFor="doc-upload" className={`cursor-pointer font-semibold text-white py-2 px-4 rounded-lg transition-colors ${isUploading ? 'bg-white' : 'btn-brand-primary'}`} style={!isUploading ? { background: 'var(--gradient-primary)', cursor: 'pointer' } : undefined}>
-                                {isUploading ? '...' : 'Upload'}
+                            <label
+                                htmlFor="doc-upload"
+                                className={`cursor-pointer inline-flex items-center justify-center gap-2 font-semibold text-white py-3 px-5 rounded-lg whitespace-nowrap shadow-sm hover:shadow-md transition-shadow ${isUploading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                style={{ background: 'linear-gradient(135deg, #FF6B35 0%, #FF8456 100%)' }}
+                            >
+                                {isUploading ? (
+                                    <span className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-current" />
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                )}
+                                <span>{isUploading ? 'Uploading…' : 'Upload Document'}</span>
                                 <input id="doc-upload" type="file" className="sr-only" accept=".pdf,.png,.jpg,.jpeg" onChange={(e) => handleFileUpload(e, 'document')} disabled={isUploading} />
                             </label>
                         </div>
-                         <div className="mt-2 flex flex-wrap gap-2">
-                            {(formData.documents || []).map(doc => (
-                                <span key={doc.url} className="bg-gray-100 dark:bg-white text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-2">
-                                    {doc.fileName} ({doc.name})
-                                    <button type="button" onClick={() => handleRemoveDocument(doc.url)}>&times;</button>
-                                </span>
-                            ))}
-                        </div>
+                        {(formData.documents?.length || 0) > 0 && (
+                            <div className="mt-3 space-y-2">
+                                {(formData.documents || []).map(doc => {
+                                    const isPdf = (doc.fileName || '').toLowerCase().endsWith('.pdf');
+                                    return (
+                                        <div key={doc.url} className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg hover:border-reride-orange transition-colors">
+                                            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isPdf ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                            </div>
+                                            <div className="flex-grow min-w-0">
+                                                <p className="text-sm font-semibold text-reride-text-dark truncate">{doc.fileName}</p>
+                                                <p className="text-xs text-gray-500">{doc.name}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveDocument(doc.url)}
+                                                className="flex-shrink-0 w-8 h-8 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
+                                                title="Remove document"
+                                                aria-label="Remove document"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
+
+                    {/* KEY FEATURES */}
                     <div>
-                        <label className="block text-sm font-medium text-reride-text-dark dark:text-reride-text-dark mb-1">Key Features</label>
+                        <label className="block text-sm font-medium text-reride-text-dark mb-2">
+                            Key Features
+                            <span className="text-xs text-gray-500 ml-2 font-normal">(Press Enter to add)</span>
+                        </label>
                         <div className="flex gap-2">
-                            <input type="text" value={featureInput} onChange={(e) => setFeatureInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }} placeholder="e.g., Sunroof" className="flex-grow p-3 border border-gray-200 dark:border-gray-300 rounded-lg" />
-                            <button type="button" onClick={handleAddFeature} className="bg-gray-100 dark:bg-white font-bold py-2 px-4 rounded-lg">Add</button>
+                            <div className="relative flex-grow">
+                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                </span>
+                                <input
+                                    type="text"
+                                    value={featureInput}
+                                    onChange={(e) => setFeatureInput(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddFeature(); } }}
+                                    placeholder="e.g., Sunroof, ABS, Cruise Control"
+                                    className="w-full pl-9 p-3 border border-gray-200 rounded-lg focus:outline-none transition hover:border-gray-300"
+                                    onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)')}
+                                    onBlur={(e) => (e.currentTarget.style.boxShadow = '')}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleAddFeature}
+                                disabled={!featureInput.trim()}
+                                className="inline-flex items-center gap-1.5 bg-reride-text-dark text-white font-semibold py-2 px-4 rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                Add
+                            </button>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-2">{formData.features.map(feature => ( <span key={feature} className="brand-badge-orange text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-2">{feature}<button type="button" onClick={() => handleRemoveFeature(feature)}>&times;</button></span> ))}</div>
+                        {formData.features.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {formData.features.map(feature => (
+                                    <span key={feature} className="inline-flex items-center gap-1.5 bg-reride-orange-light text-reride-orange text-sm font-semibold pl-3 pr-1 py-1 rounded-full">
+                                        {feature}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveFeature(feature)}
+                                            className="w-5 h-5 rounded-full hover:bg-reride-orange hover:text-white flex items-center justify-center transition-colors"
+                                            aria-label={`Remove ${feature}`}
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                     <div>
-                        <div className="flex justify-between items-center mb-1">
-                            <label htmlFor="description" className="block text-sm font-medium">Vehicle Description</label>
-                            <button type="button" onClick={handleGenerateDescription} disabled={isGeneratingDesc || !formData.make || !formData.model} className="text-sm font-semibold text-reride-orange disabled:opacity-50"> {isGeneratingDesc ? '...' : '✨ Generate with AI'}</button>
+
+                    {/* DESCRIPTION */}
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                            <label htmlFor="description" className="block text-sm font-medium text-reride-text-dark">
+                                Vehicle Description
+                                <span className="text-xs text-gray-500 ml-2 font-normal">(optional but recommended)</span>
+                            </label>
+                            <button
+                                type="button"
+                                onClick={handleGenerateDescription}
+                                disabled={isGeneratingDesc || !formData.make || !formData.model}
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-reride-orange/30 text-reride-orange bg-reride-orange-light hover:bg-reride-orange hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-reride-orange-light disabled:hover:text-reride-orange"
+                                title={!formData.make || !formData.model ? 'Fill Make & Model first' : 'Generate description with AI'}
+                            >
+                                {isGeneratingDesc ? (
+                                    <>
+                                        <span className="w-3.5 h-3.5 border-2 border-dashed rounded-full animate-spin border-current" />
+                                        <span>Generating…</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" /></svg>
+                                        <span>Generate with AI</span>
+                                    </>
+                                )}
+                            </button>
                         </div>
-                        <textarea id="description" name="description" rows={4} value={formData.description} onChange={handleChange} className="block w-full p-3 border border-gray-200 dark:border-gray-300 rounded-lg" />
+                        <div className="relative">
+                            <textarea
+                                id="description"
+                                name="description"
+                                rows={5}
+                                maxLength={1000}
+                                value={formData.description}
+                                onChange={handleChange}
+                                placeholder="Describe the highlights — service history, condition, recent upgrades, why you love it…"
+                                className="block w-full p-3 border border-gray-200 rounded-lg focus:outline-none transition hover:border-gray-300 resize-y"
+                                onFocus={(e) => (e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255, 107, 53, 0.15)')}
+                                onBlur={(e) => (e.currentTarget.style.boxShadow = '')}
+                            />
+                            <div className="absolute bottom-2 right-3 text-xs text-gray-400 pointer-events-none">
+                                {(formData.description || '').length} / 1000
+                            </div>
+                        </div>
                     </div>
                 </div>
             </FormFieldset>
 
-            <FormFieldset title={t('sellerListing.section.offer')}>
-                <p className="text-sm text-reride-text-dark dark:text-reride-text-dark mb-4">{t('sellerListing.offer.hint')}</p>
+            <FormFieldset title={t('sellerListing.section.offer')} step={5} description="Optional — attract more buyers with a special offer" defaultOpen={false}>
+                <p className="text-sm text-gray-500 mb-4">{t('sellerListing.offer.hint')}</p>
                 <div className="flex items-center gap-3 mb-4">
                     <input
                         id="offer-enabled"
@@ -1622,7 +2151,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 </div>
             </FormFieldset>
 
-            <FormFieldset title="Promotion">
+            <FormFieldset title="Promotion" step={6} description="Boost visibility with featured placement" defaultOpen={false}>
                 {(!editingVehicle || !editingVehicle.isFeatured) && (
                     <div className="p-4 bg-reride-orange dark:bg-reride-orange/20 border border-reride-orange dark:border-reride-orange rounded-lg">
                         <div className="flex items-center justify-between">
@@ -1649,49 +2178,122 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                 )}
             </FormFieldset>
 
-            <div className="pt-4 flex flex-col sm:flex-row items-center gap-4">
-                <button 
-                    type="submit" 
-                    disabled={!editingVehicle && isPlanExpired} 
-                    className={`w-full sm:w-auto flex-grow font-bold py-3 px-6 rounded-lg text-lg ${
-                        !editingVehicle && isPlanExpired 
-                            ? 'opacity-50 cursor-not-allowed btn-brand-primary' 
-                            : 'btn-brand-primary'
-                    }`}
-                > 
-                    {editingVehicle ? 'Update Vehicle' : 'List My Vehicle'} 
-                </button>
-                <button type="button" onClick={onCancel} className="w-full sm:w-auto bg-gray-500 text-white font-bold py-3 px-6 rounded-lg text-lg hover:bg-gray-600">Cancel</button>
+            {/* Sticky action bar – always visible on scroll */}
+            <div className="sticky bottom-0 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 bg-white/90 backdrop-blur border-t border-gray-200 z-20 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500 mr-auto">
+                        <span className="w-2 h-2 rounded-full" style={{ background: completionColor }} />
+                        <span>{completionPercent}% complete · {completedCount}/{listingChecklist.length} essentials</span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="w-full sm:w-auto order-2 sm:order-1 bg-white border border-gray-300 text-gray-700 font-semibold py-2.5 px-5 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={!editingVehicle && isPlanExpired}
+                        className={`w-full sm:w-auto order-1 sm:order-2 inline-flex items-center justify-center gap-2 font-bold py-2.5 px-6 rounded-lg shadow-sm ${
+                            !editingVehicle && isPlanExpired
+                                ? 'opacity-50 cursor-not-allowed btn-brand-primary'
+                                : 'btn-brand-primary hover:shadow-md transition-shadow'
+                        }`}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        {editingVehicle ? 'Update Vehicle' : 'List My Vehicle'}
+                    </button>
+                </div>
             </div>
           </form>
 
-          <div className="hidden lg:block">
-              <div className="sticky top-24 self-start space-y-6">
+          {/* Live Preview / Sidebar Column */}
+          <aside className="hidden lg:block lg:col-span-2">
+              <div className="sticky top-24 self-start space-y-5">
                   <div>
-                      <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4">Live Preview</h3>
-                      <div className="pointer-events-none">
-                         <VehicleCard vehicle={previewVehicle} onSelect={() => {}} onToggleCompare={() => {}} isSelectedForCompare={false} onToggleWishlist={() => {}} isInWishlist={false} isCompareDisabled={true} onViewSellerProfile={() => {}} />
-                      </div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                          Live Preview
+                      </h3>
+                      {formData.images.length === 0 ? (
+                          <PremiumPreviewPlaceholder
+                              make={formData.make}
+                              model={formData.model}
+                              year={formData.year}
+                              category={formData.category}
+                              price={Number(formData.price) || 0}
+                              fuelType={formData.fuelType}
+                              transmission={formData.transmission}
+                              mileage={Number(formData.mileage) || 0}
+                              city={formData.city}
+                              state={formData.state}
+                              sellerName={seller?.dealershipName || seller?.name || 'Your Dealership'}
+                              onUploadClick={() => document.getElementById('file-upload')?.click()}
+                          />
+                      ) : (
+                          <div className="pointer-events-none rounded-2xl overflow-hidden ring-1 ring-gray-200 shadow-sm">
+                             <VehicleCard vehicle={previewVehicle} onSelect={() => {}} onToggleCompare={() => {}} isSelectedForCompare={false} onToggleWishlist={() => {}} isInWishlist={false} isCompareDisabled={true} onViewSellerProfile={() => {}} />
+                          </div>
+                      )}
                       {isSellerListingOfferVisible(previewVehicle) ? (
                         <div className="pointer-events-none mt-4">
                           <VehicleOfferBanner vehicle={previewVehicle} />
                         </div>
                       ) : null}
                   </div>
+
+                  {/* Listing Health Checklist */}
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-reride-text-dark flex items-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-reride-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                              Listing Health
+                          </h3>
+                          <span className="text-xs font-bold" style={{ color: completionColor }}>{completionPercent}%</span>
+                      </div>
+                      <ul className="px-4 py-3 space-y-2">
+                          {listingChecklist.map(item => (
+                              <li key={item.key} className="flex items-center gap-2 text-sm">
+                                  <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${item.done ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                                      {item.done ? (
+                                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                      ) : (
+                                          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                                      )}
+                                  </span>
+                                  <span className={item.done ? 'text-gray-600 line-through' : 'text-reride-text-dark'}>{item.label}</span>
+                              </li>
+                          ))}
+                      </ul>
+                      {completionPercent < 100 && (
+                          <div className="px-4 py-3 bg-orange-50 border-t border-orange-100">
+                              <p className="text-xs text-orange-800">
+                                  <span className="font-semibold">Pro tip:</span> Complete listings get up to <span className="font-bold">3× more views</span>.
+                              </p>
+                          </div>
+                      )}
+                  </div>
+
                    {aiSuggestions && Object.keys(aiSuggestions.featureSuggestions).length > 0 && (
-                     <div>
-                        <h3 className="text-lg font-semibold text-reride-text-dark dark:text-reride-text-dark mb-4 flex items-center gap-2">✨ Suggested Features</h3>
-                        <div className="bg-brand-gray-light dark:bg-white p-4 rounded-lg border dark:border-gray-200 max-h-96 overflow-y-auto">
+                     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                        <div className="px-4 py-3 border-b border-gray-100">
+                            <h3 className="text-sm font-semibold text-reride-text-dark flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-reride-orange" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" /></svg>
+                                Suggested Features
+                            </h3>
+                        </div>
+                        <div className="p-4 max-h-96 overflow-y-auto">
                             {Object.entries(aiSuggestions.featureSuggestions).map(([category, features]) => {
                                 if (!Array.isArray(features) || features.length === 0) return null;
                                 return (
                                     <div key={category} className="mb-4 last:mb-0">
-                                        <h4 className="font-bold text-reride-text-dark dark:text-reride-text-dark mb-2 pb-1 border-b dark:border-gray-300">{category}</h4>
+                                        <h4 className="font-semibold text-xs uppercase tracking-wider text-gray-500 mb-2 pb-1 border-b border-gray-100">{category}</h4>
                                         <div className="space-y-2">
                                             {features.map(feature => (
                                                 <label key={feature} className="flex items-center space-x-3 cursor-pointer group">
-                                                    <input type="checkbox" checked={formData.features.includes(feature)} onChange={() => handleSuggestedFeatureToggle(feature)} className="h-4 w-4 rounded border-gray-200 dark:border-gray-500 bg-transparent" style={{ accentColor: '#FF6B35' }} />
-                                                    <span className="text-sm text-reride-text-dark dark:text-reride-text-dark transition-colors" onMouseEnter={(e) => e.currentTarget.style.color = 'var(--reride-orange)'} onMouseLeave={(e) => e.currentTarget.style.color = ''}>{feature}</span>
+                                                    <input type="checkbox" checked={formData.features.includes(feature)} onChange={() => handleSuggestedFeatureToggle(feature)} className="h-4 w-4 rounded border-gray-300 bg-transparent" style={{ accentColor: '#FF6B35' }} />
+                                                    <span className="text-sm text-reride-text-dark group-hover:text-reride-orange transition-colors">{feature}</span>
                                                 </label>
                                             ))}
                                         </div>
@@ -1702,7 +2304,7 @@ const VehicleForm: React.FC<VehicleFormProps> = memo(({ editingVehicle, onAddVeh
                     </div>
                 )}
               </div>
-          </div>
+          </aside>
         </div>
       </div>
     );

@@ -117,12 +117,29 @@ function supabaseRowToVehicle(row: any): Vehicle {
   // CRITICAL FIX: Process images to convert storage paths to public URLs
   const processedImages = processImageUrls(row.images, vehicleId);
 
-  const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  const rawMeta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+  // Strip the deprecated qualityReport.summary so it never overwrites Vehicle.description
+  // when metadata is spread into the returned object below. We keep fixesDone intact.
+  let meta: any = rawMeta;
+  const legacyQualitySummary: string | undefined =
+    rawMeta && rawMeta.qualityReport && typeof rawMeta.qualityReport === 'object'
+      ? (rawMeta.qualityReport.summary as string | undefined)
+      : undefined;
+  if (legacyQualitySummary !== undefined) {
+    const { summary: _ignored, ...restQR } = rawMeta.qualityReport as { summary?: string; fixesDone?: string[] };
+    meta = { ...rawMeta, qualityReport: { fixesDone: restQR.fixesDone || [] } };
+  }
   const metaSellerPhone = (meta as { sellerPhone?: string; seller_phone?: string }).sellerPhone
     ?? (meta as { seller_phone?: string }).seller_phone;
   const metaSellerWa = (meta as { sellerWhatsApp?: string; seller_whatsapp?: string }).sellerWhatsApp
     ?? (meta as { seller_whatsapp?: string }).seller_whatsapp;
-  
+
+  // Backfill: if description is empty but the row still has a legacy qualityReport.summary, use it.
+  const mergedDescription: string =
+    (row.description && String(row.description).trim()) ||
+    (legacyQualitySummary && legacyQualitySummary.trim()) ||
+    '';
+
   return {
     id: vehicleId,
     category: validateCategory(row.category),
@@ -134,7 +151,7 @@ function supabaseRowToVehicle(row: any): Vehicle {
     mileage: Number(row.mileage) || 0,
     images: processedImages, // Use processed images with public URLs
     features: row.features || [],
-    description: row.description || '',
+    description: mergedDescription,
     sellerEmail: row.seller_email || '',
     sellerName: row.seller_name || undefined,
     engine: row.engine || '',
@@ -192,7 +209,14 @@ function vehicleToSupabaseRow(vehicle: Partial<Vehicle>): any {
       metadata[field] = vehicle[field as keyof Vehicle];
     }
   });
-  
+
+  // Sanitize: qualityReport.summary is deprecated (merged into the top-level description column).
+  // Strip it out so we never re-introduce it into the JSONB metadata.
+  if (metadata.qualityReport && typeof metadata.qualityReport === 'object') {
+    const { summary: _droppedSummary, fixesDone } = metadata.qualityReport as { summary?: string; fixesDone?: string[] };
+    metadata.qualityReport = { fixesDone: Array.isArray(fixesDone) ? fixesDone : [] };
+  }
+
   const row: any = {
     id: vehicle.id?.toString() || undefined,
     category: vehicle.category || null,

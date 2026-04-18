@@ -4883,16 +4883,29 @@ async function handleVehicles(req: VercelRequest, res: VercelResponse, _options:
     const ALLOWED_VEHICLE_CREATE_FIELDS = [
       'category', 'make', 'model', 'year', 'price', 'mileage',
       'fuelType', 'transmission', 'color', 'bodyType', 'numberOfOwners',
+      'noOfOwners',
       'description', 'features', 'location', 'city', 'state', 'pincode',
-      'registrationNumber', 'insuranceValidTill', 'condition',
+      'registrationNumber', 'registrationYear', 'insuranceValidTill', 'insuranceValidity',
+      'insuranceType', 'condition',
       'sellerName', 'sellerPhone', 'sellerType',
-      'qualityReport', 'offerDetails', 'tags', 'title', 'engineCc',
-      'kmDriven', 'variant', 'listingType', 'negotiable', 'status'
+      'qualityReport', 'offerDetails', 'tags', 'title', 'engine', 'engineCc',
+      'kmDriven', 'variant', 'listingType', 'negotiable', 'status',
+      'rto', 'displacement', 'groundClearance', 'bootSpace', 'documents',
     ] as const;
     const body = (req.body || {}) as Record<string, unknown>;
     const sanitizedBody: Record<string, unknown> = {};
     for (const key of ALLOWED_VEHICLE_CREATE_FIELDS) {
       if (key in body) sanitizedBody[key] = body[key];
+    }
+    // Client form uses noOfOwners; legacy/alternate key is numberOfOwners
+    if (sanitizedBody.noOfOwners === undefined && body.numberOfOwners !== undefined) {
+      sanitizedBody.noOfOwners = body.numberOfOwners;
+    }
+    // Accept either insurance validity field name from clients
+    if (sanitizedBody.insuranceValidity === undefined && body.insuranceValidTill !== undefined) {
+      sanitizedBody.insuranceValidity = body.insuranceValidTill;
+    } else if (sanitizedBody.insuranceValidity === undefined && sanitizedBody.insuranceValidTill !== undefined) {
+      sanitizedBody.insuranceValidity = sanitizedBody.insuranceValidTill;
     }
     // Clamp status to the published/unpublished/sold enum — prevent free-text injection.
     const validStatuses = new Set(['published', 'unpublished', 'sold']);
