@@ -6,6 +6,10 @@ import * as buyerService from '../services/buyerService';
 import VehicleCard from './VehicleCard';
 import LazyImage from './LazyImage';
 import { getFirstValidImage } from '../utils/imageUtils';
+import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
+
+// Compare list maximum — must match VehicleCard/marketplace behaviour
+const MAX_COMPARE = 4;
 
 const ServiceCart = lazy(() => import('./ServiceCart'));
 
@@ -95,36 +99,6 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     setSavedSearches(buyerService.getSavedSearches(currentUser.email));
   }, [currentUser.email]);
 
-  const stats = useMemo(
-    () => [
-      {
-        label: t('buyerDashboard.stat.wishlist'),
-        value: wishlist.length,
-        icon: '❤️',
-        action: () => onNavigate(View.WISHLIST),
-      },
-      {
-        label: t('buyerDashboard.stat.messages'),
-        value: conversations.length,
-        icon: '💬',
-        action: () => onNavigate(View.INBOX),
-      },
-      {
-        label: t('buyerDashboard.stat.savedSearches'),
-        value: savedSearches.length,
-        icon: '🔍',
-        action: () => setActiveTab('searches'),
-      },
-      {
-        label: t('buyerDashboard.stat.recentlyViewed'),
-        value: recentlyViewed.length,
-        icon: '👁️',
-        action: () => setActiveTab('activity'),
-      },
-    ],
-    [t, wishlist.length, conversations.length, savedSearches.length, recentlyViewed.length, onNavigate]
-  );
-
   // Safety check: show login prompt when no currentUser (after all hooks)
   if (!currentUser) {
     return (
@@ -152,14 +126,17 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
         <div className="absolute bottom-20 left-20 w-96 h-96 bg-gradient-to-tr from-orange-200/15 to-pink-200/15 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
       </div>
       
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6 lg:gap-8">
           {/* Premium Sidebar */}
           <aside className="lg:col-span-1">
-            <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-6 space-y-3 sticky top-8">
-              <div className="flex items-center gap-3 mb-6">
+            <nav
+              aria-label={t('buyerDashboard.myDashboard') || 'Buyer dashboard'}
+              className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-white/20 p-4 sm:p-5 lg:sticky lg:top-6"
+            >
+              <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                     <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/>
                   </svg>
                 </div>
@@ -167,82 +144,69 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   {t('nav.dashboard')}
                 </h3>
               </div>
-              
-              <button
-                onClick={() => setActiveTab('overview')}
-                className={`group flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl transition-all duration-300 ${
-                  activeTab === 'overview' 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105' 
-                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-md hover:-translate-y-0.5'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-                </svg>
-                <span className="font-medium">{t('buyerDashboard.tab.overview')}</span>
-              </button>
-              
-              <button
-                onClick={() => setActiveTab('searches')}
-                className={`group flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl transition-all duration-300 ${
-                  activeTab === 'searches' 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105' 
-                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-md hover:-translate-y-0.5'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
-                <span className="font-medium">{t('buyerDashboard.tab.savedSearches')}</span>
-              </button>
-              
-              <button
-                onClick={() => setActiveTab('activity')}
-                className={`group flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl transition-all duration-300 ${
-                  activeTab === 'activity' 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105' 
-                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-md hover:-translate-y-0.5'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <span className="font-medium">{t('buyerDashboard.tab.recentActivity')}</span>
-              </button>
-              
-              <button
-                onClick={() => setActiveTab('alerts')}
-                className={`group flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl transition-all duration-300 ${
-                  activeTab === 'alerts' 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105' 
-                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-md hover:-translate-y-0.5'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12.828 7H4.828z"/>
-                </svg>
-                <span className="font-medium">{t('buyerDashboard.tab.alerts')}</span>
-                {priceDrops.length + newMatches.length > 0 && (
-                  <span className="bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold rounded-full px-2 py-0.5 ml-auto">
-                    {priceDrops.length + newMatches.length}
-                  </span>
-                )}
-              </button>
 
-              <button
-                onClick={() => setActiveTab('serviceTrack')}
-                className={`group flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl transition-all duration-300 ${
-                  activeTab === 'serviceTrack'
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105'
-                    : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600 hover:shadow-md hover:-translate-y-0.5'
-                }`}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-                <span className="font-medium">{t('buyerDashboard.tab.trackRequests')}</span>
-              </button>
-            </div>
+              <div role="tablist" aria-orientation="vertical" className="space-y-2">
+                {([
+                  { id: 'overview' as const, label: t('buyerDashboard.tab.overview'), icon: (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                  ) },
+                  { id: 'searches' as const, label: t('buyerDashboard.tab.savedSearches'), icon: (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                  ) },
+                  { id: 'activity' as const, label: t('buyerDashboard.tab.recentActivity'), icon: (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  ) },
+                  { id: 'alerts' as const, label: t('buyerDashboard.tab.alerts'), icon: (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM4.828 7l2.586 2.586a2 2 0 002.828 0L12.828 7H4.828z"/>
+                    </svg>
+                  ), badge: priceDrops.length + newMatches.length },
+                  { id: 'serviceTrack' as const, label: t('buyerDashboard.tab.trackRequests'), icon: (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                  ) },
+                ]).map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      role="tab"
+                      type="button"
+                      id={`buyer-tab-${tab.id}`}
+                      aria-selected={isActive}
+                      aria-controls={`buyer-panel-${tab.id}`}
+                      tabIndex={isActive ? 0 : -1}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`group flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 ${
+                        isActive
+                          ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
+                          : 'text-gray-600 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:text-blue-600'
+                      }`}
+                    >
+                      {tab.icon}
+                      <span className="font-medium flex-1 truncate">{tab.label}</span>
+                      {tab.badge !== undefined && tab.badge > 0 && (
+                        <span
+                          aria-label={`${tab.badge} items`}
+                          className={`text-xs font-bold rounded-full px-2 py-0.5 ${
+                            isActive ? 'bg-white/20 text-white' : 'bg-gradient-to-r from-red-500 to-pink-500 text-white'
+                          }`}
+                        >
+                          {tab.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </nav>
           </aside>
           
           {/* Main Content */}
@@ -257,113 +221,78 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           </p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat) => (
-            <button
-              key={stat.label}
-              onClick={stat.action}
-              className="bg-white dark:bg-brand-gray-800 rounded-xl shadow-soft p-6 hover:shadow-lg transition-all"
-            >
-              <div className="flex items-center justify-between mb-2 gap-3">
-                <span className="text-2xl flex-shrink-0">{stat.icon}</span>
-                <span className="text-lg sm:text-xl lg:text-2xl font-bold text-reride-orange whitespace-nowrap overflow-hidden text-ellipsis min-w-0 flex-1 text-right">
-                  {stat.value}
-                </span>
-              </div>
-              <p className="text-gray-600 dark:text-gray-400 font-medium">
-                {stat.label}
-              </p>
-            </button>
-          ))}
-        </div>
+        {/* Stats Cards — shared primitives for consistency across roles */}
+        <StatCardGrid cols={4} className="mb-6">
+          <StatCard
+            label={t('buyerDashboard.stat.wishlist')}
+            value={wishlist.length}
+            icon="❤️"
+            onClick={() => onNavigate(View.WISHLIST)}
+            iconGradient="from-rose-500 to-pink-600"
+            accent="rose"
+          />
+          <StatCard
+            label={t('buyerDashboard.stat.messages')}
+            value={conversations.length}
+            icon="💬"
+            onClick={() => onNavigate(View.INBOX)}
+            iconGradient="from-blue-500 to-indigo-600"
+            accent="blue"
+          />
+          <StatCard
+            label={t('buyerDashboard.stat.savedSearches')}
+            value={savedSearches.length}
+            icon="🔍"
+            onClick={() => setActiveTab('searches')}
+            iconGradient="from-orange-500 to-amber-500"
+            accent="orange"
+          />
+          <StatCard
+            label={t('buyerDashboard.stat.recentlyViewed')}
+            value={recentlyViewed.length}
+            icon="👁️"
+            onClick={() => setActiveTab('activity')}
+            iconGradient="from-purple-500 to-indigo-500"
+            accent="purple"
+          />
+        </StatCardGrid>
 
-        {/* Alerts Section */}
-        {(priceDrops.length > 0 || newMatches.length > 0) && (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-6 mb-8">
-            <h2 className="text-xl font-bold text-yellow-900 dark:text-yellow-200 mb-4 flex items-center gap-2">
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              {t('buyerDashboard.newAlerts')}
-            </h2>
-
-            {/* Price Drops */}
-            {priceDrops.length > 0 && (
-              <div className="mb-4">
-                <h3 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-2">
-                  🔽 {t('buyerDashboard.priceDropsHeading', { count: priceDrops.length })}
-                </h3>
-                {priceDrops.map(drop => {
-                  const vehicle = vehicles.find(v => v.id === drop.vehicleId);
-                  if (!vehicle) return null;
-                  const savings = drop.oldPrice - drop.newPrice;
-                  return (
-                    <button
-                      key={drop.vehicleId}
-                      type="button"
-                      className="w-full text-left bg-white dark:bg-brand-gray-800 rounded-lg p-4 mb-2 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => onSelectVehicle(vehicle)}
-                    >
-                      <p className="font-semibold text-reride-text-dark dark:text-reride-text">
-                        {vehicle.year} {vehicle.make} {vehicle.model}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        <span className="line-through">₹{drop.oldPrice.toLocaleString('en-IN')}</span>
-                        {' → '}
-                        <span className="text-reride-orange font-bold">
-                          ₹{drop.newPrice.toLocaleString('en-IN')}
-                        </span>
-                        {' '}
-                        <span className="text-green-600">
-                          {t('buyerDashboard.saveAmount', {
-                            amount: savings.toLocaleString('en-IN'),
-                          })}
-                        </span>
-                      </p>
-                    </button>
-                  );
-                })}
+        {/* Compact alerts banner — summary only; full details live in the Alerts tab */}
+        {activeTab !== 'alerts' && (priceDrops.length > 0 || newMatches.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('alerts')}
+            className="group flex items-center justify-between gap-4 w-full bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl px-5 py-4 mb-6 hover:shadow-md transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-yellow-500"
+            aria-label={t('buyerDashboard.newAlerts')}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span aria-hidden="true" className="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 text-white flex items-center justify-center shadow">
+                🔔
+              </span>
+              <div className="min-w-0 text-left">
+                <p className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 truncate">
+                  {t('buyerDashboard.newAlerts')}
+                </p>
+                <p className="text-xs text-yellow-800/80 dark:text-yellow-200/80 truncate">
+                  {priceDrops.length > 0 && t('buyerDashboard.priceDropsHeading', { count: priceDrops.length })}
+                  {priceDrops.length > 0 && newMatches.length > 0 && ' • '}
+                  {newMatches.length > 0 && `${newMatches.length} ${t('buyerDashboard.newMatchesHeading')}`}
+                </p>
               </div>
-            )}
-
-            {/* New Matches */}
-            {newMatches.length > 0 && (
-              <div>
-                <h3 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-2">
-                  ✨ {t('buyerDashboard.newMatchesHeading')}
-                </h3>
-                {newMatches.map(result => {
-                  const search = savedSearches.find(s => s.id === result.searchId);
-                  if (!search) return null;
-                  return (
-                    <div
-                      key={result.searchId}
-                      className="bg-white dark:bg-brand-gray-800 rounded-lg p-4 mb-2"
-                    >
-                      <p className="font-semibold text-reride-text-dark dark:text-reride-text mb-1">
-                        {search.name}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {result.matches.length === 1
-                          ? t('buyerDashboard.oneNewMatch')
-                          : t('buyerDashboard.nNewMatches', { count: result.matches.length })}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+            </div>
+            <span className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 whitespace-nowrap group-hover:translate-x-0.5 transition-transform">
+              {t('buyerDashboard.viewAllArrow')}
+            </span>
+          </button>
         )}
 
         {/* Content */}
-        <div className="bg-white dark:bg-brand-gray-800 rounded-xl shadow-soft mb-8">
+        <div className="bg-white dark:bg-brand-gray-800 rounded-2xl shadow-soft mb-8">
 
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {/* Overview Tab */}
             {activeTab === 'overview' && (
-              <div className="space-y-8">
+              <div role="tabpanel" id="buyer-panel-overview" aria-labelledby="buyer-tab-overview" className="space-y-8">
                 {/* Wishlist Section */}
                 {wishlistVehicles.length > 0 && (
                   <div>
@@ -388,7 +317,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           isSelectedForCompare={comparisonList.includes(vehicle.id)}
                           onToggleWishlist={onToggleWishlist}
                           isInWishlist={wishlist.includes(vehicle.id)}
-                          isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+                          isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= MAX_COMPARE}
                           onViewSellerProfile={onViewSellerProfile}
                         />
                       ))}
@@ -412,19 +341,37 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                           isSelectedForCompare={comparisonList.includes(vehicle.id)}
                           onToggleWishlist={onToggleWishlist}
                           isInWishlist={wishlist.includes(vehicle.id)}
-                          isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= 4}
+                          isCompareDisabled={!comparisonList.includes(vehicle.id) && comparisonList.length >= MAX_COMPARE}
                           onViewSellerProfile={onViewSellerProfile}
                         />
                       ))}
                     </div>
                   </div>
                 )}
+
+                {/* Empty-state when both wishlist and recently viewed are empty */}
+                {wishlistVehicles.length === 0 && recentlyViewed.length === 0 && (
+                  <EmptyState
+                    icon="🛍️"
+                    title={t('buyerDashboard.noRecentActivity')}
+                    description={t('buyerDashboard.welcomeSubtitle', { name: currentUser.name })}
+                    action={{
+                      label: t('buyerDashboard.browseVehicles'),
+                      onClick: () => onNavigate(View.USED_CARS),
+                    }}
+                    secondaryAction={
+                      savedSearches.length > 0
+                        ? { label: t('buyerDashboard.tab.savedSearches'), onClick: () => setActiveTab('searches') }
+                        : undefined
+                    }
+                  />
+                )}
               </div>
             )}
 
             {/* Saved Searches Tab */}
             {activeTab === 'searches' && (
-              <div>
+              <div role="tabpanel" id="buyer-panel-searches" aria-labelledby="buyer-tab-searches">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">
                     {t('buyerDashboard.yourSavedSearches')}
@@ -432,17 +379,11 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 </div>
 
                 {savedSearches.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-gray-500 dark:text-gray-400 mb-4">
-                      {t('buyerDashboard.noSavedSearches')}
-                    </p>
-                    <button
-                      onClick={() => onNavigate(View.USED_CARS)}
-                      className="btn-brand-primary text-white px-6 py-2 rounded-lg"
-                    >
-                      {t('buyerDashboard.browseVehicles')}
-                    </button>
-                  </div>
+                  <EmptyState
+                    icon="🔍"
+                    title={t('buyerDashboard.noSavedSearches')}
+                    action={{ label: t('buyerDashboard.browseVehicles'), onClick: () => onNavigate(View.USED_CARS) }}
+                  />
                 ) : (
                   <div className="space-y-4">
                     {savedSearches.map(search => {
@@ -534,14 +475,16 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
 
             {/* Activity Tab */}
             {activeTab === 'activity' && (
-              <div>
+              <div role="tabpanel" id="buyer-panel-activity" aria-labelledby="buyer-tab-activity">
                 <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-6">
                   {t('buyerDashboard.recentActivity')}
                 </h3>
                 {recentlyViewed.length === 0 ? (
-                  <p className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    {t('buyerDashboard.noRecentActivity')}
-                  </p>
+                  <EmptyState
+                    icon="👁️"
+                    title={t('buyerDashboard.noRecentActivity')}
+                    action={{ label: t('buyerDashboard.browseVehicles'), onClick: () => onNavigate(View.USED_CARS) }}
+                  />
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {recentlyViewed.map(vehicle => (
@@ -553,7 +496,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         isSelectedForCompare={comparisonList.includes(vehicle.id)}
                         onToggleWishlist={onToggleWishlist}
                         isInWishlist={wishlist.includes(vehicle.id)}
-                        isCompareDisabled={comparisonList.length >= 3 && !comparisonList.includes(vehicle.id)}
+                        isCompareDisabled={comparisonList.length >= MAX_COMPARE && !comparisonList.includes(vehicle.id)}
                         onViewSellerProfile={onViewSellerProfile}
                       />
                     ))}
@@ -564,14 +507,17 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
 
             {/* Alerts Tab */}
             {activeTab === 'alerts' && (
-              <div>
+              <div role="tabpanel" id="buyer-panel-alerts" aria-labelledby="buyer-tab-alerts">
                 <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text mb-6">
                   {t('buyerDashboard.yourAlerts')}
                 </h3>
                 {priceDrops.length === 0 && newMatches.length === 0 ? (
-                  <p className="text-center py-12 text-gray-500 dark:text-gray-400">
-                    {t('buyerDashboard.noAlerts')}
-                  </p>
+                  <EmptyState
+                    icon="🔔"
+                    title={t('buyerDashboard.noAlerts')}
+                    description={t('buyerDashboard.welcomeSubtitle', { name: currentUser.name })}
+                    secondaryAction={{ label: t('buyerDashboard.tab.savedSearches'), onClick: () => setActiveTab('searches') }}
+                  />
                 ) : (
                   <div className="space-y-6">
                     {priceDrops.length > 0 && (
@@ -651,7 +597,7 @@ const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             )}
 
             {activeTab === 'serviceTrack' && (
-              <div>
+              <div role="tabpanel" id="buyer-panel-serviceTrack" aria-labelledby="buyer-tab-serviceTrack">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
                   <div>
                     <h3 className="text-xl font-bold text-reride-text-dark dark:text-reride-text">

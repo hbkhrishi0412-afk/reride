@@ -1,5 +1,16 @@
 import './utils/capacitorInit';
 
+import { enforceRememberMePolicyOnBoot } from './utils/rememberMe';
+
+// Must run before Supabase client is initialised or any auth state is read.
+if (typeof window !== 'undefined') {
+  try {
+    enforceRememberMePolicyOnBoot();
+  } catch {
+    /* non-fatal */
+  }
+}
+
 import { completeWebSupabaseOAuthCallbackIfNeeded } from './utils/consumeWebSupabaseOAuthCallback';
 import React from 'react';
 import ReactDOM from 'react-dom/client';

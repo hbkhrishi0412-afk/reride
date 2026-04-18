@@ -412,14 +412,36 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
   }, [sortedRequests, statusFilter]);
 
   const myRequestStats = useMemo(() => {
-    const completedToday = requests.filter((req) => req.status === 'completed' && isScheduledToday(req.scheduledAt)).length;
-    const dueToday = requests.filter((req) => isScheduledToday(req.scheduledAt)).length;
-    const overdue = requests.filter((req) => isOverdueRequest(req)).length;
+    // Walk the requests array once; multiple per-status filters were doing
+    // N passes over the list and were also recomputed in the chip row below.
+    let accepted = 0;
+    let inProgress = 0;
+    let completed = 0;
+    let completedToday = 0;
+    let cancelled = 0;
+    let dueToday = 0;
+    let overdue = 0;
+    for (const req of requests) {
+      switch (req.status) {
+        case 'accepted': accepted++; break;
+        case 'in_progress': inProgress++; break;
+        case 'completed':
+          completed++;
+          if (isScheduledToday(req.scheduledAt)) completedToday++;
+          break;
+        case 'cancelled': cancelled++; break;
+        default: break;
+      }
+      if (isScheduledToday(req.scheduledAt)) dueToday++;
+      if (isOverdueRequest(req)) overdue++;
+    }
     return {
       total: requests.length,
-      accepted: requests.filter((r) => r.status === 'accepted').length,
-      inProgress: requests.filter((r) => r.status === 'in_progress').length,
+      accepted,
+      inProgress,
+      completed,
       completedToday,
+      cancelled,
       dueToday,
       overdue,
     };
@@ -469,7 +491,9 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       completed: overviewRequests.filter((r) => r.status === 'completed').length,
       cancelled: overviewRequests.filter((r) => r.status === 'cancelled').length,
     }),
-    [overviewOpenRequests.length, overviewRequests],
+    // Previously depended on `.length` which missed content changes; depending on
+    // the full array keeps KPIs in sync when statuses flip without length changes.
+    [overviewOpenRequests, overviewRequests],
   );
 
   const activeProviderServices = useMemo(
@@ -1605,76 +1629,110 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        {/* Enhanced Tab Navigation */}
+        {/* Enhanced Tab Navigation — semantic tablist with keyboard support */}
         <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-1.5">
-          <nav className="flex space-x-2 overflow-x-auto" aria-label="Tabs">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md transition-all duration-300 whitespace-nowrap relative ${
-                activeTab === 'overview'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('services')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md transition-all duration-300 whitespace-nowrap ${
-                activeTab === 'services'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-              Services & Pricing
-            </button>
-            <button
-              onClick={() => setActiveTab('open')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md transition-all duration-300 whitespace-nowrap relative ${
-                activeTab === 'open'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Open Requests
-              {stats.open > 0 && (
-                <span className={`ml-2 px-2.5 py-0.5 text-xs font-bold rounded-full ${
-                  activeTab === 'open' ? 'bg-white/20 text-white' : 'bg-amber-500 text-white'
-                }`}>
-                  {stats.open}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab('my-requests')}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md transition-all duration-300 whitespace-nowrap relative ${
-                activeTab === 'my-requests'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              My Requests
-              {stats.total > 0 && (
-                <span className={`ml-2 px-2.5 py-0.5 text-xs font-bold rounded-full ${
-                  activeTab === 'my-requests' ? 'bg-white/20 text-white' : 'bg-blue-500 text-white'
-                }`}>
-                  {stats.total}
-                </span>
-              )}
-            </button>
-          </nav>
+          {(() => {
+            const providerTabs: Array<{
+              id: 'overview' | 'services' | 'open' | 'my-requests';
+              label: string;
+              badge?: number;
+              badgeColor?: string;
+              icon: React.ReactNode;
+            }> = [
+              {
+                id: 'overview',
+                label: 'Overview',
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                ),
+              },
+              {
+                id: 'services',
+                label: 'Services & Pricing',
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                  </svg>
+                ),
+              },
+              {
+                id: 'open',
+                label: 'Open Requests',
+                badge: stats.open,
+                badgeColor: 'bg-amber-500',
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ),
+              },
+              {
+                id: 'my-requests',
+                label: 'My Requests',
+                badge: stats.total,
+                badgeColor: 'bg-blue-500',
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                ),
+              },
+            ];
+            return (
+              <div
+                role="tablist"
+                aria-label="Service provider dashboard"
+                className="flex space-x-2 overflow-x-auto"
+              >
+                {providerTabs.map((tab, i) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      role="tab"
+                      type="button"
+                      id={`csd-tab-${tab.id}`}
+                      aria-selected={isActive}
+                      aria-controls={`csd-panel-${tab.id}`}
+                      tabIndex={isActive ? 0 : -1}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'Home' && e.key !== 'End') return;
+                        e.preventDefault();
+                        let nextIdx = i;
+                        if (e.key === 'ArrowRight') nextIdx = (i + 1) % providerTabs.length;
+                        else if (e.key === 'ArrowLeft') nextIdx = (i - 1 + providerTabs.length) % providerTabs.length;
+                        else if (e.key === 'Home') nextIdx = 0;
+                        else if (e.key === 'End') nextIdx = providerTabs.length - 1;
+                        const next = providerTabs[nextIdx];
+                        if (next) setActiveTab(next.id);
+                      }}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-md transition-all whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 ${
+                        isActive
+                          ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md'
+                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                    >
+                      {tab.icon}
+                      <span>{tab.label}</span>
+                      {tab.badge !== undefined && tab.badge > 0 && (
+                        <span
+                          aria-label={`${tab.badge} items`}
+                          className={`ml-1 px-2 py-0.5 text-xs font-bold rounded-full ${
+                            isActive ? 'bg-white/20 text-white' : `${tab.badgeColor ?? 'bg-gray-500'} text-white`
+                          }`}
+                        >
+                          {tab.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Tab Content */}
@@ -2860,18 +2918,20 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                       ({filteredProviderServices.length})
                     </span>
                   </h3>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <input
                       type="text"
                       value={serviceSearch}
                       onChange={(e) => setServiceSearch(e.target.value)}
                       placeholder="Search…"
-                      className="px-3 py-1.5 rounded-md border border-gray-300 text-sm w-40"
+                      aria-label="Search services"
+                      className="px-3 py-1.5 rounded-md border border-gray-300 text-sm w-full sm:w-40 min-w-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     />
                     <select
                       value={serviceStatusFilter}
                       onChange={(e) => setServiceStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
-                      className="px-3 py-1.5 rounded-md border border-gray-300 text-sm bg-white"
+                      aria-label="Filter services by status"
+                      className="px-3 py-1.5 rounded-md border border-gray-300 text-sm bg-white flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     >
                       <option value="all">All</option>
                       <option value="active">Active</option>
@@ -3373,8 +3433,8 @@ const CarServiceDashboard: React.FC<CarServiceDashboardProps> = ({ provider }) =
                     { key: 'all', label: 'All', count: myRequestStats.total },
                     { key: 'accepted', label: 'Accepted', count: myRequestStats.accepted },
                     { key: 'in_progress', label: 'In progress', count: myRequestStats.inProgress },
-                    { key: 'completed', label: 'Completed', count: requests.filter((r) => r.status === 'completed').length },
-                    { key: 'cancelled', label: 'Cancelled', count: requests.filter((r) => r.status === 'cancelled').length },
+                    { key: 'completed', label: 'Completed', count: myRequestStats.completed },
+                    { key: 'cancelled', label: 'Cancelled', count: myRequestStats.cancelled },
                     { key: 'due_today', label: 'Due today', count: myRequestStats.dueToday },
                     { key: 'overdue', label: 'Overdue', count: myRequestStats.overdue },
                   ].map((status) => {

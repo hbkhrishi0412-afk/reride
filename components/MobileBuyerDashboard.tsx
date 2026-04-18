@@ -6,6 +6,7 @@ import { getFirstValidImage } from '../utils/imageUtils';
 import * as buyerService from '../services/buyerService';
 import { getLastVisibleMessageForViewer } from '../utils/conversationView';
 import { getThreadLastMessagePreview } from '../utils/messagePreview';
+import { StatCard, StatCardGrid, EmptyState } from './dashboard/shared';
 
 const ServiceCart = lazy(() => import('./ServiceCart'));
 
@@ -145,76 +146,90 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="px-4 mt-4 grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-600 text-xs font-medium">{t('buyerDashboard.mobile.stat.saved')}</p>
-            <svg className="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{wishlist.length}</p>
-        </div>
-        
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-600 text-xs font-medium">{t('buyerDashboard.mobile.stat.messages')}</p>
-            <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{conversations.length}</p>
-        </div>
-        
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-600 text-xs font-medium">{t('buyerDashboard.mobile.stat.viewed')}</p>
-            <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{recentlyViewed.length}</p>
-        </div>
-        
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-gray-600 text-xs font-medium">{t('buyerDashboard.mobile.stat.compared')}</p>
-            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{comparisonList.length}</p>
-        </div>
+      {/* Stats Cards — shared primitives, accessible and keyboard-navigable */}
+      <div className="px-4 mt-4">
+        <StatCardGrid cols={2}>
+          <StatCard
+            label={t('buyerDashboard.mobile.stat.saved')}
+            value={wishlist.length}
+            icon="❤️"
+            iconGradient="from-rose-500 to-pink-600"
+            accent="rose"
+            dense
+            onClick={() => onNavigate(ViewEnum.WISHLIST)}
+          />
+          <StatCard
+            label={t('buyerDashboard.mobile.stat.messages')}
+            value={conversations.length}
+            icon="💬"
+            iconGradient="from-blue-500 to-indigo-600"
+            accent="blue"
+            dense
+            onClick={() => onNavigate(ViewEnum.INBOX)}
+          />
+          <StatCard
+            label={t('buyerDashboard.mobile.stat.viewed')}
+            value={recentlyViewed.length}
+            icon="👁️"
+            iconGradient="from-purple-500 to-indigo-500"
+            accent="purple"
+            dense
+            onClick={() => setActiveTab('activity')}
+          />
+          <StatCard
+            label={t('buyerDashboard.mobile.stat.compared')}
+            value={comparisonList.length}
+            icon="⚖️"
+            iconGradient="from-emerald-500 to-green-600"
+            accent="emerald"
+            dense
+          />
+        </StatCardGrid>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-white border-b border-gray-200 mt-4 flex">
-        {mobileTabs.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id)}
-            className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2 ${
-              activeTab === id
-                ? 'text-orange-500 border-b-2 border-orange-500'
-                : 'text-gray-600'
-            }`}
-          >
-            {id === 'overview' && (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            )}
-            {label}
-          </button>
-        ))}
+      {/* Tabs — tablist with a11y semantics */}
+      <div
+        role="tablist"
+        aria-label={t('nav.dashboard') || 'Buyer dashboard'}
+        className="bg-white border-b border-gray-200 mt-4 flex overflow-x-auto no-scrollbar"
+      >
+        {mobileTabs.map(({ id, label }, i) => {
+          const isActive = activeTab === id;
+          return (
+            <button
+              key={id}
+              role="tab"
+              type="button"
+              id={`mbd-tab-${id}`}
+              aria-selected={isActive}
+              aria-controls={`mbd-panel-${id}`}
+              tabIndex={isActive ? 0 : -1}
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                e.preventDefault();
+                const next =
+                  e.key === 'ArrowRight'
+                    ? mobileTabs[(i + 1) % mobileTabs.length]
+                    : mobileTabs[(i - 1 + mobileTabs.length) % mobileTabs.length];
+                if (next) setActiveTab(next.id);
+              }}
+              onClick={() => setActiveTab(id)}
+              className={`flex-1 min-w-[25%] py-3 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500 ${
+                isActive
+                  ? 'text-orange-500 border-b-2 border-orange-500'
+                  : 'text-gray-600 border-b-2 border-transparent'
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Content */}
       <div className="px-4 py-4">
         {activeTab === 'overview' && (
-          <div className="space-y-6">
+          <div role="tabpanel" id="mbd-panel-overview" aria-labelledby="mbd-tab-overview" className="space-y-6">
             {/* Quick Actions Section */}
             <div className="bg-white rounded-xl p-4 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-4">{t('buyerDashboard.mobile.quickActions')}</h3>
@@ -254,28 +269,31 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                 </div>
                 <div className="space-y-3">
                   {wishlistVehicles.slice(0, 3).map((vehicle) => (
-                    <div
+                    <button
                       key={vehicle.id}
+                      type="button"
                       onClick={() => onSelectVehicle(vehicle)}
-                      className="bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform"
+                      aria-label={`${vehicle.year} ${vehicle.make} ${vehicle.model}, ${formatCurrency(vehicle.price)}`}
+                      className="w-full text-left bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-500"
                     >
                       <img
                         src={getFirstValidImage(vehicle.images, vehicle.id)}
-                        alt={`${vehicle.make} ${vehicle.model}`}
+                        alt=""
+                        aria-hidden="true"
                         className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-1">
+                        <h3 className="font-semibold text-gray-900 mb-1 truncate">
                           {vehicle.year} {vehicle.make} {vehicle.model}
                         </h3>
                         <p className="text-lg font-bold text-orange-500 mb-1">
                           {formatCurrency(vehicle.price)}
                         </p>
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs text-gray-600 truncate">
                           {vehicle.mileage.toLocaleString()} km • {vehicle.fuelType}
                         </p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -318,17 +336,14 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         )}
 
         {activeTab === 'searches' && (
-          <div className="space-y-4">
+          <div role="tabpanel" id="mbd-panel-searches" aria-labelledby="mbd-tab-searches" className="space-y-4">
             {savedSearches.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 mb-2">{t('buyerDashboard.mobile.noSavedSearches')}</p>
-                <button
-                  onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                  className="text-orange-500 font-semibold"
-                >
-                  {t('buyerDashboard.mobile.startSearching')}
-                </button>
-              </div>
+              <EmptyState
+                icon="🔍"
+                title={t('buyerDashboard.mobile.noSavedSearches')}
+                action={{ label: t('buyerDashboard.mobile.startSearching'), onClick: () => onNavigate(ViewEnum.USED_CARS) }}
+                dense
+              />
             ) : (
               savedSearches.map((search, idx) => {
                 const filters = search.filters || {};
@@ -344,14 +359,15 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
                   ]
                     .filter(Boolean)
                     .join(' • ') || t('buyerDashboard.mobile.noFilters');
-                
+
                 return (
-                  <div key={idx} className="bg-white rounded-xl p-4 shadow-sm">
-                    <h3 className="font-semibold text-gray-900 mb-2">{search.name}</h3>
+                  <div key={search.id ?? `search-${idx}`} className="bg-white rounded-xl p-4 shadow-sm">
+                    <h3 className="font-semibold text-gray-900 mb-2 truncate">{search.name}</h3>
                     <p className="text-sm text-gray-600 mb-3">{filterText}</p>
                     <button
+                      type="button"
                       onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                      className="text-sm text-orange-500 font-semibold"
+                      className="text-sm text-orange-500 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded"
                     >
                       {t('buyerDashboard.mobile.viewResults')}
                     </button>
@@ -363,49 +379,49 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         )}
 
         {activeTab === 'activity' && (
-          <div className="space-y-4">
+          <div role="tabpanel" id="mbd-panel-activity" aria-labelledby="mbd-tab-activity" className="space-y-4">
             {recentlyViewed.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600 mb-2">{t('buyerDashboard.mobile.noRecentlyViewed')}</p>
-                <button
-                  onClick={() => onNavigate(ViewEnum.USED_CARS)}
-                  className="text-orange-500 font-semibold"
-                >
-                  {t('buyerDashboard.mobile.startBrowsing')}
-                </button>
-              </div>
+              <EmptyState
+                icon="👁️"
+                title={t('buyerDashboard.mobile.noRecentlyViewed')}
+                action={{ label: t('buyerDashboard.mobile.startBrowsing'), onClick: () => onNavigate(ViewEnum.USED_CARS) }}
+                dense
+              />
             ) : (
               <div>
                 <h2 className="text-lg font-bold text-gray-900 mb-3">{t('buyerDashboard.recentlyViewed')}</h2>
                 <div className="space-y-3">
                   {recentlyViewed.map((vehicle) => (
-                    <div
+                    <button
                       key={vehicle.id}
+                      type="button"
                       onClick={() => onSelectVehicle(vehicle)}
-                      className="bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform"
+                      aria-label={`${vehicle.year} ${vehicle.make} ${vehicle.model}, ${formatCurrency(vehicle.price)}`}
+                      className="w-full text-left bg-white rounded-xl p-4 shadow-sm flex gap-4 active:scale-[0.98] transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-500"
                     >
                       <img
                         src={getFirstValidImage(vehicle.images, vehicle.id)}
-                        alt={`${vehicle.make} ${vehicle.model}`}
+                        alt=""
+                        aria-hidden="true"
                         className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-1">
+                        <h3 className="font-semibold text-gray-900 mb-1 truncate">
                           {vehicle.year} {vehicle.make} {vehicle.model}
                         </h3>
                         <p className="text-lg font-bold text-orange-500 mb-1">
                           {formatCurrency(vehicle.price)}
                         </p>
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs text-gray-600 truncate">
                           {vehicle.mileage.toLocaleString()} km • {vehicle.fuelType}
                         </p>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
             )}
-            
+
             {/* Logout Section */}
             {onLogout && (
               <div className="mt-8 pt-6 border-t border-gray-200">
@@ -426,7 +442,7 @@ export const MobileBuyerDashboard: React.FC<MobileBuyerDashboardProps> = ({
         )}
 
         {activeTab === 'serviceTrack' && (
-          <div className="space-y-4">
+          <div role="tabpanel" id="mbd-panel-serviceTrack" aria-labelledby="mbd-tab-serviceTrack" className="space-y-4">
             <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
               <h2 className="text-lg font-bold text-gray-900 mb-1">{t('buyerDashboard.trackRequests.title')}</h2>
               <p className="text-sm text-gray-600 mb-4">{t('buyerDashboard.trackRequests.subtitle')}</p>
