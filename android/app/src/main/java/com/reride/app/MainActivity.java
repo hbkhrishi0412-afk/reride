@@ -1,5 +1,7 @@
 package com.reride.app;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.webkit.RenderProcessGoneDetail;
@@ -20,6 +22,69 @@ public class MainActivity extends BridgeActivity {
         SplashScreen.installSplashScreen(this);
         super.onCreate(savedInstanceState);
         installRenderProcessGoneRecovery();
+    }
+
+    /**
+     * With {@code launchMode="singleTask"} the activity is reused when the
+     * {@code com.reride.app://oauth-callback?code=...} deep link fires. Capacitor's
+     * {@link BridgeActivity#onNewIntent(Intent)} dispatches {@code appUrlOpen} to JS, but does
+     * not update the activity's stored intent. Without {@link #setIntent(Intent)} here, a later
+     * {@code App.getLaunchUrl()} (our resume-time fallback in {@code utils/oauthMobile.ts})
+     * still returns the original launcher intent and the PKCE {@code ?code=} is lost whenever
+     * the {@code appUrlOpen} event is missed (MIUI/ColorOS, cold-start races). Replacing the
+     * intent here makes the resume fallback deterministic.
+     *
+     * Also pushes the URL to the WebView via {@code window.__rerideNativeOAuthUrl} so the
+     * handler fires even if Capacitor's event bus isn't ready yet.
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        try {
+            if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) {
+                Uri data = intent.getData();
+                if (data != null) {
+                    String scheme = data.getScheme();
+                    if ("com.reride.app".equalsIgnoreCase(scheme)) {
+                        setIntent(intent);
+                        forwardOAuthUrlToWebView(data.toString());
+                    }
+                }
+            }
+        } catch (Exception err) {
+            Log.w(TAG, "onNewIntent OAuth handling failed", err);
+        }
+        super.onNewIntent(intent);
+    }
+
+    /**
+     * Calls into the SPA's JS bridge to hand the deep-link URL to the OAuth return handler.
+     * Safe to call before/after Capacitor's {@code appUrlOpen} listener attaches — the handler
+     * in {@code utils/oauthMobile.ts} deduplicates via {@code lastHandledOAuthUrl}.
+     */
+    private void forwardOAuthUrlToWebView(final String url) {
+        if (url == null || url.isEmpty()) return;
+        try {
+            final Bridge bridge = getBridge();
+            if (bridge == null || bridge.getWebView() == null) return;
+            final WebView webView = bridge.getWebView();
+            final String escaped = url
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\n", "\\n")
+                .replace("\r", "");
+            final String js =
+                "try{if(typeof window.__rerideNativeOAuthUrl==='function'){" +
+                "window.__rerideNativeOAuthUrl('" + escaped + "');}}catch(e){}";
+            webView.post(() -> {
+                try {
+                    webView.evaluateJavascript(js, null);
+                } catch (Exception err) {
+                    Log.w(TAG, "forwardOAuthUrlToWebView evaluateJavascript failed", err);
+                }
+            });
+        } catch (Exception err) {
+            Log.w(TAG, "forwardOAuthUrlToWebView failed", err);
+        }
     }
 
     /**

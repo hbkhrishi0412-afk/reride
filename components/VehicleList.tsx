@@ -375,6 +375,45 @@ const VehicleList: React.FC<VehicleListProps> = React.memo(({
     };
 
     loadVehicleDataForFilters();
+
+    // Refresh the filter dropdowns whenever admin updates the vehicle catalog
+    // (bulk upload or inline edits). Without this, VehicleList keeps serving
+    // its 5-minute cached copy and the newly added makes/models don't appear.
+    const handleVehicleDataUpdated = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail && detail.vehicleData) {
+        setVehicleData(detail.vehicleData);
+        try {
+          localStorage.setItem(
+            'reRideVehicleDataFilters',
+            JSON.stringify({ data: detail.vehicleData, timestamp: Date.now() })
+          );
+        } catch { /* storage unavailable */ }
+      } else {
+        // Fallback: re-fetch from API if the event didn't carry a payload
+        loadVehicleDataForFilters();
+      }
+    };
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'reRideVehicleData' && event.newValue) {
+        try {
+          const parsed = JSON.parse(event.newValue);
+          setVehicleData(parsed);
+          localStorage.setItem(
+            'reRideVehicleDataFilters',
+            JSON.stringify({ data: parsed, timestamp: Date.now() })
+          );
+        } catch { /* ignore malformed storage value */ }
+      }
+    };
+
+    window.addEventListener('vehicleDataUpdated', handleVehicleDataUpdated as EventListener);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('vehicleDataUpdated', handleVehicleDataUpdated as EventListener);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
   
   const [makeFilter, setMakeFilter] = useState('');

@@ -317,7 +317,8 @@ const AppContent: React.FC = () => {
     currentView, 
     setCurrentView,
     navigate,
-    goBack, 
+    goBack,
+    previousView, 
     currentUser, 
     setCurrentUser,
     handleLogout, 
@@ -2733,6 +2734,9 @@ const AppContent: React.FC = () => {
               onUpdateFaq={onUpdateFaq}
               onDeleteFaq={onDeleteFaq}
               onCertificationApproval={onCertificationApproval}
+              notifications={notifications}
+              onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
+              onMarkNotificationAsRead={(id) => handleMarkNotificationsAsRead([Number(id)])}
             />
           </AdminPanelErrorBoundary>
         ) : (
@@ -3024,8 +3028,9 @@ const AppContent: React.FC = () => {
         );
 
       case ViewEnum.DEALER_PROFILES: {
-        // Pass sellers if available, but components will fetch directly from API if not provided
-        const sellersFromUsers = users.filter(user => user.role === 'seller');
+        // Pass sellers AND service providers if available; components will fetch directly from API if not provided.
+        // Car-service providers and dealer/showroom sellers both appear on the Dealer page, differentiated by role.
+        const sellersFromUsers = users.filter(user => user.role === 'seller' || user.role === 'service_provider');
         if (isMobileApp) {
           return (
             <MobileDealerProfilesPage
@@ -3304,7 +3309,7 @@ const AppContent: React.FC = () => {
           <AuthenticationErrorBoundary>
             <Suspense fallback={<LoadingSpinner />}>
               <ForgotPassword
-                onBack={() => goBack(ViewEnum.LOGIN_PORTAL)}
+                onBack={() => goBack(previousView === ViewEnum.ADMIN_LOGIN ? ViewEnum.ADMIN_LOGIN : ViewEnum.LOGIN_PORTAL)}
                 onResetSent={(email) => {
                   if (process.env.NODE_ENV === 'development') {
                     logInfo('Password reset email requested for:', email);
@@ -3721,6 +3726,9 @@ const AppContent: React.FC = () => {
             onUpdateFaq={onUpdateFaq}
             onDeleteFaq={onDeleteFaq}
             onCertificationApproval={onCertificationApproval}
+            notifications={notifications}
+            onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
+            onMarkNotificationAsRead={(id) => handleMarkNotificationsAsRead([Number(id)])}
           />
           </>
         );
