@@ -21,18 +21,15 @@ export const saveSupportTickets = (tickets: SupportTicket[]) => {
   }
 };
 
-const toNumericTicketId = (id: unknown): number => {
-  if (typeof id === 'number') return id;
-  if (typeof id === 'string') {
-    const digits = id.match(/\d+/g)?.join('');
-    if (digits) return Number(digits);
-  }
-  return Date.now();
+const normalizeTicketId = (id: unknown): string | number => {
+  if (id === undefined || id === null || id === '') return Date.now();
+  if (typeof id === 'number' && Number.isFinite(id)) return id;
+  return String(id);
 };
 
 const normalizeTicket = (ticket: any): SupportTicket => {
   return {
-    id: toNumericTicketId(ticket?.id),
+    id: normalizeTicketId(ticket?.id),
     userEmail: ticket?.userEmail || '',
     userName: ticket?.userName || '',
     subject: ticket?.subject || '',

@@ -2120,8 +2120,9 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
 
     const SupportTicketsView = () => {
         const [statusFilter, setStatusFilter] = useState<'All' | 'Open' | 'In Progress' | 'Closed'>('All');
-        
-        const filteredTickets = (supportTickets || []).filter(ticket => 
+        const [editingTicket, setEditingTicket] = useState<SupportTicket | null>(null);
+
+        const filteredTickets = (supportTickets || []).filter(ticket =>
             statusFilter === 'All' || ticket.status === statusFilter
         );
 
@@ -2131,10 +2132,49 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                     return 'bg-red-100 text-red-800';
                 case 'In Progress':
                     return 'bg-yellow-100 text-yellow-800';
+                case 'Resolved':
+                    return 'bg-blue-100 text-blue-800';
                 case 'Closed':
                     return 'bg-green-100 text-green-800';
                 default:
                     return 'bg-gray-100 text-gray-800';
+            }
+        };
+
+        const nextQuickStatus = (ticket: SupportTicket): SupportTicket['status'] => {
+            if (ticket.status === 'Open') return 'In Progress';
+            if (ticket.status === 'In Progress') return 'Closed';
+            if (ticket.status === 'Resolved') return 'Open';
+            return 'Open';
+        };
+
+        const quickStatusLabel = (ticket: SupportTicket) => {
+            if (ticket.status === 'Open') return 'Start Progress';
+            if (ticket.status === 'In Progress') return 'Close';
+            if (ticket.status === 'Resolved') return 'Reopen';
+            return 'Reopen';
+        };
+
+        const formatTicketDate = (iso: string) => {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+        };
+
+        const handleSaveEditedTicket = async () => {
+            if (!editingTicket) return;
+            if (!editingTicket.subject.trim() || !editingTicket.message.trim()) {
+                alert('Subject and message are required.');
+                return;
+            }
+            try {
+                await Promise.resolve(onUpdateSupportTicket({
+                    ...editingTicket,
+                    updatedAt: new Date().toISOString()
+                }));
+                setEditingTicket(null);
+            } catch {
+                // Toasts are handled in AppProvider
             }
         };
 
@@ -2147,15 +2187,15 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             key={status}
                             onClick={() => setStatusFilter(status)}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                                statusFilter === status 
-                                    ? 'bg-blue-500 text-white' 
+                                statusFilter === status
+                                    ? 'bg-blue-500 text-white'
                                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                             }`}
                         >
                             {status} ({status === 'All' ? (supportTickets || []).length : (supportTickets || []).filter(t => t.status === status).length})
                         </button>
                     ))}
-                    </div>
+                </div>
 
                 {/* Tickets Table */}
                 <TableContainer title={`Support Tickets (${filteredTickets.length})`}>
@@ -2178,7 +2218,7 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200 dark:divide-gray-700">
                                 {filteredTickets.map(ticket => (
-                                    <tr key={ticket.id} className="hover:bg-gray-50">
+                                    <tr key={String(ticket.id)} data-testid="support-ticket" className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                             #{ticket.id}
                                         </td>
@@ -2188,36 +2228,130 @@ const AdminPanel: React.FC<AdminPanelProps> = (props) => {
                                         <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title={ticket.subject}>
                                             {ticket.subject}
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            —
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.status)}`}>
                                                 {ticket.status}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {new Date(ticket.createdAt).toLocaleDateString()}
+                                            {formatTicketDate(ticket.createdAt)}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                                             <button
+                                                type="button"
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
-                                                    const newStatus = ticket.status === 'Open' ? 'In Progress' : 
-                                                                   ticket.status === 'In Progress' ? 'Closed' : 'Open';
-                                                    console.log('🔄 Support ticket status change:', ticket.id, 'from', ticket.status, 'to', newStatus);
-                                                    onUpdateSupportTicket({ ...ticket, status: newStatus });
+                                                    setEditingTicket({ ...ticket });
+                                                }}
+                                                className="text-gray-700 hover:text-gray-900 font-medium cursor-pointer"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    const newStatus = nextQuickStatus(ticket);
+                                                    void Promise.resolve(onUpdateSupportTicket({ ...ticket, status: newStatus })).catch(() => {});
                                                 }}
                                                 className="text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
                                             >
-                                                {ticket.status === 'Open' ? 'Start Progress' : 
-                                                 ticket.status === 'In Progress' ? 'Close' : 'Reopen'}
+                                                {quickStatusLabel(ticket)}
                                             </button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     )}
-        </TableContainer>
+                </TableContainer>
+
+                {editingTicket && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div
+                            className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+                            data-testid="ticket-details"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="edit-ticket-title"
+                        >
+                            <h3 id="edit-ticket-title" className="text-xl font-bold mb-4 text-gray-900 dark:text-white">
+                                Edit support ticket
+                            </h3>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span className="font-medium text-gray-700 dark:text-gray-300">Ticket ID</span>
+                                        <p className="text-gray-900 dark:text-white mt-1">#{editingTicket.id}</p>
+                                    </div>
+                                    <div>
+                                        <span className="font-medium text-gray-700 dark:text-gray-300">Created</span>
+                                        <p className="text-gray-900 dark:text-white mt-1">{formatTicketDate(editingTicket.createdAt)}</p>
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <span className="font-medium text-gray-700 dark:text-gray-300">Requester</span>
+                                        <p className="text-gray-900 dark:text-white mt-1">{editingTicket.userName} ({editingTicket.userEmail})</p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Subject</label>
+                                    <input
+                                        type="text"
+                                        value={editingTicket.subject}
+                                        onChange={(e) => setEditingTicket({ ...editingTicket, subject: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Message</label>
+                                    <textarea
+                                        value={editingTicket.message}
+                                        onChange={(e) => setEditingTicket({ ...editingTicket, message: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                        rows={5}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Status</label>
+                                    <select
+                                        value={editingTicket.status}
+                                        onChange={(e) => setEditingTicket({
+                                            ...editingTicket,
+                                            status: e.target.value as SupportTicket['status']
+                                        })}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                    >
+                                        <option value="Open">Open</option>
+                                        <option value="In Progress">In Progress</option>
+                                        <option value="Resolved">Resolved</option>
+                                        <option value="Closed">Closed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 mt-6">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingTicket(null)}
+                                    className="px-4 py-2 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void handleSaveEditedTicket()}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                                >
+                                    Save changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };
